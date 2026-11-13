@@ -25,7 +25,41 @@ SYSTEM = ("You answer questions about one building information model (IFC). Use 
           "labelled estimate. Answer in at most 12 short lines.")
 
 
-def fact_card(idx: IfcIndex, it: Intent | None = None, max_lines: int = 160) -> str:
+def placeholder_spaces(idx: IfcIndex) -> bool:
+    """True when the IfcSpaces are placeholders (>= 80% of >= 5 spaces have a footprint <= 1.01 m², e.g. the
+    sixty5 ArchiCAD zones: 1 m² in geometry AND in every quantity set). Their areas say nothing about the rooms."""
+    sp = [e for e in idx.elements.values() if e.cls == "IfcSpace"]
+    tiny = [e for e in sp if e.geo and e.geo.footprint_area is not None and e.geo.footprint_area <= 1.01]
+    return len(sp) >= 5 and len(tiny) >= 0.8 * len(sp)
+
+
+PLACEHOLDER_NOTE = ("WARNING: the IfcSpaces in this model are placeholders (about 1 m² each in geometry and quantity "
+                    "sets); the model has no real room areas. Say so, and do not present 1 m² as a room area.")
+
+
+def storey_card(idx: IfcIndex, storey) -> list[str]:
+    """Everything on one storey (the one the question names): class counts, types per class, rooms."""
+    els = [e for e in idx.elements.values() if e.storey == storey.guid]
+    L = [f"FOCUS STOREY '{storey.name}' (elevation {storey.elevation} m): {len(els)} elements: "
+         + ", ".join(f"{c} {n}" for c, n in collections.Counter(e.eff_cls for e in els).most_common(14))]
+    for c, _ in collections.Counter(e.eff_cls for e in els if e.eff_cls != "IfcOpeningElement").most_common(8):
+        types = collections.Counter(e.type_name or e.object_type or "(untyped)" for e in els if e.eff_cls == c)
+        L.append(f"  on '{storey.name}' {c} types: " + "; ".join(f"{t} x{n}" for t, n in types.most_common(8)))
+    rs = [e for e in els if e.cls == "IfcSpace"]
+    if rs and placeholder_spaces(idx):
+        L.append("  " + PLACEHOLDER_NOTE)
+    if rs:
+        L.append(f"  rooms on '{storey.name}' (long name (number) - net floor area m², gross m² when given):")
+        for e in sorted(rs, key=lambda e: e.name or "")[:40]:
+            ga = next((v for k, v in e.qto.items() if k.endswith("GrossFloorArea")), None)
+            L.append(f"   - {e.long_name or ''} ({e.name or ''}) {(e.geo.footprint_area or 0) if e.geo else 0:.1f}"
+                     + (f", gross {ga:.1f}" if ga else ""))
+    else:
+        L.append(f"  no IfcSpace on '{storey.name}'")
+    return L
+
+
+def fact_card(idx: IfcIndex, it: Intent | None = None, max_lines: int = 160, storey=None) -> str:
     els = list(idx.elements.values())
     L = [f"Model: {idx.path.split('/')[-1]} | schema {idx.schema} | project '{idx.project_name or ''}'"
          + (f" | buildings {', '.join(b for b in idx.building_names if b)}" if any(idx.building_names) else "")]
@@ -74,6 +108,8 @@ def fact_card(idx: IfcIndex, it: Intent | None = None, max_lines: int = 160) -> 
         if q:
             L.append(f"  {c} quantity totals: " + ", ".join(f"{k} {v:.2f}" for k, v in q.items()))
     spaces = [e for e in els if e.cls == "IfcSpace"]
+    if spaces and placeholder_spaces(idx):
+        L.append(PLACEHOLDER_NOTE)
     if spaces:
         L.append("Rooms (IfcSpace: long name (number) - net floor area m² from geometry):")
         by = collections.defaultdict(list)
@@ -87,14 +123,20 @@ def fact_card(idx: IfcIndex, it: Intent | None = None, max_lines: int = 160) -> 
             L.append(f"- {s.name} ({len(rs)} rooms, {area:.1f} m²): " + "; ".join(
                 f"{e.long_name or ''} ({e.name or ''}) {(e.geo.footprint_area or 0) if e.geo else 0:.1f}"
                 for e in sorted(rs, key=lambda e: -((e.geo.footprint_area or 0) if e.geo else 0))[:25]))
-    return "\n".join(L[:max_lines])
+    L = L[:max_lines]
+    if storey is not None:
+        L = L[:3] + storey_card(idx, storey) + L[3:]
+    return "\n".join(L)
 
 
-def answer_free_text(idx: IfcIndex, question: str, it: Intent | None) -> tuple[str | None, str, dict]:
+def answer_free_text(idx: IfcIndex, question: str, it: Intent | None, storey=None,
+                     extra: str | None = None) -> tuple[str | None, str, dict]:
     """-> (answer text or None, card, info). Uses the shared local model server."""
     from stoa import llm
 
-    card = fact_card(idx, it)
+    card = fact_card(idx, it, storey=storey)
+    if extra:
+        card = extra + "\n" + card
     try:
         r = llm.chat([{"role": "system", "content": SYSTEM},
                       {"role": "user", "content": f"FACTS:\n{card}\n\nQUESTION: {question}"}],

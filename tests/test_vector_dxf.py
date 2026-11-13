@@ -70,3 +70,53 @@ def test_parse_reasoning_ops():
     q = qparse.parse("How many of the rooms 3.01 ('Bad') and 3.05 ('Zimmer') have a net floor area of more than 15 m²?", v)
     assert q.op == "count_gt" and q.threshold == 15.0 and qparse.covered("How many of the rooms 3.01 ('Bad') and 3.05 "
                                                                          "('Zimmer') have a net floor area of more than 15 m²?", q)
+
+
+P2 = "data/swiss_dwellings/site760_bldg1652_floor10897.pdf"  # French labels, apartments A and B
+
+
+def test_parse_sets_and_superlatives():
+    # superlatives over a set, not a sum (cycle 2: these returned the floor total at conf 0.95)
+    q = qparse.parse("What is the area of the largest room on this floor?")
+    assert (q.qtype, q.op, q.terms[0].kind) == ("area", "max", "rooms")
+    assert qparse.parse("Which is the largest room on this floor?").qtype == "text"
+    q = qparse.parse("Quelle est la surface de la plus grande pièce ?")
+    assert (q.qtype, q.op, q.terms[0].kind) == ("area", "max", "rooms")
+    assert qparse.parse("Qual è la stanza più grande?").terms[0].kind == "rooms"
+    q = qparse.parse("Which apartment is the largest?")
+    assert (q.qtype, q.terms[0].kind, q.terms[0].arg) == ("text", "area_apartment", "<all>")
+    assert qparse.parse("What is the average apartment size on this floor in m²?").op == "mean"
+    q = qparse.parse("How many apartments are larger than 60 m²?")
+    assert (q.op, q.threshold, q.terms[0].arg) == ("count_gt", 60.0, "<all>")
+    # comparatives stay comparisons (not superlatives)
+    q = qparse.parse("De combien la pièce 2.04 est-elle plus grande que la pièce 2.05 en m² ?")
+    assert q.op == "diff" and not qparse.operator_unapplied("De combien la pièce 2.04 est-elle plus grande que la pièce 2.05 en m² ?", q)
+    # concept words inside exclusion clauses are not the subject
+    for txt in ("What is the net floor area of apartment A in m², summing all its rooms except balconies, loggias, "
+                "terraces and other outdoor spaces?",
+                "Wie gross ist die Nettowohnfläche von Wohnung A in m² (Summe aller Räume ohne Balkone, Loggien)?",
+                "Quelle est la surface nette de l'appartement B en m² (somme de toutes ses pièces, hors balcons) ?"):
+        assert qparse.parse(txt).terms[0].kind == "area_apartment", txt
+    # a nested superlative is not covered by the rules
+    q = qparse.parse("How many rooms does the largest apartment have?")
+    assert not qparse.covered("How many rooms does the largest apartment have?", q)
+
+
+@needs_data
+def test_dxf_sets_and_scopes():
+    from stoa.solvers import get_solver
+
+    s = get_solver("dxf", llm=0)
+    a = s.solve(P2, "What is the area of the largest room on this floor?")
+    assert abs(a.value - 24.03) < 0.02 and len(a.evidence) == 1
+    assert s.solve(P2, "Which apartment is the largest?").value == "apartment B"
+    assert abs(s.solve(P2, "What is the area of the kitchen in apartment A?").value - 9.84) < 0.02
+    assert abs(s.solve(P2, "What is the total area of all bathrooms on this floor?").value - 14.29) < 0.05
+    assert s.solve(P2, "How many bathrooms does apartment A have?").value == 2
+    assert s.solve(P2, "How many rooms are smaller than 5 m²?").value == 11
+    assert s.solve(P2, "What is the smallest room in apartment B?").value == "room 2.12 (Réduit)"
+    a = s.solve(P2, "How many bedrooms are on this floor?")  # no 'Chambre à coucher' label: 'Pièce' rooms, said so
+    assert a.value == 8 and a.confidence <= 0.5 and any("bedroom" in x for x in a.assumptions)
+    a = s.solve(P2, "What is the net floor area of apartment A in m², summing all its rooms except balconies, loggias, "
+                    "terraces and other outdoor spaces?")
+    assert abs(a.value - 105.93) < 0.02

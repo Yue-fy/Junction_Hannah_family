@@ -1,0 +1,118 @@
+{
+ "fitted_on": [
+  "20261114-013211-pipeline-train_gate-8bc9",
+  "20261114-012403-vlm_direct-train_gate-ee1b"
+ ],
+ "key": "stoa.router.intent.parse(q).target",
+ "lora_model": "cc-v2",
+ "concepts": {
+  "wc": {
+   "use_lora": true,
+   "n": 40,
+   "acc_pipeline": 0.6,
+   "acc_lora": 0.85,
+   "conf_chosen": 0.85,
+   "conf_agree": 0.913,
+   "conf_disagree": 0.7647
+  },
+  "window": {
+   "use_lora": true,
+   "n": 40,
+   "acc_pipeline": 0.1,
+   "acc_lora": 0.15,
+   "conf_chosen": 0.15,
+   "conf_agree": 0.25,
+   "conf_disagree": 0.1389
+  },
+  "sink": {
+   "use_lora": true,
+   "n": 40,
+   "acc_pipeline": 0.4,
+   "acc_lora": 0.725,
+   "conf_chosen": 0.725,
+   "conf_agree": 0.6957,
+   "conf_disagree": 0.7647
+  },
+  "shower_bathtub": {
+   "use_lora": false,
+   "n": 40,
+   "acc_pipeline": 0.65,
+   "acc_lora": 0.65,
+   "conf_chosen": 0.65,
+   "conf_agree": 0.7667,
+   "conf_disagree": 0.3
+  },
+  "storey": {
+   "use_lora": true,
+   "n": 40,
+   "acc_pipeline": 0.925,
+   "acc_lora": 0.975,
+   "conf_chosen": 0.975,
+   "conf_agree": 1.0,
+   "conf_disagree": 0.75
+  },
+  "door": {
+   "use_lora": true,
+   "n": 40,
+   "acc_pipeline": 0.15,
+   "acc_lora": 0.375,
+   "conf_chosen": 0.375,
+   "conf_agree": 0.5,
+   "conf_disagree": 0.3333
+  },
+  "kitchen": {
+   "use_lora": false,
+   "n": 40,
+   "acc_pipeline": 0.975,
+   "acc_lora": 0.975,
+   "conf_chosen": 0.975,
+   "conf_agree": 0.975,
+   "conf_disagree": null
+  },
+  "bedroom": {
+   "use_lora": true,
+   "n": 40,
+   "acc_pipeline": 0.725,
+   "acc_lora": 0.85,
+   "conf_chosen": 0.85,
+   "conf_agree": 0.8788,
+   "conf_disagree": 0.7143
+  },
+  "bathroom": {
+   "use_lora": true,
+   "n": 40,
+   "acc_pipeline": 0.825,
+   "acc_lora": 0.925,
+   "conf_chosen": 0.925,
+   "conf_agree": 0.9167,
+   "conf_disagree": 1.0
+  },
+  "wc_room": {
+   "use_lora": true,
+   "n": 40,
+   "acc_pipeline": 0.825,
+   "acc_lora": 0.875,
+   "conf_chosen": 0.875,
+   "conf_agree": 0.9143,
+   "conf_disagree": 0.6
+  },
+  "balcony": {
+   "use_lora": true,
+   "n": 40,
+   "acc_pipeline": 0.75,
+   "acc_lora": 0.875,
+   "conf_chosen": 0.875,
+   "conf_agree": 0.9062,
+   "conf_disagree": 0.75
+  },
+  "sauna": {
+   "use_lora": true,
+   "n": 40,
+   "acc_pipeline": 0.85,
+   "acc_lora": 0.975,
+   "conf_chosen": 0.975,
+   "conf_agree": 1.0,
+   "conf_disagree": 0.8571
+  }
+ }
+}

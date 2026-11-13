@@ -13,7 +13,44 @@ answer) vs `20261113-234812-dummy-dev` (template prior), both on dev v2 (hash f4
 | dummy (prior) | 26.1% | 40.4% | 0 | 0% |
 | vlm_direct | 32.0% (28.0–36.5) | 44.1% | 200 (all IFC) | 0% |
 
-## LATEST (01:05): held-out rewording (hard2p), cost billing, format swap
+## LATEST (01:29): LoRA cc-v2 overfitting watch: the biggest cubicasa gain, with routing rules
+
+R2's LoRA cc-v2 (Qwen3-VL-8B, trained on TRAIN cubicasa counts; train_gate drawings excluded), served on a private
+:8002 and asked via `vlm_direct model=cc-v2`:
+
+| split (cubicasa) | LoRA cc-v2 | integrated pipeline | note |
+|---|---:|---:|---|
+| dev (800) | **73.9%** | 61.8% (2b7935a) | +12.1 [+9.0, +15.2] cluster CI; ≈ +8 weighted pts |
+| train_gate (480, unseen drawings) | 76.7% | – | no memorisation gap |
+| hard: translation / paraphrase / composition | 75.0 / 65.0 / 9.6% | 66 / 58 / 23% (cbd2fe8) | compositions asked directly |
+| hard2q (clean held-out) | 26% scored, 68% text | 52% (scored + text) | LoRA conf ≥ 0.8 → 15.8% right (inverted) |
+
+Per concept on dev (LoRA / pipeline): windows 21/14, doors 35/26, WC seats 76/57, sinks 71/46, storeys 99/88,
+saunas 93/71, bedrooms 90/71, WC rooms 100/88, balconies 91/83, bathrooms 91/88, kitchens 100/100, showers+baths
+77/78.
+**Rules:** route only atomic, known concepts (after compose/canonical; not showers+baths) to the LoRA; take the
+confidence from the per-concept train_gate hit rate, never from the LoRA; paraphrases cost ~9 points, so canonicalise
+for this VLM path (but ask dxf/ifc the original question).
+
+## Earlier (01:15): clean held-out `hard2q`, judge numeric check
+
+- **hard2p is contaminated for dxf/ifc**: my messages quoted its wordings, and dxf v6 then reached 97% on it.
+  `hard2q` (third wording: Italian/Dutch/Swedish + new English; same drawings and answers) is the clean held-out
+  set. Aggregates only; never quote its questions.
+
+| | hard2 (dev) | hard2p | hard2q (clean) |
+|---|---:|---:|---:|
+| dxf v6 (W2 e539b77), swiss, scored | 97.1% | 97.1% (contaminated) | **81.9%** (conf ≥ 0.8: 84.9% right) |
+| ifc (W1 532d61d), scored | 100% | 88.2% | **100%** |
+| pipeline, scored / judged text | 77.8% / 47.8% (971b985) | 56.1% / 56.7% (971b985) | **69.3% / 64.2%** (474e3e4) |
+| pipeline: conf ≥ 0.8 accuracy | 95.8% | 69.5% | 77.2% |
+
+  Pipeline per source on hard2q: swiss 74.2% (dxf alone 81.9% scored), ifc 91.7% (ifc alone 100%), cubicasa 52%.
+  The pipeline layer (canonicalisation + gate confidence) still loses points vs its own solvers on new wordings.
+- **Judge:** a deterministic numeric check now decides when the reference holds exactly one number (2%, units
+  converted; unit-less integers exact). ifc_bench text for the pipeline is 40.5% (was 42.5% with the lenient LLM).
+
+## Earlier (01:05): held-out rewording (hard2p), cost billing, format swap
 
 - **hard2p** = hard2 reworded (other English phrasing, German/French/Finnish; same drawings and answers; HELD OUT, D9).
   Integrated pipeline night 971b985: hard2 69.9% → hard2p **56.2%** (scored + judged text). Answers at conf ≥ 0.8
