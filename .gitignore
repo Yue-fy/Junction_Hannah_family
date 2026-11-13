@@ -48,3 +48,6 @@ junction-dataset*
 *.onnx
 *.gguf
 artifacts/
+
+# Python packaging
+*.egg-info/
