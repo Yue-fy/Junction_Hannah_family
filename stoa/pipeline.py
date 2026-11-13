@@ -455,7 +455,7 @@ class Pipeline(BaseSolver):
             return
         if not note:
             return
-        if intent.scope in ("apartment", "floor_total", "storey_total", "label_total", "model") and \
+        if intent.scope in ("apartment", "floor_total", "storey_total", "label_total", "model", "rooms") and \
                 re.search(r"polygon of room|vs (?:the )?room ", note):
             # an aggregate (apartment / floor / all rooms labelled X) compared with ONE room's polygon is not a check:
             # 272 correct swiss dev totals got a false ✗ this way (night 00:47)

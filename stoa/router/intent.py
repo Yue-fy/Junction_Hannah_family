@@ -82,6 +82,7 @@ _OUTDOOR_EXCL = re.compile(r"excluding balconies|ohne balkone|hors balcons|esclu
 # "..., not counting separate WC rooms" must not make the target wc_room
 _NEGATION = re.compile(r"(not counting|excluding|except|without|ohne|hors|esclusi|sauf)[^?;.]*|"
                        r"[^,;?]*\b(lukuun ottamatta|ausgenommen)", re.I)
+_NO_LABEL = re.compile(r"\b([A-Z]{0,2}\d+(?:\.\d+)+)\s*\(\s*<q>\s*\)")
 _NUMBERED = re.compile(r"numbered|nummerierten|num[ée]rot[ée]es|numerati", re.I)
 
 
@@ -250,11 +251,16 @@ def parse(question: str) -> Intent:
         if t2 and t2 != "apartment":
             filters["apartment"] = ma.group(1)
             scope, target = "apartment", t2
-    if _LABELLED.search(q_noquote) and quoted:
+    nos = _NO_LABEL.findall(q_noquote)
+    if len(nos) >= 2 and scope == "drawing" and task in ("area", "count", "volume", "length", "text", "yesno"):
+        # swiss "rooms 2.03 ('Bad') and 2.01 ('Zimmer')": numbered rooms with their labels, not a room on a storey
+        filters["rooms"] = nos
+        scope, target = "rooms", "room"
+    elif _LABELLED.search(q_noquote) and quoted:
         filters["label"] = quoted[0]
         scope = "label_total" if task in ("area", "volume", "length") else "label"
         target = "room"
-    elif quoted and scope == "drawing":
+    elif quoted and scope == "drawing" and not nos:
         # ifc_models: "the room 'X' on 'Level 1'" / "on 'Level 1'" / "in the model 'X'"
         if _MODEL.search(q_noquote) and task == "count":
             filters["model"] = quoted[-1]
