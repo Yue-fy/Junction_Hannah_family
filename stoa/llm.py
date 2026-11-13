@@ -256,6 +256,17 @@ def _charge(res: "ChatResult") -> "ChatResult":
     m = _METER.get()
     if m is not None:
         m.add(res)
+    if not res.cached:  # report to the contract's CostMeter (the eval attributes it per question)
+        try:
+            from stoa.contract import record_cost
+        except ImportError:  # older contract without cost metering
+            return res
+        tin, tout = res.prompt_tokens or 0, res.completion_tokens or 0
+        if res.backend == "local":
+            record_cost(llm_calls=1, llm_tokens_in=tin, llm_tokens_out=tout, gpu_seconds=round(res.latency_s, 4))
+        else:
+            record_cost(llm_calls=1, llm_tokens_in=tin, llm_tokens_out=tout, api_calls=1, api_tokens_in=tin,
+                        api_tokens_out=tout)
     return res
 
 

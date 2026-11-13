@@ -102,7 +102,8 @@ def run_one(solver, q: Question, handled_only: bool) -> dict:
             ans = Answer.abstain(getattr(solver, "name", "?"), "exception", [traceback.format_exc(limit=4)[-800:]])
     dt = time.perf_counter() - t0
     # cost = field-wise max of what the solver reported and what LLM clients recorded (avoids double count)
-    rep, met = ans.cost.model_dump(), meter.cost.model_dump()
+    rep = ans.cost.model_dump() if hasattr(ans.cost, "model_dump") else dict(ans.cost or {})
+    met = meter.cost.model_dump()
     cost = {k: max(rep.get(k, 0) or 0, met.get(k, 0) or 0) for k in set(rep) | set(met)
             if isinstance(rep.get(k, met.get(k)), (int, float))}
     if not cost.get("wall_seconds"):
