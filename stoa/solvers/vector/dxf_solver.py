@@ -308,7 +308,7 @@ class DxfSolver(BaseSolver):
         for p in parts:
             conf *= p.conf if p.value is not None else 0.2
         if qparse.operator_unapplied(question, qr):
-            conf = min(conf, 0.5)
+            conf = min(conf, 0.3)  # S0 D9: low enough that the pipeline's agent takes over
             missing.append("the question mentions an operation (average/ratio/share/threshold/per/'not in') that the "
                            "rule parser did not apply; the value may answer a simpler question")
         # combine --------------------------------------------------------------------------------
