@@ -141,6 +141,20 @@ def full_shares() -> dict[str, float]:
     return _FULL_SHARES
 
 
+def _num(v) -> float | None:
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
+
+def _n_objects(evidence: list[dict]) -> int:
+    """Located objects behind an answer: unique IFC GUIDs (a 3D element and its 2D box on a plan are one
+    object, as the UI groups them) plus boxes without a GUID (one per counted symbol/room)."""
+    guids = {e["ifc_guid"] for e in evidence if e.get("ifc_guid")}
+    return len(guids) + sum(1 for e in evidence if e.get("bbox") and not e.get("ifc_guid"))
+
+
 def summarize(preds: list[dict]) -> dict:
     def block(rows: list[dict]) -> dict:
         scored = [r for r in rows if r["type"] in SCORED_TYPES]
@@ -155,7 +169,16 @@ def summarize(preds: list[dict]) -> dict:
             "acc_when_answered": (round(sum(1 for r in scored if r["correct"]) /
                                         max(1, sum(1 for r in scored if not r["abstained"])), 4) if scored else None),
             "evidence_rate": round(sum(1 for r in answered if r["evidence"]) / len(answered), 4) if answered else None,
+            # located on a drawing (bbox) — what the UI can highlight in 2D; ifc_guid-only evidence is 3D only
+            "evidence_2d_rate": (round(sum(1 for r in answered if any(e.get("bbox") for e in r["evidence"] or []))
+                                       / len(answered), 4) if answered else None),
         }
+        # verifiability of counts: the number of located objects equals the answer
+        cnt = [r for r in answered if r["type"] == "count" and r["evidence"] and _num(r["value"]) is not None]
+        if cnt:
+            d["evidence_count_match"] = round(sum(1 for r in cnt if _n_objects(r["evidence"]) == round(_num(r["value"])))
+                                              / len(cnt), 4)
+            d["evidence_count_n"] = len(cnt)
         d["refusal_rate"] = round(1 - d["coverage"], 4) if rows else None
         if text:
             d["text_n"] = len(text)
@@ -232,6 +255,10 @@ def print_report(m: dict, file=sys.stdout) -> None:
         print(f"text (LLM judge, not in accuracy): {pct(m['text_judge'])} of {m['text_judged_n']} judged; per bucket: "
               + ", ".join(f"{k} {pct(b['text_judge'])}" for k, b in m["by_bucket"].items() if b.get("text_judge") is not None),
               file=file)
+    if m.get("evidence_rate") is not None:
+        print(f"evidence: {pct(m['evidence_rate']).strip()}% of answers, located in 2D {pct(m.get('evidence_2d_rate')).strip()}%"
+              + (f"; counts whose located items = the answer: {pct(m['evidence_count_match']).strip()}% of "
+                 f"{m['evidence_count_n']}" if m.get("evidence_count_match") is not None else ""), file=file)
     print(f"weighted_acc (full-data bucket shares): {pct(m.get('weighted_acc'))}   macro: {pct(m['macro_accuracy'])}   "
           f"refusal: {pct(m.get('refusal_rate'))}   errors: {m['errors']}", file=file)
     cm = m.get("cost_mean") or {}
