@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import collections
 
-from stoa.solvers.ifc.index import IfcIndex
+from stoa.solvers.ifc.index import IfcIndex, strip_id, type_key_fn
 from stoa.solvers.ifc.parse import KIND_CLASSES, Intent
 
 MAIN = ["IfcWall", "IfcWallStandardCase", "IfcCurtainWall", "IfcSlab", "IfcRoof", "IfcColumn", "IfcBeam", "IfcDoor",
@@ -43,7 +43,9 @@ def storey_card(idx: IfcIndex, storey) -> list[str]:
     L = [f"FOCUS STOREY '{storey.name}' (elevation {storey.elevation} m): {len(els)} elements: "
          + ", ".join(f"{c} {n}" for c, n in collections.Counter(e.eff_cls for e in els).most_common(14))]
     for c, _ in collections.Counter(e.eff_cls for e in els if e.eff_cls != "IfcOpeningElement").most_common(8):
-        types = collections.Counter(e.type_name or e.object_type or "(untyped)" for e in els if e.eff_cls == c)
+        cls_els = [e for e in els if e.eff_cls == c]
+        tk = type_key_fn(cls_els)
+        types = collections.Counter(tk(e) for e in cls_els)
         L.append(f"  on '{storey.name}' {c} types: " + "; ".join(f"{t} x{n}" for t, n in types.most_common(8)))
     rs = [e for e in els if e.cls == "IfcSpace"]
     if rs and placeholder_spaces(idx):
@@ -82,9 +84,13 @@ def fact_card(idx: IfcIndex, it: Intent | None = None, max_lines: int = 160, sto
         group = [e for e in els if e.eff_cls == c]
         if not group:
             continue
-        types = collections.Counter(e.type_name or e.object_type or "(untyped)" for e in group)
-        L.append(f"{c} types: " + "; ".join(f"{t} x{n}" for t, n in types.most_common(8))
-                 + (f"; ... {len(types) - 8} more" if len(types) > 8 else ""))
+        tk = type_key_fn(group)
+        types = collections.Counter(tk(e) for e in group)
+        L.append(f"{c} types: " + "; ".join(f"{t} x{n}" for t, n in types.most_common(10))
+                 + (f"; ... {len(types) - 10} more" if len(types) > 10 else ""))
+        tobj = collections.Counter(strip_id(e.type_name) for e in group if e.type_name)
+        if tobj and set(tobj) != set(types):
+            L.append(f"  {c} IfcTypeObject names: " + "; ".join(f"{t} x{n}" for t, n in tobj.most_common(6)))
         ext = collections.Counter(next((v for k, v in e.props.items() if k.endswith(".IsExternal")), None)
                                   for e in group)
         if ext.get(True) or ext.get(False):
