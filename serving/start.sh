@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Start the shared OpenAI-compatible model server (vLLM) on port 8001.
 # Usage: serving/start.sh [preset]      presets: qwen3vl8b (default), qwen35-9b, qwen36-35b-a3b
-# Env overrides: MODEL, SERVED_NAME, PORT, GPU_UTIL, MAX_LEN, EXTRA_ARGS, LORA (name=path[,name=path])
+# Env overrides: MODEL, SERVED_NAME, PORT, GPU_UTIL, MAX_LEN, EXTRA_ARGS, LORA (name=path[,name=path]),
+#   RUNTIME_LORA=1 (enable LoRA + hot-loading via /v1/load_lora_adapter without preloading any)
 # A second, private instance (e.g. to test a LoRA) must use another PORT and hold the GPU lock:
 #   PORT=8002 GPU_UTIL=0.30 LORA=cc-v1=$JUNCTION_SHARED/artifacts/R2/lora/cc-v1 flock $JUNCTION_SHARED/locks/gpu.lock serving/start.sh
 # Survives the calling shell (setsid+nohup). Log: $JUNCTION_SHARED/logs/model-server.log
@@ -30,9 +31,15 @@ if [[ $PORT == 8001 ]]; then SUFFIX=""; else SUFFIX="-$PORT"; fi
 LOG=$SHARED/logs/model-server$SUFFIX.log
 PIDF=$SHARED/logs/model-server$SUFFIX.pid
 LORA_ARGS=()
-if [[ -n ${LORA:-} ]]; then
-  LORA_ARGS=(--enable-lora --max-lora-rank 64 --max-loras 4 --lora-modules)
-  IFS=',' read -ra L <<< "$LORA"; LORA_ARGS+=("${L[@]}")
+if [[ -n ${LORA:-} || ${RUNTIME_LORA:-0} == 1 ]]; then
+  # LoRA serving; adapters can also be hot-loaded later without a restart:
+  #   curl -X POST localhost:$PORT/v1/load_lora_adapter -H 'Content-Type: application/json' \
+  #        -d '{"lora_name":"cc-v2","lora_path":"/abs/path/to/adapter"}'
+  export VLLM_ALLOW_RUNTIME_LORA_UPDATING=True
+  LORA_ARGS=(--enable-lora --max-lora-rank 64 --max-loras 4)
+  if [[ -n ${LORA:-} ]]; then
+    LORA_ARGS+=(--lora-modules); IFS=',' read -ra L <<< "$LORA"; LORA_ARGS+=("${L[@]}")
+  fi
 fi
 
 if curl -s -m 2 "http://127.0.0.1:$PORT/v1/models" >/dev/null 2>&1; then
