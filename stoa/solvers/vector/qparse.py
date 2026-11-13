@@ -145,6 +145,9 @@ ROOMNUM_RE = re.compile(r"(?<![\w.])([A-Z]{0,2}\d{1,3}\.\d{1,3}(?:\.\d{1,3})?)(?
 APT_LEAD = (r"(?:apartments?|units?|flats?|wohnungen|wohnung|whg\.?|appartements?|l'appartement|appartament[oi]|"
             r"dell'appartamento|app\.?|lägenhet(?:er(?:na)?)?|l[äa]genheten|woning(?:en)?|bostad(?:en)?|apartamentos?)")
 APT_RE = re.compile("(?i:" + APT_LEAD + r")\s+([A-Z](?:" + JOIN + r"[A-Z])*)(?![\w])")
+ROOM_NO_RE = re.compile(r"(?i:\b(?:room|raum|zimmer|pi[èe]ce|local[e]?|stanza|vano|kamer|ruimte|rum|rummet)\s+"
+                        r"(?:no\.?\s*|nr\.?\s*|n°\s*|number\s+|nummer\s+|numéro\s+|numero\s+)?)"
+                        r"([A-Z]{0,2}\d{1,4}[a-z]?)(?![\w.,]*\s*(?:m²|m2|ft|%|sq|qm|mq))(?![.\d])")
 QUOTES = "'\"«»„“”‘’‹›`´"
 
 
@@ -223,6 +226,10 @@ def parse(question: str, vocab: list[str] | None = None, room_numbers: set[str] 
     labels = find_labels(q, vocab)
     # room numbers: keep those that exist on the floor if we know them, else anything room-number-like
     nums = [(m.group(1), m.start()) for m in ROOMNUM_RE.finditer(q)]
+    # "room 1" / "Raum 12" / "pièce n° 3": a room number without a dot, named as a room (W4: was read as the floor total)
+    for m in ROOM_NO_RE.finditer(q):
+        if not any(m.start(1) <= p < m.end(1) or n == m.group(1) for n, p in nums):
+            nums.append((m.group(1), m.start(1)))
     if room_numbers is not None:
         known = [(n, p) for n, p in nums if n in room_numbers]
         if known or not nums:
