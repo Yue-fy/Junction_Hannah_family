@@ -42,3 +42,5 @@ export const ask = (path: string, question: string, solver?: string) =>
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(solver ? { path, question, solver } : { path, question }),
   });
+
+export const benchmark = () => fetch("/api/bench").then((r) => (r.ok ? r.json() : Promise.reject(new Error(`${r.status}`))));

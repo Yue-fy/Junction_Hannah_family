@@ -1,0 +1,497 @@
+{
+ "from": "snapshot",
+ "generated": "2026-11-13T22:53:20.820Z",
+ "runs": {
+  "dev": {
+   "pipeline": {
+    "run_id": "20261114-004756-pipeline-dev-fbaf",
+    "solver": "pipeline",
+    "split": "dev",
+    "time": "2026-11-14T00:52:03",
+    "commit": "2b7935a",
+    "agent": "S0",
+    "note": "S0 night 2b7935a (F,R2,W1-W5 merged 00:50)",
+    "n": 2215,
+    "weighted_acc": 0.7384,
+    "accuracy": 0.836,
+    "macro_accuracy": 0.9187,
+    "usd_per_1k_q": 0.491,
+    "latency_p50_s": 0.284,
+    "latency_p95_s": 3.564,
+    "evidence_rate": 0.6528,
+    "refusal_rate": 0,
+    "by_tier": {
+     "deterministic": {
+      "share": 0.8014,
+      "n": 1775,
+      "accuracy": 0.8613,
+      "coverage": 1
+     },
+     "local": {
+      "share": 0.1986,
+      "n": 440,
+      "accuracy": 0.7096,
+      "coverage": 1
+     }
+    },
+    "by_kind": null,
+    "calibration": {
+     "n": 2000,
+     "n_missing_conf": 0,
+     "accuracy": 0.836,
+     "mean_conf": 0.7851,
+     "ece": 0.051,
+     "brier": 0.0872,
+     "auroc": 0.9041,
+     "aurc": 0.0319,
+     "e_aurc": 0.0177,
+     "hi_conf_share": 0.5335,
+     "hi_conf_acc": 0.985
+    },
+    "cost_mean": {
+     "llm_tokens_in": 626.185102,
+     "llm_tokens_out": 39.134537,
+     "api_tokens_in": 0,
+     "api_tokens_out": 0,
+     "llm_calls": 0.229797,
+     "api_calls": 0,
+     "gpu_seconds": 0.797976,
+     "wall_seconds": 0.888566,
+     "usd": 0.000491
+    },
+    "by_source": {
+     "cubicasa5k": {
+      "n": 800,
+      "correct": 494,
+      "accuracy": 0.6175
+     },
+     "ifc_models": {
+      "n": 354,
+      "correct": 354,
+      "accuracy": 1
+     },
+     "opening_design": {
+      "n": 46,
+      "correct": 34,
+      "accuracy": 0.7391304347826086
+     },
+     "swiss_dwellings": {
+      "n": 800,
+      "correct": 790,
+      "accuracy": 0.9875
+     }
+    }
+   },
+   "vlm_direct": {
+    "run_id": "20261113-235024-vlm_direct-dev",
+    "solver": "vlm_direct",
+    "split": "dev",
+    "time": "2026-11-13T23:51:58",
+    "commit": "980d46f",
+    "agent": "R2",
+    "note": "R2 baseline: Qwen3-VL-8B local, direct answer (splits v1)",
+    "n": 2215,
+    "weighted_acc": null,
+    "accuracy": 0.3205,
+    "macro_accuracy": 0.1599,
+    "usd_per_1k_q": null,
+    "latency_p50_s": 0.801,
+    "latency_p95_s": 2.372,
+    "evidence_rate": 0,
+    "refusal_rate": null,
+    "by_tier": null,
+    "by_kind": null,
+    "calibration": null,
+    "cost_mean": null,
+    "by_source": {
+     "cubicasa5k": {
+      "n": 800,
+      "correct": 398,
+      "accuracy": 0.4975
+     },
+     "ifc_models": {
+      "n": 354,
+      "correct": 5,
+      "accuracy": 0.014124293785310734
+     },
+     "opening_design": {
+      "n": 46,
+      "correct": 8,
+      "accuracy": 0.17391304347826086
+     },
+     "swiss_dwellings": {
+      "n": 800,
+      "correct": 230,
+      "accuracy": 0.2875
+     }
+    }
+   },
+   "prior": {
+    "run_id": "20261113-235744-prior-dev",
+    "solver": "prior",
+    "split": "dev",
+    "time": "2026-11-13T23:57:46",
+    "commit": "1953e27",
+    "agent": "F",
+    "note": "D4 prior: keyed backoff + calibrated confidence",
+    "n": 2215,
+    "weighted_acc": 0.4097,
+    "accuracy": 0.269,
+    "macro_accuracy": 0.0997,
+    "usd_per_1k_q": 0,
+    "latency_p50_s": 0,
+    "latency_p95_s": 0.001,
+    "evidence_rate": 0,
+    "refusal_rate": 0,
+    "by_tier": {
+     "deterministic": {
+      "share": 1,
+      "n": 2215,
+      "accuracy": 0.269,
+      "coverage": 1
+     }
+    },
+    "by_kind": null,
+    "calibration": null,
+    "cost_mean": {
+     "llm_tokens_in": 0,
+     "llm_tokens_out": 0,
+     "api_tokens_in": 0,
+     "api_tokens_out": 0,
+     "llm_calls": 0,
+     "api_calls": 0,
+     "gpu_seconds": 0,
+     "wall_seconds": 0.004192,
+     "usd": 0
+    },
+    "by_source": {
+     "cubicasa5k": {
+      "n": 800,
+      "correct": 433,
+      "accuracy": 0.54125
+     },
+     "ifc_models": {
+      "n": 354,
+      "correct": 6,
+      "accuracy": 0.01694915254237288
+     },
+     "opening_design": {
+      "n": 46,
+      "correct": 3,
+      "accuracy": 0.06521739130434782
+     },
+     "swiss_dwellings": {
+      "n": 800,
+      "correct": 96,
+      "accuracy": 0.12
+     }
+    }
+   }
+  },
+  "hard": {
+   "pipeline": {
+    "run_id": "20261114-005205-pipeline-hard-de9c",
+    "solver": "pipeline",
+    "split": "hard",
+    "time": "2026-11-14T00:53:09",
+    "commit": "2b7935a",
+    "agent": "S0",
+    "note": "S0 night 2b7935a",
+    "n": 711,
+    "weighted_acc": 0.6679,
+    "accuracy": 0.7965,
+    "macro_accuracy": 0.928,
+    "usd_per_1k_q": 0.816,
+    "latency_p50_s": 0.458,
+    "latency_p95_s": 1.702,
+    "evidence_rate": 0.6188,
+    "refusal_rate": 0,
+    "by_tier": {
+     "deterministic": {
+      "share": 0.7679,
+      "n": 546,
+      "accuracy": 0.8953,
+      "coverage": 1
+     },
+     "local": {
+      "share": 0.2321,
+      "n": 165,
+      "accuracy": 0.451,
+      "coverage": 1
+     }
+    },
+    "by_kind": {
+     "composition": {
+      "n": 211,
+      "scored_n": 188,
+      "correct": 123,
+      "accuracy": 0.6543,
+      "coverage": 1,
+      "acc_when_answered": 0.6543,
+      "evidence_rate": 0.5545,
+      "evidence_2d_rate": 0.5545,
+      "evidence_count_match": 0.549,
+      "evidence_count_n": 51,
+      "refusal_rate": 0,
+      "text_n": 23,
+      "text_fuzzy": 0.7826,
+      "usd_per_q": 0.000722
+     },
+     "paraphrase": {
+      "n": 250,
+      "scored_n": 250,
+      "correct": 210,
+      "accuracy": 0.84,
+      "coverage": 1,
+      "acc_when_answered": 0.84,
+      "evidence_rate": 0.668,
+      "evidence_2d_rate": 0.648,
+      "evidence_count_match": 1,
+      "evidence_count_n": 95,
+      "refusal_rate": 0,
+      "usd_per_q": 0.001161
+     },
+     "translation": {
+      "n": 250,
+      "scored_n": 250,
+      "correct": 215,
+      "accuracy": 0.86,
+      "coverage": 1,
+      "acc_when_answered": 0.86,
+      "evidence_rate": 0.624,
+      "evidence_2d_rate": 0.62,
+      "evidence_count_match": 1,
+      "evidence_count_n": 60,
+      "refusal_rate": 0,
+      "usd_per_q": 0.00055
+     }
+    },
+    "calibration": {
+     "n": 688,
+     "n_missing_conf": 0,
+     "accuracy": 0.7965,
+     "mean_conf": 0.7425,
+     "ece": 0.0553,
+     "brier": 0.0798,
+     "auroc": 0.9385,
+     "aurc": 0.0358,
+     "e_aurc": 0.0133,
+     "hi_conf_share": 0.5436,
+     "hi_conf_acc": 0.9947
+    },
+    "cost_mean": {
+     "llm_tokens_in": 289.135021,
+     "llm_tokens_out": 48.714487,
+     "api_tokens_in": 0,
+     "api_tokens_out": 0,
+     "llm_calls": 0.247539,
+     "api_calls": 0,
+     "gpu_seconds": 1.342909,
+     "wall_seconds": 0.717811,
+     "usd": 0.000816
+    },
+    "by_source": {
+     "cubicasa5k": {
+      "n": 283,
+      "correct": 145,
+      "accuracy": 0.5123674911660777
+     },
+     "ifc_models": {
+      "n": 135,
+      "correct": 135,
+      "accuracy": 1
+     },
+     "swiss_dwellings": {
+      "n": 270,
+      "correct": 268,
+      "accuracy": 0.9925925925925926
+     }
+    }
+   },
+   "vlm_direct": {
+    "run_id": "20261113-235933-vlm_direct-hard",
+    "solver": "vlm_direct",
+    "split": "hard",
+    "time": "2026-11-14T00:02:06",
+    "commit": "0ce5c7c",
+    "agent": "F",
+    "note": "E: generality check of R2 baseline (rerun after cost fix)",
+    "n": 711,
+    "weighted_acc": 0.3342,
+    "accuracy": 0.2515,
+    "macro_accuracy": 0.1245,
+    "usd_per_1k_q": 0.973,
+    "latency_p50_s": 1.441,
+    "latency_p95_s": 4.205,
+    "evidence_rate": 0,
+    "refusal_rate": 0,
+    "by_tier": {
+     "local": {
+      "share": 1,
+      "n": 711,
+      "accuracy": 0.2515,
+      "coverage": 1
+     }
+    },
+    "by_kind": {
+     "composition": {
+      "n": 211,
+      "scored_n": 188,
+      "correct": 18,
+      "accuracy": 0.0957,
+      "coverage": 1,
+      "acc_when_answered": 0.0957,
+      "evidence_rate": 0,
+      "refusal_rate": 0,
+      "text_n": 23,
+      "text_fuzzy": 0.4348,
+      "usd_per_q": 0.001649
+     },
+     "paraphrase": {
+      "n": 250,
+      "scored_n": 250,
+      "correct": 67,
+      "accuracy": 0.268,
+      "coverage": 1,
+      "acc_when_answered": 0.268,
+      "evidence_rate": 0,
+      "refusal_rate": 0,
+      "usd_per_q": 0.000768
+     },
+     "translation": {
+      "n": 250,
+      "scored_n": 250,
+      "correct": 88,
+      "accuracy": 0.352,
+      "coverage": 1,
+      "acc_when_answered": 0.352,
+      "evidence_rate": 0,
+      "refusal_rate": 0,
+      "usd_per_q": 0.000607
+     }
+    },
+    "calibration": null,
+    "cost_mean": {
+     "llm_tokens_in": 2054.804501,
+     "llm_tokens_out": 3.253165,
+     "api_tokens_in": 0,
+     "api_tokens_out": 0,
+     "llm_calls": 0,
+     "api_calls": 0,
+     "gpu_seconds": 1.581648,
+     "wall_seconds": 1.709019,
+     "usd": 0.000973
+    },
+    "by_source": {
+     "cubicasa5k": {
+      "n": 283,
+      "correct": 107,
+      "accuracy": 0.37809187279151946
+     },
+     "ifc_models": {
+      "n": 135,
+      "correct": 1,
+      "accuracy": 0.007407407407407408
+     },
+     "swiss_dwellings": {
+      "n": 270,
+      "correct": 65,
+      "accuracy": 0.24074074074074073
+     }
+    }
+   },
+   "prior": {
+    "run_id": "20261113-235746-prior-hard",
+    "solver": "prior",
+    "split": "hard",
+    "time": "2026-11-13T23:57:48",
+    "commit": "1953e27",
+    "agent": "F",
+    "note": "D4 prior: keyed backoff + calibrated confidence",
+    "n": 711,
+    "weighted_acc": 0.3049,
+    "accuracy": 0.2093,
+    "macro_accuracy": 0.0936,
+    "usd_per_1k_q": 0,
+    "latency_p50_s": 0.001,
+    "latency_p95_s": 0.001,
+    "evidence_rate": 0,
+    "refusal_rate": 0,
+    "by_tier": {
+     "deterministic": {
+      "share": 1,
+      "n": 711,
+      "accuracy": 0.2093,
+      "coverage": 1
+     }
+    },
+    "by_kind": {
+     "composition": {
+      "n": 211,
+      "scored_n": 188,
+      "correct": 7,
+      "accuracy": 0.0372,
+      "coverage": 1,
+      "acc_when_answered": 0.0372,
+      "evidence_rate": 0,
+      "refusal_rate": 0,
+      "text_n": 23,
+      "text_fuzzy": 0,
+      "usd_per_q": 0
+     },
+     "paraphrase": {
+      "n": 250,
+      "scored_n": 250,
+      "correct": 59,
+      "accuracy": 0.236,
+      "coverage": 1,
+      "acc_when_answered": 0.236,
+      "evidence_rate": 0,
+      "refusal_rate": 0,
+      "usd_per_q": 0
+     },
+     "translation": {
+      "n": 250,
+      "scored_n": 250,
+      "correct": 78,
+      "accuracy": 0.312,
+      "coverage": 1,
+      "acc_when_answered": 0.312,
+      "evidence_rate": 0,
+      "refusal_rate": 0,
+      "usd_per_q": 1e-06
+     }
+    },
+    "calibration": null,
+    "cost_mean": {
+     "llm_tokens_in": 0,
+     "llm_tokens_out": 0,
+     "api_tokens_in": 0,
+     "api_tokens_out": 0,
+     "llm_calls": 0,
+     "api_calls": 0,
+     "gpu_seconds": 0,
+     "wall_seconds": 0.023261,
+     "usd": 0
+    },
+    "by_source": {
+     "cubicasa5k": {
+      "n": 283,
+      "correct": 115,
+      "accuracy": 0.40636042402826855
+     },
+     "ifc_models": {
+      "n": 135,
+      "correct": 6,
+      "accuracy": 0.044444444444444446
+     },
+     "swiss_dwellings": {
+      "n": 270,
+      "correct": 23,
+      "accuracy": 0.08518518518518518
+     }
+    }
+   }
+  }
+ }
+}

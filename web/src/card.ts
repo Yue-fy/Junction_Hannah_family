@@ -27,12 +27,12 @@ const UNIT_LABEL: Record<string, string> = { m2: "m²", m3: "m³", ft2: "ft²", 
 
 const esc = (s: unknown) => String(s ?? "").replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
+/** Per-question cost as "€X per 1,000 questions like this" (µ-euros per question mean nothing to a jury). */
 function fmtEur(usd: number) {
-  const eur = usd * EUR_PER_USD;
-  if (eur === 0) return "€0";
-  if (eur < 0.0001) return `€${(eur * 1e6).toFixed(1)}µ`;
-  if (eur < 0.01) return `€${eur.toFixed(5)}`;
-  return `€${eur.toFixed(3)}`;
+  const per1k = usd * EUR_PER_USD * 1000;
+  if (per1k === 0) return "€0 / 1k Qs";
+  if (per1k < 0.01) return "< €0.01 / 1k Qs";
+  return `€${per1k < 10 ? per1k.toFixed(2) : per1k.toFixed(0)} / 1k Qs`;
 }
 
 function fmtValue(a: Answer) {
@@ -196,7 +196,7 @@ export function renderCard(el: HTMLElement, a: Answer, opts: CardOpts) {
     <div class="cost">
       <span title="Wall time">⏱ ${wall < 1 ? `${Math.round(wall * 1000)} ms` : `${wall.toFixed(1)} s`}</span>
       <span title="LLM tokens in / out">${tokens ? `${(c.llm_tokens_in ?? 0).toLocaleString()} / ${(c.llm_tokens_out ?? 0).toLocaleString()} tok` : "0 tokens"}</span>
-      <span title="Estimated cost with the eval's rates (stoa/eval/runner.py), shown in EUR at ${EUR_PER_USD} €/$">≈ ${fmtEur(costUsd({ ...c, wall_seconds: wall }))}</span>
+      <span title="Estimated cost of this answer with the eval's rates (stoa/eval/runner.py): €${(costUsd({ ...c, wall_seconds: wall }) * EUR_PER_USD).toPrecision(2)} per question, i.e. this much per 1,000 questions like it (EUR at ${EUR_PER_USD} €/$)">≈ ${fmtEur(costUsd({ ...c, wall_seconds: wall }))}</span>
       <span class="solver" title="Solver">${esc(a.solver || "?")}</span>
     </div>
     <details class="sec" open><summary>Why <small>${(a.trace ?? []).length} steps</small></summary>
