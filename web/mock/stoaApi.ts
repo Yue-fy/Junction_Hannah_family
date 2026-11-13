@@ -257,6 +257,17 @@ async function handle(req: Connect.IncomingMessage, res: http.ServerResponse, ne
     const body = req.method === "POST" ? await readBody(req) : Buffer.alloc(0);
     const live = await forward(req, route + url.search, body);
     const optional = ["/questions", "/kg", "/files", "/health"].includes(route);
+    if (live && route === "/kg" && live.status === 200) {
+      // stoa.kg links only siblings for some sources (opening_design, cubicasa): add the drawing set by folder.
+      try {
+        const body = JSON.parse(live.body.toString()) as Record<string, unknown>;
+        const hasPaths = Array.isArray(body.nodes) && (body.nodes as { path?: string }[]).some((n) => n.path);
+        if (!body.files && !hasPaths) body.files = kgFromDisk(url.searchParams.get("path") ?? "").files;
+        return send(res, 200, body, "live");
+      } catch {
+        /* fall through: pass the body on unchanged */
+      }
+    }
     if (live && !(optional && (live.status === 404 || live.status === 405) && !String(live.body).includes("file"))) {
       res.statusCode = live.status;
       res.setHeader("Content-Type", String(live.headers["content-type"] ?? "application/json"));

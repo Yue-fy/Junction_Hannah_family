@@ -115,7 +115,8 @@ export interface KgCrossCheck {
   what: string;
   model: number;
   drawn: number;
-  ok: boolean;
+  ok: boolean | null; // null = not comparable (reason says why)
+  reason?: string;
   plan?: string;
 }
 
