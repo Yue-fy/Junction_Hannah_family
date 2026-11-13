@@ -138,10 +138,11 @@ def _eval_term(fm: FloorModel, t: qparse.Term, qtype: str) -> _Part:
         tr = [f"apartment {t.arg}: {len(rooms)} numbered indoor rooms inside its UNIT_OUTLINE = {val:.2f} m²"]
         if excl:
             tr.append("excluded: " + ", ".join(r.label() for r in excl))
-        return _Part(val, RULE_CONF["area_apartment"] if unit.poly is not None else 0.3,
-                     [(r.bbox, _room_note(r)) for r in rooms], tr,
-                     ["apartment = rooms whose label lies inside the UNIT_OUTLINE holding 'Whg./App. X'",
-                      "outdoor rooms (Balkon/Loggia/Terrasse/…) excluded"])
+        asm = ["apartment = rooms whose label lies inside the UNIT_OUTLINE holding 'Whg./App. X'",
+               "outdoor rooms (Balkon/Loggia/Terrasse/…) excluded"]
+        conf, asm2, miss = _unnamed_caveat(rooms, val)
+        return _Part(val, min(conf, RULE_CONF["area_apartment"]) if unit.poly is not None else 0.3,
+                     [(r.bbox, _room_note(r)) for r in rooms], tr, asm + asm2, miss)
     if k == "area_total":
         rooms = [r for r in fm.rooms if r.number and not r.outdoor and not r.shaft]
         excl = [r for r in fm.rooms if r.number and (r.outdoor or r.shaft)]
@@ -152,8 +153,26 @@ def _eval_term(fm: FloorModel, t: qparse.Term, qtype: str) -> _Part:
         asm = ["total = numbered ROOM_OUTLINE polygons, minus outdoor rooms (Balkon/Loggia/Terrasse/…) and shafts"]
         if t.note:
             asm.append(t.note)
-        return _Part(val, RULE_CONF["area_total"], [(r.bbox, _room_note(r)) for r in rooms], tr, asm)
+        conf, asm2, miss = _unnamed_caveat(rooms, val)
+        return _Part(val, min(conf, RULE_CONF["area_total"] + 0.06), [(r.bbox, _room_note(r)) for r in rooms], tr,
+                     asm + asm2, miss)
     return _Part(None, 0.0, [], [f"unknown term {k}"])
+
+
+def _unnamed_caveat(rooms: list[Room], total: float):
+    """Numbered rooms without a name are the only source of error in apartment/floor totals (train: every
+    overshoot is explained by 1-3 such rooms or a misassigned room; geometry can't tell which ones the
+    reference drops). Keep them, but say so and lower the confidence."""
+    un = [r for r in rooms if not r.name]
+    if not un:
+        return 0.97, [], []
+    a = sum(r.area for r in un)
+    lo = total - a
+    share = a / total if total else 0
+    conf = 0.95 if share < 0.02 else 0.8
+    return conf, [f"included {len(un)} numbered rooms without a name ({a:.2f} m²: "
+                  + ", ".join(r.number for r in un[:8]) + "); without them the total is "
+                  + f"{lo:.2f} m²"], ["room type of unnamed numbered rooms (shaft/void or storage?)"]
 
 
 class _Mapper:

@@ -294,7 +294,19 @@ def _load_floor_cached(path: str) -> FloorModel:
         items["door"].append(Item("door", box, f"door {k + 1}"))
 
     # windows: 3 polylines each -> cluster touching boxes --------------------------------------------
-    groups = _cluster(window_boxes, 0.01)
+    groups = []
+    for g in _cluster(window_boxes, 0.01):
+        # adjacent windows touch: a cluster of 3k lines along a wall = k windows side by side; split it
+        # into runs of 3 along the cluster's long axis (a window's own 3 lines are stacked across it)
+        if len(g) > 3 and len(g) % 3 == 0:
+            gb = window_boxes[g[0]]
+            for i in g[1:]:
+                gb = _union(gb, window_boxes[i])
+            ax = 0 if gb[2] - gb[0] >= gb[3] - gb[1] else 1
+            g = sorted(g, key=lambda i: (window_boxes[i][ax] + window_boxes[i][ax + 2]) / 2)
+            groups += [g[k:k + 3] for k in range(0, len(g), 3)]
+        else:
+            groups.append(g)
     n_win_polys = len(window_boxes)
     exp = round(n_win_polys / 3)
     if len(groups) != exp:
@@ -320,7 +332,7 @@ def _load_floor_cached(path: str) -> FloorModel:
             continue
         lst.sort(key=lambda it: (-it.bbox[3], it.bbox[0]))
         for k, it in enumerate(lst):
-            it.note = it.note or f"{kind} {k + 1}"
+            it.note = f"{kind} {k + 1}"
 
     insunits = doc.header.get("$INSUNITS")
     if insunits not in (6, None):
