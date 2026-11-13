@@ -86,3 +86,13 @@ def test_select_grep():
     qs = [Question(qid=str(i), path="data/cubicasa5k/a.png", question=q, answer=1, unit=None, type="count")
           for i, q in enumerate(("How many windows are shown?", "Kuinka monta ikkunaa?", "How many doors?"))]
     assert len(select(qs, grep="window|ikkun")) == 2
+
+
+def test_resbim_plan_links_to_model():
+    from stoa.data import data_root, drawing_group, ifc_model_for, siblings
+
+    if not (data_root() / "data/ifc_models/resbim-0_model.ifc").exists():
+        return
+    assert ifc_model_for("data/ifc_models/resbim-0_plan.png") == "data/ifc_models/resbim-0_model.ifc"
+    assert siblings("data/ifc_models/resbim-0_plan.png")[".ifc"] == "data/ifc_models/resbim-0_model.ifc"
+    assert drawing_group("data/ifc_models/resbim-0_plan.png") == drawing_group("data/ifc_models/resbim-0_model.ifc")

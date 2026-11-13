@@ -54,3 +54,58 @@ def judge_rows(rows: list[dict], backend: str = "local", workers: int = 8) -> No
             ok, why = f.result()
             futs[f]["text_judge"] = ok
             futs[f]["text_judge_raw"] = why
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Judge the text answers of an EXISTING predictions file (no solver re-run).
+
+    python -m stoa.eval.judge RUN [--backend local|nvidia] [--workers 16]
+    Writes <run>.judged.jsonl next to the predictions (the original file is left alone) and prints the
+    judged accuracy per bucket and per answering solver.
+    """
+    import argparse
+    import collections
+    import json
+    import sys
+    from pathlib import Path
+
+    from stoa.eval.splits import shared_root
+
+    ap = argparse.ArgumentParser(prog="python -m stoa.eval.judge", description=main.__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("run")
+    ap.add_argument("--backend", default="local", choices=("local", "nvidia"))
+    ap.add_argument("--workers", type=int, default=16)
+    a = ap.parse_args(argv)
+    p = Path(a.run)
+    if not p.exists():
+        p = shared_root() / "artifacts" / "eval" / (a.run if a.run.endswith(".jsonl") else f"{a.run}.jsonl")
+    rows = [json.loads(line) for line in open(p, encoding="utf-8") if line.strip()]
+    todo = [r for r in rows if r["type"] in ("text", "other")]
+    if not todo:
+        print("no text/other questions in this run", file=sys.stderr)
+        return 1
+    judge_rows(todo, a.backend, a.workers)
+    out = p.with_name(p.stem + ".judged.jsonl")
+    with open(out, "w", encoding="utf-8") as fh:
+        for r in rows:
+            fh.write(json.dumps(r, ensure_ascii=False, default=str) + "\n")
+
+    def show(title, key):
+        g = collections.defaultdict(list)
+        for r in todo:
+            g[key(r)].append(r)
+        print(f"\n{title:40s} {'n':>5s} {'judged':>7s} {'correct':>8s} {'unjudged':>9s}")
+        for k, v in sorted(g.items()):
+            j = [r for r in v if r.get("text_judge") is not None]
+            ok = sum(1 for r in j if r["text_judge"])
+            print(f"{k:40s} {len(v):5d} {len(j):7d} {100 * ok / max(1, len(j)):7.1f}% {len(v) - len(j):9d}")
+
+    show("bucket", lambda r: f"{r['source']}/{r['type']}")
+    show("answering solver", lambda r: r.get("solver") or "?")
+    print(f"\njudge: {a.backend}; verdicts in {out}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
