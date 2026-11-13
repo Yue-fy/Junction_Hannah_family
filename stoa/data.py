@@ -146,7 +146,7 @@ def drawing_group(path: str, root: Path | None = None) -> str:
 
 
 _NUM = re.compile(r"\d+(?:[.,]\d+)?")
-_QUOTED = re.compile(r"(['\"‘’“”«»])(?:(?!\1).){1,80}\1")
+_QUOTED = re.compile(r"«[^»]{1,80}»|„[^“”\"]{1,80}[“”\"]|“[^”]{1,80}”|‘[^’]{1,80}’|(?<!\w)'[^']{1,80}'(?!\w)|\"[^\"]{1,80}\"")
 
 
 def template_of(question: str) -> str:

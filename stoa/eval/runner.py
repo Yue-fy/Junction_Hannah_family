@@ -196,9 +196,10 @@ def main(argv: list[str] | None = None) -> int:
     m["wall_s"] = round(wall, 1)
     print_report(m)
     status = _git("status", "--porcelain", "--untracked-files=no")
+    from stoa.eval.splits import split_hash
     line = {
         "time": datetime.now().isoformat(timespec="seconds"), "run_id": run_id, "solver": a.solver,
-        "solver_args": kwargs, "split": a.split, "limit": a.limit, "sources": sorted(sources) or None,
+        "solver_args": kwargs, "split": a.split, "split_hash": split_hash(a.split), "limit": a.limit, "sources": sorted(sources) or None,
         "types": sorted(types) or None, "handled_only": a.handled_only, "n": len(qs),
         "commit": _git("rev-parse", "--short", "HEAD"), "branch": _git("rev-parse", "--abbrev-ref", "HEAD"),
         "dirty": bool(status), "agent": os.environ.get("AGENT_ID", ""), "note": a.note,
