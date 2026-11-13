@@ -67,29 +67,49 @@ INCLUDE_OUT = (r"(?:including|incl\.?|inklusive|inkl\.?|einschliesslich|y\s+comp
                r"ext[ée]rieur|estern)")
 GROSS = (r"\bgross\s+(?:floor\s+|internal\s+|external\s+|living\s+)?area|\bgfa\b|brutto|\bbgf\b|"
          r"surface\s+(?:de\s+plancher\s+)?brute|superficie\s+lorda")  # not "wie gross ist" (= how large)
-MEAN_W = r"\baverage\b|\bmean\b|durchschnitt\w*|\bmittlere\w*|\bmoyen(?:ne)?s?\b|\bmedi[ao]\b|im\s+mittel"
+MEAN_W = (r"\baverage\b|\bmean\b|durchschnitt\w*|\bmittlere\w*|\bmoyen(?:ne)?s?\b|\bmedi[ao]\b|im\s+mittel|"
+          r"\bgemiddeld\w*|genomsnitt\w*|\bmedel\w*|\bpromedio\b|keskim[äa][äa]r\w*|keskiarvo|[śs]redni\w*")
 PER_W = (r"\b(?:per|pro|je)\s+(?:residential\s+)?(?:apartment|unit|flat|dwelling|wohnung|wohneinheit)|divided\s+by|"
-         r"par\s+(?:appartement|logement)|per\s+(?:appartamento|unit[àa]\s+abitativa)")
+         r"par\s+(?:appartement|logement)|per\s+(?:appartamento|unit[àa]\s+abitativa)|"
+         r"per\s+(?:woning|appartement|wooneenheid|l[äa]genhet|bostad|bostadsenhet)|por\s+(?:apartamento|vivienda)")
 TIMES_W = (r"how\s+many\s+times|times\s+(?:larger|bigger|greater|as\s+(?:large|big))|give\s+the\s+ratio|\bratio\b|"
            r"\bfa[ck]tor\b|wievielmal|verh[äa]ltnis|combien\s+de\s+fois|\bfois\s+plus|\brapport\b|quante\s+volte|"
-           r"\bvolte\s+pi[uù]|\brapporto\b")
+           r"\bvolte\s+pi[uù]|\brapporto\b|hoeveel\s+keer|\bkeer\s+(?:zo\s+)?(?:groter|groot|kleiner)|verhouding|"
+           r"hur\s+m[åa]nga\s+g[åa]nger|g[åa]nger\s+(?:st[öo]rre|s[åa]\s+stor)|f[öo]rh[åa]llande|\bkvot\b|"
+           r"cu[áa]ntas\s+veces|veces\s+(?:m[áa]s\s+grande|mayor)|\braz[óo]n\b|kuinka\s+monta\s+kertaa|kertaa\s+suurempi|"
+           r"\bsuhde\b|ile\s+razy|razy\s+wi[ęe]ksz\w*|\bstosunek\b|\bmultiple\s+of\b|relative\s+to")
 SHARE_W = (r"\bshare\b|\bpercent(?:age)?\b|in\s+%|\bproportion\b|\banteil\b|prozent|pourcentage|\bpart\s+de\b|"
-           r"percentuale|\bquota\b|\btake\s+up\b|\bnimmt\b.*\bein\b|\boccupe\b|\boccupa\b")
+           r"percentuale|\bquota\b|\btake\s+up\b|\bnimmt\b.*\bein\b|\boccupe\b|\boccupa\b|\baandeel\b|\bprocent\w*|"
+           r"\bandel(?:en)?\b|\bporcentaje\b|\bproporci[óo]n\b|\bosuus\b|prosent\w*|\budzia[łl]\b|\btakes\s+up\b|"
+           r"\binneemt\b|\btar\s+upp\b")
 THRESH_GT = (r"(?:more|larger|greater|bigger)\s+than|exceed(?:s|ing)?|\bover\b|\babove\b|[üu]ber|mehr\s+als|"
              r"gr[öo](?:ss|ß)er\s+als|plus\s+de|plus\s+grande?s?\s+que|sup[ée]rieure?s?\s+[àa]|pi[uù]\s+di|"
-             r"superiore\s+a|maggiore\s+di|oltre")
+             r"superiore\s+a|maggiore\s+di|oltre|meer\s+dan|groter\s+dan|\bboven\b|mer\s+[äa]n|st[öo]rre\s+[äa]n|"
+             r"\b[öo]ver\b|m[áa]s\s+de|mayor(?:es)?\s+(?:a|que)|yli|suurempi\s+kuin|wi[ęe]ksz\w*\s+ni[żz]|powy[żz]ej")
 THRESH_LT = (r"(?:less|smaller|fewer)\s+than|\bunder\b|\bbelow\b|\bunter\b|weniger\s+als|kleiner\s+als|moins\s+de|"
-             r"plus\s+petite?s?\s+que|inf[ée]rieure?s?\s+[àa]|meno\s+di|inferiore\s+a|minore\s+di")
-THRESH_GE = r"at\s+least|mindestens|au\s+moins|almeno"
-THRESH_W = (r"(" + THRESH_GT + r"|" + THRESH_LT + r"|" + THRESH_GE + r")\s+(\d+(?:[.,]\d+)?)\s*(?:m²|m2|qm|mq|sq|square)")
+             r"plus\s+petite?s?\s+que|inf[ée]rieure?s?\s+[àa]|meno\s+di|inferiore\s+a|minore\s+di|minder\s+dan|"
+             r"kleiner\s+dan|\bonder\b|mindre\s+[äa]n|\bunder\b|menos\s+de|menor(?:es)?\s+(?:a|que)|"
+             r"pienempi\s+kuin|mniejsz\w*\s+ni[żz]|poni[żz]ej")
+THRESH_GE = r"at\s+least|mindestens|au\s+moins|almeno|ten\s+minste|minstens|\bminst\b|al\s+menos|v[äa]hint[äa][äa]n|co\s+najmniej"
+THRESH_W = (r"(" + THRESH_GT + r"|" + THRESH_LT + r"|" + THRESH_GE + r")\s+(\d+(?:[.,]\d+)?)\s*(?:m²|m2|qm|mq|sq|square|kvm|vierkante)")
 NEG_APT_W = (r"(?:do(?:es)?\s+not|don't|doesn't|not)\s+(?:belong|lie|part|in|inside|within)\w*|outside\s+(?:of\s+)?"
              r"(?:the\s+)?apartment|other\s+than\s+apartment|except\s+(?:for\s+)?apartment|exclud\w*\s+apartment|"
              r"without\s+apartment|ohne\s+(?:die\s+)?wohnung|au(?:ss|ß)er\s+(?:der\s+)?wohnung|nicht\s+zu\s+wohnung|"
              r"sans\s+l'\s*appartement|hors\s+(?:de\s+)?l'\s*appartement|n'appartiennent\s+pas|senza\s+l'\s*appartamento|"
-             r"escluso\s+l'\s*appartamento|tranne\s+l'\s*appartamento|non\s+appartengono")
-WHICH_CMP = r"^\s*(?:which|welche[rs]?|quel(?:le)?|quale)\b.*\b(smaller|larger|bigger|greater|kleiner|gr[öo]sser|plus\s+petit|plus\s+grand|più\s+piccol|più\s+grand)"
+             r"escluso\s+l'\s*appartamento|tranne\s+l'\s*appartamento|non\s+appartengono|non\s+fanno\s+parte|"
+             r"al\s+di\s+fuori\s+dell'\s*appartamento|eccetto\s+l'\s*appartamento|n't\s+(?:belong|in|part|inside|within)|"
+             r"apart\s+from\s+apartment|besides\s+apartment|minus\s+apartment|"
+             r"niet\s+(?:tot|bij|in)\s+(?:het\s+)?(?:appartement|woning)|buiten\s+(?:het\s+)?(?:appartement|woning)|"
+             r"behalve\s+(?:het\s+)?(?:appartement|woning)|zonder\s+(?:het\s+)?(?:appartement|woning)|"
+             r"exclusief\s+(?:het\s+)?(?:appartement|woning)|met\s+uitzondering\s+van\s+(?:het\s+)?(?:appartement|woning)|"
+             r"inte\s+(?:tillh[öo]r|h[öo]r\s+till|ing[åa]r\s+i|ligger\s+i)|utom\s+l[äa]genhet|f[öo]rutom\s+l[äa]genhet|"
+             r"exklusive\s+l[äa]genhet|utanf[öo]r\s+l[äa]genhet|excepto\s+el\s+apartamento|sin\s+el\s+apartamento|"
+             r"fuera\s+del\s+apartamento|no\s+pertenecen")
+WHICH_CMP = (r"^\s*(?:which|welche[rs]?|quel(?:le)?|lequel|laquelle|quale|welk[e]?|vilk(?:en|et)|cu[áa]l|kumpi|kt[óo]r[ey])\b.*"
+             r"\b(smaller|larger|bigger|greater|kleiner|gr[öo]sser|größer|plus\s+petit|plus\s+grand|più\s+piccol|più\s+grand|"
+             r"groter|mindre|st[öo]rre|m[áa]s\s+peque[ñn]|m[áa]s\s+grande|pienempi|suurempi|mniejsz|wi[ęe]ksz)")
 COUNT_WORDS = r"how\s+many|count|number\s+of|wie\s+viele|anzahl|combien|nombre\s+de|quant[ie]|quante|numero\s+di|hoeveel|hur\s+m[åa]nga"
-AREA_WORDS = (r"\barea\b|fl[äa]che|surface|superficie|oppervlak|yta\b|m²|m2\b|square\s+met|sq\.?\s*m\b|square\s+f(?:ee|oo)t|"
+AREA_WORDS = (r"arean?\b|vloeroppervl|ytan\b|fl[äa]che|surface|superficie|oppervlak|yta\b|m²|m2\b|square\s+met|sq\.?\s*m\b|square\s+f(?:ee|oo)t|"
               r"sq\.?\s*ft|ft²|ft2\b|how\s+(?:large|big)|wie\s+gross|wie\s+groß")
 FT2 = r"square\s+f(?:ee|oo)t|sq\.?\s*ft|ft²|ft2\b|\bsf\b"
 DIFF = (r"how\s+many\s+more|more\s+\w+\s+than|by\s+how\s+(?:many|much)|difference|minus|larger\s+than|bigger\s+than|"
@@ -123,7 +143,7 @@ WHICH_Q = (r"^\s*(?:which|what\s+(?:is\s+the\s+)?(?:name|number|label)|welche[rs
 
 ROOMNUM_RE = re.compile(r"(?<![\w.])([A-Z]{0,2}\d{1,3}\.\d{1,3}(?:\.\d{1,3})?)(?![\w.]*\s*(?:m²|m2|ft|%))")
 APT_LEAD = (r"(?:apartments?|units?|flats?|wohnungen|wohnung|whg\.?|appartements?|l'appartement|appartament[oi]|"
-            r"dell'appartamento|app\.?|lägenhet(?:er(?:na)?)?|woning(?:en)?)")
+            r"dell'appartamento|app\.?|lägenhet(?:er(?:na)?)?|l[äa]genheten|woning(?:en)?|bostad(?:en)?|apartamentos?)")
 APT_RE = re.compile("(?i:" + APT_LEAD + r")\s+([A-Z](?:" + JOIN + r"[A-Z])*)(?![\w])")
 QUOTES = "'\"«»„“”‘’‹›`´"
 
@@ -217,8 +237,8 @@ def parse(question: str, vocab: list[str] | None = None, room_numbers: set[str] 
     total_numbered = bool(re.search(TOTAL_NUMBERED, ql))
 
     # "how many times / by what factor is apartment B larger than A" compares sizes even without an area word
-    if re.search(TIMES_W, ql) and (len(apts) >= 2 or len(nums) >= 2) and not is_area:
-        is_area, is_count = True, False
+    if re.search(TIMES_W, ql) and (len(apts) >= 2 or len(nums) >= 2):
+        is_area, is_count = True, False  # "how many times" is not a count
     op = "sum"
     if re.search(MAX_W, ql):
         op = "max"
@@ -300,7 +320,7 @@ def parse(question: str, vocab: list[str] | None = None, room_numbers: set[str] 
                 continue
             concept_terms.append(Term("area_label", list(clabs), p, note=f"concept {c}"))
     # area questions -------------------------------------------------------------------------------
-    if is_area and not (is_count and not re.search(r"m²|m2\b|square|ft|area|fl[äa]che|surface|superficie", ql)):
+    if is_area and not (is_count and not re.search(r"m²|m2\b|square|ft|area|fl[äa]che|surface|superficie|yta\b|ytan\b|arean\b|oppervl", ql)):
         qtype = "area"
         scoped_label = apts and (labels or concept_terms) and not re.search(NEG_APT_W, ql) and \
             not re.search(SHARE_W, ql) and not re.search(TIMES_W, ql) and len(apts) == 1
@@ -328,7 +348,8 @@ def parse(question: str, vocab: list[str] | None = None, room_numbers: set[str] 
         gross = bool(re.search(GROSS, ql))
         consumed: list[str] = []
         thr = None
-        if apts and re.search(NEG_APT_W, ql) and (total_numbered or re.search(r"\btotal|gesamt|insgesamt|totale|tous|toutes|tutti", ql)):
+        if apts and re.search(NEG_APT_W, ql) and (total_numbered or re.search(r"\btotal|gesamt|insgesamt|totale|tous|toutes|tutti|\balle\b|\balla\b|samtliga|"
+                                                                      r"\ball\b|todas|todos|kaikki|wszystkie|overige|[öo]vriga|other", ql)):
             # "numbered indoor rooms that do NOT belong to apartment A" = floor total - apartment A
             terms = [Term("area_total", None, -1)] + [Term("area_apartment", a, p) for a, p in apts]
             op, rev = "diff", False
@@ -353,7 +374,7 @@ def parse(question: str, vocab: list[str] | None = None, room_numbers: set[str] 
             qr.terms.sort(key=lambda t: t.pos)
             return qr
         if re.search(WHICH_CMP, ql) and len(terms) >= 2:
-            op = "min" if re.search(r"smaller|kleiner|petit|piccol", ql) else "max"
+            op = "min" if re.search(r"smaller|kleiner|petit|piccol|mindre|peque[ñn]|pienempi|mniejsz", ql) else "max"
             qr = Query("text", op, terms, None, notes, include_outdoor=inc, gross=gross, consumed=consumed + [WHICH_CMP, r"\bwhich\b"])
             qr.terms.sort(key=lambda t: t.pos)
             return qr
@@ -433,7 +454,7 @@ def _finish(qr: Query, rev: bool) -> Query:
 
 
 UNCOVERED = re.compile(
-    r"\b(which|welche[rs]?|lequel|laquelle|quale\s+(?:dei|delle)|average|mean|median|durchschnitt|moyenne|media|per\s|each|jede[rs]?|"
+    r"\b(which|welche[rs]?|lequel|laquelle|quale\s+(?:dei|delle)|average|mean|median|durchschnitt|moyenne|media|per\s+(?:apartment|unit|flat|room|dwelling|floor|storey|wohnung|logement|appartement)|each|jede[rs]?|"
     r"chaque|ogni|ratio|percent|percentage|proportion|share|anteil|with\s+(?:a|an|no|more|at)|without\s+(?:a|an|any|windows?|doors?)|that\s+ha(?:ve|s)|"
     r"ha(?:ve|s)\s+(?:a|an|no|any|more|at\s+least|\d+)\b|contain\w*|adjacent|next\s+to|neighbo\w+|between|at\s+least|at\s+most|is\s+there|are\s+there\s+any|do\s+any|"
     r"mit\s+(?:einem|einer|mehr)|ohne\s+(?:fenster|t[üu]r)|avec\s+(?:un|une|plus)|sans\s+(?:fen|porte)|senza)\b|%|(?:more|less|larger|smaller)\s+than\s+\d",
@@ -470,6 +491,8 @@ def operator_unapplied(question: str, qr: Query) -> bool:
     """The question contains an operator word (average, ratio, share, threshold, 'not in apartment', per) but the
     parse applied none: the plain sum is probably the wrong reading -> cap the confidence."""
     q = _norm(question)
+    for pat in qr.consumed:  # operators the parse applied (e.g. "not in apartment A" -> floor minus A) are fine
+        q = re.sub(pat, " ", q, flags=re.I)
     if qr.op in ("sum", "diff") and (re.search(SUPER_MAX, q, re.I) or re.search(SUPER_MIN, q, re.I)):
         return True  # "largest"/"smallest" over something the rules did not pick
     return qr.op in ("sum", "diff") and bool(OPERATOR_HINT.search(q))

@@ -79,6 +79,36 @@ def _rooms_with_name(fm: FloorModel, name) -> list[Room]:
     return [r for r in fm.rooms if (r.name or "").lower() in low]
 
 
+OPCHECK_KINDS = {
+    "A": "one value, or the total/sum of the named things", "B": "difference between two things",
+    "C": "ratio / how many times", "D": "percentage or share of a whole", "E": "average",
+    "F": "how many items are above/below a threshold", "G": "a total excluding some part (e.g. not in apartment X)",
+    "H": "which of the named things is larger/smaller (a name)", "I": "largest/smallest of a set", "J": "yes/no",
+    "K": "something else",
+}
+OPCHECK_PROMPT = ("Classify the operation this floor-plan question asks for. Reply with ONE capital letter only.\n"
+                  + "\n".join(f"{k}: {v}" for k, v in OPCHECK_KINDS.items()) + "\nQuestion: {q}\nLetter:")
+
+
+def _known_template(question: str) -> bool:
+    try:
+        from stoa.router.prior import known_template
+        return known_template(question)
+    except Exception:  # noqa: BLE001 - no train split available: treat as unseen
+        return False
+
+
+def _opcheck(question: str, backend: str = "local") -> str | None:
+    """One short LLM call: which operation does the question ask (letter A-K)? None if the LLM is unavailable."""
+    try:
+        from stoa.llm import chat
+        r = chat(OPCHECK_PROMPT.replace("{q}", question), backend=backend, max_tokens=3, temperature=0.0)
+    except Exception:  # noqa: BLE001
+        return None
+    m = re.search(r"\b([A-K])\b", (r.text or "").strip().upper())
+    return m.group(1) if m else None
+
+
 BEDROOM_FALLBACK = ["Zimmer", "Pièce", "Stanza"]
 
 
@@ -331,7 +361,8 @@ class DxfSolver(BaseSolver):
 
     sources = ("swiss_dwellings",)
 
-    def __init__(self, llm: int | str = 1, backend: str = "local", **kwargs):
+    def __init__(self, llm: int | str = 1, backend: str = "local", opcheck: int | str = 1, **kwargs):
+        self.opcheck = int(opcheck)
         super().__init__(**kwargs)
         self.llm = bool(int(llm))
         self.backend = backend
@@ -356,10 +387,26 @@ class DxfSolver(BaseSolver):
         vocab = fm.names() + KNOWN_NAMES
         qr = qparse.parse(question, vocab, room_numbers={r.number for r in fm.rooms if r.number})
         trace = [f"parsed: {qr.describe()}", *[f"parse note: {n}" for n in qr.notes]]
+        opcheck_cap = False
         if self.llm and not qparse.covered(question, qr):
             ans = self._tableqa(path, dxf_rel, fm, question, trace)
             if ans is not None:
                 return ans
+        elif self.llm and self.opcheck and qr.terms and qr.op in ("sum", "diff") and not _known_template(question):
+            # unseen wording that the rules read as a plain value/sum/difference: one short LLM call checks the
+            # operation (any language); on disagreement the table QA answers instead (F/S0 hard2p/hard2q lesson:
+            # keyword rules miss reworded operators and then answer the simpler question confidently)
+            letter = _opcheck(question, self.backend)
+            neg = qr.op == "diff" and qr.terms[0].kind == "area_total"  # the floor-minus-apartment rule fired
+            ok = letter is None or (qr.op == "sum" and letter == "A") or (qr.op == "diff" and (
+                (letter == "B" and not neg) or (letter == "G" and neg)))
+            trace.append(f"operation check (LLM): '{letter}' = {OPCHECK_KINDS.get(letter, '?')}; rules applied "
+                         f"{qr.op} -> {'agree' if ok else 'disagree'}")
+            if not ok:
+                ans = self._tableqa(path, dxf_rel, fm, question, trace)
+                if ans is not None:
+                    return ans
+                opcheck_cap = True
         if not qr.terms:
             return Answer.abstain(self.name, "question not understood by the DXF parser", trace)
         if any(t.kind == "area_room" and t.arg == "<all>" for t in qr.terms):  # every numbered indoor room
@@ -390,7 +437,7 @@ class DxfSolver(BaseSolver):
         conf = 1.0
         for p in parts:
             conf *= p.conf if p.value is not None else 0.2
-        if qparse.operator_unapplied(question, qr):
+        if qparse.operator_unapplied(question, qr) or opcheck_cap:
             conf = min(conf, 0.3)  # S0 D9: low enough that the pipeline's agent takes over
             missing.append("the question mentions an operation (average/ratio/share/threshold/per/'not in') that the "
                            "rule parser did not apply; the value may answer a simpler question")
