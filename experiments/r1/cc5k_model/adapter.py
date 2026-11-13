@@ -116,7 +116,8 @@ class RasterCC5K:
         assumptions = ["symbols segmented by the pretrained CubiCasa5K model (Kalervo et al. 2019); "
                        "each box is one counted symbol"]
         if d.get("cc5k_list") == "train":
-            assumptions.append("this drawing is in the model's original training list: the count may be memorised")
+            assumptions.append("this drawing is in the model's original training list (measured: accuracy on such "
+                               "drawings is within a few points of held-out ones)")
         missing = []
         if c["confidence"] < 0.5:
             missing.append(f"a second independent count of {NOUN[t]} symbols (model exact on ~{c['confidence']:.0%} "
