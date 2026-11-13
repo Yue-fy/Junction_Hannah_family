@@ -218,7 +218,7 @@ def load_split(name: str) -> list[Question]:
     (generated splits such as `hard`) are used as-is; the rest are joined with questions.jsonl via qid."""
     if name == "all":
         return list(load_questions())
-    f = splits_dir() / f"{name}.jsonl"
+    f = Path(name) if (name.endswith(".jsonl") or "/" in name) else splits_dir() / f"{name}.jsonl"
     if not f.exists():
         raise FileNotFoundError(f"{f} missing; run `python -m stoa.eval.splits --write`")
     by_id = None
@@ -243,7 +243,7 @@ def load_split(name: str) -> list[Question]:
 
 def split_hash(name: str) -> str | None:
     """Short content hash of a split file, recorded in leaderboard lines (detects regenerated splits)."""
-    f = splits_dir() / f"{name}.jsonl"
+    f = Path(name) if (name.endswith(".jsonl") or "/" in name) else splits_dir() / f"{name}.jsonl"
     return hashlib.sha1(f.read_bytes()).hexdigest()[:8] if f.exists() else None
 
 
