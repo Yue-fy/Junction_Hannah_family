@@ -327,7 +327,7 @@ def _add_geometry(f, elements: dict[str, Element], geom_classes, threads: int | 
         st.set("weld-vertices", False)
     except Exception:  # noqa: BLE001
         pass
-    nthreads = threads or max(1, min(16, multiprocessing.cpu_count() // 3))
+    nthreads = threads or int(os.environ.get("IFC_GEOM_THREADS", 0)) or max(1, min(16, multiprocessing.cpu_count() // 3))
     it = ifcopenshell.geom.iterator(st, f, nthreads, include=targets)
     if not it.initialize():
         return

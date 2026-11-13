@@ -114,6 +114,15 @@ _DIFF = ("difference", "minus", "larger than", "bigger than", "smaller than", "m
          "differenza", "piu di")
 _CONJ = re.compile(r"\b(and|und|en|y|e|og|ja|i|si|et|och|plus|or|oder|of|o|eller|sau|ou)\b|[+&,/]")
 _NET = ("net", "netto", "util", "neto", "nett")
+_EXTERNAL = re.compile(r"\b(external|exterior|outer|outside|facade|aussen\w*|ausseren|buiten\w*|exterior\w*|ydre|udvendig\w*|"
+                       r"valis\w*|zewnetrzn\w*|exterieur\w*|estern\w*|ulko\w*|yttre)\b")
+_INTERNAL = re.compile(r"\b(internal|interior|inner|inside|innen\w*|inneren|binnen\w*|interior\w*|indvendig\w*|indre|"
+                       r"sise\w*|wewnetrzn\w*|interieur\w*|intern\w*|sisa\w*|inre)\b")
+_LOADBEARING = re.compile(r"\b(load[- ]?bearing|structural|tragend\w*|dragend\w*|portant\w*|baerende|kandev\w*|nosn\w*|"
+                          r"kantav\w*|barande)\b")
+_ELEVATION = re.compile(r"\b(elevation|hohenkote|hoehenkote|hohe uber|peil|cota|kote|niveau|altitude|absolute height)\b")
+_HEIGHT = re.compile(r"\b(height|high|hohe|hoehe|hoch|hoogte|altura|hojde|korgus|wysokosc|inaltime|hauteur|altezza|"
+                     r"korkeus|hojd)\b")
 # "floor area" compounds: they name the measured quantity of a ROOM, not a floor slab ("vloer", "Boden", "dæk")
 _FLOOR_AREA = re.compile(r"(net(to)?[- ]?)?(floor ?area|floor ?space|vloer ?oppervlak\w*|grund ?flache|grundflaeche|"
                          r"boden ?flache|bodenflaeche|poranda ?pind|porandapind|gulvareal\w*|nettoareal\w*|"
@@ -144,6 +153,8 @@ class Intent:
     gross: bool = False
     asked_unit: str | None = None  # unit the question asks for (m2, ft2, m3, m, ft, ...)
     kinds: list[str] = field(default_factory=list)  # coordinated kinds ("doors and windows") -> summed
+    filters: dict[str, bool] = field(default_factory=dict)  # {"IsExternal": True, "LoadBearing": True}
+    attr: str | None = None  # storey attribute asked: "elevation" | "height"
     op: str | None = None  # None | sum | max | min | argmax | argmin | diff | more
     yes_no: bool = False  # "are there more X than Y?" -> "yes"/"no"
     notes: list[str] = field(default_factory=list)
@@ -263,6 +274,17 @@ def parse(question: str) -> Intent:
     it = Intent(metric=metric, kind=kind, names=names, side_area=side,
                 total=_has(t, _TOTAL) or (metric != "count" and len(names) <= 1),
                 net=not gross, gross=gross, asked_unit=asked_unit, kinds=kinds or ([kind] if kind else []))
+    if _EXTERNAL.search(t):
+        it.filters["IsExternal"] = True
+    elif _INTERNAL.search(t):
+        it.filters["IsExternal"] = False
+    if _LOADBEARING.search(t):
+        it.filters["LoadBearing"] = True
+    if kind == "storey" or (kind is None and names and (_ELEVATION.search(t) or _HEIGHT.search(t))):
+        if _ELEVATION.search(t):
+            it.metric, it.kind, it.attr = "length", "storey", "elevation"
+        elif _HEIGHT.search(t) and metric != "count":
+            it.metric, it.kind, it.attr = "length", "storey", "height"
     which = _has(t, _WHICH)
     comparative_which = which and re.search(r"\b(bigger|larger|greater|smaller|grosser|groesser|kleiner|groter|"
                                             r"kleiner|storre|mindre|mayor|menor)\b", t)
