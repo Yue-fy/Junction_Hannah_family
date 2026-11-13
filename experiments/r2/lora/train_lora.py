@@ -80,6 +80,7 @@ def main() -> None:
     ap.add_argument("--mem-frac", type=float, default=0.42)
     ap.add_argument("--save-every", type=int, default=1000, help="samples")
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--init-adapter", default="", help="continue training this saved adapter (rank/targets from it)")
     a = ap.parse_args()
 
     from peft import LoraConfig, get_peft_model
@@ -105,9 +106,15 @@ def main() -> None:
     model.config.use_cache = False
     model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
     model.enable_input_require_grads()
-    cfg = LoraConfig(r=a.rank, lora_alpha=2 * a.rank, lora_dropout=0.05, bias="none",
-                     target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"])
-    model = get_peft_model(model, cfg)
+    if a.init_adapter:
+        from peft import PeftModel
+
+        model = PeftModel.from_pretrained(model, a.init_adapter, is_trainable=True)
+        print(f"continuing from adapter {a.init_adapter}", flush=True)
+    else:
+        cfg = LoraConfig(r=a.rank, lora_alpha=2 * a.rank, lora_dropout=0.05, bias="none",
+                         target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"])
+        model = get_peft_model(model, cfg)
     model.print_trainable_parameters()
 
     params = [p for p in model.parameters() if p.requires_grad]
