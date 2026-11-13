@@ -43,6 +43,9 @@ Click **Demo tour ▸** (top left). Each click opens a file, asks one question a
    window · German" and the plan (sum of 2 sub-questions, each clickable); both parts are cross-checked.
 6. HABS historical scan (no questions in the dataset): "what kind of drawing is this?" → the cascade escalates
    to the local VLM (strip shows "rules › **local model**"), low confidence and what is missing.
+7. "How well it works": accuracy per source on held-out drawings against "just ask the VLM" and the template
+   prior, the hard (generality) split, cost per 1,000 questions, the share answered by rules alone, and
+   calibration. Read live from the stoa.eval leaderboard (`STOA_LEADERBOARD`), else `fixtures/bench.json`.
 
 Also: click any room/door on an IFC sheet to see it in 3D; click an element in 3D to see it on the drawing.
 

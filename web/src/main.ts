@@ -229,6 +229,7 @@ async function openFile(f: FileInfo, question = "", keep: Answer | null = null, 
     $("card").innerHTML = `<p class="hint">Ask a question about this ${f.ext === ".ifc" ? "model" : "drawing"}.</p>`;
   }
   $("pick").hidden = true;
+  $("bench").hidden = true;
   $<HTMLTextAreaElement>("question").value = question;
 
   const is3DOnly = f.ext === ".ifc";
@@ -491,7 +492,7 @@ function focusEvidence(i: number) {
 }
 
 // --- demo tour: five steps, each one sentence for the presenter ----------------------------------------
-const TOUR: { file: string; q: string; note: string }[] = [
+const TOUR: { file: string; q: string; note: string; bench?: boolean }[] = [
   { file: "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
     q: "What is the net floor area of the room 'KORIDOR (119)' on '1.korrus', in m²?",
     note: "Area from the IFC model, shown on the drawing and in 3D: same room, same GlobalId." },
@@ -510,6 +511,8 @@ const TOUR: { file: string; q: string; note: string }[] = [
   { file: "data/habs/ak0003_sheet_00019.jpg",
     q: "What kind of drawing is this (floor plan, elevation, section, site plan)?",
     note: "Historical scan with no text layer: the cascade escalates to a local vision model and says how sure it is." },
+  { file: "", q: "", bench: true,
+    note: "Measured on held-out drawings: accuracy per source against two baselines, generality, and cost per 1,000 questions." },
 ];
 let tourStep = -1;
 $("tourBtn").addEventListener("click", async () => {
@@ -519,6 +522,8 @@ $("tourBtn").addEventListener("click", async () => {
   const note = $("tourNote");
   note.hidden = false;
   note.innerHTML = `<b>${tourStep + 1}/${TOUR.length}</b> ${esc(t.note)}`;
+  $("bench").hidden = true;
+  if (t.bench) return $("benchBtn").click();
   if (state.file?.path !== t.file) {
     const src = t.file.split("/")[1];
     const f = state.files.find((x) => x.path === t.file) ?? (await listFiles("", t.file, 5)).find((x) => x.path === t.file)
