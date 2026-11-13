@@ -111,7 +111,7 @@ export function renderKg(el: HTMLElement, kg: Kg, o: KgOpts) {
         act: () => (/\.(pdf|png|jpe?g|ifc)$/i.test(p) ? o.openPath(p) : window.open(`/api/file?path=${encodeURIComponent(p)}`, "_blank")) });
     }
     for (const f of files.filter((f: KgFile) => !seen.has(f.path)))
-      chips.push({ kind: KIND_LABEL[f.kind] ?? f.kind, label: base(f.path), title: `${f.path}${f.relation ? ` — ${f.relation}` : ""}`, on: false, act: () => o.openPath(f.path) });
+      chips.push({ kind: KIND_LABEL[f.kind] ?? f.kind, label: base(f.path).replace(/\.(pdf|png|jpe?g)$/i, ""), title: `${f.path}${f.relation ? ` — ${f.relation}` : ""}`, on: false, act: () => o.openPath(f.path) });
   }
   if (chips.filter((c) => !c.on).length === 0 && !checks.length && !rooms.length) {
     el.innerHTML = "";
