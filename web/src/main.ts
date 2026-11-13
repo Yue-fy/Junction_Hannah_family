@@ -1,5 +1,6 @@
 import "./style.css";
-import { ask, exampleQuestions, fileUrl, knowledgeGraph, listFiles, onBackend } from "./api";
+import { ask, benchmark, exampleQuestions, fileUrl, knowledgeGraph, listFiles, onBackend } from "./api";
+import { renderBench } from "./bench";
 import { crossChecks, renderCard } from "./card";
 import { renderKg } from "./kg";
 import type { Answer, FileInfo, KgRoom } from "./types";
@@ -146,6 +147,21 @@ $<HTMLSelectElement>("storey").addEventListener("change", (e) => {
 $("fitBtn").addEventListener("click", () => {
   v2d.frameEvidence();
   if (v3d && state.answer) applyEvidence3D(state.answer);
+});
+
+$("benchBtn").addEventListener("click", async () => {
+  const el = $("bench");
+  if (!el.hidden) return void (el.hidden = true);
+  el.hidden = false;
+  el.innerHTML = `<p class="bn-empty">Loading the leaderboard…</p>`;
+  try {
+    renderBench(el, await benchmark());
+  } catch (e) {
+    el.innerHTML = `<p class="bn-empty">No benchmark data (${esc(e)}).</p>`;
+  }
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") $("bench").hidden = true;
 });
 
 // --- files --------------------------------------------------------------------------------------------------
