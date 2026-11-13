@@ -23,6 +23,8 @@ QUESTIONS = [
     ("data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
      "How many doors are shown on the floor plan of '1.korrus'?"),
     ("data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "How many windows are shown on the floor plan of '1.korrus'?"),
+    ("data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
      "How many doors are there in the model 'Maleva tänav 18 korterelamu (Esplanades example model)'?"),
     ("data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
      "How many doors (interior doors and entrance doors together) are drawn on this floor plan?"),
