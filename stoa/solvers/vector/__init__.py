@@ -1,0 +1,14 @@
+"""Vector drawings: DXF layers, vector-PDF text, schedules (owner: W2).
+
+Solvers registered here:
+- `dxf`: swiss_dwellings floors (asked on .pdf/.png/.dxf), answered from the sibling DXF's layers
+  (ROOM_OUTLINE, ROOM_TEXT, UNIT_OUTLINE, DOOR, WINDOW, FIXTURE), evidence mapped onto the asked file.
+
+Modules:
+- `floor.py`   DXF -> FloorModel (rooms, units, doors, windows, fixtures), cached per file
+- `pdfmap.py`  DXF -> PDF page transform fitted from matching text, PDF -> PNG pixel scale
+- `qparse.py`  multilingual question parser (EN/DE/FR/IT) -> small expression over primitives
+- `dxf_solver.py` the `dxf` solver
+"""
+
+from stoa.solvers.vector import dxf_solver  # noqa: F401  (registers "dxf")

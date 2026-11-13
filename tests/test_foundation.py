@@ -48,3 +48,14 @@ def test_groups_and_templates():
     assert drawing_group("data/cubicasa5k/colorful-10052.png") == "cubicasa5k/colorful-10052"
     assert drawing_group("data/ifc_bench/dental_clinic_mep.ifc") == "ifc_bench/dental_clinic"
     assert template_of("How many rooms on floor 3?") == "how many rooms on floor <N>?"
+
+
+def test_cost_backward_compat():
+    from stoa.contract import Cost
+
+    a = Answer(value=1)
+    assert not a.cost and dict(**a.cost) == {}
+    a.cost = {**{"llm_tokens_in": 10, "gpu_seconds": 0.5}, **(a.cost or {})}  # old-style merge
+    assert isinstance(a.cost, Cost) and a.cost.llm_tokens_in == 10 and a.cost.gpu_seconds == 0.5
+    assert {**a.cost} == {"llm_tokens_in": 10, "gpu_seconds": 0.5}
+    assert a.model_dump()["cost"]["llm_tokens_in"] == 10

@@ -61,6 +61,18 @@ class Cost(BaseModel):
     llm_calls: int = 0  # all LLM/VLM calls, local or hosted
     wall_seconds: float = 0.0  # filled by the eval if left 0
 
+    # Mapping view (backward compatibility with code written when cost was a dict, e.g.
+    # `{**meter_dict, **(ans.cost or {})}`): only NON-ZERO fields are exposed, and an all-zero Cost is falsy,
+    # so a default Cost never overwrites real numbers in such a merge.
+    def keys(self):
+        return [k for k, v in self.model_dump().items() if v]
+
+    def __getitem__(self, key):
+        return self.model_dump()[key]
+
+    def __bool__(self) -> bool:
+        return any(bool(v) for v in self.model_dump().values())
+
     def add(self, other: "Cost") -> "Cost":
         d = self.model_dump()
         for k, v in other.model_dump().items():
@@ -72,7 +84,8 @@ class Cost(BaseModel):
 class Answer(BaseModel):
     """What every solver returns. JSON-serialisable via `answer.model_dump()` / `model_dump_json()`."""
 
-    model_config = ConfigDict(extra="forbid")
+    # validate_assignment: `ans.cost = {...}` or `ans.evidence = [...]` after construction is coerced/checked
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
 
     value: Value = None  # None = abstain
     unit: str | None = None  # "count", "m2", "m3", "m", "ft2", ... or None for text

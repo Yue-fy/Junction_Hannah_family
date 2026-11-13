@@ -49,7 +49,30 @@ Consequences:
 - Abstention fallback: return the prior mode with low confidence, never "no answer". Scoring has no
   penalty for a wrong answer beyond losing the point.
 
-## 2. Room-label counting on Finnish plans (method, to be measured by W3)
+## 2. Room-label counting on Finnish plans (measured: +13.5 pts on dev)
+
+`experiments/r1/room_labels/{run,policy}.py`. One Qwen3-VL-8B call per drawing (image upscaled 2×, max side
+2400) with a grounded prompt: "Locate every room name or room code printed as text inside the rooms…
+Output a JSON list [{"bbox_2d", "text"}]". The prompt gives NO example codes: v1 listed codes and the
+model echoed them back on some plans. Labels are split on `+ / , -`, trailing digits are stripped
+(`MH1`→`MH`), codes are mapped to classes, and duplicates (same text, IoU > 0.3) are dropped. If one
+text repeats > 6×, the output looped, and we fall back to the prior.
+
+Per-template policy chosen on 60 train drawings (574 Qs), then frozen and scored once on dev (251 Qs,
+140 drawings):
+
+| Template | Policy | Prior (dev) | Policy (dev) |
+|---|---|---|---|
+| bedroom | labels | 36.6% | **78.0%** |
+| WC room | labels | 42.5% | **75.0%** |
+| balcony | labels | 52.2% | **73.9%** |
+| sauna | labels | 62.1% | 60.3% (no gain: the one-letter `S` is missed) |
+| kitchen | prior "1" | 100% | 100% (labels: 52.7%, because `K` + `TK` double-count) |
+| bathroom | max(1, labels) | 88.2% | 88.2% |
+| **all** | | 65.7% | **79.3%**, paired delta +13.5, 95% CI [+7.2, +19.6] (cluster bootstrap) |
+
+19% of dev outputs looped; fixing that is the next lever. Cost: ~2.1k tokens in and ~570 out per
+drawing, and one call answers all 12 room-type questions (EN+FI).
 
 About 25% of all questions (37% of cubicasa) count rooms by type. Finnish plans print the room code
 inside the room: `MH` (bedroom), `OH` (living room), `K`/`KK`/`TK` (kitchen, kitchenette, open kitchen),
@@ -106,6 +129,18 @@ Same rule, other English templates (first 300 floors, within 2%;
 
 Negative result: treating untexted polygons inside a room as holes and subtracting them changes the
 total from 91.0% to 92.0% and per-room from 99.2% to 98.8%, which is noise (`test_holes.py`).
+
+Counts, exact match, DXF only (`test_counts.py`, `test_doors2.py`, `test_fixtures.py`, `test_wc_basin.py`):
+
+| Template | Rule | Exact |
+|---|---|---|
+| doors | number of 5-vertex DOOR LWPOLYLINEs (arcs: 56.7%; double doors have 2 arcs) | 1000/1000 |
+| windows | WINDOW LWPOLYLINEs / 3 | 200/200 |
+| apartments | ROOM_TEXT matching `^(Whg|App)\.` (UNIT_OUTLINE polygons: 89%) | 200/200 |
+| rooms labelled X | ROOM_TEXT == X | 1213/1213 |
+| bathtubs | 69-vertex FIXTURE LWPOLYLINEs | 258/258 |
+| showers | 5-vertex FIXTURE LWPOLYLINEs | 96/96 |
+| toilets / washbasins | 48-vertex FIXTURE ellipses; one with a FIXTURE CIRCLE (drain) inside it is a washbasin, otherwise a toilet. Found by rendering the fixtures; size, aspect ratio and adjacent rectangles all fail (~5%). | 1000/1000 each |
 
 All 36 misses of the total rule overshoot by 2–6%. Residual causes: numbered rooms with no name, and Lift/stairs that are
 excluded on some floors but not others. This matches SIA 416 logic, where net floor area is usable
