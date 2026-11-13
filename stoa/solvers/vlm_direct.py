@@ -20,6 +20,9 @@ Options (pass via the eval tool's solver kwargs, e.g. `--solver vlm_direct -k ba
   min_pixels   upscale small images to at least this many pixels before sending (default 0 = never)
   with_text    1 -> append the PDF's text layer (words, reading order) to the prompt (PDF only)
   thinking     1 -> let hybrid-thinking models think (slower)
+  conf         "logprob" (default; local backend, direct style, samples=1): confidence = probability the model
+               gave to its answer's digits (top-5 logprobs, free on vLLM), mapped through a table fit on TRAIN
+               (CONF_MAP); "raw" = unmapped probability; "const" = the old constant 0.3
   style        "direct" (default: answer only, ~10 output tokens, cheapest) or "cot" (reason step by step,
                then `ANSWER: x`; up to max_tokens; if it runs out of tokens a short follow-up asks for the answer)
 """
@@ -32,6 +35,21 @@ from pathlib import Path
 from stoa.contract import Answer, Evidence
 from stoa.solvers import register
 from stoa.solvers.base import BaseSolver
+
+# Raw answer-digit probability -> calibrated confidence, per answer kind: (upper edge of p bin, accuracy).
+# Fit on TRAIN questions (experiments/r2/fit_conf.py); placeholder = identity-ish until fitted.
+CONF_MAP: dict[str, list[tuple[float, float]]] = {}
+
+
+def map_conf(p: float, kind: str) -> float:
+    table = CONF_MAP.get(kind) or CONF_MAP.get("count" if kind == "count" else "measure")
+    if not table:
+        return round(min(0.9, max(0.05, p)), 3)
+    for edge, acc in table:
+        if p <= edge:
+            return acc
+    return table[-1][1]
+
 
 IMG_EXT = (".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp")
 
@@ -151,7 +169,7 @@ class VlmDirect(BaseSolver):
                  dpi: int | str = 150, ground: int | str = 0, with_text: int | str = 0, thinking: int | str = 0,
                  max_tokens: int | str = 1024, style: str = "direct", count_from: str = "list",
                  min_pixels: int | str = 0, samples: int | str = 1, decompose: int | str = 0,
-                 hints: int | str = 0, **kwargs):
+                 hints: int | str = 0, conf: str = "logprob", **kwargs):
         super().__init__(**kwargs)
         self.backend = backend
         self.model = model
@@ -167,6 +185,7 @@ class VlmDirect(BaseSolver):
         self.with_text = bool(int(with_text))
         self.thinking = bool(int(thinking))
         self.style = style
+        self.conf_mode = conf
         self.max_tokens = int(max_tokens) if not self.thinking else max(int(max_tokens), 4096)
 
     # -- input --------------------------------------------------------------------------------
@@ -274,6 +293,8 @@ class VlmDirect(BaseSolver):
                                      else 64 if direct and kind != "text" else 256 if direct else
                                      max(self.max_tokens, 2048) if grounded else self.max_tokens),
                          thinking=self.thinking, max_pixels=self.max_pixels,
+                         logprobs=5 if (direct and self.samples <= 1 and self.backend == "local"
+                                        and self.conf_mode != "const" and kind != "text") else 0,
                          **({"n": self.samples, "temperature": 0.7} if (direct and self.samples > 1) else {}))
             if r.finish_reason == "length" and (not direct or self.backend == "nvidia") and "ANSWER:" not in r.text:
                 # rambling/looping CoT: ask for the answer only, keeping what it saw so far
@@ -347,4 +368,10 @@ class VlmDirect(BaseSolver):
             value = len(items)
         if value is None:
             return self.abstain("could not parse a number", trace)
-        return Answer(value=value, unit=unit, confidence=0.3, evidence=evidence, trace=trace, solver=self.name)
+        conf = 0.3
+        p = llm.answer_prob(r, max_digits=0 if kind == "count" else 2) if r.logprobs else None
+        if p is not None:
+            conf = p if self.conf_mode == "raw" else map_conf(p, kind)
+            trace.append(f"p(answer digits) = {p:.3f} -> confidence {conf:.2f}")
+        return Answer(value=value, unit=unit, confidence=round(conf, 3), evidence=evidence, trace=trace,
+                      solver=self.name)

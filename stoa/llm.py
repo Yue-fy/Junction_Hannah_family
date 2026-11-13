@@ -301,6 +301,7 @@ class ChatResult:
     reasoning: str | None = None  # thinking text if the server returned it separately
     texts: list[str] = field(default_factory=list)  # all n samples when n > 1 (texts[0] == text)
     finish_reason: str | None = None
+    logprobs: list[dict] | None = None  # [{"t": token, "lp": logprob, "top": [[alt, lp], ...]}] (chat(logprobs=K))
     cached: bool = False
 
 
@@ -379,6 +380,7 @@ def chat(
     retries: int = 6,
     cache: bool | None = None,
     extra_body: dict | None = None,
+    logprobs: int = 0,
 ) -> ChatResult:
     """One chat completion.
 
@@ -389,6 +391,8 @@ def chat(
                them think (slower, sometimes better at arithmetic); None -> model default.
     json_schema: a JSON schema dict -> guided decoding (vLLM `structured_outputs`/`guided_json`).
     cache    : on-disk response cache (temperature 0 only). Default from env STOA_LLM_CACHE=1.
+    logprobs : K > 0 -> return per-token logprobs of the first choice with the top-K alternatives in
+               `ChatResult.logprobs` (see `answer_prob`). Free on vLLM; use it for a real confidence.
     """
     cfg = BACKENDS[backend]
     model = model or cfg["model"]
@@ -424,6 +428,9 @@ def chat(
         kwargs["seed"] = seed
     if n > 1:  # one prefill (image encoded once), n decodes: cheap self-consistency on vLLM
         kwargs["n"] = n
+    if logprobs:
+        kwargs["logprobs"] = True
+        kwargs["top_logprobs"] = int(logprobs)
     if body:
         kwargs["extra_body"] = body
 
@@ -465,6 +472,7 @@ def chat(
                 completion_tokens=getattr(resp.usage, "completion_tokens", None) if resp.usage else None,
                 reasoning=reasoning, finish_reason=ch.finish_reason,
                 texts=[c.message.content or "" for c in resp.choices],
+                logprobs=_logprobs_of(ch) if logprobs else None,
             )
             if cpath is not None:
                 cpath.parent.mkdir(parents=True, exist_ok=True)
@@ -495,6 +503,52 @@ def chat(
                 continue
             raise  # 400 etc.: the request itself is wrong (e.g. prompt too long) — don't retry
     raise RuntimeError(f"chat failed after {attempt} attempts ({waited:.0f}s waiting) on {backend}: {last_err!r}")
+
+
+def _logprobs_of(choice: Any) -> list[dict] | None:
+    lp = getattr(choice, "logprobs", None)
+    content = getattr(lp, "content", None) if lp is not None else None
+    if not content:
+        return None
+    return [{"t": c.token, "lp": round(float(c.logprob), 4),
+             "top": [[a.token, round(float(a.logprob), 4)] for a in (c.top_logprobs or [])]} for c in content]
+
+
+def answer_prob(res: "ChatResult", value: str | None = None, max_digits: int = 0) -> float | None:
+    """Probability the model gave to the number it answered: product over the tokens of the FIRST number in
+    the reply (Qwen tokenises digits one by one) of p(token). With `value`, the first occurrence of that
+    string is used instead. max_digits > 0 -> only the first N digit tokens count (for areas/lengths scored
+    within 2%, the 3rd+ significant digits don't matter). None when logprobs were not requested or no
+    number was found.
+
+    Interpretable as a confidence: p("7") = 0.93 means the model put 93% on the leading digit path. Raw
+    token probabilities are over-confident; calibrate per question kind (e.g. isotonic on TRAIN)."""
+    toks = res.logprobs
+    if not toks:
+        return None
+    text = "".join(t["t"] for t in toks)
+    if value is not None:
+        start = text.find(value)
+        if start < 0:
+            return None
+        end = start + len(value)
+    else:
+        m = re.search(r"-?\d+(?:[.,]\d+)?", text)
+        if not m:
+            return None
+        start, end = m.span()
+    lp, pos, nd = 0.0, 0, 0
+    for t in toks:  # tokens overlapping [start, end)
+        a, b = pos, pos + len(t["t"])
+        pos = b
+        if b <= start or a >= end:
+            continue
+        if any(ch.isdigit() for ch in t["t"]):
+            if max_digits and nd >= max_digits:
+                break
+            lp += t["lp"]
+            nd += 1
+    return round(math.exp(lp), 4)
 
 
 def chat_many(requests: Iterable[dict], workers: int = 16) -> list[ChatResult | Exception]:
