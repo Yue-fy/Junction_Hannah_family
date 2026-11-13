@@ -37,16 +37,36 @@ def rows(split: str | None, show_all: bool, source: str | None) -> list[dict]:
     return sorted(out.values(), key=lambda r: (r.get("split", ""), -(r["metrics"].get("weighted_acc") or 0)))
 
 
-def _calibration_from_preds(path: str | None) -> dict | None:
-    """Runs logged before calibration was added: compute it from their predictions file (if still there)."""
-    from pathlib import Path
+_PREDS: dict = {}
 
-    from stoa.eval.calibration import calibration
+
+def _preds(path: str | None) -> list[dict] | None:
+    from pathlib import Path
 
     if not path or not Path(path).exists():
         return None
-    with open(path, encoding="utf-8") as fh:
-        return calibration([json.loads(line) for line in fh if line.strip()])
+    if path not in _PREDS:
+        with open(path, encoding="utf-8") as fh:
+            _PREDS[path] = [json.loads(line) for line in fh if line.strip()]
+    return _PREDS[path]
+
+
+def _calibration_from_preds(path: str | None) -> dict | None:
+    """Runs logged before calibration was added: compute it from their predictions file (if still there)."""
+    from stoa.eval.calibration import calibration
+
+    rows = _preds(path)
+    return calibration(rows) if rows else None
+
+
+def _usd_per_1k(r: dict):
+    """Cost under the CURRENT billing policy (runner.cost_usd), recomputed from the predictions when possible."""
+    from stoa.eval.runner import cost_usd
+
+    rows = _preds(r.get("preds"))
+    if rows and all("cost" in x for x in rows):
+        return round(1000 * sum(cost_usd(x["cost"]) for x in rows) / len(rows), 3)
+    return r["metrics"].get("usd_per_1k_q", "-")
 
 
 def fmt(x, pct=True):
@@ -77,7 +97,7 @@ def main(argv=None) -> int:
         hi = f"{fmt(cal.get('hi_conf_share'))}/{fmt(cal.get('hi_conf_acc'))}" if cal else ""
         print(f"| {r['time'][11:16]} | {r['split']} | {r['solver']} | {(args + ' ' + filt).strip()} | {r['n']} | "
               f"{fmt(m.get('weighted_acc'))} | {fmt(m.get('accuracy'))} | {fmt(m.get('macro_accuracy'))} | "
-              f"{fmt(m.get('coverage'))} | {fmt(m.get('evidence_rate'))} | {m.get('usd_per_1k_q', '-')} | "
+              f"{fmt(m.get('coverage'))} | {fmt(m.get('evidence_rate'))} | {_usd_per_1k(r)} | "
               f"{format(cal['auroc'], '.2f') if cal.get('auroc') is not None else '-'} | {hi} | {hard} | "
               f"{r.get('commit', '')} | {(r.get('note') or '')[:50]} |")
     return 0

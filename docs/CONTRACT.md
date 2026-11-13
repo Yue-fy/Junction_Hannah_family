@@ -105,7 +105,8 @@ $JUNCTION_VENV/bin/python -m stoa.eval --list        # registered solvers + impo
   generated generality checks on dev drawings (`stoa/eval/hard.py`). `hard2` = reasoning kinds that
   questions.jsonl never asks (averages, ratios, percentages, thresholds, complements, unit changes, argmin,
   yes/no; `stoa/eval/hard2.py`, 256 Qs on dev drawings); it adds the scored type `ratio` (dimensionless,
-  within 2%). Load in code:
+  within 2%). `hard2p` = the same questions reworded (other English phrasing, German/French/Finnish;
+  `stoa/eval/hard2p.py`): HELD OUT. Develop on `hard2`, report only aggregates on `hard2p`. Load in code:
   `stoa.eval.splits.load_split("train")` → `list[Question]` with answers.
 - `--limit N` takes the same fixed random subset every run. `--grep REGEX` keeps questions matching the regex
   (case-insensitive), e.g. `--grep 'window|ikkun|fenster|fönster'` for one concept in every language.
