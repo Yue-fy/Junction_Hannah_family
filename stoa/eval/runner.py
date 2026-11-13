@@ -16,12 +16,42 @@ import traceback
 from datetime import datetime
 from pathlib import Path
 
-from stoa.contract import Answer
+from stoa.contract import Answer, Cost, CostMeter
 from stoa.data import Question, template_of
 from stoa.eval.scoring import score, text_fuzzy
 from stoa.eval.splits import load_split, shared_root
 
 SCORED_TYPES = ("count", "area", "length", "volume")
+
+# Cost score = estimated USD per question. Rates are assumptions, written down so runs are comparable:
+RATES = {
+    "gpu_usd_per_s": 0.0006,  # ~$2.2/h for a 96 GB workstation GPU (cloud rental equivalent)
+    "cpu_usd_per_s": 0.000014,  # ~$0.05/h per busy core; applied to wall seconds
+    "api_usd_per_mtok_in": 0.40,  # hosted VLM (Nemotron Super class), assumed list price
+    "api_usd_per_mtok_out": 1.60,
+    "local_usd_per_mtok_in": 0.05,  # local tokens, only used when the solver reports no gpu_seconds
+    "local_usd_per_mtok_out": 0.20,
+}
+
+
+def cost_usd(c: dict) -> float:
+    local_in = max(0, c.get("llm_tokens_in", 0) - c.get("api_tokens_in", 0))
+    local_out = max(0, c.get("llm_tokens_out", 0) - c.get("api_tokens_out", 0))
+    usd = c.get("gpu_seconds", 0) * RATES["gpu_usd_per_s"] + c.get("wall_seconds", 0) * RATES["cpu_usd_per_s"]
+    usd += (c.get("api_tokens_in", 0) * RATES["api_usd_per_mtok_in"]
+            + c.get("api_tokens_out", 0) * RATES["api_usd_per_mtok_out"]) / 1e6
+    if not c.get("gpu_seconds"):
+        usd += (local_in * RATES["local_usd_per_mtok_in"] + local_out * RATES["local_usd_per_mtok_out"]) / 1e6
+    return usd
+
+
+def cost_tier(c: dict) -> str:
+    """deterministic (no model calls) < local (own GPU / local server) < api (hosted model)."""
+    if c.get("api_calls", 0) > 0 or c.get("api_tokens_in", 0) > 0:
+        return "api"
+    if c.get("llm_calls", 0) > 0 or c.get("llm_tokens_in", 0) > 0 or c.get("gpu_seconds", 0) > 0:
+        return "local"
+    return "deterministic"
 
 
 def _git(*args: str) -> str:
@@ -59,17 +89,25 @@ def run_one(solver, q: Question, handled_only: bool) -> dict:
         handled = bool(solver.can_handle(q.path, q.question))
     except Exception:  # noqa: BLE001
         handled = True
-    try:
-        if handled_only and not handled:
-            ans = Answer.abstain(getattr(solver, "name", "?"), "can_handle=False")
-        else:
-            ans = solver.solve(q.path, q.question)
-            if not isinstance(ans, Answer):
-                ans = Answer.model_validate(ans)
-    except Exception as e:  # noqa: BLE001
-        err = f"{type(e).__name__}: {e}"
-        ans = Answer.abstain(getattr(solver, "name", "?"), "exception", [traceback.format_exc(limit=4)[-800:]])
+    with CostMeter() as meter:
+        try:
+            if handled_only and not handled:
+                ans = Answer.abstain(getattr(solver, "name", "?"), "can_handle=False")
+            else:
+                ans = solver.solve(q.path, q.question)
+                if not isinstance(ans, Answer):
+                    ans = Answer.model_validate(ans)
+        except Exception as e:  # noqa: BLE001
+            err = f"{type(e).__name__}: {e}"
+            ans = Answer.abstain(getattr(solver, "name", "?"), "exception", [traceback.format_exc(limit=4)[-800:]])
     dt = time.perf_counter() - t0
+    # cost = field-wise max of what the solver reported and what LLM clients recorded (avoids double count)
+    rep, met = ans.cost.model_dump(), meter.cost.model_dump()
+    cost = {k: max(rep.get(k, 0) or 0, met.get(k, 0) or 0) for k in set(rep) | set(met)
+            if isinstance(rep.get(k, met.get(k)), (int, float))}
+    if not cost.get("wall_seconds"):
+        cost["wall_seconds"] = round(dt, 4)
+    cost["usd"] = round(cost_usd(cost), 7)
     correct = score(q.type, q.answer, q.unit, ans.value, ans.unit)
     return {
         "qid": q.qid, "path": q.path, "question": q.question, "type": q.type, "source": q.source,
@@ -78,8 +116,24 @@ def run_one(solver, q: Question, handled_only: bool) -> dict:
         "correct": correct, "text_fuzzy": text_fuzzy(ans.value, q.answer) if q.type in ("text", "other") else None,
         "abstained": ans.value is None, "handled": handled, "latency_s": round(dt, 4),
         "solver": ans.solver, "evidence": [e.model_dump(exclude_none=True) for e in ans.evidence],
-        "trace": ans.trace[-20:], "error": err,
+        "assumptions": ans.assumptions, "missing": ans.missing, "cost": cost, "tier": cost_tier(cost),
+        "trace": ans.trace[-20:], "error": err, "meta": getattr(q, "meta", None),
     }
+
+
+_FULL_SHARES: dict[str, float] | None = None
+
+
+def full_shares() -> dict[str, float]:
+    """Share of each scored source/type bucket among scored questions of the FULL dataset (S0 D1)."""
+    global _FULL_SHARES
+    if _FULL_SHARES is None:
+        from stoa.data import load_questions
+
+        c = collections.Counter(f"{q.source}/{q.type}" for q in load_questions() if q.type in SCORED_TYPES)
+        n = sum(c.values())
+        _FULL_SHARES = {k: v / n for k, v in c.items()}
+    return _FULL_SHARES
 
 
 def summarize(preds: list[dict]) -> dict:
@@ -97,9 +151,12 @@ def summarize(preds: list[dict]) -> dict:
                                         max(1, sum(1 for r in scored if not r["abstained"])), 4) if scored else None),
             "evidence_rate": round(sum(1 for r in answered if r["evidence"]) / len(answered), 4) if answered else None,
         }
+        d["refusal_rate"] = round(1 - d["coverage"], 4) if rows else None
         if text:
             d["text_n"] = len(text)
             d["text_fuzzy"] = round(sum(1 for r in text if r["text_fuzzy"]) / len(text), 4)
+        if rows and "cost" in rows[0]:
+            d["usd_per_q"] = round(statistics.fmean(r["cost"]["usd"] for r in rows), 6)
         return d
 
     out = block(preds)
@@ -109,6 +166,24 @@ def summarize(preds: list[dict]) -> dict:
     out["by_bucket"] = {k: block(v) for k, v in sorted(buckets.items())}
     accs = [b["accuracy"] for b in out["by_bucket"].values() if b["accuracy"] is not None]
     out["macro_accuracy"] = round(sum(accs) / len(accs), 4) if accs else None
+    # weighted_acc: bucket accuracies weighted by the bucket's share of the FULL dataset (renormalised over
+    # the buckets present in this run). Estimates accuracy on a test drawn like the full data. Not
+    # meaningful for generated splits (hard), where buckets mix kinds.
+    shares = full_shares()
+    wb = {k: b["accuracy"] for k, b in out["by_bucket"].items() if b["accuracy"] is not None and k in shares}
+    tot = sum(shares[k] for k in wb)
+    out["weighted_acc"] = round(sum(shares[k] * a for k, a in wb.items()) / tot, 4) if tot else None
+    # cost
+    if preds and "cost" in preds[0]:
+        keys = ("llm_tokens_in", "llm_tokens_out", "api_tokens_in", "api_tokens_out", "llm_calls", "api_calls",
+                "gpu_seconds", "wall_seconds", "usd")
+        out["cost_mean"] = {k: round(statistics.fmean(r["cost"].get(k, 0) for r in preds), 6) for k in keys}
+        out["usd_per_1k_q"] = round(1000 * out["cost_mean"]["usd"], 4)
+        tiers = collections.defaultdict(list)
+        for r in preds:
+            tiers[r["tier"]].append(r)
+        out["by_tier"] = {t: {"share": round(len(v) / len(preds), 4), **{k: block(v)[k] for k in ("n", "accuracy", "coverage")}}
+                          for t, v in sorted(tiers.items())}
     lat = sorted(r["latency_s"] for r in preds)
     if lat:
         out["latency_mean_s"] = round(statistics.fmean(lat), 3)
@@ -128,8 +203,16 @@ def print_report(m: dict, file=sys.stdout) -> None:
               f"{pct(b['evidence_rate']):>6s} {pct(b.get('text_fuzzy')):>6s}", file=file)
     print(f"{'OVERALL (micro, scored types)':34s} {m['n']:6d} {pct(m['accuracy']):>6s} {pct(m['coverage']):>6s} "
           f"{pct(m['acc_when_answered']):>8s} {pct(m['evidence_rate']):>6s} {pct(m.get('text_fuzzy')):>6s}", file=file)
-    print(f"macro accuracy over buckets: {pct(m['macro_accuracy'])}   latency mean/p50/p95 s: "
-          f"{m.get('latency_mean_s')}/{m.get('latency_p50_s')}/{m.get('latency_p95_s')}   errors: {m['errors']}", file=file)
+    print(f"weighted_acc (full-data bucket shares): {pct(m.get('weighted_acc'))}   macro: {pct(m['macro_accuracy'])}   "
+          f"refusal: {pct(m.get('refusal_rate'))}   errors: {m['errors']}", file=file)
+    cm = m.get("cost_mean") or {}
+    print(f"cost/question: ${cm.get('usd', 0):.6f} (${m.get('usd_per_1k_q', 0):.3f} per 1k)  tokens in/out "
+          f"{cm.get('llm_tokens_in', 0):.0f}/{cm.get('llm_tokens_out', 0):.0f}  llm calls {cm.get('llm_calls', 0):.2f}  "
+          f"api calls {cm.get('api_calls', 0):.2f}  gpu s {cm.get('gpu_seconds', 0):.2f}  wall s mean/p50/p95 "
+          f"{m.get('latency_mean_s')}/{m.get('latency_p50_s')}/{m.get('latency_p95_s')}", file=file)
+    if m.get("by_tier"):
+        print("tiers: " + "  ".join(f"{t}: {100 * v['share']:.0f}% of Qs, acc {pct(v['accuracy'])}"
+                                    for t, v in m["by_tier"].items()), file=file)
 
 
 def main(argv: list[str] | None = None) -> int:

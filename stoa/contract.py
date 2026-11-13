@@ -5,11 +5,18 @@
 `path` is always dataset-relative, exactly as in questions.jsonl, e.g.
 "data/cubicasa5k/colorful-10052.png". Use `stoa.data.abspath(path)` to open the file.
 
-An Answer with `value=None` is an abstention (counts as wrong for accuracy, reported as coverage).
+An Answer with `value=None` is a refusal: allowed but discouraged (Stoa: "refusing is not useful").
+Prefer a best estimate with a low `confidence`, plus `assumptions` and `missing`.
+
+Cost: LLM clients call `record_cost(...)`; the eval wraps every solve() in a `CostMeter`, so token counts
+and API calls are attributed to the question automatically. Solvers may also fill `Answer.cost` directly.
 """
 
 from __future__ import annotations
 
+import contextvars
+import threading
+import time
 from typing import Literal, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -40,6 +47,28 @@ class Evidence(BaseModel):
     note: str = ""
 
 
+class Cost(BaseModel):
+    """What answering one question cost. All fields default to 0; add more fields if useful (extra allowed)."""
+
+    model_config = ConfigDict(extra="allow")
+
+    llm_tokens_in: int = 0
+    llm_tokens_out: int = 0
+    gpu_seconds: float = 0.0  # GPU time attributable to this question (local model server or own model)
+    api_calls: int = 0  # calls to hosted APIs (NVIDIA etc.); local-server calls are NOT api_calls
+    api_tokens_in: int = 0  # the part of llm_tokens_in that went to hosted APIs (priced in the cost score)
+    api_tokens_out: int = 0
+    llm_calls: int = 0  # all LLM/VLM calls, local or hosted
+    wall_seconds: float = 0.0  # filled by the eval if left 0
+
+    def add(self, other: "Cost") -> "Cost":
+        d = self.model_dump()
+        for k, v in other.model_dump().items():
+            if isinstance(v, (int, float)) and not isinstance(v, bool):
+                d[k] = d.get(k, 0) + v
+        return Cost.model_validate(d)
+
+
 class Answer(BaseModel):
     """What every solver returns. JSON-serialisable via `answer.model_dump()` / `model_dump_json()`."""
 
@@ -51,14 +80,20 @@ class Answer(BaseModel):
     evidence: list[Evidence] = Field(default_factory=list)
     trace: list[str] = Field(default_factory=list)  # short strings: what the solver did, step by step
     solver: str = ""
+    assumptions: list[str] = Field(default_factory=list)  # "no scale bar; assumed door width 0.9 m"
+    missing: list[str] = Field(default_factory=list)  # what would make the answer certain ("no IFC sibling")
+    cost: Cost = Field(default_factory=Cost)
 
     @property
     def abstained(self) -> bool:
         return self.value is None
 
     @classmethod
-    def abstain(cls, solver: str, reason: str, trace: list[str] | None = None) -> "Answer":
-        return cls(value=None, confidence=0.0, solver=solver, trace=[*(trace or []), f"abstain: {reason}"])
+    def abstain(cls, solver: str, reason: str, trace: list[str] | None = None,
+                missing: list[str] | None = None) -> "Answer":
+        """A refusal. Discouraged: prefer a low-confidence estimate with assumptions/missing."""
+        return cls(value=None, confidence=0.0, solver=solver, trace=[*(trace or []), f"abstain: {reason}"],
+                   missing=list(missing or [reason]))
 
 
 @runtime_checkable
@@ -70,3 +105,53 @@ class Solver(Protocol):
     def can_handle(self, path: str, question: str) -> bool: ...
 
     def solve(self, path: str, question: str) -> Answer: ...
+
+
+# --- cost metering ----------------------------------------------------------------------------------
+_CURRENT_METER: contextvars.ContextVar["CostMeter | None"] = contextvars.ContextVar("stoa_cost_meter", default=None)
+
+
+class CostMeter:
+    """Accumulates cost recorded with `record_cost` inside a `with` block (per thread / context).
+
+        with CostMeter() as m:
+            ans = solver.solve(path, question)
+        m.cost  # Cost(llm_tokens_in=..., ...)
+    Nested meters all receive the record (an outer meter sees inner costs too).
+    """
+
+    def __init__(self):
+        self.cost = Cost()
+        self._lock = threading.Lock()
+        self._parent: CostMeter | None = None
+        self._token = None
+        self._t0 = 0.0
+
+    def __enter__(self) -> "CostMeter":
+        self._parent = _CURRENT_METER.get()
+        self._token = _CURRENT_METER.set(self)
+        self._t0 = time.perf_counter()
+        return self
+
+    def __exit__(self, *exc) -> None:
+        _CURRENT_METER.reset(self._token)
+        self.wall_seconds = time.perf_counter() - self._t0
+
+    def _add(self, c: Cost) -> None:
+        with self._lock:
+            self.cost = self.cost.add(c)
+        if self._parent is not None:
+            self._parent._add(c)
+
+
+def record_cost(**fields) -> None:
+    """Call from LLM/VLM clients after each call, e.g.
+    record_cost(llm_tokens_in=usage.prompt_tokens, llm_tokens_out=usage.completion_tokens, llm_calls=1,
+                gpu_seconds=elapsed)                       # local server
+    record_cost(llm_tokens_in=..., llm_tokens_out=..., api_tokens_in=..., api_tokens_out=..., api_calls=1,
+                llm_calls=1)                               # hosted API
+    No-op outside a CostMeter. Thread-safe. Note: work in a thread pool started *inside* solve() runs in a
+    fresh context; wrap it with `contextvars.copy_context().run(...)` to keep the meter."""
+    m = _CURRENT_METER.get()
+    if m is not None:
+        m._add(Cost(**fields))

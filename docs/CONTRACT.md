@@ -49,9 +49,22 @@ class MySolver(BaseSolver):
   "confidence": 0.82,             // 0..1
   "evidence": [ /* Evidence */ ],
   "trace": ["parsed: count windows", "dxf layer WINDOW: 7 inserts"],  // short human-readable steps
-  "solver": "dxf"
+  "solver": "dxf",
+  "assumptions": ["no scale bar; assumed door width 0.9 m"],   // what the answer relies on
+  "missing": ["no DXF sibling; counted from raster"],            // what would make it certain
+  "cost": {"llm_tokens_in": 0, "llm_tokens_out": 0, "gpu_seconds": 0.0, "api_calls": 0,
+           "api_tokens_in": 0, "api_tokens_out": 0, "llm_calls": 0, "wall_seconds": 0.0}
 }
 ```
+Stoa (13 Nov): refusing is not useful. `value: null` is allowed but counted as a **refusal**; prefer a best
+estimate with a low `confidence` plus `assumptions` and `missing`.
+
+Cost: `stoa.contract.record_cost(**fields)` adds to the current question's meter (the eval wraps each
+`solve()` in a `CostMeter`). The LLM client (`stoa/llm.py`) calls it after every call, so solvers get
+token/API accounting for free; local-server calls set `llm_calls`, tokens and `gpu_seconds` (wall time of
+the call is a fine proxy), hosted calls also set `api_calls` and `api_tokens_in/out`. Threads started inside
+`solve()` need `contextvars.copy_context().run(...)` to keep the meter. The eval takes the field-wise max of
+the meter and `Answer.cost` (no double counting) and fills `wall_seconds` itself.
 Units: give the unit you computed in; the eval converts (m2↔ft2, m↔mm/cm/ft/in, m3↔ft3/l). A unit of the
 wrong dimension (m for an area question) is wrong. Counts are rounded to the nearest integer before scoring.
 
@@ -80,16 +93,21 @@ $JUNCTION_VENV/bin/python -m stoa.eval --solver <name> --split smoke|dev [--limi
     [--source S] [--type T] [--workers N] [--solver-arg k=v] [--handled-only] [--note "..."]
 $JUNCTION_VENV/bin/python -m stoa.eval --list        # registered solvers + import errors
 ```
-- Splits live in `$JUNCTION_SHARED/results/splits/{smoke,dev,test,train,unused}.jsonl` (qid, path, type,
-  source, group; no answers). Grouped by drawing (`stoa.data.drawing_group`): sibling formats, floors of
-  one Swiss site, plans and discipline models of one IFC project, all stay together. `test` is sealed (only
-  S0, with `--allow-test`). `unused` = questions of eval-split drawings that were capped out: never train
-  on them. Load in code: `stoa.eval.splits.load_split("train")` → `list[Question]` with answers.
+- Splits (v2) live in `$JUNCTION_SHARED/results/splits/{smoke,dev,test,train,unused,hard}.jsonl`. Grouped
+  by drawing (`stoa.data.drawing_group`): sibling formats, floors of one Swiss site, plans and discipline
+  models of one IFC project all stay together. Eval splits keep one language per concept (EN or the local
+  language; `stoa.data.concept_map`). `test` is sealed (only S0, with `--allow-test`); opening_design is
+  dev-only. `unused` = translations and capped-out questions of eval drawings: never train on them. `hard` =
+  generated generality checks on dev drawings (`stoa/eval/hard.py`). Load in code:
+  `stoa.eval.splits.load_split("train")` → `list[Question]` with answers.
 - `--limit N` takes the same fixed random subset every run.
 - Scoring: count exact (after rounding); area/length/volume within 2% after unit conversion; text/other
   not scored (a rough `text_fuzzy` rate is reported separately). Abstain = wrong, reported as coverage.
 - Output: table per source × type (accuracy, coverage, accuracy-when-answered, evidence rate, text~),
-  micro and macro accuracy, latency. One line appended to `$JUNCTION_SHARED/results/leaderboard.jsonl`;
+  micro accuracy, macro accuracy, **`weighted_acc`** (bucket accuracies weighted by each bucket's share of
+  scored questions in the FULL dataset; the team's headline accuracy, S0 D1), refusal rate, cost per question
+  (tokens, LLM/API calls, GPU s, wall s, **est. USD/question** with the rates in `stoa/eval/runner.py:RATES`),
+  and accuracy per cost tier (`deterministic` / `local` / `api`). One line appended to `$JUNCTION_SHARED/results/leaderboard.jsonl`;
   per-question predictions in `$JUNCTION_SHARED/artifacts/eval/<run-id>.jsonl` (gold, prediction,
   evidence, trace, error) for error analysis.
 - Set `AGENT_ID=<your id>` in the environment so the leaderboard line records who ran it.

@@ -154,3 +154,30 @@ def template_of(question: str) -> str:
     t = _QUOTED.sub("<Q>", question.lower())
     t = _NUM.sub("<N>", t)
     return re.sub(r"\s+", " ", t).strip()
+
+
+_EN_START = re.compile(r"^\s*(how|what|which|is|are|does|do|on sheet|list|name|give)\b", re.I)
+
+
+@functools.lru_cache(maxsize=4)
+def concept_map(root: str | None = None) -> dict[str, str]:
+    """qid -> concept id. The dataset asks many questions twice: in English and, on the next row, in the
+    drawing's language (Finnish for cubicasa5k; German/French/Italian for swiss_dwellings), with the same
+    answer. Both rows of such a pair share one concept id (the English question's qid); every other
+    question is its own concept. Use it to avoid double-counting translations, or to test language
+    robustness (same concept, other language)."""
+    qs = load_questions(root)
+    out: dict[str, str] = {}
+    i = 0
+    while i < len(qs):
+        q = qs[i]
+        if i + 1 < len(qs):
+            n = qs[i + 1]
+            if (n.path == q.path and n.type == q.type and n.answer == q.answer and n.unit == q.unit
+                    and _EN_START.match(q.question) and not _EN_START.match(n.question)):
+                out[q.qid] = out[n.qid] = q.qid
+                i += 2
+                continue
+        out[q.qid] = q.qid
+        i += 1
+    return out
