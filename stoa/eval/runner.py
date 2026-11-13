@@ -156,6 +156,10 @@ def summarize(preds: list[dict]) -> dict:
         if text:
             d["text_n"] = len(text)
             d["text_fuzzy"] = round(sum(1 for r in text if r["text_fuzzy"]) / len(text), 4)
+            judged = [r for r in text if r.get("text_judge") is not None]
+            if judged:
+                d["text_judge"] = round(sum(1 for r in judged if r["text_judge"]) / len(judged), 4)
+                d["text_judged_n"] = len(judged)
         if rows and "cost" in rows[0]:
             d["usd_per_q"] = round(statistics.fmean(r["cost"]["usd"] for r in rows), 6)
         return d
@@ -214,6 +218,10 @@ def print_report(m: dict, file=sys.stdout) -> None:
               f"{pct(b['evidence_rate']):>6s} {pct(b.get('text_fuzzy')):>6s}", file=file)
     print(f"{'OVERALL (micro, scored types)':34s} {m['n']:6d} {pct(m['accuracy']):>6s} {pct(m['coverage']):>6s} "
           f"{pct(m['acc_when_answered']):>8s} {pct(m['evidence_rate']):>6s} {pct(m.get('text_fuzzy')):>6s}", file=file)
+    if m.get("text_judge") is not None:
+        print(f"text (LLM judge, not in accuracy): {pct(m['text_judge'])} of {m['text_judged_n']} judged; per bucket: "
+              + ", ".join(f"{k} {pct(b['text_judge'])}" for k, b in m["by_bucket"].items() if b.get("text_judge") is not None),
+              file=file)
     print(f"weighted_acc (full-data bucket shares): {pct(m.get('weighted_acc'))}   macro: {pct(m['macro_accuracy'])}   "
           f"refusal: {pct(m.get('refusal_rate'))}   errors: {m['errors']}", file=file)
     cm = m.get("cost_mean") or {}
@@ -243,6 +251,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--no-leaderboard", action="store_true", help="don't append to results/leaderboard.jsonl")
     ap.add_argument("--allow-test", action="store_true", help="required for --split test (S0 only)")
     ap.add_argument("--quiet", action="store_true")
+    ap.add_argument("--judge", default="none", choices=("none", "local", "nvidia"),
+                    help="grade text/other answers with an LLM judge (reported as text_judge; not in accuracy)")
     a = ap.parse_args(argv)
 
     from stoa.solvers import available, get_solver, import_errors
@@ -265,7 +275,10 @@ def main(argv: list[str] | None = None) -> int:
     if not qs:
         print("no questions selected", file=sys.stderr)
         return 2
-    run_id = f"{datetime.now().strftime('%Y%m%d-%H%M%S')}-{a.solver}-{a.split}" + (f"-n{len(qs)}" if a.limit else "")
+    # unique even for runs started in the same second (R2 00:00): random suffix + exclusive create below
+    split_tag = Path(a.split).stem if a.split.endswith(".jsonl") else a.split
+    run_id = (f"{datetime.now().strftime('%Y%m%d-%H%M%S')}-{a.solver}-{split_tag}" + (f"-n{len(qs)}" if a.limit else "")
+              + f"-{os.urandom(2).hex()}")
     out_dir = shared_root() / "artifacts" / "eval"
     out_dir.mkdir(parents=True, exist_ok=True)
     preds_path = out_dir / f"{run_id}.jsonl"
@@ -276,7 +289,7 @@ def main(argv: list[str] | None = None) -> int:
         tqdm = None
     preds: list[dict] = []
     t0 = time.time()
-    with open(preds_path, "w", encoding="utf-8") as fout, cf.ThreadPoolExecutor(max_workers=max(1, a.workers)) as ex:
+    with open(preds_path, "x", encoding="utf-8") as fout, cf.ThreadPoolExecutor(max_workers=max(1, a.workers)) as ex:
         futs = [ex.submit(run_one, solver, q, a.handled_only) for q in qs]
         it = cf.as_completed(futs)
         if tqdm and not a.quiet:
@@ -288,6 +301,13 @@ def main(argv: list[str] | None = None) -> int:
     wall = time.time() - t0
     order = {q.qid: i for i, q in enumerate(qs)}
     preds.sort(key=lambda r: order[r["qid"]])
+    if a.judge != "none" and any(r["type"] in ("text", "other") for r in preds):
+        from stoa.eval.judge import judge_rows
+
+        judge_rows(preds, a.judge, workers=a.workers)
+        with open(preds_path, "w", encoding="utf-8") as fout:  # rewrite with verdicts
+            for r in preds:
+                fout.write(json.dumps(r, ensure_ascii=False, default=str) + "\n")
 
     m = summarize(preds)
     m["wall_s"] = round(wall, 1)
@@ -297,7 +317,7 @@ def main(argv: list[str] | None = None) -> int:
     line = {
         "time": datetime.now().isoformat(timespec="seconds"), "run_id": run_id, "solver": a.solver,
         "solver_args": kwargs, "split": a.split, "split_hash": split_hash(a.split), "limit": a.limit, "sources": sorted(sources) or None,
-        "types": sorted(types) or None, "handled_only": a.handled_only, "n": len(qs),
+        "types": sorted(types) or None, "handled_only": a.handled_only, "judge": a.judge, "n": len(qs),
         "commit": _git("rev-parse", "--short", "HEAD"), "branch": _git("rev-parse", "--abbrev-ref", "HEAD"),
         "dirty": bool(status), "agent": os.environ.get("AGENT_ID", ""), "note": a.note,
         "metrics": m, "preds": str(preds_path),
