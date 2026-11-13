@@ -86,15 +86,78 @@ REWORD: dict[str, tuple[str, list[str]]] = {
 }
 
 
-def build(seed: int = SEED) -> list[dict]:
-    rng = random.Random(seed + 3)
+# hard2q: a THIRD wording (01:12). hard2p wordings were quoted in messages to W1/W2, so hard2p stopped being held
+# out for dxf/ifc. hard2q is the clean held-out set: report aggregates only and never quote its questions.
+REWORD_Q: dict[str, tuple[str, list[str]]] = {
+    "rooms-above-threshold": (REWORD["rooms-above-threshold"][0], [
+        "Count how many of rooms {1} are bigger than {2} m² (net).",
+        "Quante delle stanze {1} hanno una superficie netta superiore a {2} m²?"]),
+    "average-room-area": (REWORD["average-room-area"][0], [
+        "Rooms {1}: what is their net floor area on average, in square metres?",
+        "Qual è la superficie netta media delle stanze {1}, in m²?"]),
+    "room-sum-ft2": (REWORD["room-sum-ft2"][0], [
+        "Taken together, how many square feet of net floor area do rooms {1} have?",
+        "Qual è la superficie netta complessiva delle stanze {1}, in piedi quadrati (sq ft)?"]),
+    "apartment-share-pct": (REWORD["apartment-share-pct"][0], [
+        "As a percentage, how much of the net area of all numbered indoor rooms on this floor lies in apartment {1}?",
+        "Che percentuale della superficie netta di tutti i locali interni numerati di questo piano occupa "
+        "l'appartamento {1}?"]),
+    "floor-minus-apartment": (REWORD["floor-minus-apartment"][0], [
+        "Leaving out apartment {1}, how many m² of net area do the numbered indoor rooms on this floor add up to?",
+        "Qual è la superficie netta dei locali interni numerati di questo piano escluso l'appartamento {1}, in m²?"]),
+    "apartment-ratio": (REWORD["apartment-ratio"][0], [
+        "Divide the net floor area of apartment {1} by that of apartment {2}. What do you get?",
+        "Quante volte è più grande l'appartamento {1} rispetto all'appartamento {2} (superficie netta)?"]),
+    "smaller-apartment": (REWORD["smaller-apartment"][0], [
+        "Apartment {1} or apartment {2}: which has the smaller net floor area?",
+        "Quale appartamento ha la superficie netta minore, {1} o {2}?"]),
+    "doors-per-apartment": (REWORD["doors-per-apartment"][0], [
+        "Dividing the number of doors on this floor by the number of apartments, how many doors per apartment is that?",
+        "In media quante porte ci sono per appartamento su questa pianta (porte totali diviso numero di appartamenti)?"]),
+    "average-room-area-storey": (REWORD["average-room-area-storey"][0], [
+        "Taking all rooms (spaces) on '{1}', what is the average size of one in m² of net floor area?",
+        "Wat is de gemiddelde netto vloeroppervlakte per ruimte op '{1}', in m²?"]),
+    "two-storeys-area": (REWORD["two-storeys-area"][0], [
+        "Together, how many m² of net floor area do the spaces on '{1}' and '{2}' have?",
+        "Wat is de totale netto vloeroppervlakte van alle ruimtes op '{1}' en '{2}' samen, in m²?"]),
+    "storey-more-doors": (REWORD["storey-more-doors"][0], [
+        "Comparing the floor plans of '{1}' and '{2}', on which one are more doors drawn?",
+        "Op welke verdieping staan meer deuren op de plattegrond, '{1}' of '{2}'?"]),
+    "wall-length-ft": (REWORD["wall-length-ft"][0], [
+        "Express the combined length of the walls on '{1}' in feet.",
+        "Wat is de totale lengte van alle wanden op '{1}', in voet (ft)?"]),
+    "rooms-above-threshold@ifc": (REWORD["rooms-above-threshold@ifc"][0], [
+        "Among rooms {1} on '{2}', how many are bigger than {3} m² (net)?",
+        "Hoeveel van de ruimtes {1} op '{2}' zijn groter dan {3} m² netto?"]),
+    "room-share-pct": (REWORD["room-share-pct"][0], [
+        "What fraction of the net floor area of '{1}', as a percent, is taken by room '{2}'?",
+        "Welk percentage van de totale netto vloeroppervlakte van '{1}' neemt de ruimte '{2}' in?"]),
+    "wet-rooms": (REWORD["wet-rooms"][0], [
+        "Add up the bathrooms or washrooms (KH, KPH, PH, PESUH, SH), the separate WC rooms and the saunas on this plan.",
+        "Hur många våtrum finns det på planritningen totalt (badrum/tvättrum, separata WC och bastur)?"]),
+    "wc+showers": (REWORD["wc+showers"][0], [
+        "Toilet seats plus showers plus bathtubs: how many are drawn on this plan?",
+        "Hur många toalettstolar, duschar och badkar är ritade på planritningen sammanlagt?"]),
+    "two-wc-yes-no": (REWORD["two-wc-yes-no"][0], [
+        "Is the number of WC bowls on this plan two or higher? Answer yes or no.",
+        "Finns det minst två toalettstolar på planritningen? Svara yes eller no."]),
+    "more-bedrooms-than-bathrooms": (REWORD["more-bedrooms-than-bathrooms"][0], [
+        "Do bedrooms (MH) outnumber bathrooms/washrooms (separate WC rooms not counted) here? Answer yes or no.",
+        "Finns det fler sovrum (MH) än badrum eller tvättrum (separata WC räknas inte)? Svara yes eller no."]),
+}
+
+
+def build(seed: int = SEED, table: dict | None = None, kind: str = "reasoning-reworded",
+          prefix: str = "p", seed_off: int = 3) -> list[dict]:
+    table = table or REWORD
+    rng = random.Random(seed + seed_off)
     src = splits_dir() / "hard2.jsonl"
     rows = [json.loads(line) for line in open(src, encoding="utf-8") if line.strip()]
     out = []
     for r in rows:
         recipe = r["meta"]["recipe"]
         key = f"{recipe}@ifc" if (recipe == "rooms-above-threshold" and r["source"] == "ifc_models") else recipe
-        rx, tpls = REWORD[key]
+        rx, tpls = table[key]
         m = re.match(rx, r["question"])
         if not m:
             raise ValueError(f"{key}: no match for {r['question']!r}")
@@ -102,18 +165,18 @@ def build(seed: int = SEED) -> list[dict]:
         q = tpls[i]
         for k, g in enumerate(m.groups(), 1):
             q = q.replace("{" + str(k) + "}", g)
-        qid = "p" + hashlib.sha1(f"{r['path']}\n{q}".encode()).hexdigest()[:11]
+        qid = prefix + hashlib.sha1(f"{r['path']}\n{q}".encode()).hexdigest()[:11]
         out.append({**r, "qid": qid, "question": q,
-                    "meta": {**r["meta"], "kind": "reasoning-reworded", "variant": "en" if i == 0 else "other-language",
+                    "meta": {**r["meta"], "kind": kind, "variant": "en" if i == 0 else "other-language",
                              "from_hard2": r["qid"]}})
     return out
 
 
-def write(seed: int = SEED, force: bool = False) -> dict:
-    f = splits_dir() / "hard2p.jsonl"
+def write(seed: int = SEED, force: bool = False, q: bool = False) -> dict:
+    f = splits_dir() / ("hard2q.jsonl" if q else "hard2p.jsonl")
     if f.exists() and not force:
         raise SystemExit(f"{f} exists; splits are frozen (use --force only if nobody has run on it)")
-    rows = build(seed)
+    rows = build(seed, REWORD_Q, "reasoning-reworded-q", "q", 5) if q else build(seed)
     with open(f, "w", encoding="utf-8") as fh:
         for r in rows:
             fh.write(json.dumps(r, ensure_ascii=False) + "\n")
@@ -127,9 +190,10 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--write", action="store_true")
     ap.add_argument("--force", action="store_true")
+    ap.add_argument("--q", action="store_true", help="write hard2q (third wording, the clean held-out set)")
     a = ap.parse_args()
     if a.write:
-        print(json.dumps(write(force=a.force), indent=1, ensure_ascii=False))
+        print(json.dumps(write(force=a.force, q=a.q), indent=1, ensure_ascii=False))
     else:
         for r in random.Random(2).sample(build(), 10):
             print(r["source"][:5], r["meta"]["recipe"], "|", r["question"], "->", r["answer"])
