@@ -101,7 +101,11 @@ _OPS = [
              r"nicht zu|n'appartiennent pas|ne font pas partie)"),
     ("ratio", r"\b(how many times|times (?:larger|bigger|smaller|greater|as (?:large|big|many))|divided by|"
               r"per (?:apartment|unit|storey|floor|level|room|bedroom|person)|mal so (?:gro(?:ß|ss)|viel)|fois plus)\b"),
-    ("threshold", r"\b(?:larger|bigger|smaller|more|less|greater|fewer)\s+than\s+(?:\d+|one|two|three|four|five|six|seven|"
+    ("threshold", r"\b(?:gr[öo](?:ß|ss)er|kleiner|mehr|weniger)\s+als\s+\d|\bplus (?:grande?s?|petite?s?|de)\s+(?:que\s+)?\d|"
+                  r"\bmoins de\s+\d|\bpi[uù] (?:grandi|piccol[ie]|di)\s+(?:di\s+)?\d|\bmeno di\s+\d|"
+                  r"\b(?:groter|kleiner|meer|minder)\s+dan\s+\d|\b(?:st[öo]rre|mindre|mer)\s+[äa]n\s+\d|"
+                  r"\b(?:suurempi|suurempia|pienempi|pienempi[äa]|enemm[äa]n|v[äa]hemm[äa]n)\s+kuin\s+\d|"
+                  r"\b(?:larger|bigger|smaller|more|less|greater|fewer)\s+than\s+(?:\d+|one|two|three|four|five|six|seven|"
                   r"eight|nine|ten)\b|\b(?:over|under|above|below|at least|at most|exceeding|mindestens|"
                   r"h[öo]chstens|au moins|v[äa]hint[äa][äa]n)\s+(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|"
                   r"zwei|drei|deux|trois|kaksi|kolme)\b"),

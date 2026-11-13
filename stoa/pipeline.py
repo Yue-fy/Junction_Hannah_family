@@ -93,6 +93,18 @@ def _agree(a, b, task: str) -> bool:
     return abs(x - y) <= 0.02 * max(abs(y), 1e-9)
 
 
+_UNIT_KIND = {"count": "count", "m2": "area", "m²": "area", "ft2": "area", "sqft": "area", "m3": "volume", "m³": "volume",
+              "ft3": "volume", "m": "length", "ft": "length", "mm": "length", "cm": "length"}
+
+
+def _fits(task: str, ans: Answer | None) -> bool:
+    """A count question answered in m² (or an area question in m) is not an answer to it."""
+    if ans is None or ans.value is None:
+        return False
+    k = _UNIT_KIND.get(str(ans.unit or "").lower())
+    return k is None or task not in ("count", "area", "volume", "length") or k == task
+
+
 def _cost_of(ans: Answer) -> Cost:
     c = ans.cost
     return Cost.model_validate(c) if isinstance(c, dict) else (c or Cost())
@@ -233,9 +245,15 @@ class Pipeline(BaseSolver):
             pre, unsure = self._raw_deterministic(path, question, intent, cands, trace, t0)
             if pre is not None:
                 return pre
+            if unsure is not None and not why and self.use_agent and allow_agent and intent.task != "text" and \
+                    source_of(path) != "ifc_bench" and any(re.search(r"operat|not appl|did not apply", m, re.I)
+                                                           for m in unsure[1].missing):
+                # the solver itself says the question has an operation it did not apply: the agent's job
+                why = f"{unsure[0]} flagged an operation it did not apply"
         if why:
             ans = self._run_agent(path, question, why, t0)
             if ans is not None:
+                ans.trace = trace + ans.trace  # intent, "dxf as asked: unsure", then the agent's steps
                 return self._vs_unsure(ans, unsure, intent)
             trace.append(f"general agent gave no answer ({why}); falling back to the template path")
         if self.api:
@@ -295,6 +313,9 @@ class Pipeline(BaseSolver):
             if ans.value is None:
                 trace.append(f"{name}: abstained ({(ans.missing or ['?'])[0][:80]})")
                 continue
+            if not _fits(intent.task, ans):
+                trace.append(f"{name}: {ans.value} {ans.unit} does not answer a {intent.task} question; ignored")
+                continue
             if name in rates:  # held-out hit rate (raster_cc5k on cc5k_heldout, D8), smoothed
                 conf = (rates[name][0] * rates[name][1] + 1) / (rates[name][1] + 2)
             elif gate and name in acc:  # train hit rate for this key, smoothed (k+1)/(n+2): 40/40 -> 0.976, not 1.0
@@ -318,7 +339,7 @@ class Pipeline(BaseSolver):
         best = self._combine(answers, intent, trace)
         if unsure is not None and not reused:
             total = total.add(_cost_of(unsure[1]))
-        if unsure is not None and (best is None or best.confidence < unsure[1].confidence):
+        if unsure is not None and _fits(intent.task, unsure[1]) and (best is None or best.confidence < unsure[1].confidence):
             n_u, a_u = unsure
             if best is not None:
                 trace.append(f"{n_u} on the question as asked ({a_u.value}, conf {a_u.confidence:.2f}) is surer than "
@@ -381,8 +402,9 @@ class Pipeline(BaseSolver):
             total = total.add(_cost_of(a))
             if a.value is None:
                 continue
-            if a.confidence < self.accept:
+            if a.confidence < self.accept or not _fits(intent.task, a):
                 trace.append(f"{name} (question as asked): {a.value} {a.unit or ''} at conf {a.confidence:.2f}, unsure"
+                             + ("" if _fits(intent.task, a) else f" (a {a.unit} answer to a {intent.task} question)")
                              + (" → general agent" if self._agent_reason(path, question, intent, cands) else ""))
                 return None, (name, a)
             best = a.model_copy(deep=True)
@@ -403,6 +425,9 @@ class Pipeline(BaseSolver):
             return ans
         n_u, a_u = unsure
         ans.cost = _cost_of(ans).add(_cost_of(a_u))
+        if not _fits(intent.task, a_u):
+            ans.trace.append(f"{n_u} answered {a_u.value} {a_u.unit} to a {intent.task} question: ignored")
+            return ans
         same = _agree(ans.value, a_u.value, intent.task)
         note = (f"cross-check: agent {ans.value} = {n_u} {a_u.value} ✓" if same
                 else f"cross-check: agent {ans.value} ≠ {n_u} {a_u.value}")
