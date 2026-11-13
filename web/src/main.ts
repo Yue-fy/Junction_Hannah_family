@@ -1,5 +1,6 @@
 import "./style.css";
-import { ask, exampleQuestions, fileUrl, knowledgeGraph, listFiles, onBackend } from "./api";
+import { ask, benchmark, exampleQuestions, fileUrl, knowledgeGraph, listFiles, onBackend } from "./api";
+import { renderBench } from "./bench";
 import { crossChecks, renderCard } from "./card";
 import { renderKg } from "./kg";
 import type { Answer, FileInfo, KgRoom } from "./types";
@@ -129,14 +130,10 @@ function fillStoreys() {
   sel.innerHTML = `<option value="">All storeys</option>` + v.storeys.map((s) => `<option value="${s.id}">${esc(s.name)}</option>`).join("");
   // a plan sheet → its storey ("…_plan-01-1-korrus.pdf" ↔ "1.korrus")
   const m = state.file?.path.match(/_plan-\d+-(.*)\.pdf$/);
-  if (m) {
-    const key = m[1].replace(/[^a-z0-9]/gi, "").toLowerCase();
-    const s = v.storeys.find((x) => x.name.replace(/[^a-z0-9]/gi, "").toLowerCase() === key);
-    if (s) {
-      sel.value = String(s.id);
-      v.setStorey(s.id);
-    }
-  }
+  const key = m?.[1].replace(/[^a-z0-9]/gi, "").toLowerCase();
+  const s = key ? v.storeys.find((x) => x.name.replace(/[^a-z0-9]/gi, "").toLowerCase() === key) : undefined;
+  sel.value = s ? String(s.id) : "";
+  v.setStorey(s ? s.id : null);
 }
 $<HTMLSelectElement>("storey").addEventListener("change", (e) => {
   const val = (e.target as HTMLSelectElement).value;
@@ -146,6 +143,21 @@ $<HTMLSelectElement>("storey").addEventListener("change", (e) => {
 $("fitBtn").addEventListener("click", () => {
   v2d.frameEvidence();
   if (v3d && state.answer) applyEvidence3D(state.answer);
+});
+
+$("benchBtn").addEventListener("click", async () => {
+  const el = $("bench");
+  if (!el.hidden) return void (el.hidden = true);
+  el.hidden = false;
+  el.innerHTML = `<p class="bn-empty">Loading the leaderboard…</p>`;
+  try {
+    renderBench(el, await benchmark());
+  } catch (e) {
+    el.innerHTML = `<p class="bn-empty">No benchmark data (${esc(e)}).</p>`;
+  }
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") $("bench").hidden = true;
 });
 
 // --- files --------------------------------------------------------------------------------------------------
@@ -213,6 +225,7 @@ async function openFile(f: FileInfo, question = "", keep: Answer | null = null, 
     $("card").innerHTML = `<p class="hint">Ask a question about this ${f.ext === ".ifc" ? "model" : "drawing"}.</p>`;
   }
   $("pick").hidden = true;
+  $("bench").hidden = true;
   $<HTMLTextAreaElement>("question").value = question;
 
   const is3DOnly = f.ext === ".ifc";
@@ -222,6 +235,7 @@ async function openFile(f: FileInfo, question = "", keep: Answer | null = null, 
     b.disabled = (b.dataset.mode !== "2d" && !state.ifc) || (b.dataset.mode !== "3d" && is3DOnly);
   });
   $<HTMLSelectElement>("storey").hidden = true;
+  if (v3d && state.ifc && v3d.file === state.ifc) fillStoreys(); // same model, other sheet: follow its storey
   if (!keep) setMode(is3DOnly ? "3d" : state.ifc ? "split" : "2d");
   else setMode(is3DOnly ? "3d" : state.mode === "3d" && state.ifc ? "split" : state.ifc ? state.mode : "2d");
 
@@ -449,6 +463,9 @@ function applyEvidence3D(a: Answer) {
     const s = [...storeyIds][0];
     v.setStorey(s);
     $<HTMLSelectElement>("storey").value = String(s);
+  } else if (storeyIds.size > 1) {
+    v.setStorey(null); // model-wide evidence: show every storey it touches
+    $<HTMLSelectElement>("storey").value = "";
   }
   const pane = $("pane3d");
   pane.dataset.found = String(n);
@@ -475,7 +492,7 @@ function focusEvidence(i: number) {
 }
 
 // --- demo tour: five steps, each one sentence for the presenter ----------------------------------------
-const TOUR: { file: string; q: string; note: string }[] = [
+const TOUR: { file: string; q: string; note: string; bench?: boolean }[] = [
   { file: "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
     q: "What is the net floor area of the room 'KORIDOR (119)' on '1.korrus', in m²?",
     note: "Area from the IFC model, shown on the drawing and in 3D: same room, same GlobalId." },
@@ -494,6 +511,8 @@ const TOUR: { file: string; q: string; note: string }[] = [
   { file: "data/habs/ak0003_sheet_00019.jpg",
     q: "What kind of drawing is this (floor plan, elevation, section, site plan)?",
     note: "Historical scan with no text layer: the cascade escalates to a local vision model and says how sure it is." },
+  { file: "", q: "", bench: true,
+    note: "Measured on held-out drawings: accuracy per source against two baselines, generality, and cost per 1,000 questions." },
 ];
 let tourStep = -1;
 $("tourBtn").addEventListener("click", async () => {
@@ -503,6 +522,8 @@ $("tourBtn").addEventListener("click", async () => {
   const note = $("tourNote");
   note.hidden = false;
   note.innerHTML = `<b>${tourStep + 1}/${TOUR.length}</b> ${esc(t.note)}`;
+  $("bench").hidden = true;
+  if (t.bench) return $("benchBtn").click();
   if (state.file?.path !== t.file) {
     const src = t.file.split("/")[1];
     const f = state.files.find((x) => x.path === t.file) ?? (await listFiles("", t.file, 5)).find((x) => x.path === t.file)

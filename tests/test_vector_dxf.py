@@ -54,3 +54,19 @@ def test_dxf_scoped_counts():
     s = get_solver("dxf", llm=0)
     a = s.solve(P, "How many windows are there in apartment B?")
     assert 0 < a.value < 28 and len(a.evidence) == a.value
+
+
+def test_parse_reasoning_ops():
+    v = ["Bad", "Zimmer"]
+    assert qparse.parse("What is the average net floor area of rooms 2.03 ('Bad') and 2.01 ('Zimmer'), in m²?", v).op == "mean"
+    q = qparse.parse("On average, how many doors are drawn per apartment on this floor plan?")
+    assert q.op == "ratio" and [t.arg for t in q.terms] == ["door", "apartment"]
+    q = qparse.parse("What share of the total net floor area of all numbered indoor rooms on this floor does apartment C "
+                     "take up, in percent?")
+    assert q.op == "pct" and [t.kind for t in q.terms] == ["area_apartment", "area_total"]
+    q = qparse.parse("What is the total net floor area, in m², of the numbered indoor rooms on this floor that do not "
+                     "belong to apartment A?")
+    assert q.op == "diff" and [t.kind for t in q.terms] == ["area_total", "area_apartment"]
+    q = qparse.parse("How many of the rooms 3.01 ('Bad') and 3.05 ('Zimmer') have a net floor area of more than 15 m²?", v)
+    assert q.op == "count_gt" and q.threshold == 15.0 and qparse.covered("How many of the rooms 3.01 ('Bad') and 3.05 "
+                                                                         "('Zimmer') have a net floor area of more than 15 m²?", q)
