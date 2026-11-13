@@ -275,7 +275,34 @@ class Agent:
                 if n_bad >= 3:
                     break
             msgs.append({"role": "user", "content": f"RESULT of {tool}: {obs[:3600]}"})
-        return self._finish(final, unit, results, evidence, trace, assumptions, missing, cost, t0, question)
+        ans = self._finish(final, unit, results, evidence, trace, assumptions, missing, cost, t0, question)
+        if src == "swiss_dwellings" and self.ask_fn is not None and ans.value is not None and ans.confidence > 0.25:
+            try:
+                self._table_evidence(path, results, ans)
+            except Exception:  # noqa: BLE001 - evidence is a bonus, never a failure
+                pass
+        return ans
+
+    def _table_evidence(self, path: str, results, ans: Answer) -> None:
+        """Rooms whose table area the calculation used -> their drawn outline (asked to the deterministic solver)."""
+        tables = [str(v) for v, c, _, _ in results if c == -2.0]
+        exprs = " ".join(w[6:] for v, c, _, w in results if c == -1.0)
+        if not tables or not exprs:
+            return
+        nums = {float(t) for t in re.findall(r"\d+\.\d+", exprs)}
+        rows = []
+        for line in tables[-1].splitlines():  # "number,name,area_m2,apartment,outdoor"
+            parts = line.split(",")
+            if len(parts) >= 3 and re.fullmatch(r"\d+(?:\.\d+)*", parts[0] or "x") and _num(parts[2]) is not None:
+                rows.append((parts[0], parts[1], _num(parts[2])))
+        hit = [(no, name) for no, name, a in rows if a in nums][:6]
+        for no, name in hit:
+            a = self.ask_fn(path, f"What is the net floor area of room {no} ('{name}') in m²?" if name
+                            else f"What is the net floor area of room {no} in m²?")
+            for e in (a.evidence or [])[:1]:
+                ans.evidence.append(e.model_copy(update={"note": f"room {no} '{name}' used in the calculation"}))
+        if hit:
+            ans.trace.append("evidence: outlines of the rooms used — " + ", ".join(f"{no}" for no, _ in hit))
 
     def _run(self, tool: str, inp: str, path: str, evidence, results, cost_box) -> str:
         try:
