@@ -2,7 +2,7 @@ import "./style.css";
 import { ask, benchmark, exampleQuestions, fileUrl, knowledgeGraph, listFiles, onBackend } from "./api";
 import { renderBench } from "./bench";
 import { crossChecks, renderCard } from "./card";
-import { renderKg } from "./kg";
+import { markAnswerCheck, renderKg } from "./kg";
 import type { Answer, FileInfo, KgRoom } from "./types";
 import { Viewer2D } from "./viewer2d";
 import type { Viewer3D } from "./viewer3d"; // loaded lazily: web-ifc + three are ~4 MB
@@ -220,6 +220,7 @@ async function openFile(f: FileInfo, question = "", keep: Answer | null = null, 
   $("fileMeta").textContent = `${f.source} · ${f.n_questions} questions`;
   $("credit").innerHTML = creditLine(f);
   if (!keep) {
+    markAnswerCheck($("linked"), undefined, undefined);
     $("xbanner").hidden = true;
     $("card").className = "card empty";
     $("card").innerHTML = `<p class="hint">Ask a question about this ${f.ext === ".ifc" ? "model" : "drawing"}.</p>`;
@@ -435,6 +436,9 @@ async function showAnswer(a: Answer, roundTripMs: number) {
   });
   v2d.setEvidence(a.evidence);
   v2d.frameEvidence();
+  // only a storey-scoped count is the same fact as a drawing-vs-model pill (model-wide totals are not)
+  const st = a.intent?.filters?.storey ? String(a.intent.filters.storey) : undefined;
+  markAnswerCheck($("linked"), a.intent?.task === "count" && st ? a.intent.target : undefined, st);
   const xb = $("xbanner");
   const xcs = crossChecks(a);
   const xc = xcs[0];
@@ -500,6 +504,9 @@ const TOUR: { file: string; q: string; note: string; bench?: boolean }[] = [
     q: "How many doors are shown on the floor plan of '1.korrus'?",
     note: "Count with one box per door. The drawing and the model agree (cross-check), no model call needed." },
   { file: "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+    q: "How many windows are shown on the floor plan of '1.korrus'?",
+    note: "Windows: the model has 55 on this storey, the drawing shows 52. The answer says the sources disagree instead of hiding it (see the highlighted check below)." },
+  { file: "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
     q: "How many doors are there in the model 'Maleva tänav 18 korterelamu (Esplanades example model)'?",
     note: "Model-wide question: evidence on five sheets. Click a sheet chip to open it." },
   { file: "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
@@ -515,8 +522,20 @@ const TOUR: { file: string; q: string; note: string; bench?: boolean }[] = [
     note: "Measured on held-out drawings: accuracy per source against two baselines, generality, and cost per 1,000 questions." },
 ];
 let tourStep = -1;
+let tourBack = false;
+// presenter keys: → next step, ← previous step (not while typing a question)
+document.addEventListener("keydown", (e) => {
+  const t = e.target as HTMLElement;
+  if (/^(TEXTAREA|INPUT|SELECT)$/.test(t.tagName) || e.altKey || e.ctrlKey || e.metaKey) return;
+  if (e.key === "ArrowRight" || (e.key === "ArrowLeft" && tourStep > 0)) {
+    e.preventDefault();
+    tourBack = e.key === "ArrowLeft";
+    $("tourBtn").click();
+  }
+});
 $("tourBtn").addEventListener("click", async () => {
-  tourStep = (tourStep + 1) % TOUR.length;
+  tourStep = tourBack ? Math.max(0, tourStep - 1) : (tourStep + 1) % TOUR.length;
+  tourBack = false;
   const t = TOUR[tourStep];
   $("tourBtn").textContent = `Demo ${tourStep + 1}/${TOUR.length} ▸`;
   const note = $("tourNote");

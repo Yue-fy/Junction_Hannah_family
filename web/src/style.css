@@ -331,3 +331,5 @@ select, input[type="search"], textarea { border: 1px solid var(--line); border-r
   .brand p { display: none; }
   #side { gap: 8px; padding: 10px; }
 }
+.kg-pill.match { outline: 2px solid var(--accent); outline-offset: 1px; animation: pillpulse 1.2s ease-in-out 2; }
+@keyframes pillpulse { 50% { outline-color: transparent; } }

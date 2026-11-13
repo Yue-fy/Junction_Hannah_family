@@ -56,6 +56,10 @@ export class Viewer3D {
   private root = new THREE.Group();
   private hlGroup = new THREE.Group();
   private buckets: Bucket[] = [];
+  /** Floor height of each storey in world y (10th percentile of its vertices; IFC elevations are not in world units after COORDINATE_TO_ORIGIN). */
+  private storeyBaseY = new Map<number, number>();
+  /** With a storey filter: cut everything above the next storey's floor (elements a model assigns to a storey but places higher up). */
+  private clipPlane = new THREE.Plane(new THREE.Vector3(0, -1, 0), 0);
   private spaceBuckets = new Map<number, Bucket>();
   private elementBuckets = new Map<number, { b: Bucket; r: Range }[]>();
   private api: WebIFC.IfcAPI | null = null;
@@ -77,6 +81,7 @@ export class Viewer3D {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setClearColor(new THREE.Color("#eef1f5"));
+    this.renderer.localClippingEnabled = true;
     el.append(this.renderer.domElement);
     this.camera = new THREE.PerspectiveCamera(45, 1, 0.1, 5000);
     this.camera.position.set(30, 30, 30);
@@ -175,6 +180,7 @@ export class Viewer3D {
       b.mesh.userData.bucket = b;
       this.root.add(b.mesh);
     }
+    this.computeStoreyBases();
     this.frame(this.root);
     this.el.dataset.state = "ready";
     onProgress("");
@@ -276,6 +282,36 @@ export class Viewer3D {
       this.elementBuckets.set(id, list);
       geom.delete();
     }
+  }
+
+  private computeStoreyBases() {
+    this.storeyBaseY.clear();
+    const ys = new Map<number, number[]>();
+    for (const b of this.buckets) {
+      if (b.storey < 0 || b.transparent) continue;
+      const l = ys.get(b.storey) ?? [];
+      const step = Math.max(3, Math.floor(b.pos.length / 3 / 4000) * 3); // sample ≤ ~4k vertices per bucket
+      for (let i = 1; i < b.pos.length; i += step) l.push(b.pos[i]);
+      ys.set(b.storey, l);
+    }
+    for (const [id, l] of ys) {
+      if (l.length < 20) continue;
+      l.sort((a, c) => a - c);
+      this.storeyBaseY.set(id, l[Math.floor(l.length * 0.1)]);
+    }
+  }
+
+  /** World y where the active storey ends: the floor of the next storey above that has geometry. */
+  private clipHeight(): number | null {
+    if (this.activeStorey === null) return null;
+    const base = this.storeyBaseY.get(this.activeStorey);
+    if (base === undefined) return null;
+    const i = this.storeys.findIndex((s) => s.id === this.activeStorey);
+    for (const s of this.storeys.slice(i + 1)) {
+      const nb = this.storeyBaseY.get(s.id);
+      if (nb !== undefined && nb > base) return nb;
+    }
+    return null;
   }
 
   private toMesh(b: Bucket, mat: THREE.Material): THREE.Mesh {
@@ -407,8 +443,11 @@ export class Viewer3D {
   }
 
   private updateMaterials() {
+    const clipY = this.clipHeight();
+    if (clipY !== null) this.clipPlane.constant = clipY;
     for (const b of this.buckets) {
       const mat = b.mesh!.material as THREE.MeshLambertMaterial;
+      mat.clippingPlanes = clipY !== null && b.storey === this.activeStorey ? [this.clipPlane] : null;
       const other = this.activeStorey !== null && b.storey !== this.activeStorey;
       let opacity = b.transparent ? 0.35 : 1;
       if (other) opacity = 0.06;
