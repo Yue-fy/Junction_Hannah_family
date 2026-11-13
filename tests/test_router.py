@@ -142,3 +142,18 @@ def test_gate_keeps_near_perfect_solver_first():
 
     order, _ = gating.plan("swiss_dwellings", "area:room:room", ["dxf", "pdf_vector", "vlm_direct"])
     assert order[0] == "dxf"
+
+
+def test_apartment_scope_kept_for_counts():
+    """W2: dxf answers apartment-scoped counts; the router must not canonicalise them to the whole floor."""
+    from stoa.router.canonical import canonical
+    from stoa.router.compose import decompose
+    from stoa.router.intent import modifiers, parse
+
+    it = parse("How many windows are in apartment B?")
+    assert it.key == "count:window:apartment" and it.filters == {"apartment": "B"}
+    assert canonical("swiss_dwellings", it) is None and modifiers("How many windows are in apartment B?") == []
+    it = parse("How many rooms labelled 'Zimmer' are in apartment C?")
+    assert it.filters.get("apartment") == "C" and canonical("swiss_dwellings", it) is None
+    assert decompose("swiss_dwellings", "How many doors and windows does apartment C have in total?") is None
+    assert parse("How many bedrooms does this apartment have?").filters == {}

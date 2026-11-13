@@ -113,6 +113,7 @@ _OPS = [
     ("multi_scope", r"\b(?:on|auf|sur|op|in)\s+<q>\s*,?\s*(?:and|und|et|en|og|ja)\s+(?:on|auf|sur|op|in)\s+<q>"),
 ]
 _OPS_RX = [(n, re.compile(p, re.I)) for n, p in _OPS]
+_APT_SCOPE = re.compile(r"\b(?i:apartment|wohnung|appartement|appartamento|asunto|unit)\s+[A-Z0-9]{1,3}\b")
 _GENERIC = {"room", "unknown", "sanitary"}
 
 
@@ -137,6 +138,7 @@ def modifiers(question: str) -> list[str]:
     # several object classes: >= 2 outside parentheses, or an enumeration of >= 3 inside one ("wet rooms
     # (bathrooms, WC rooms and saunas)"); "(kitchen and bathroom combined)" in the sinks template is a definition
     q2 = _fold(question)
+    q2 = _APT_SCOPE.sub(" ", q2)  # "windows in apartment B": the apartment is a scope, not a second object class
     outside = re.sub(r"\([^)]*\)", " ", q2)
     outside = re.sub(r"[^,;?(]*\bexcluded\b", " ", outside)
     t_out = {t for t in targets_mentioned(outside) if t not in _GENERIC}
@@ -237,6 +239,13 @@ def parse(question: str) -> Intent:
     if ma and task in ("area",) and target in ("apartment", "balcony", "room", "unknown"):
         filters["apartment"] = ma.group(1).upper()
         scope, target = "apartment", "apartment"
+    elif ma and task == "count" and (ma.group(1).isupper() or ma.group(1).isdigit()):
+        # "How many windows in apartment B?": keep the scope (never canonicalise it to the whole floor; dxf answers it)
+        rest = q_noquote[:ma.start()] + " " + q_noquote[ma.end():]
+        t2 = next((t for t, rx in _TARGETS if rx.search(rest)), None)
+        if t2 and t2 != "apartment":
+            filters["apartment"] = ma.group(1)
+            scope, target = "apartment", t2
     if _LABELLED.search(q_noquote) and quoted:
         filters["label"] = quoted[0]
         scope = "label_total" if task in ("area", "volume", "length") else "label"

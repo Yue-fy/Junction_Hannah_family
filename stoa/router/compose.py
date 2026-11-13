@@ -65,7 +65,7 @@ def _targets_in(text: str) -> list[tuple[int, str]]:
 
 def _sub_for(source: str, target: str, base: Intent) -> str | None:
     it = Intent(task=base.task, target=target, scope=base.scope, unit=base.unit,
-                filters={k: v for k, v in base.filters.items() if k in ("storey", "model")}, lang="en")
+                filters={k: v for k, v in base.filters.items() if k in ("storey", "model", "apartment")}, lang="en")
     return canonical(source, it)
 
 
@@ -76,6 +76,8 @@ def decompose(source: str, question: str) -> Plan | None:
     if known_template(q):  # a question shape seen in train is atomic: solve it directly
         return None
     base = parse(q)
+    if base.filters.get("apartment") and base.task == "count":
+        return None  # "doors and windows of apartment C": dxf scopes apartments itself; else the agent asks per part
     qn = _QUOTED.sub(" <q> ", q)
     quoted = [next(g for g in m.groups() if g).strip() for m in _QUOTED.finditer(q)]
 
