@@ -125,7 +125,7 @@ _LEX: list[tuple[str, tuple[str, ...]]] = [
     ("pipe", ("pipe", "rohr", "leiding", "tuberia")),
     ("outlet", ("outlet", "receptacle", "socket", "steckdose", "wandcontactdoos")),
     ("switch", ("switch", "schalter", "schakelaar")),
-    ("valve", ("valve", "ventil", "klep", "valvula")),
+    ("valve", ("valve", "ventile", "ventil ", "ventils", "klep", "valvula")),  # not "ventilation"
     ("damper", ("damper", "klappe")),
     ("pump", ("pump", "pumpe", "pomp")),
     ("cable", ("cable", "kabel", "cable tray")),

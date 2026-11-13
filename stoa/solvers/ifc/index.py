@@ -128,10 +128,10 @@ def strip_id(s: str | None) -> str | None:
     'A:A' (Revit family:type with the same text twice) -> 'A'."""
     if not s:
         return s
-    s = re.sub(r"(:\d+)+$", "", s.strip()) or s.strip()
+    s = re.sub(r"(:\d+)+\s*$", "", s) or s  # keep other whitespace: 'X ' and 'X' are different names in the model
     parts = s.split(":")
     if len(parts) == 2 and parts[0].strip() == parts[1].strip():
-        s = parts[0].strip()
+        s = parts[0]
     return s
 
 

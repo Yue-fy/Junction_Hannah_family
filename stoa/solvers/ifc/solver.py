@@ -994,6 +994,9 @@ class IfcSolver(BaseSolver):
     def _breakdown(self, idx: IfcIndex, it: Intent, els: list[Element], value_of, ev, trace, assumptions, missing,
                    conf: float, where: str, unit: str | None = None) -> Answer:
         """Text answer: total + breakdown by type name or by storey (IFC-Bench style)."""
+        if not els:  # nothing matched (a filter the elements lack, a broad question): let the fact card answer
+            return Answer.abstain(self.name, f"breakdown of {it.kind} in {where}: no matching elements", trace=trace,
+                                  missing=missing or [f"{it.kind} elements matching the question"])
         groups: dict[str, list[float]] = {}
         members: dict[str, list[Element]] = {}
         type_key = _type_key_fn(els)
@@ -1029,17 +1032,25 @@ class IfcSolver(BaseSolver):
         want_mat = bool(re.search(r"\bmaterials?\b|made of|composition|composed|layers?\b|build[- ]?up|materia\w*|"
                                   r"werkstoff|baustoff", q))
         list_rooms = (it.kind == "space" and value_of is not None and len(els) <= 60)
+        want_size = bool(re.search(r"\b(sizes?|dimensions?|widths?|heights?|grosse|abmessung\w*|afmeting\w*|maat)\b", q)
+                         and it.kind in ("door", "window"))
         for k in order[:25]:
             sub = sum(groups[k])
             share = f" ({sub / total * 100:.1f}%)" if total else ""
             cnt = f", {len(groups[k])} elements" if value_of is not None else ""
-            lines.append(f"- {k}: {fmt(sub)}{share}{cnt}")
+            shown = f"'{k}'" if k != k.strip() else k  # trailing spaces: a different name in the model
+            lines.append(f"- {shown}: {fmt(sub)}{share}{cnt}")
             if want_mat:
                 combos = Counter(tuple(m for m in (e.materials or []) if m and m.strip() and "<unnamed>" not in m.lower())
                                  for e in members[k])
                 best = next((c for c, _ in combos.most_common() if c), None)
                 if best:
                     lines.append("    materials: " + ", ".join(best))
+            if want_size:
+                sizes = Counter(f"{e.dims['OverallWidth']:.2f} m x {e.dims['OverallHeight']:.2f} m" for e in members[k]
+                                if e.dims and "OverallWidth" in e.dims and "OverallHeight" in e.dims)
+                for sz, c in sizes.most_common(12):
+                    lines.append(f"    {sz} (W x H): {c} ({c / len(members[k]) * 100:.0f}%)")
             if list_rooms:
                 for e in sorted(members[k], key=lambda e: -(value_of(e) or 0.0)):
                     nm = e.long_name or e.name or "(unnamed)"
