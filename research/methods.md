@@ -128,6 +128,17 @@ Calibration: `confidence = P(gold == count | template, count bucket)` fit on val
 never fires except for sinks with 0, 1 or ≥6, where it changes nothing on test. Within ±1 coverage on test:
 windows 57%, doors 68%, WC seats 95%, sinks 86%. These are the intervals to state when unsure.
 
+Inside the full pipeline (`pipeline` on cc5k_heldout, night cbd2fe8: 61.8%), swapping in the model's
+counts for the 4 symbol templates gives 68.8%: **+7.1 [+5.1, +9.0]**. Doors: pipeline (VLM) 23.6% → 38.6%.
+(`artifacts/eval/20261114-005010-pipeline-cc5k_heldout-5645.jsonl` vs `artifacts/R1/cc5k_preds/plain_over_pipeline.jsonl`.)
+
+Tried and not adopted:
+- 4-rotation TTA (4× CPU): test windows 35.3 (+1.3), doors 37.1 (−3.1), WC 77.9 (+2.4), sinks 63.1 (+3.0).
+  All within noise, so we keep plain inference because it is 4× cheaper.
+- An opening kernel relative to image size: no change (windows 33.4, WC 75.7, sinks 59.5).
+- Splitting long window components into several windows by a typical window length: always worse
+  (windows val 40% → ≤ 39%). The −4 tail (18% of val drawings) is missed windows, not merged ones.
+
 Live use: `experiments/r1/cc5k_model/predict.py IMG.png` prints `{counts: {windows|doors|wc_seats|sinks:
 {count, confidence, boxes}}}`. It needs torch (CPU is enough; `/data/User/fangy4/envs/junction-train`
 has it, but `$JUNCTION_VENV` does not).

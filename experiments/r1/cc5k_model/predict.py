@@ -26,9 +26,7 @@ sys.path.insert(0, HERE)
 import net  # noqa: E402
 
 WEIGHTS = os.environ.get("CC5K_WEIGHTS", "/data/User/fangy4/r1_cc5k/model_best_val_loss_var.pkl")
-# template -> (icon class ids, min component area as a fraction of H*W, opening kernel); frozen on CC5K val
-FROZEN = {"windows": ([1], 2e-4, 5), "doors": ([2], 2e-4, 0), "wc_seats": ([5], 2e-4, 5), "sinks": ([6], 2e-5, 5)}
-CALIB = json.load(open(os.path.join(HERE, "calib_plain.json")))
+from config import FROZEN, confidence  # noqa: E402
 _M = None
 
 
@@ -65,9 +63,7 @@ def predict(path):
     out = {}
     for t, (cls, mf, k) in FROZEN.items():
         bx = [b for c in cls for b in boxes(icons == c, max(1, mf * H * W), k)]
-        tab = CALIB[t]["buckets"]
-        row = tab[str(min(len(bx), max(int(b) for b in tab)))]
-        out[t] = {"count": len(bx), "confidence": row["conf_model"], "boxes": bx}
+        out[t] = {"count": len(bx), "confidence": confidence(t, len(bx)), "boxes": bx}
     return {"path": path, "cpu_seconds": round(time.process_time() - t0, 2),
             "model": "CubiCasa5K multi-task (Kalervo et al. 2019), CC BY-NC 4.0 weights", "counts": out}
 
