@@ -77,7 +77,8 @@ _LEX: list[tuple[str, tuple[str, ...]]] = [
                 "korrus", "kondygnac", "niveluri")),
 ]
 
-_COUNT = ("how many", "number of", "count of", "wie viele", "wieviele", "anzahl", "numero de", "cuantos",
+_COUNT = ("how many", "number of", "count of", " count the ", " count all ", " count ", "tally", "zahle", "zaehle",
+          "tel de ", "tel alle", "cuenta ", "cuente ", "tael ", "loenda", "policz", "numarati", "comptez", "conta ", "wie viele", "wieviele", "anzahl", "numero de", "cuantos",
           "cuantas", "el numero", "hvor mange", "antal", "hoeveel", "aantal", "mitu", "ile ", "numarul",
           "combien", "nombre de", "quanti", "quante", "numero di", "kuinka monta", "montako", "hur manga")
 _AREA = ("area", "flache", "flaeche", "superficie", "areal", "oppervlak", "pind", "powierzchn", "suprafat",
@@ -95,6 +96,21 @@ _MODEL = ("in the model", "the model", "modell", "modelo", "modellen", "het mode
 _PLAN = ("floor plan", "plan of", "grundriss", "plano", "plantegning", "plattegrond", "plaan", "rzuc",
          "planul", "plan de", "pianta", "pohjapiirro", "on the level", "on level", "storey", "geschoss",
          "planta", "etage", "verdieping", "korrus", "kondygnac", "nivel")
+_MAX = ("largest", "biggest", "greatest", "maximum", "max ", "most ", "grosste", "groesste", "grosster", "groesster",
+        "grootste", "mayor ", "mas grande", "storste", "suurim", "najwieksz", "cel mai mare", "plus grand",
+        "piu grande", "suurin", "storsta")
+_MIN = ("smallest", "least", "minimum", "min ", "kleinste", "menor ", "mas pequen", "mindste", "vaikseim",
+        "najmniejsz", "cel mai mic", "plus petit", "piu piccol", "pienin", "minsta")
+_WHICH = ("which", "what room", "welche", "welcher", "welches", "welke", "cual ", "hvilk", "milline", "ktory",
+          "ktora", "care ", "quel", "quale", "mika", "vilk")
+_SUM = ("combined", "together", "in total", "sum of", "zusammen", "insgesamt", "samen", "totaal", "en total",
+        "juntas", "juntos", "tilsammen", "i alt", "kokku", "lacznie", "razem", "in total", "au total", "in totale",
+        "yhteensa", "sammanlagt", " plus ", " + ")
+_DIFF = ("difference", "minus", "larger than", "bigger than", "smaller than", "more than", "fewer than",
+         "less than", "unterschied", "differenz", "mehr als", "verschil", "meer dan", "diferencia", "mas que",
+         "forskel", "flere end", "erinevus", "roznica", "wiecej niz", "diferenta", "difference", "plus que",
+         "differenza", "piu di")
+_CONJ = re.compile(r"\b(and|und|en|y|e|og|ja|i|si|et|och|plus|or|oder|of|o|eller|sau|ou)\b|[+&,/]")
 _NET = ("net", "netto", "util", "neto", "nett")
 # "floor area" compounds: they name the measured quantity of a ROOM, not a floor slab ("vloer", "Boden", "dæk")
 _FLOOR_AREA = re.compile(r"(net(to)?[- ]?)?(floor ?area|floor ?space|vloer ?oppervlak\w*|grund ?flache|grundflaeche|"
@@ -125,6 +141,9 @@ class Intent:
     net: bool = True
     gross: bool = False
     asked_unit: str | None = None  # unit the question asks for (m2, ft2, m3, m, ft, ...)
+    kinds: list[str] = field(default_factory=list)  # coordinated kinds ("doors and windows") -> summed
+    op: str | None = None  # None | sum | max | min | argmax | argmin | diff | more
+    yes_no: bool = False  # "are there more X than Y?" -> "yes"/"no"
     notes: list[str] = field(default_factory=list)
 
     @property
@@ -143,6 +162,37 @@ def quoted_names(question: str) -> list[str]:
 
 def _has(text: str, words) -> bool:
     return any(w in text for w in words)
+
+
+def _kind_hits(text: str) -> list[tuple[int, int, str]]:
+    """All (start, end, kind) lexicon hits, first hit per kind, sorted by position."""
+    hits: dict[str, tuple[int, int, int]] = {}
+    for prio, (kind, stems) in enumerate(_LEX):
+        for st in stems:
+            m = re.search(r"(?<![a-z])" + re.escape(st), text)
+            if m:
+                end = m.start() + len(re.match(r"[\w-]*", text[m.start():]).group(0) or st)
+                key = (m.start(), prio, end)
+                if kind not in hits or key < hits[kind]:
+                    hits[kind] = key
+    return sorted(((v[0], v[2], k) for k, v in hits.items()), key=lambda x: (x[0], x[1]))
+
+
+def coordinated_kinds(text: str) -> list[str]:
+    """['door', 'window'] for "doors and windows", ['door'] for "doors on storey X"."""
+    hits = [h for h in _kind_hits(text) if h[2] != "storey"] or _kind_hits(text)
+    if not hits:
+        return []
+    out = [hits[0][2]]
+    prev_end = hits[0][1]
+    for start, end, kind in hits[1:]:
+        gap = text[prev_end:start]
+        if len(gap) <= 25 and _CONJ.search(gap) and kind not in out:
+            out.append(kind)
+            prev_end = end
+        elif start - prev_end > 25:
+            break
+    return out
 
 
 def _find_kind(text: str) -> str | None:
@@ -198,6 +248,9 @@ def parse(question: str) -> Intent:
     kind = _find_kind(_FLOOR_AREA.sub(" ", t) if floor_area else t)
     if floor_area and kind in (None, "slab", "storey"):
         kind = "space"
+    kinds = coordinated_kinds(_FLOOR_AREA.sub(" ", t) if floor_area else t) if metric == "count" else []
+    if kinds and kind in kinds and kinds[0] != kind:
+        kinds = [kind] + [k for k in kinds if k != kind]
     if metric == "area" and kind is None and not side:
         kind = "space"
     if side and kind is None:
@@ -207,7 +260,25 @@ def parse(question: str) -> Intent:
     gross = bool(re.search(r"\b(gross|brutto|bruto|construida)\b", tg))
     it = Intent(metric=metric, kind=kind, names=names, side_area=side,
                 total=_has(t, _TOTAL) or (metric != "count" and len(names) <= 1),
-                net=not gross, gross=gross, asked_unit=asked_unit)
+                net=not gross, gross=gross, asked_unit=asked_unit, kinds=kinds or ([kind] if kind else []))
+    which = _has(t, _WHICH)
+    if _has(t, _DIFF) or re.search(r"\b(more|fewer|less|mehr|weniger|meer|minder|mas|menos|flere|faerre|wiecej|mniej|"
+                                   r"mai multe|plus|moins|piu|meno)\b.{1,40}\b(than|als|dan|que|end|niz|decat|di)\b", t):
+        it.op = "diff"
+        it.yes_no = bool(re.match(r"\s*(are|is|do|does|gibt|sind|hay|er|zijn|kas|czy|sunt|y a)\b", t))
+    elif _has(t, _MAX):
+        it.op = "argmax" if which else "max"
+    elif _has(t, _MIN):
+        it.op = "argmin" if which else "min"
+    elif _has(t, _SUM) or len(it.kinds) > 1:
+        it.op = "sum"
+    if it.op == "diff" and metric == "count" and len(it.kinds) < 2:
+        hs = [h[2] for h in _kind_hits(_FLOOR_AREA.sub(" ", t) if floor_area else t) if h[2] != "storey"]
+        if len(hs) >= 2:
+            it.kinds = hs[:2]
+            it.kind = hs[0]
+    if it.op in ("argmax", "argmin"):
+        it.metric = "area" if metric in ("text", "area") else metric
     if _has(t, _MODEL) and not _has(t, ("floor plan", "grundriss", "plattegrond", "plantegning", "plaan")):
         it.scope = "model"
     elif metric == "area" and kind == "space" and len(names) >= 2 and not it.total:

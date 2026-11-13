@@ -125,105 +125,157 @@ class IfcSolver(BaseSolver):
         return ans
 
     # ------------------------------------------------------------------------------------------------
-    def _scope(self, path: str, idx: IfcIndex, it: Intent, trace: list[str], assumptions: list[str]):
-        """-> (storey | None, room_name | None, conf_factor). storey None + scope model = whole model."""
+    def _roles(self, path: str, idx: IfcIndex, it: Intent, trace: list[str], assumptions: list[str]):
+        """Give every quoted name a role by resolving it against the model (not by its position):
+        -> (storey | None, rooms: list[(asked_name, [Match])], conf_factor)."""
         conf = 1.0
-        storey = None
-        room = None
-        names = list(it.names)
-        if it.scope == "room" and names:
-            room = names[0]
-            names = names[1:]
-        if it.scope != "model":
-            for n in reversed(names):
-                m = match_storey(idx, n)
-                if m:
-                    storey = m.obj
-                    trace.append(f"storey '{n}' -> '{m.label}' ({m.method}, {m.score:.0f}) guid {storey.guid}")
-                    if m.method == "fuzzy":
-                        conf *= 0.85
-                        assumptions.append(f"storey name '{n}' matched fuzzily to '{m.label}'")
-                    break
-            if storey is None and names:
-                mm = match_model(idx, names[-1])
-                if mm and it.scope != "room":
-                    trace.append(f"'{names[-1]}' matches the model name '{mm.label}': whole model")
-                    it.scope = "model"
-            if storey is None and it.scope != "model":
-                ps, why = plan_storey(path, idx)
-                if ps is not None:
-                    storey = ps
-                    trace.append(f"storey from the plan file: {why}")
-                    if names:
-                        conf *= 0.7
-                        assumptions.append(f"no storey named {names[-1]!r}; used the plan's storey '{ps.name}'")
-                elif it.scope == "storey":
-                    trace.append(f"no storey resolved ({why}); counting the whole model")
-                    assumptions.append("storey not found; counted the whole model")
-                    conf *= 0.3
-        elif it.names:
-            mm = match_model(idx, it.names[-1])
-            trace.append(f"model scope; model name '{it.names[-1]}' "
-                         + (f"~ project '{mm.label}' ({mm.method})" if mm else "not in IfcProject/IfcBuilding names; "
-                            "using the file's model"))
-        return storey, room, conf
+        storey, storey_name, rooms, model_named = None, None, [], False
+        cands = []
+        for n in it.names:
+            ms = match_storey(idx, n)
+            sp = match_space(idx, n) if it.kind == "space" or it.metric == "area" else []
+            mm = match_model(idx, n)
+            cands.append((n, ms, sp, mm))
+        # storey: the best exact/normalised storey match, else the best fuzzy one that isn't a better room match
+        st_c = [(n, ms) for n, ms, sp, mm in cands if ms and (not sp or ms.score >= sp[0].score)]
+        if st_c:
+            n, ms = max(st_c, key=lambda x: x[1].score)
+            storey, storey_name = ms.obj, n
+            trace.append(f"storey '{n}' -> '{ms.label}' ({ms.method}, {ms.score:.0f}) guid {storey.guid}")
+            if ms.method == "fuzzy":
+                conf *= 0.85
+                assumptions.append(f"storey name '{n}' matched fuzzily to '{ms.label}'")
+        for n, ms, sp, mm in cands:
+            if n == storey_name:
+                continue
+            if mm and (not sp or mm.score > sp[0].score) and mm.score >= 85:
+                model_named = True
+                trace.append(f"'{n}' = the model ('{mm.label}', {mm.method})")
+                continue
+            if it.kind == "space" or it.metric == "area":
+                sp2 = match_space(idx, n, storey.guid if storey else None)
+                if sp2:
+                    rooms.append((n, sp2))
+                    continue
+            if it.scope == "model" or (mm and mm.score >= 60):
+                model_named = True
+                trace.append(f"'{n}' taken as the model's name" + (f" (~'{mm.label}')" if mm else
+                             " (not in IfcProject/IfcBuilding names; the file is the model)"))
+            else:
+                trace.append(f"'{n}': no storey, room or model of that name")
+                assumptions.append(f"could not resolve '{n}'")
+                conf *= 0.6
+        if it.scope == "model" or (model_named and storey is None):
+            it.scope = "model"
+        elif storey is None and it.metric != "text":
+            ps, why = plan_storey(path, idx)
+            if ps is not None and not (it.metric == "area" and rooms and not it.total):
+                storey = ps
+                trace.append(f"storey from the plan file: {why}")
+            elif ps is not None:
+                trace.append(f"plan file shows {why}")
+            elif not rooms:
+                trace.append(f"no storey named or implied ({why}); whole model")
+                assumptions.append("no storey given; answered for the whole model")
+                it.scope = "model"
+                conf *= 0.5
+        return storey, rooms, conf
 
     def _answer(self, path: str, model: str, idx: IfcIndex, it: Intent, trace: list[str]) -> Answer:
         assumptions: list[str] = []
         missing: list[str] = []
-        if it.metric == "text":
-            return Answer.abstain(self.name, "free-text question: no deterministic rule", trace=trace,
-                                  missing=["a quantity question (count/area/volume/length)"])
         if it.kind is None:
             return Answer.abstain(self.name, "no element kind recognised in the question", trace=trace,
                                   missing=["element kind (doors, walls, rooms, ...)"])
-        storey, room, conf = self._scope(path, idx, it, trace, assumptions)
+        if it.metric == "text":
+            if it.kind is not None and it.names:
+                it.metric = "count"  # "Count the walls on storey X." style imperatives without a count word
+                trace.append("no metric word; assuming a count")
+            else:
+                return Answer.abstain(self.name, "free-text question: no deterministic rule", trace=trace,
+                                      missing=["a quantity question (count/area/volume/length)"])
+        storey, rooms, conf = self._roles(path, idx, it, trace, assumptions)
         sname = storey.name if storey else None
 
-        # ---- single room area -----------------------------------------------------------------------
-        if it.metric == "area" and room is not None:
-            ms = match_space(idx, room, storey.guid if storey else None)
-            if not ms:
-                return Answer.abstain(self.name, f"room {room!r} not found", trace=trace,
-                                      missing=[f"an IfcSpace named {room!r}"])
-            m = ms[0]
-            e: Element = m.obj
-            trace.append(f"room '{room}' -> IfcSpace '{m.label}' ({m.method}, {m.score:.0f}) guid {e.guid}"
-                         + (f"; {len(ms)} equally good matches, took the first" if len(ms) > 1 else ""))
-            if m.method == "fuzzy":
-                conf *= 0.8
-                assumptions.append(f"room name '{room}' matched fuzzily to '{m.label}'")
-            if len(ms) > 1:
-                conf *= 0.6
-            val, how = self._floor_area(e, it, trace)
-            if val is None:
-                return Answer.abstain(self.name, "space has no geometry or area quantity", trace=trace)
-            assumptions.append(how)
-            return self._final(val, "m2", it, conf * 0.97, [self._ev(model, e, f"{e.long_name or e.name} {val:.2f} m²")],
-                               trace, assumptions, missing)
+        # ---- named rooms: area of one, or sum/max/min/argmax/diff over several ----------------------
+        if it.metric == "area" and rooms and not it.side_area:
+            vals, ev = [], []
+            for asked, ms in rooms:
+                m = ms[0]
+                e: Element = m.obj
+                trace.append(f"room '{asked}' -> IfcSpace '{m.label}' ({m.method}, {m.score:.0f}) guid {e.guid}"
+                             + (f"; {len(ms)} equally good matches, took the first" if len(ms) > 1 else ""))
+                if m.method == "fuzzy":
+                    conf *= 0.8
+                    assumptions.append(f"room name '{asked}' matched fuzzily to '{m.label}'")
+                if len(ms) > 1:
+                    conf *= 0.6
+                v, how = self._floor_area(e, it, trace)
+                if v is None:
+                    missing.append(f"room '{asked}' has no geometry or area quantity")
+                    continue
+                vals.append((asked, v, e))
+                ev.append(self._ev(model, e, f"{e.long_name or e.name} {v:.2f} m²"))
+                if how not in assumptions:
+                    assumptions.append(how)
+            if not vals:
+                return Answer.abstain(self.name, "no area for the named rooms", trace=trace, missing=missing)
+            op = it.op if len(vals) > 1 else None
+            if op in ("argmax", "argmin"):
+                pick = (max if op == "argmax" else min)(vals, key=lambda x: x[1])
+                trace.append(f"{op}: " + ", ".join(f"{a} {v:.2f}" for a, v, _ in vals) + f" -> {pick[0]}")
+                return Answer(value=pick[0], unit=None, confidence=conf * 0.9, evidence=ev, trace=trace,
+                              solver=self.name, assumptions=assumptions, missing=missing)
+            if op in ("max", "min"):
+                val = (max if op == "max" else min)(v for _, v, _ in vals)
+            elif op == "diff" and len(vals) == 2:
+                val = abs(vals[0][1] - vals[1][1])
+                trace.append(f"difference |{vals[0][1]:.2f} - {vals[1][1]:.2f}|")
+            else:
+                val = sum(v for _, v, _ in vals)
+                if len(vals) > 1:
+                    trace.append("sum of " + " + ".join(f"{v:.2f}" for _, v, _ in vals))
+            return self._final(val, "m2", it, conf * 0.97, ev, trace, assumptions, missing)
 
-        classes = KIND_CLASSES.get(it.kind, ())
-        if it.scope == "model" or storey is None:
-            els = idx.by_class(*classes)
-            where = "whole model"
-        else:
-            els = idx.in_storey(storey.guid, *classes)
-            where = f"storey '{sname}'"
-        trace.append(f"{len(els)} elements of {'/'.join(classes)} in {where}")
+        if it.metric == "area" and it.kind == "space" and not rooms and len(it.names) > (1 if storey else 0):
+            return Answer.abstain(self.name, f"rooms {it.names} not found", trace=trace,
+                                  missing=[f"IfcSpaces named {it.names}"])
+
+        where = "whole model" if (it.scope == "model" or storey is None) else f"storey '{sname}'"
+
+        def elements_of(kind: str) -> list[Element]:
+            classes = KIND_CLASSES.get(kind, ())
+            els = idx.by_class(*classes) if where == "whole model" else idx.in_storey(storey.guid, *classes)
+            trace.append(f"{len(els)} elements of {'/'.join(classes)} in {where}")
+            return els
 
         if it.metric == "count":
-            if it.kind == "wall":
+            kinds = it.kinds or [it.kind]
+            per = {k: elements_of(k) for k in kinds}
+            if "wall" in kinds:
                 assumptions.append("walls = IfcWall + IfcWallStandardCase (curtain walls not counted)")
-            if it.kind in ("sanitary", "light"):
+            if {"sanitary", "light"} & set(kinds):
                 assumptions.append("IFC2X3 IfcFlowTerminal classified by its type object")
-            if storey is not None and it.scope != "model":
+            if where != "whole model":
                 assumptions.append(f"elements whose spatial container is storey '{sname}'")
-            ev = [self._ev(model, e, f"{e.eff_cls} {e.name or ''}".strip()) for e in els[:MAX_EVIDENCE]]
-            conf_c = conf * (0.97 if els else 0.6)
-            if not els:
-                missing.append(f"no {it.kind} elements in the model: they may be modelled as proxies or not at all")
-            return self._final(len(els), "count", it, conf_c, ev, trace, assumptions, missing)
+            ev = [self._ev(model, e, f"{e.eff_cls} {e.name or ''}".strip()) for k in kinds for e in per[k]][:MAX_EVIDENCE]
+            for k in kinds:
+                if not per[k]:
+                    missing.append(f"no {k} elements found: they may be modelled as proxies or not at all")
+            if it.op == "diff" and len(kinds) >= 2:
+                a, b = len(per[kinds[0]]), len(per[kinds[1]])
+                trace.append(f"{kinds[0]}={a}, {kinds[1]}={b}")
+                if it.yes_no:
+                    return Answer(value="yes" if a > b else "no", unit=None, confidence=conf * 0.9, evidence=ev,
+                                  trace=trace, solver=self.name, assumptions=assumptions, missing=missing)
+                return self._final(abs(a - b), "count", it, conf * 0.95, ev, trace, assumptions, missing)
+            n = sum(len(v) for v in per.values())
+            if len(kinds) > 1:
+                trace.append("sum: " + " + ".join(f"{k} {len(per[k])}" for k in kinds))
+            conf_c = conf * (0.97 if n else 0.6)
+            return self._final(n, "count", it, conf_c, ev, trace, assumptions, missing)
 
+        els = elements_of(it.kind)
         if not els:
             missing.append(f"no {it.kind} elements in {where}")
             return self._final(0.0, {"area": "m2", "volume": "m3", "length": "m"}[it.metric], it, conf * 0.3, [],
@@ -237,7 +289,7 @@ class IfcSolver(BaseSolver):
                 if v is not None:
                     tot += v
                     ev.append(self._ev(model, e, f"{e.long_name or e.name} {v:.2f} m²"))
-            assumptions.append("net floor area = sum of IfcSpace footprints (geometry) on the storey")
+            assumptions.append(f"net floor area = sum of IfcSpace footprints (geometry) in {where}")
             return self._final(tot, "m2", it, conf * 0.95, ev, trace, assumptions, missing)
 
         if it.metric == "area":
@@ -266,9 +318,8 @@ class IfcSolver(BaseSolver):
             ev.append(self._ev(model, e, f"{e.eff_cls} {e.name or ''} {label} {v:.3f}"))
         src = f"Qto {keys[0].split('.')[-1]}"
         trace.append(f"{label}: {n_q} from {src}, {n_geo} from geometry, {n_none} without either; total {tot:.3f}")
-        if n_q and geo_tot:
-            trace.append(f"cross-check: geometry-only total {geo_tot:.3f} ({(geo_tot - tot) / tot * 100:+.1f}% vs answer)"
-                         if tot else "cross-check: n/a")
+        if n_q and geo_tot and tot:
+            trace.append(f"cross-check: geometry-only total {geo_tot:.3f} ({(geo_tot - tot) / tot * 100:+.1f}% vs answer)")
         if n_geo:
             assumptions.append(f"{n_geo} of {len(els)} elements have no {src}; used their geometry instead")
             conf *= 0.6 if n_q else 0.5
