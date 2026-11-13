@@ -41,8 +41,10 @@ def fact_card(idx: IfcIndex, it: Intent | None = None, max_lines: int = 160) -> 
         L.append(f"- {s.name}: {s.elevation if s.elevation is not None else '?'}; doors {on['IfcDoor']}, windows "
                  f"{on['IfcWindow']}, walls {walls}, spaces {on['IfcSpace']}")
     want = list(KIND_CLASSES.get(it.kind, ())) if it is not None and it.kind else []
-    classes = want + [c for c in MAIN if c not in want and tot.get(c)]
-    for c in classes[:14]:
+    # the asked kind first, then the model's own most frequent classes (MEP models), then main building classes
+    top = [c for c, _ in tot.most_common(12) if c not in want and c not in ("IfcOpeningElement",)]
+    classes = want + top + [c for c in MAIN if c not in want and c not in top and tot.get(c)]
+    for c in classes[:18]:
         group = [e for e in els if e.eff_cls == c]
         if not group:
             continue

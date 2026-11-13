@@ -22,7 +22,7 @@ import time
 from pathlib import Path
 
 from stoa.contract import Answer, Evidence
-from stoa.data import siblings, source_of
+from stoa.data import abspath, siblings, source_of
 from stoa.solvers import register
 from stoa.solvers.base import BaseSolver
 from stoa.solvers.ifc.index import Element, IfcIndex, Storey, load_index
@@ -52,7 +52,16 @@ def model_for(path: str) -> str | None:
     """Dataset-relative .ifc behind `path` (the path itself, or the parent model of a rendered plan)."""
     if Path(path).suffix.lower() == ".ifc":
         return path
-    return siblings(path).get(".ifc")
+    m = siblings(path).get(".ifc")
+    if m:
+        return m
+    # ResBIM pairs: data/ifc_models/resbim-N_plan.png <-> resbim-N_model.ifc (stoa.data.siblings misses them)
+    p = Path(path)
+    stem = re.sub(r"_(plan|drawing|image|render)$", "", p.stem)
+    for cand in (f"{stem}_model.ifc", f"{stem}.ifc"):
+        if abspath(str(p.parent / cand)).exists():
+            return str(p.parent / cand)
+    return None
 
 
 def _ascii_drop(s: str) -> str:
@@ -248,6 +257,12 @@ class IfcSolver(BaseSolver):
                 trace.append(f"storey from the plan file: {why}")
             elif ps is not None:
                 trace.append(f"plan file shows {why}")
+            elif not rooms and len({e.storey for e in idx.elements.values()
+                                    if e.storey and e.cls not in ("IfcSpace",) and e.geo is not None}) == 1:
+                only = next(e.storey for e in idx.elements.values()
+                            if e.storey and e.cls not in ("IfcSpace",) and e.geo is not None)
+                storey = idx.storey(only)
+                trace.append(f"all building elements are on storey '{storey.name}': the plan shows that storey")
             elif not rooms:
                 trace.append(f"no storey named or implied ({why}); whole model")
                 assumptions.append("no storey given; answered for the whole model")

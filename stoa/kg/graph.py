@@ -75,6 +75,9 @@ def _ifc_project(model: str) -> dict:
                 plan_of.setdefault(s.guid, rel)
         files.append({"path": rel, "kind": kind, "storey": st,
                       "svg": str(folder / (f.stem + ".svg")) if (data_root() / folder / (f.stem + ".svg")).exists() else None})
+    base = re.sub(r"_model$", "", stem)
+    for f in sorted((data_root() / folder).glob(f"{base}_plan.png")):
+        files.append({"path": str(folder / f.name), "kind": "raster-plan", "storey": None})
     # other models of the same project (discipline models / variants)
     proj = drawing_group(model)
     for m in sorted((data_root() / folder).glob("*.ifc")):
@@ -160,7 +163,9 @@ def project_graph(path: str) -> dict:
     """The whole project graph behind `path` (ifc_models / ifc_bench); {} for other sources."""
     src = source_of(path)
     if src == "ifc_models":
-        model = path if path.endswith(".ifc") else ifc_model_for(path)
+        from stoa.solvers.ifc.solver import model_for
+
+        model = path if path.endswith(".ifc") else (ifc_model_for(path) or model_for(path))
         return _ifc_project(model) if model else {}
     if src == "ifc_bench":
         return _bench_project(path)
@@ -229,6 +234,9 @@ def links(path: str) -> dict:
         if not g:
             return out
         this = next((f for f in g["files"] if f["path"] == path or f["path"] == str(Path(path).with_suffix(".pdf"))), None)
+        if this is None and not path.endswith(".ifc"):  # e.g. ResBIM raster plan of a one-storey unit
+            this = {"path": path, "kind": "raster-plan", "storey": None}
+            g = {**g, "files": g["files"] + [this]}
         storey = this.get("storey") if this else None
         out.update({"kind": this["kind"] if this else ("model" if path.endswith(".ifc") else "other"),
                     "model": g["model"], "storey": next((s for s in g["storeys"] if s["guid"] == storey), None),
