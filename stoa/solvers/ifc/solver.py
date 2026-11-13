@@ -46,9 +46,14 @@ _OPERATOR_WORD = re.compile(r"\b(exceed\w*|surpass\w*|average|mean|median|ratio|
                             r"porcentaje|pourcentage|anteil)\b|%")
 
 # quantity key suffixes, in order of preference, per (metric, kind)
-_DIM_WORD = re.compile(r"\b(widths?|wide|widest|narrowest|breite\w*|breedte\w*|largeur\w*|ancho\w*|larghezza|"
+_DIM_WORD = re.compile(r"\b(widths?|wide|wider|widest|narrower|narrowest|broader|taller|thicker|thinner|breite\w*|breedte\w*|largeur\w*|ancho\w*|larghezza|"
                        r"heights?|tall\w*|hoehe|hohe|hoogte\w*|hauteur\w*|altura\w*|altezza|"
                        r"thickness\w*|thick|thickest|thinnest|dicke\w*|dikte\w*|epaisseur\w*|espesor\w*|spessore\w*)\b")
+_DIM_THRESHOLD = re.compile(
+    r"(?P<cmp>wider|broader|taller|higher|thicker|longer|larger|bigger|greater|more|over|above|exceed\w*|at least|"
+    r"minimum|narrower|smaller|thinner|shorter|lower|less|under|below|at most|breiter|hoher|hoeher|dicker|grosser|"
+    r"groesser|mehr|uber|ueber|mindestens|schmaler|kleiner|dunner|duenner|weniger|breder|hoger|dikker|groter|meer|"
+    r"minstens|smaller|lager|dunner|minder|plus|moins)\b[^0-9]{0,25}?(?P<num>\d+(?:[.,]\d+)?)\s*(?P<unit>mm|cm|m)?\b")
 _FOUNDATION_NAME = re.compile(r"(?<![a-z])(foundation|footing|fundament|fundering|fundbalk|fundatie|pad[: ]|pile|"
                               r"strip footing|grondbalk|poer)")
 _GENERIC_CLASSES = {"IfcBuildingElementProxy", "IfcFlowTerminal", "IfcFlowController", "IfcFlowFitting",
@@ -812,7 +817,7 @@ class IfcSolver(BaseSolver):
         if not m or it.kind not in ("door", "window", "wall", "slab", "roof", "covering"):
             return None
         word = m.group(1)
-        attr = ("thickness" if re.match(r"thick|dick|dikte|epaisseur|espesor|spessore|paksuus|tjock", word)
+        attr = ("thickness" if re.match(r"thick|thin|dick|dikte|epaisseur|espesor|spessore|paksuus|tjock", word)
                 else "OverallHeight" if re.match(r"heigh|tall|hoh|hoeh|hoogte|haut|alt|korkeus|hojd", word)
                 else "OverallWidth")
         if attr == "thickness" and it.kind in ("door", "window"):
@@ -870,6 +875,20 @@ class IfcSolver(BaseSolver):
         ev_all = [self._ev(model, e, f"{tk(e)} {what} {v * 1000:.0f} mm") for v, e in vals][:MAX_EVIDENCE]
         mm = lambda v: f"{v * 1000:.0f} mm"  # noqa: E731
         asks_type = bool(re.search(r"\b(type|types|which|what kind|family)\b", q))
+        thr = _DIM_THRESHOLD.search(q)
+        if thr and (it.metric == "count" or re.search(r"\b(how many|number of|count|wie viele|hoeveel|combien)\b", q)):
+            num = float(thr.group("num").replace(",", "."))
+            u = thr.group("unit") or ""
+            lim = num / 1000 if u == "mm" or (not u and num > 20) else num / 100 if u == "cm" else num
+            gt = not re.match(r"(narrow|small|less|under|below|thinn|short|lower|schmal|klein|wenig|minder|smal|"
+                              r"moins|meno|menos|at most|no more)", thr.group("cmp"))
+            ge = bool(re.match(r"(at least|minimum|min\.?|mindestens|minstens|au moins|no less)", thr.group("cmp")))
+            hit = [(v, e) for v, e in vals if ((v > lim + 5e-4) or (ge and abs(v - lim) <= 5e-4))] if gt else \
+                [(v, e) for v, e in vals if (v < lim - 5e-4)]
+            trace.append(f"threshold: {what} {'>=' if ge else '>' if gt else '<'} {lim:.3f} m -> {len(hit)} of "
+                         f"{len(vals)} {noun}s")
+            ev = [self._ev(model, e, f"{label(e)} {what} {mm(v)}") for v, e in hit][:MAX_EVIDENCE]
+            return self._final(len(hit), "count", it, conf * 0.95, ev, trace, assumptions, missing)
         if re.search(r"\b(average|mean|typical|durchschnitt\w*|gemiddeld\w*|moyenne|media|promedio)\b", q):
             avg = sum(v for v, _ in vals) / len(vals)
             trace.append(f"average over {len(vals)}: {avg:.4f} m")

@@ -147,6 +147,8 @@ def test_material_filter_dimensions_and_fallbacks():
     assert a.value == pytest.approx(273.91, rel=0.01)
     a = s.solve(ARC4351, "What is the mean width of the doors?")
     assert a.value == pytest.approx(0.992, abs=0.002) and a.unit == "m"
+    assert s.solve(ARC4351, "How many doors are narrower than 1 m?").value == 14  # 14 x 914 mm, 3 wider
+    assert s.solve(ARC4351, "How many walls are thicker than 200 mm?").value == 14
     a = s.solve(ARC4351, "How many light switches does the building have?")
     assert a.value == 16 and a.confidence <= 0.6  # counted by name: capped
     a = s.solve(ARC4351, "Which wall types are used, with their quantities and materials?")
