@@ -59,6 +59,33 @@ Also:
 - cubicasa drawings often say "Piirros ohjeellinen, ei mittakaavassa" ("indicative drawing, not to
   scale"). If the hidden set asks for areas on such plans, state the scale assumption (Stoa point 3).
 
+## Generality: the `hard` split (added 00:02)
+
+`hard` = 711 Qs on dev drawings: real translations (the other-language twin), rule paraphrases (EN/SV/DE,
+unit changes) and compositions computed from known answers (`stoa/eval/hard.py`).
+
+| kind | n | prior | vlm_direct (`20261113-235933-vlm_direct-hard`) |
+|---|---:|---:|---:|
+| translation | 250 | 31.2% | 35.2% |
+| paraphrase | 250 | 23.6% | 26.8% |
+| composition | 211 | 3.7% | 9.6% |
+
+Findings:
+1. **Compositions break both** (VLM 9.6%): doors+windows totals 0%, room A + room B 0–15%, room A − room B 0%,
+   apartment A+B 0%, largest of 3 rooms 0%. The only wins are yes/no sauna (59%) and bedrooms+bathrooms (29%).
+   → **W4: decompose questions.** Split "doors and windows in total" or "how many more X than Y" into
+   sub-questions, answer each with the cheapest exact solver (DXF/IFC/text), do the arithmetic in code, and
+   keep the union of the evidence. That generalises to the harder hidden set at near-zero cost, and the
+   trace shows the reasoning (Stoa scores reasoning).
+2. **Unit trap:** Swiss room area asked in m² gets 57% (paraphrase); the same room asked in **ft²** gets 14%
+   (floor total in ft² 0%). → Compute in the drawing's native unit, convert in code, and set `Answer.unit` to
+   what the question asked for (the eval converts anyway, but the model doesn't).
+3. **Language sensitivity:** Swedish rewordings collapse where English works: saunas EN 80% → SV 0%,
+   balconies EN 60% → SV 0%. German saunas 80%. Real dataset twins: swiss translation 39% (EN-only paraphrase
+   room-area 57%). → Parse every question into a language-neutral intent (W4) before solving, and add
+   SV/DE/FR/IT/ET/NL/DA/ES synonyms to the parser.
+4. ifc_models stays at ~0% on every kind: nothing works on rendered PDFs without the IFC (W1).
+
 ---
 
 ## 20261113-235024-vlm_direct-dev (baseline: 20261113-234812-dummy-dev)
