@@ -107,6 +107,9 @@ def _eval_term(fm: FloorModel, t: qparse.Term, qr: qparse.Query) -> _Part:
             return _Part(len(fm.units), RULE_CONF["count:apartment"], boxes,
                          [f"apartments = {len(fm.units)} labels {sorted(u.label for u in fm.units)}"],
                          [f"counted {KIND_DESC['apartment']}"])
+        if fm.supported is not None and kind not in fm.supported:
+            return _Part(None, 0.0, [], [f"{kind}s are not identified in this (PDF-only) model"],
+                         missing=[f"{kind} symbols: not separable by style in the PDF; needs the DXF or a detector"])
         items = fm.items.get(kind, [])
         if t.scope:
             items = [it for it in items if _in_scope(fm, kind, it.bbox, t.scope)]
@@ -221,14 +224,14 @@ def _unnamed_caveat(rooms: list[Room], total: float):
 class _Mapper:
     """DXF bbox -> Evidence on the asked file (PDF points or PNG pixels); falls back to the PDF sibling."""
 
-    def __init__(self, path: str, dxf_rel: str):
+    def __init__(self, path: str, dxf_rel: str, tf=None):
         self.path = path
         sib = siblings(path)
         ext = Path(path).suffix.lower()
         self.pdf_rel = path if ext == ".pdf" else sib.get(".pdf")
-        self.tf = None
+        self.tf = tf
         self.file, self.space, self.k = None, None, 1.0
-        if self.pdf_rel:
+        if self.pdf_rel and self.tf is None and dxf_rel.lower().endswith(".dxf"):
             self.tf = fit_transform(str(abspath(self.pdf_rel)), str(abspath(dxf_rel)))
         if self.tf is not None:
             if ext == ".png":
@@ -263,11 +266,18 @@ class DxfSolver(BaseSolver):
             return False
         return Path(path).suffix.lower() == ".dxf" or abspath(str(Path(path).with_suffix(".dxf"))).exists()
 
-    def solve(self, path: str, question: str) -> Answer:
+    def _load(self, path: str):
+        """-> (FloorModel, source file it came from, Transform metres->pdf_pt or None to fit) or (None, reason, None)."""
         dxf_rel = path if path.lower().endswith(".dxf") else siblings(path).get(".dxf")
         if not dxf_rel:
-            return self.abstain("no DXF sibling")
-        fm = load_floor(str(abspath(dxf_rel)))
+            return None, "no DXF sibling", None
+        return load_floor(str(abspath(dxf_rel))), dxf_rel, None
+
+    def solve(self, path: str, question: str) -> Answer:
+        fm, dxf_rel, tf0 = self._load(path)
+        if fm is None:
+            return self.abstain(dxf_rel)
+        self._tf0 = tf0
         vocab = fm.names() + KNOWN_NAMES
         qr = qparse.parse(question, vocab, room_numbers={r.number for r in fm.rooms if r.number})
         trace = [f"parsed: {qr.describe()}", *[f"parse note: {n}" for n in qr.notes]]
@@ -314,8 +324,10 @@ class DxfSolver(BaseSolver):
         elif unit == "m2":
             value = round(value, 2)
         # linked data: the PDF text layer is an independent rendering of the same drawing -> cross-check
-        mapper = _Mapper(path, dxf_rel)
-        if mapper.pdf_rel:
+        mapper = _Mapper(path, dxf_rel, tf0)
+        if fm.supported is not None:
+            trace.append(f"source: {fm.warnings[0] if fm.warnings else 'PDF-only model'}")
+        if mapper.pdf_rel and fm.supported is None:  # cross-check only when the PDF is an independent source
             conf = self._cross_check(mapper.pdf_rel, fm, qr, parts, trace, conf)
         # evidence -------------------------------------------------------------------------------
         evidence = [mapper.ev(bb, note) for p in parts for bb, note in p.boxes]
@@ -371,7 +383,7 @@ class DxfSolver(BaseSolver):
             trace.append(f"table QA gave no answer ({res.get('error')})")
             return None
         trace += ["table QA code: " + " ; ".join(ln.strip() for ln in res["code"].splitlines() if ln.strip())[:600]]
-        mapper = _Mapper(path, dxf_rel)
+        mapper = _Mapper(path, dxf_rel, getattr(self, "_tf0", None))
         by_id = {r.idx: r for r in fm.rooms}
         evidence = [mapper.ev(by_id[i].bbox, _room_note(by_id[i])) for i in res["used"] if i in by_id]
         value, unit = res["value"], res.get("unit")
@@ -390,3 +402,25 @@ class DxfSolver(BaseSolver):
         return Answer(value=value, unit=unit, confidence=0.6 if evidence else 0.45, evidence=evidence, trace=trace,
                       solver=self.name, assumptions=["the model wrote the query; every number comes from the DXF tables"],
                       missing=[] if evidence else ["the query did not report which rooms it used"])
+
+
+@register("pdf_vector")
+class PdfVectorSolver(DxfSolver):
+    """Same rules as `dxf`, but the floor model comes from the PDF's vector + text layer alone (pdffloor.py):
+    rooms, areas (printed scale), labels, apartments, doors. Windows/fixtures -> value None + missing."""
+
+    sources = ()
+
+    def can_handle(self, path: str, question: str) -> bool:
+        return Path(path).suffix.lower() == ".pdf" and source_of(path) not in ("ifc_models", "opening_design")
+
+    def _load(self, path: str):
+        from stoa.solvers.vector.pdffloor import load_pdf_floor
+
+        pdf_rel = path if path.lower().endswith(".pdf") else siblings(path).get(".pdf")
+        if not pdf_rel:
+            return None, "no PDF", None
+        fm, tf, note = load_pdf_floor(str(abspath(pdf_rel)))
+        if fm is None:
+            return None, note, None
+        return fm, pdf_rel, tf
