@@ -239,7 +239,7 @@ def _finish(qr: Query, rev: bool) -> Query:
 UNCOVERED = re.compile(
     r"\b(which|welche[rs]?|lequel|laquelle|quale\s+(?:dei|delle)|average|mean|median|durchschnitt|moyenne|media|per\s|each|jede[rs]?|"
     r"chaque|ogni|ratio|percent|percentage|proportion|share|anteil|with\s+(?:a|an|no|more|at)|without\s+(?:a|an|any|windows?|doors?)|that\s+ha(?:ve|s)|"
-    r"contain\w*|adjacent|next\s+to|neighbo\w+|between|at\s+least|at\s+most|is\s+there|are\s+there\s+any|does|do\s+any|"
+    r"ha(?:ve|s)\s+(?:a|an|no|any|more|at\s+least|\d+)\b|contain\w*|adjacent|next\s+to|neighbo\w+|between|at\s+least|at\s+most|is\s+there|are\s+there\s+any|does|do\s+any|"
     r"mit\s+(?:einem|einer|mehr)|ohne\s+(?:fenster|t[üu]r)|avec\s+(?:un|une|plus)|sans\s+(?:fen|porte)|senza)\b|%|(?:more|less|larger|smaller)\s+than\s+\d",
     re.I)
 
@@ -258,3 +258,6 @@ def covered(question: str, qr: Query) -> bool:
         # the standard swiss templates contain none of these, except "excluding ... shafts and voids" etc.
         return False
     return True
+
+
+YESNO = re.compile(r"^(is|are|does|do|has|have|can|gibt\s+es|hat|ist|sind|y\s+a-t-il|est-ce|existe|c'è|ci\s+sono|ha)\b", re.I)

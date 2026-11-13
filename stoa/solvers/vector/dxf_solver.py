@@ -302,8 +302,12 @@ class DxfSolver(BaseSolver):
         by_id = {r.idx: r for r in fm.rooms}
         evidence = [mapper.ev(by_id[i].bbox, _room_note(by_id[i])) for i in res["used"] if i in by_id]
         value, unit = res["value"], res.get("unit")
-        if isinstance(value, bool):
-            value = "yes" if value else "no"
+        yesno = bool(qparse.YESNO.match(question.strip()))
+        if isinstance(value, bool) or (yesno and isinstance(value, (int, float))):
+            trace.append(f"yes/no question; query returned {value!r}")
+            value, unit = ("yes" if value else "no"), None
+        if isinstance(value, str):
+            unit = None
         if unit == "count" and isinstance(value, (int, float)):
             value = int(round(value))
         elif isinstance(value, float):

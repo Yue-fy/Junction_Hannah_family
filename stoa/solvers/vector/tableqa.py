@@ -55,7 +55,11 @@ def floor_tables(fm: FloorModel) -> dict[str, pd.DataFrame]:
         apts.append(dict(apartment=u.label, n_rooms_numbered=sum(1 for r in rs if r.number),
                          net_area_m2=round(sum(r.area for r in rs if r.number and not r.outdoor), 2),
                          outdoor_area_m2=round(sum(r.area for r in rs if r.outdoor), 2)))
-    return {"rooms": pd.DataFrame(rooms), "objects": pd.DataFrame(objects), "apartments": pd.DataFrame(apts)}
+    rdf = pd.DataFrame(rooms)
+    if not rdf.empty:
+        rdf = rdf.set_index("room_id", drop=False)  # rooms.index == room_id, so `.index` is safe to report
+        rdf.index.name = None
+    return {"rooms": rdf, "objects": pd.DataFrame(objects), "apartments": pd.DataFrame(apts)}
 
 
 DOC = """Tables extracted from one floor plan (Swiss, DXF; areas in m²; labels in German/French/Italian):
@@ -76,10 +80,15 @@ PROMPT = """{doc}
 
 Question: {question}
 
-Write Python (pandas available as pd; DataFrames `rooms`, `objects`, `apartments`) that computes the answer.
-Set `answer` (a number, or a short string for which/what questions), `unit` ("count", "m2" or null) and `used` =
-list of room_id values of the rooms the answer is based on (empty if none). No imports, no printing.
-Reply with one ```python code block only."""
+Write Python (pandas available as pd; DataFrames {names}) that computes the answer.
+Set `answer` (a number; a short string for which/what questions; True/False for yes/no questions), `unit`
+({units} or None) and `used` = list of {id_col} values of the rows the answer is based on (empty if none).
+For "which ..." questions `answer` is the identifier (apartment letter, room number or room name), not its area.
+Compute everything from the DataFrames: never type a number or room_id from the data above into the code.
+No imports, no printing. Reply with one ```python code block only."""
+
+
+WHICH = re.compile(r"^\s*(which|welche[rs]?|quel(?:le)?s?\s+(?:appartement|pièce|logement)|quale|in\s+which)\b", re.I)
 
 
 def _render(tables: dict[str, pd.DataFrame], max_rows: int = 160) -> str:
@@ -117,16 +126,22 @@ def _run(code: str, tables: dict[str, pd.DataFrame]) -> dict:
     return {"value": ans, "unit": env.get("unit"), "used": [int(u) for u in list(used)[:200] if str(u).lstrip("-").isdigit()]}
 
 
-def ask(question: str, tables: dict[str, pd.DataFrame], backend: str = "local", tries: int = 2) -> dict:
+def ask(question: str, tables: dict[str, pd.DataFrame], backend: str = "local", tries: int = 2, doc: str = DOC,
+        id_col: str = "room_id", units: str = '"count", "m2"') -> dict:
     from stoa.llm import chat
 
-    msgs = [{"role": "user", "content": PROMPT.format(doc=DOC, data=_render(tables), question=question)}]
+    names = ", ".join(f"`{k}`" for k in tables)
+    msgs = [{"role": "user", "content": PROMPT.format(doc=doc, data=_render(tables), question=question, names=names,
+                                                      id_col=id_col, units=units)}]
     last = {"value": None, "unit": None, "used": [], "code": "", "error": "no attempt"}
     for _ in range(tries):
         r = chat(msgs, backend=backend, max_tokens=500, temperature=0.0)
         code = _extract_code(r.text)
         try:
             res = _run(code, tables)
+            if WHICH.search(question) and not isinstance(res["value"], str):
+                raise ValueError(f"the question asks WHICH one, but answer = {res['value']!r}; set answer to the "
+                                 "identifier string (apartment letter / room number / name)")
             res.update(code=code, error=None)
             return res
         except Exception as e:  # noqa: BLE001 - feed the error back once
