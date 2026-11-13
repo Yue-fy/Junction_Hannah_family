@@ -94,7 +94,7 @@ def question_op(question: str) -> tuple[str, list[str]]:
 
 def _norm(s: str) -> str:
     s = unicodedata.normalize("NFKC", s).upper()
-    s = s.replace("Ö", "O").replace("Ä", "A").replace("Å", "A")
+    s = s.replace("Ö", "O").replace("Ä", "A").replace("Å", "A").replace("Ü", "U")
     return s
 
 
@@ -112,6 +112,17 @@ CODES = {
     "sauna": {"S", "SAUNA", "LOYLYH", "LOYLYHUONE", "LH"},
     "balcony": {"PARV", "PARVEKE", "LASPARV", "LASITETTUPARVEKE", "RANSKALAINENPARVEKE"},
 }
+# Full room words in other languages (generality: non-Finnish scans; not measured on cubicasa)
+_OTHER = {
+    "bedroom": {"BEDROOM", "SCHLAFZIMMER", "SCHLAFEN", "CHAMBRE", "CAMERA", "SOVRUM", "SLAAPKAMER"},
+    "kitchen": {"KITCHEN", "KUCHE", "CUISINE", "CUCINA", "KOK", "KEUKEN"},
+    "bathroom": {"BATHROOM", "BATH", "BAD", "BADEZIMMER", "DUSCHE", "BAINS", "BAGNO", "BADRUM", "BADKAMER"},
+    "wc_room": {"TOILET", "TOILETTE", "LAVATORY"},
+    "sauna": {"BASTU"},
+    "balcony": {"BALCONY", "BALKON", "BALCON", "BALCONE", "BALKONG", "LOGGIA"},
+}
+for _c, _w in _OTHER.items():
+    CODES[_c] |= _w
 # combined labels ("KH/WC", "PH+S") count once, for the most specific room in this order
 _PRIORITY = ("bathroom", "sauna", "bedroom", "kitchen", "balcony", "wc_room")
 

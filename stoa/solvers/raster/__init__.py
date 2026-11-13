@@ -99,7 +99,7 @@ class RasterSolver(BaseSolver):
             self.gate.setdefault(c, {"acc": {}})["method"] = m
 
     def can_handle(self, path: str, question: str) -> bool:
-        return Path(path).suffix.lower() in IMG_EXT and question_op(question)[0] != "none"
+        return self._raster_file(path) is not None and question_op(question)[0] != "none"
 
     # ----------------------------------------------------------------------------------------------
     def solve(self, path: str, question: str) -> Answer:
@@ -149,8 +149,17 @@ class RasterSolver(BaseSolver):
         trace.append(f"gate[{cls}] = {method} (train acc {acc})")
         if method == "prior":
             return self._prior_answer(cls, prior, trace, acc)
-        img = vlm.llm.load_image(self.abspath(path))
-        key = path
+        src = self._raster_file(path)
+        if src is None:  # not an image and no PNG/JPG sibling: let the cascade move on (W4 pipeline)
+            ans = self._prior_answer(cls, prior, trace + ["no raster version of this drawing"], acc)
+            ans.value = None
+            ans.missing.append("no raster image of this drawing")
+            return ans
+        if src != path:
+            trace.append(f"using raster sibling {src}")
+        img = vlm.llm.load_image(self.abspath(src))
+        key = src
+        path = src  # evidence boxes are in this image's pixels
         try:
             if method in ("labels", "max1", "labels_code"):
                 return self._labels(path, img, key, cls, prior, trace, acc, method)
@@ -166,6 +175,13 @@ class RasterSolver(BaseSolver):
         except Exception as e:  # noqa: BLE001 - never refuse: fall back to the prior
             trace.append(f"{method} failed: {type(e).__name__}: {str(e)[:150]}")
         return self._prior_answer(cls, prior, trace, acc)
+
+    def _raster_file(self, path: str) -> str | None:
+        """The image to read: the path itself, or a PNG/JPG sibling of a PDF/other format (same drawing)."""
+        if Path(path).suffix.lower() in IMG_EXT:
+            return path
+        sib = self.siblings(path)
+        return next((sib[e] for e in (".png", ".jpg", ".jpeg") if e in sib), None)
 
     def _prior_answer(self, cls, prior, trace, acc) -> Answer:
         if not prior:

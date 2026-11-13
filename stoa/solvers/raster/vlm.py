@@ -149,6 +149,19 @@ def read_labels(img: Image.Image, key: str, backend: str = "local", target_px: i
             if r.finish_reason == "length":
                 log.notes.append("label list truncated (max_tokens)")
         items, looped = parse_labels(text, img.width, img.height)
+        if looped:  # R1 (inbox 00:22): a retry with repetition_penalty 1.15 fixes 26 of 28 loops on dev
+            try:
+                r = llm.chat(LABEL_PROMPT, images=[_r1_image(img)], backend=backend, max_tokens=max_tokens,
+                             max_pixels=6_000_000, cache=True, extra_body={"repetition_penalty": 1.15})
+                _charge(r)
+                items2, looped2 = parse_labels(r.text, img.width, img.height)
+                log.notes.append(f"loop retry with repetition_penalty 1.15: {'still looping' if looped2 else 'ok'}")
+                log.tokens_in += r.prompt_tokens or 0
+                log.tokens_out += r.completion_tokens or 0
+                if not looped2:
+                    items, looped = items2, False
+            except Exception as e:  # noqa: BLE001
+                log.notes.append(f"loop retry failed: {type(e).__name__}")
         if looped:
             log.notes.append("LOOP: one label text repeated > 6 times; label counts unreliable")
         return items, log
