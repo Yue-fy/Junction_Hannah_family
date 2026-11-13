@@ -108,3 +108,7 @@ def test_tiled_labels_merge_overlap_and_charge_cost(monkeypatch):
         items, log = vlm.read_labels_tiled(Image.new("RGB", (1000, 800), "white"))
     assert sum(i.text == "MH" for i in items) == 4  # 4 distinct tile centres
     assert log.tokens_in == 400 and m.cost.llm_calls == 4  # cost reaches the caller's meter from the threads
+
+
+def test_tk_is_a_vestibule_not_a_kitchen():
+    assert label_class("TK") is None and label_class("K") == "kitchen" and label_class("TUPAKEITTIÖ") == "kitchen"
