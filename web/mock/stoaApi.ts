@@ -204,8 +204,12 @@ function bench() {
     }
   });
   const full = (r: LbRow) => !r.limit && !r.sources && !r.types && !r.grep && !r.handled_only && !r.metrics.errors;
-  const pick = (solver: string, split: string, minN: number) =>
-    rows.filter((r) => r.solver === solver && r.split === split && r.n >= minN && full(r)).at(-1);
+  // The pipeline row comes from S0's integration runs on `night` when there is one (agents also log runs of
+  // uncommitted work); baselines take the latest full run of anyone.
+  const pick = (solver: string, split: string, minN: number) => {
+    const ok = rows.filter((r) => r.solver === solver && r.split === split && r.n >= minN && full(r));
+    return (solver === "pipeline" ? ok.filter((r) => r.agent === "S0").at(-1) : undefined) ?? ok.at(-1);
+  };
   const summary = (r: LbRow | undefined) => {
     if (!r) return null;
     const m = r.metrics;
@@ -230,6 +234,12 @@ function bench() {
   for (const [split, minN] of [["dev", 1500], ["hard", 500]] as const)
     out[split] = { pipeline: summary(pick("pipeline", split, minN)), vlm_direct: summary(pick("vlm_direct", split, minN)),
       prior: summary(pick("prior", split, minN)) };
+  // novel question kinds (operators no template covers): hard2 = developed on; hard2q = clean held-out rewording,
+  // reported as an aggregate only (D10)
+  for (const split of ["hard2", "hard2q"]) {
+    const r = rows.filter((x) => x.solver === "pipeline" && x.split === split && x.n >= 200 && full(x));
+    out[split] = { pipeline: summary(r.filter((x) => x.agent === "S0" || x.agent === "F").at(-1) ?? r.at(-1)) };
+  }
   return { from: "leaderboard", generated: new Date().toISOString(), runs: out };
 }
 

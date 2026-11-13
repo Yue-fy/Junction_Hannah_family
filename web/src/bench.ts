@@ -54,7 +54,9 @@ export function renderBench(el: HTMLElement, b: Bench) {
   const det = p.by_tier?.deterministic;
   const hp = hard.pipeline;
   const kinds = hp?.by_kind ? Object.entries(hp.by_kind) : [];
-  const runs = [...Object.values(dev), ...Object.values(hard)].filter((r): r is Run => !!r);
+  const h2 = b.runs.hard2?.pipeline;
+  const h2q = b.runs.hard2q?.pipeline;
+  const runs = [...Object.values(dev), ...Object.values(hard), h2, h2q].filter((r): r is Run => !!r);
 
   el.innerHTML = `
     <div class="bn-head"><h2>How well it works</h2>
@@ -66,7 +68,7 @@ export function renderBench(el: HTMLElement, b: Bench) {
         <div class="s">${pct(p.weighted_acc)} weighted by each source's share of the full dataset · VLM alone ${pct(dev.vlm_direct?.accuracy)}, prior ${pct(dev.prior?.accuracy)}</div></div>
       <div class="bn-tile"><div class="k">Generality · hard split${hp ? `, ${hp.n} questions` : ""}</div>
         <div class="v">${pct(hp?.accuracy)}</div>
-        <div class="s">${kinds.length ? kinds.map(([k, v]) => `${esc(k)}s ${pct(v.accuracy, 0)}`).join(" · ") : "translations, paraphrases, compositions"}</div></div>
+        <div class="s">${kinds.length ? kinds.map(([k, v]) => `${esc(k)}s ${pct(v.accuracy, 0)}`).join(" · ") : "translations, paraphrases, compositions"}${h2 ? `<br><b>New question kinds</b> (average, share, threshold, which-is-larger…) ${pct(h2.accuracy, 0)}${h2q ? ` · same kinds reworded, never seen while building: ${pct(h2q.accuracy, 0)}` : ""}` : ""}</div></div>
       <div class="bn-tile"><div class="k">Cost per 1,000 questions</div>
         <div class="v">${eur(p.usd_per_1k_q)}</div>
         <div class="s">median ${p.latency_p50_s !== null ? `${(p.latency_p50_s * 1000).toFixed(0)} ms` : "–"} per question · GPU time + tokens at the eval's rates</div></div>
@@ -85,7 +87,7 @@ export function renderBench(el: HTMLElement, b: Bench) {
     </div>
     <div class="bn-foot">
       ${p.by_tier ? `<div><b>Cascade on dev:</b> ${Object.entries(p.by_tier).map(([t, v]) => `${esc(TIER_LABEL[t] ?? t)} answers ${pct(v.share, 0)} of questions (${pct(v.accuracy, 0)} correct)`).join(" · ")}.</div>` : ""}
-      ${hp?.calibration?.hi_conf_share ? `<div><b>Calibration (hard):</b> ${pct(hp.calibration.hi_conf_share, 0)} of answers have confidence ≥ 0.9, and ${pct(hp.calibration.hi_conf_acc, 0)} of those are right.</div>` : ""}
+      ${hp?.calibration?.hi_conf_share ? `<div><b>Calibration (hard):</b> ${pct(hp.calibration.hi_conf_share, 0)} of answers have confidence ≥ 0.8, and ${pct(hp.calibration.hi_conf_acc, 0)} of those are right.</div>` : ""}
       <details><summary>Runs</summary><ul>${runs.map((r) => `<li><code>${esc(r.run_id)}</code> ${esc(r.split)} · ${esc(r.solver)} · n=${r.n} · ${esc(r.commit ?? "")} · ${esc(r.agent ?? "")} · ${esc((r.note ?? "").slice(0, 90))}</li>`).join("")}</ul></details>
     </div>`;
   el.querySelector(".bn-close")?.addEventListener("click", () => (el.hidden = true));
