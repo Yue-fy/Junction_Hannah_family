@@ -64,14 +64,35 @@ excluded, as `Answer.assumptions`.
 | "Robust DL-based scale inference", ASCE (snippet) | YOLOv7 finds dimension lines, EasyOCR reads them, and a vote picks the pixel resolution | The voting idea | ascelibrary.com/doi/10.1061/9780784485248.087 | – | M |
 | US patent 10395147 | scale = OCR'd room area ÷ room pixel area | A cheap cross-check when plans print m² labels, which some cubicasa plans do | patent | – | L |
 
-## 5. Floor-plan datasets, symbol spotting, counting
+## 5. Symbol counting on raster plans (cubicasa windows, doors, WC seats, sinks, showers/bathtubs)
 
-See `datasets.md` for datasets and leakage. Methods for counting symbols on raster plans:
+| Item | What | How it helps us | Link | Licence | Effort |
+|---|---|---|---|---|---|
+| AECV-Bench counting results [V] | Exact-match accuracy, door / window / bedroom / toilet. Gemini 3 Pro: 0.39 / 0.34 / 0.89 / 0.82. GPT-5.2: 0.28 / 0.27 / 0.91 / 0.76. Qwen3-VL-8B: 0.09 / 0.10 / 0.76 / 0.81. | Asking a VLM "how many doors" fails even for frontier models, so count with pointing or detection. Rooms and bedrooms are easy because they are read from labels (matches our +41 pts on bedrooms). | github.com/AECFoundry/AECV-Bench | no LICENSE | – |
+| GeCo2 (AAAI 2026, arXiv 2511.08048) [V] | Exemplar-based counting built for small, dense objects, with no upscaling or tiling heuristics | Give 1–3 exemplar boxes of a window/door symbol and get all its repeats as boxes (evidence) | arXiv 2511.08048; weights on HF and Drive | MIT | M |
+| GeCo / DAVE / LOCA (NeurIPS 2024 / CVPR 2024 / ICCV 2023) [V] | Low-shot counters with released weights | GeCo2 fallbacks | – | MIT | M |
+| CountGD (NeurIPS 2024) [V] | Counting prompted by text plus visual exemplars, 1.2 GB weights | "toilet" text + one exemplar crop | – | MIT | M |
+| SAM 3 (arXiv 2511.16719) [V] | Segmentation prompted by text or exemplar | Instance masks as evidence | facebookresearch/sam3 | SAM License, gated | M |
+| T-Rex2 / Rex-Omni [V/U] | Visual-prompt counting | T-Rex2 is API-only (IDEA licence); Rex-Omni's licence is unverified | – | – | – |
+| Molmo2 (arXiv 2601.10611) [V] | VLM with native pointing; points in 0–1000 coordinates | One point per object = count + evidence. Trained on PixMo-Points (ODC-BY). | – | Apache-2.0 weights (card notes NC third-party training data) | L–M |
+| Qwen3-VL (our server) [V] | Box and point grounding in 0–1000 coordinates; the tech report covers direct, box-based and point-based counting | Already served on :8001 | – | Apache-2.0 | L |
+| ViCrop (ICLR 2025, arXiv 2502.17422) [V] | Shows that the size of the target detail limits MLLM accuracy; training-free cropping fixes much of it | Supports upscaling and tiling of 700 px plans | – | – | L |
+| LVLM-COUNT (arXiv 2412.00686) [S] | Divide and conquer for VLM counting, guarding against objects cut at tile borders | The tiling and de-duplication recipe (`methods.md` §3) | – | – | L |
+| SAHI (obss/sahi) [V] | Sliced inference for detectors (ultralytics, HF, mmdet, GroundingDINO) | Drop-in tiling + merge for any detector | github.com/obss/sahi | MIT | L |
+| CubiCasa5K multi-task model [V] | Room + icon segmentation; icon IoU: window 66.8, door 53.6, toilet 62.8, sink 55.7, bathtub 26.7. **No shower class.** | Strong for windows, doors and toilets, but trained on ~92% of our images. D3: evaluate only on `cc5k_heldout`. | github.com/CubiCasa/CubiCasa5k | CC BY-NC | M |
+| Later CubiCasa work [S] | MuraNet (arXiv 2309.00348, YOLOX-style door/window detector), FGSSNet (arXiv 2507.10343), PCP-Net (2026, room mIoU 71.3), Raster2Seq (arXiv 2602.09016) | Same leakage caveat as the official model | – | – | – |
 
-- **VLM pointing:** Molmo / PixMo-Points, and Qwen2.5-VL / Qwen3-VL point and box grounding. Count the
-  points, so every counted object is evidence. (Details are pending the second survey agent.)
-- **Exemplar / open-world counting:** CountGD (NeurIPS 2024), GeCo, DAVE, LOCA, T-Rex2. Use one exemplar
-  crop of the symbol and count its repeats. Symbols repeat exactly on CAD-made plans, which suits these
-  methods. (Pending verification.)
-- **CAD symbol spotting:** FloorPlanCAD (ICCV 2021), CADTransformer (CVPR 2022), SymPoint (ICLR 2024),
-  ArchCAD-400K / DPSS (NeurIPS 2025). For vector drawings without clean layers.
+## 6. Symbol spotting on vector CAD (for DXF/PDF without clean layers)
+
+Panoptic quality (PQ) on FloorPlanCAD, from ArchCAD Table 2 [V]. All are trained on Chinese CAD conventions.
+Our swiss DXFs don't need these, because their layers are clean.
+
+| Method | PQ | Code / licence | Weights |
+|---|---|---|---|
+| CADTransformer (CVPR 2022) | 68.9 | MIT | not released |
+| GAT-CADNet (CVPR 2022) | 73.7 | none found | – |
+| SymPoint (ICLR 2024) | 83.3 | IDEA licence, NC research | OneDrive |
+| SymPoint-V2 | 90.1 (with layer priors) / 83.2 | no LICENSE | Drive |
+| CADSpotting (arXiv 2412.07377) | 88.9 | not found | – |
+| DPSS (ArchCAD, NeurIPS 2025) | 89.5 | released | unclear |
+| VecFormer (NeurIPS 2025, WesKwong/VecFormer) [S] | 91.1 | Apache-2.0 | not listed |
