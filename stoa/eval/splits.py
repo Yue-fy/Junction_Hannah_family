@@ -189,6 +189,52 @@ def make_splits(seed: int = SEED) -> dict[str, list[Question]]:
     return out
 
 
+GATE_TARGETS = {"cubicasa5k": 480, "swiss_dwellings": 320, "ifc_models": 160}
+
+
+def make_train_gate(seed: int = SEED) -> list[Question]:
+    """A fixed sample of TRAIN questions for choosing gates/thresholds (S0 D4: never tune on dev).
+    One language per concept, at most 2 questions per drawing group (ifc: 40 per project), round-robin over
+    templates so every template is represented."""
+    rng = random.Random(f"{seed}/gate")
+    train = load_split("train")
+    by_src = collections.defaultdict(lambda: collections.defaultdict(list))
+    for q in train:
+        by_src[q.source][drawing_group(q.path)].append(q)
+    out = []
+    for src, target in GATE_TARGETS.items():
+        cap = 40 if src == "ifc_models" else 2
+        pool = []
+        for g in sorted(by_src[src]):
+            grng = random.Random(f"{seed}/gate/{g}")
+            keep, _ = _one_per_concept(by_src[src][g], grng)
+            keep, _ = _capped(keep, cap, grng)
+            pool.extend(keep)
+        by_tpl = collections.defaultdict(list)
+        for q in pool:
+            by_tpl[template_of(q.question)].append(q)
+        for v in by_tpl.values():
+            rng.shuffle(v)
+        tpls = sorted(by_tpl, key=lambda t: -len(by_tpl[t]))
+        picked = []
+        while len(picked) < target and any(by_tpl[t] for t in tpls):
+            for t in tpls:
+                if by_tpl[t] and len(picked) < target:
+                    picked.append(by_tpl[t].pop())
+        out.extend(picked)
+    return out
+
+
+def write_train_gate(seed: int = SEED) -> int:
+    qs = make_train_gate(seed)
+    cm = concept_map()
+    with open(splits_dir() / "train_gate.jsonl", "w", encoding="utf-8") as f:
+        for q in qs:
+            f.write(json.dumps({"qid": q.qid, "path": q.path, "type": q.type, "source": q.source,
+                                "group": drawing_group(q.path), "concept": cm[q.qid]}) + "\n")
+    return len(qs)
+
+
 def write_splits(seed: int = SEED, force: bool = False) -> dict[str, int]:
     d = splits_dir()
     d.mkdir(parents=True, exist_ok=True)
@@ -267,8 +313,11 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--write", action="store_true")
     ap.add_argument("--force", action="store_true")
+    ap.add_argument("--write-gate", action="store_true", help="write train_gate.jsonl (sample of train for gating)")
     a = ap.parse_args()
-    if a.write:
+    if a.write_gate:
+        print("train_gate:", write_train_gate())
+    elif a.write:
         print(write_splits(force=a.force))
     else:
         sp = make_splits()
