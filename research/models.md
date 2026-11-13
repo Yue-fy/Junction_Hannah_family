@@ -31,6 +31,7 @@ Cost columns are per question. "dev cc" = dev cubicasa counts (800 q), the bucke
 
 | Qwen3-VL-8B + decompose compound questions | dev cc | 42.6 | 2.2 calls | sinks+basins 56→6, showers+baths 35→5: the 8B over-counts EACH kind; rejected |
 | Nemotron, direct prompt, 1024 tok (reasons briefly in the answer) | smoke cc (80) | **50.0** | 8 s, 1.5k in / 313 out, 1.16 API calls, $1.2/1k | best Nemotron mode; local 8B on the same 80: 45.0 (n small) |
+| train_gate cc symbols (160: windows, doors, WC, sinks; EN+FI): prior / 8B / 8B+symbol hints / Nemotron | train_gate | 29.4 / 30.6 / 31.9 / 34.4 | Nemotron 13 s, $1.4/1k | windows 5–15%, doors 5–25% for every model: VLMs can't count plan symbols off the shelf |
 
 **LoRA in progress (00:24–01:25): cc-v2.** Qwen3-VL-8B + LoRA r16 on TRAIN cubicasa counts, *excluding every
 train_gate drawing* (train_gate ⊂ train is used for gating; cc-v1 had seen it and was stopped after 10 min).
@@ -50,7 +51,7 @@ at saturation), not HTTP wall time (which includes queueing behind other agents)
 | Qwen3.5-9B | 19.3 GB bf16 | ✅ Qwen3_5 | newer than Qwen3-VL-8B, hybrid thinking | download cancelled to give 3.6 the bandwidth |
 | Qwen3.6-27B-FP8 | 30.9 GB | ✅ | dense 27B: slower than 35B-A3B | skip |
 | Molmo2-8B / 4B | ~17 / ~9 GB | ✅ Molmo2 | trained for pointing + counting (PixMo-Points) → count-by-pointing with evidence | next download candidate if counting stays weak |
-| Gemma-4-12B-it | ~24 GB | ✅ Gemma4 | Gemma prize | maybe later; bandwidth |
+| Gemma-4-12B-it | ~24 GB | ✅ Gemma4 | Gemma prize | maybe later; bandwidth. Hosted gemma-3-12b-it 404s and gemma-4-31b-it times out on the NVIDIA API (00:40) |
 | Nemotron 3.5 Super VL 120B-A12B | hosted | – | NVIDIA prize; strong; grounding in 0..1000 too | **hosted backend `nvidia`** in stoa.llm (30 RPM shared limiter) |
 | Nemotron 3.5 Super VL NVFP4 | ~65 GB | ? | local Nemotron | does not fit next to the shared server; 7 h download |
 | Nemotron-Parse v1.2 / 3.5-Parse | small | ? | document parsing (tables, text + boxes) | candidate for schedule tables (opening_design) |
