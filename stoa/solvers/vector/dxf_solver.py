@@ -314,8 +314,40 @@ class DxfSolver(BaseSolver):
             pairs = [(v, t) for v, t in zip(vals, qr.terms) if v is not None]
             v, t = (max if qr.op == "max" else min)(pairs, key=lambda vt: vt[0])
             value = str(t.arg if not isinstance(t.arg, list) else t.arg[0])
-            trace.append(f"{qr.op} -> {value} ({v:.2f} m²)")
+            if t.kind == "area_apartment":
+                value = f"apartment {value}"
+            elif t.kind == "area_room":
+                r = next((r for r in fm.rooms if r.number == t.arg), None)
+                value = f"room {value}" + (f" ({r.name})" if r is not None and r.name else "")
+            trace.append(f"{qr.op}: " + ", ".join(f"{tt.arg}={vv:.2f}" for vv, tt in pairs) + f" -> {value}")
             unit = None
+        elif qr.op == "mean":
+            if len(parts) == 1 and parts[0].boxes:  # average over the rooms of one label
+                value = known[0] / len(parts[0].boxes)
+                trace.append(f"mean: {known[0]:.2f} / {len(parts[0].boxes)} rooms = {value:.2f}")
+            else:
+                value = sum(known) / len(known)
+                trace.append(f"mean of {[round(v, 2) for v in known]} = {value:.2f}")
+        elif qr.op == "ratio":
+            if len(known) < 2 or not known[1]:
+                return Answer(value=None, unit=None, confidence=0.0, solver=self.name, trace=trace + ["ratio: missing/zero divisor"],
+                              missing=missing or ["divisor not found"])
+            value = round(known[0] / known[1], 3)
+            trace.append(f"ratio: {known[0]:.2f} / {known[1]:.2f} = {value}")
+        elif qr.op == "pct":
+            if len(known) < 2 or not known[1]:
+                return Answer(value=None, unit="%", confidence=0.0, solver=self.name, trace=trace + ["share: missing total"],
+                              missing=missing or ["floor total not found"])
+            value = round(100.0 * known[0] / known[1], 2)
+            trace.append(f"share: 100 × {known[0]:.2f} / {known[1]:.2f} = {value} %")
+        elif qr.op in ("count_gt", "count_lt", "count_ge"):
+            cmp = {"count_gt": lambda v: v > qr.threshold, "count_lt": lambda v: v < qr.threshold,
+                   "count_ge": lambda v: v >= qr.threshold}[qr.op]
+            hits = [t.arg for v, t in zip(vals, qr.terms) if v is not None and cmp(v)]
+            value = len(hits)
+            trace.append(f"{qr.op} {qr.threshold}: " + ", ".join(f"{t.arg}={v:.2f}" for v, t in zip(vals, qr.terms)
+                                                              if v is not None) + f" -> {hits}")
+            unit = "count"
         elif qr.op == "diff":
             value = known[0] - sum(known[1:])
             trace.append(f"difference: {' - '.join(str(round(v, 2)) for v in known)} = {value:.2f}")
@@ -323,7 +355,11 @@ class DxfSolver(BaseSolver):
             value = sum(known)
             if len(known) > 1:
                 trace.append(f"sum: {' + '.join(str(round(v, 2)) for v in known)} = {value:.2f}")
-        if unit == "count":
+        if qr.op == "ratio":
+            unit = None
+        elif qr.op == "pct":
+            unit = "%"
+        elif unit == "count":
             value = int(round(value))
         elif unit == "ft2":
             value = round(value * M2_TO_FT2, 2)
