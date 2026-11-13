@@ -13,7 +13,9 @@ C=$(git rev-parse --short HEAD)
 STAMP=$(date +%H%M)
 export AGENT_ID=S0
 if [ -n "$(git status --porcelain --untracked-files=no)" ]; then echo "worktree not clean; commit first" >&2; exit 1; fi
-HAS_CC5K=$(grep -c "cc5k" stoa/pipeline.py || true)
+# cc5k=0/1 only differ when raster_cc5k is registered (D8); otherwise the second run is the lora=0 ablation.
+HAS_CC5K=$("$P" -m stoa.eval --list 2>/dev/null | grep -c "raster_cc5k" || true)
+HAS_LORA=$(grep -c "lora: int" stoa/pipeline.py || true)
 
 run() {  # name split extra-args...
   local name=$1 split=$2; shift 2
@@ -27,8 +29,11 @@ if [ "$HAS_CC5K" -gt 0 ]; then
   run test-cc5k0 test --allow-test --solver-arg cc5k=0 --judge local
   run test-cc5k1 test --allow-test --judge local
 else
-  echo "pipeline has no cc5k switch at $C: one test run (= clean)"
-  run test test --allow-test --judge local
+  echo "raster_cc5k not registered at $C: cc5k=0 == cc5k=1, one clean test run"
+  run test-cc5k0 test --allow-test --judge local
+  if [ "$HAS_LORA" -gt 0 ]; then
+    run test-lora0 test --allow-test --solver-arg lora=0   # ablation: without R2's counting LoRA
+  fi
 fi
 run dev dev
 run hard hard
@@ -36,7 +41,7 @@ run hard2 hard2
 run hard2q hard2q   # held out: aggregates only, never quote wordings (D10)
 run hard2p hard2p   # partly seen
 pred() { tr '\r' '\n' < "$L/test-$STAMP-$1.log" | sed -n 's/^predictions: //p' | tail -1; }
-if [ "$HAS_CC5K" -gt 0 ]; then CLEAN=$(pred test-cc5k0); else CLEAN=$(pred test); fi
+CLEAN=$(pred test-cc5k0)
 DEV=$(pred dev)
 echo "scorecard: test=$CLEAN dev=$DEV"
 "$P" -m stoa.eval.scorecard "$CLEAN" --hard "$(pred hard)" --gen "$(pred hard2)" --gen "$(pred hard2q)" --out "$L/scorecard-$STAMP.md" 2>&1 | tail -40
