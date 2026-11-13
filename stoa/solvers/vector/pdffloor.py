@@ -24,7 +24,8 @@ from stoa.solvers.vector.pdfmap import Transform
 ROOM_STYLE = ("fs", (0.54, 0.54, 0.54), 0.37)
 DOOR_STYLE = ("s", (0.27, 0.27, 0.27), 0.37)
 UNIT_COLOR = (0.69, 0.23, 0.18)
-SUPPORTED = frozenset({"door", "apartment"})
+SUPPORTED = frozenset({"door", "apartment", "window", "toilet", "washbasin", "bathtub", "shower"})
+BLACK = (0.0, 0.0, 0.0)
 
 
 def _pts(d) -> list[tuple[float, float]]:
@@ -62,6 +63,7 @@ def load_pdf_floor(pdf_abspath: str) -> tuple[FloorModel | None, Transform | Non
         s = 72 / 0.0254 / int(m.group(1))
         to_m = lambda x, y: (x / s, -y / s)  # noqa: E731
         room_pts, unit_pts, door_boxes = [], [], []
+        fx_polys, fx_circles, rect_cands = [], [], []
         for d in page.get_drawings():
             col = tuple(round(x, 2) for x in (d.get("color") or ()))
             w = round(d.get("width") or 0, 2)
@@ -77,6 +79,26 @@ def load_pdf_floor(pdf_abspath: str) -> tuple[FloorModel | None, Transform | Non
                 r = d["rect"]
                 (x0, y1), (x1, y0) = to_m(r.x0, r.y0), to_m(r.x1, r.y1)
                 door_boxes.append((x0, y0, x1, y1))
+            elif col == BLACK and w == 0.37 and d["type"] == "s" and [it[0] for it in d["items"]] == ["l"]:
+                r = d["rect"]
+                (x0, y1), (x1, y0) = to_m(r.x0, r.y0), to_m(r.x1, r.y1)
+                rect_cands.append((x0, y0, x1, y1, "line"))  # single line: window glass line (or other)
+            elif col == BLACK and w == 0.51:
+                kinds = [it[0] for it in d["items"]]
+                r = d["rect"]
+                (x0, y1), (x1, y0) = to_m(r.x0, r.y0), to_m(r.x1, r.y1)
+                bb = (x0, y0, x1, y1)
+                if d["type"] == "s" and kinds == ["c"] * 8:  # circle (drain if small)
+                    fx_circles.append(((x0 + x1) / 2, (y0 + y1) / 2, (x1 - x0) / 2))
+                elif d["type"] == "s" and kinds == ["l"] * 47:  # 48-vertex ellipse: WC bowl or washbasin
+                    fx_polys.append((48, bb))
+                elif d["type"] == "s" and kinds == ["l"] * 68:  # 69-vertex outline: bathtub
+                    fx_polys.append((69, bb))
+                elif d["type"] == "s" and kinds == ["qu"]:  # shower tray
+                    fx_polys.append((5, bb))
+                elif d["type"] == "fs" and tuple(round(x, 2) for x in (d.get("fill") or ())) == (1.0, 1.0, 1.0) and \
+                        (kinds == ["l"] * 4 or kinds == ["re"]):
+                    rect_cands.append((*bb, "rect"))  # window frame or fixture part; split by position below
         texts, annotations = [], []
         for b in page.get_text("dict")["blocks"]:
             for line in b.get("lines", []):
@@ -90,11 +112,31 @@ def load_pdf_floor(pdf_abspath: str) -> tuple[FloorModel | None, Transform | Non
         pw, ph = page.rect.width, page.rect.height
     if not room_pts:
         return None, None, "no room polygons in the PDF's vector layer"
+    # windows sit in the walls, i.e. outside every room polygon; fixture rectangles sit inside rooms
+    from shapely.geometry import Point, Polygon
+    from shapely.strtree import STRtree
+
+    polys = [Polygon(p) for p in room_pts if len(p) >= 3]
+    polys = [p if p.is_valid else p.buffer(0) for p in polys]
+    tree = STRtree(polys)
+    outside = []
+    for *bb, kind in rect_cands:
+        c = Point((bb[0] + bb[2]) / 2, (bb[1] + bb[3]) / 2)
+        if not any(polys[i].contains(c) for i in tree.query(c)):
+            outside.append((tuple(bb), kind))
+    # a window = frame rectangle(s) + glass line(s) touching each other; stray lines (stairs, railings) are alone
+    from stoa.solvers.vector.floor import _cluster
+
+    window_boxes = []
+    for g in _cluster([b for b, _ in outside], 0.01):
+        kinds = {outside[i][1] for i in g}
+        if kinds == {"rect", "line"}:
+            window_boxes += [outside[i][0] for i in g]
     # long title-block lines are annotations, not room labels
     room_texts = [t for t in texts if len(t.text) <= 40]
     annotations = [Text(t.text, t.x, t.y, t.h, "ANNOTATION") for t in texts if len(t.text) > 40 or re.search(r"1\s*:\s*\d+", t.text)]
-    fm = assemble(pdf_abspath, room_pts, unit_pts, room_texts, annotations, door_boxes, [], [], [], [],
-                  {"DOOR:LWPOLYLINE": len(door_boxes)}, None,
+    fm = assemble(pdf_abspath, room_pts, unit_pts, room_texts, annotations, door_boxes, [], window_boxes, fx_polys,
+                  fx_circles, {"DOOR:LWPOLYLINE": len(door_boxes), "WINDOW:LWPOLYLINE": len(window_boxes)}, None,
                   [f"PDF-only model, scale 1:{m.group(1)} from the title block"], supported=SUPPORTED)
     tf = Transform(s=s, a=0.0, b=0.0, n_anchors=0, rms_pt=0.0, page_w=pw, page_h=ph)
     return fm, tf, f"PDF-only: scale 1:{m.group(1)}, {len(fm.rooms)} room polygons, {len(door_boxes)} doors"

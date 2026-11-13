@@ -124,7 +124,14 @@ def _eval_term(fm: FloorModel, t: qparse.Term, qr: qparse.Query) -> _Part:
         tr = [f"{kind}s = {n} ({KIND_DESC[kind]})"]
         if kind == "window" and n != len(items):
             tr.append(f"window boxes grouped into {len(items)} clusters; count uses polylines/3")
-        return _Part(n, RULE_CONF[f"count:{kind}"], [(it.bbox, it.note) for it in items], tr, [f"counted {KIND_DESC[kind]}"])
+        conf, asm = RULE_CONF[f"count:{kind}"], [f"counted {KIND_DESC[kind]}"]
+        if fm.supported is not None and kind == "window":  # PDF-only model
+            conf = 0.5
+            asm = ["PDF-only: windows = touching frame-rectangle + glass-line groups outside every room polygon, "
+                   "lines / 3 (matched the DXF count on 19/25 floors; tends to overcount)"]
+        elif fm.supported is not None:
+            asm = [f"PDF-only: {kind}s identified by path shape/style (matched the DXF on 25/25 floors)"]
+        return _Part(n, conf, [(it.bbox, it.note) for it in items], tr, asm)
     if k == "count_label":
         if t.arg == "<numbered>":
             rooms = [r for r in fm.rooms if r.number]
