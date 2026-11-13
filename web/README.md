@@ -51,9 +51,12 @@ and shows a one-line note:
    window · German" and the plan (sum of 2 sub-questions, each clickable); both parts are cross-checked.
 8. CubiCasa scan (colorful-4539), asked in Finnish: bedrooms → 3, each counted 'MH' label boxed on the image
    (W3's raster label reader, one local-VLM call per drawing, shared by all its questions).
-9. HABS historical scan (no questions in the dataset): "what kind of drawing is this?" → the local VLM says
-   "site plan" at 20 %, and the tour clicks **Second opinion · NVIDIA Nemotron**: the hosted Nemotron 3.5 Super
-   VL agrees (time, tokens and € shown; its reasoning folded).
+9. HAER historical scan (vi0026 sheet 3, Creque Marine Railway, 1977; no questions in the dataset): "what kind
+   of drawing is this?" → the local VLM says "elevation" at 20 %, and the tour clicks **Second opinion · NVIDIA
+   Nemotron**: the hosted Nemotron 3.5 Super VL agrees (time, tokens and € shown; its reasoning folded). The
+   knowledge-graph strip links the other sheets of the same survey, named from the Library of Congress titles
+   ("West Elevation", "South Elevation", "Machinery, North Elevation"). Finna scans link the drawings filed
+   under the same address ("drawing 2 of 13").
 10. "How well it works": accuracy per source on held-out drawings against "just ask the VLM" and the template
    prior, the hard (generality) split, new question kinds (hard2, plus the clean held-out rewording hard2q as an
    aggregate), cost per 1,000 questions, the share answered by rules alone, and calibration. Read live from the

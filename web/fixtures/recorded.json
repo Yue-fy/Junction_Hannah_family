@@ -54,7 +54,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 0.0484
+    "wall_seconds": 0.2188
    },
    "intent": {
     "task": "area",
@@ -69,7 +69,7 @@
     "key": "area:room:room"
    }
   },
-  "recorded_at": "2026-11-14 01:36",
+  "recorded_at": "2026-11-14 01:43",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -1073,7 +1073,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 0.0264
+    "wall_seconds": 0.0129
    },
    "intent": {
     "task": "count",
@@ -1087,7 +1087,7 @@
     "key": "count:door:storey"
    }
   },
-  "recorded_at": "2026-11-14 01:36",
+  "recorded_at": "2026-11-14 01:43",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -2281,7 +2281,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 0.027
+    "wall_seconds": 0.0144
    },
    "intent": {
     "task": "count",
@@ -2295,7 +2295,7 @@
     "key": "count:window:storey"
    }
   },
-  "recorded_at": "2026-11-14 01:36",
+  "recorded_at": "2026-11-14 01:43",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -6761,7 +6761,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 0.0285
+    "wall_seconds": 0.0157
    },
    "intent": {
     "task": "count",
@@ -6775,7 +6775,7 @@
     "key": "count:door:model"
    }
   },
-  "recorded_at": "2026-11-14 01:36",
+  "recorded_at": "2026-11-14 01:43",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -6902,12 +6902,12 @@
    "cost": {
     "llm_tokens_in": 3182,
     "llm_tokens_out": 237,
-    "gpu_seconds": 10.254,
+    "gpu_seconds": 12.003,
     "api_calls": 0,
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 4,
-    "wall_seconds": 10.5745
+    "wall_seconds": 12.0681
    },
    "intent": {
     "task": "area",
@@ -6922,7 +6922,7 @@
     "key": "area:room:room"
    }
   },
-  "recorded_at": "2026-11-14 01:36",
+  "recorded_at": "2026-11-14 01:44",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -7424,7 +7424,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 0.185
+    "wall_seconds": 0.205
    },
    "intent": {
     "task": "count",
@@ -7436,7 +7436,7 @@
     "key": "count:door:drawing"
    }
   },
-  "recorded_at": "2026-11-14 01:36",
+  "recorded_at": "2026-11-14 01:44",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -7624,7 +7624,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 0.0241
+    "wall_seconds": 0.0184
    },
    "intent": {
     "task": "count",
@@ -7638,7 +7638,7 @@
     "key": "count:room:label"
    }
   },
-  "recorded_at": "2026-11-14 01:36",
+  "recorded_at": "2026-11-14 01:44",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -8502,7 +8502,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 0.8252
+    "wall_seconds": 0.0369
    },
    "intent": {
     "task": "count",
@@ -8525,7 +8525,7 @@
     ]
    }
   },
-  "recorded_at": "2026-11-14 01:36",
+  "recorded_at": "2026-11-14 01:44",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -8600,7 +8600,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 1,
-    "wall_seconds": 0.0681
+    "wall_seconds": 1.5505
    },
    "intent": {
     "task": "count",
@@ -8612,25 +8612,25 @@
     "key": "count:bedroom:drawing"
    }
   },
-  "recorded_at": "2026-11-14 01:36",
+  "recorded_at": "2026-11-14 01:44",
   "api": "http://127.0.0.1:8102"
  },
  {
-  "path": "data/habs/ak0003_sheet_00019.jpg",
+  "path": "data/habs/vi0026_sheet_00003.jpg",
   "question": "What kind of drawing is this (floor plan, elevation, section, site plan)?",
   "answer": {
-   "value": "site plan",
+   "value": "elevation",
    "unit": null,
    "confidence": 0.2,
    "evidence": [],
    "trace": [
     "intent: text unknown [drawing] (lang en)",
     "no train gate for this kind of question: general path by file type",
-    "vlm_direct: site plan  (conf 0.20)",
+    "vlm_direct: elevation  (conf 0.20)",
     "[vlm_direct] kind=text unit=None",
-    "[vlm_direct] local:qwen3-vl-8b 0.5s tok 3208->3",
-    "[vlm_direct] raw: site plan",
-    "[vlm_direct] cost: calls=1 tok_in=3208 tok_out=3 gpu_s=0.13 api_calls=0"
+    "[vlm_direct] local:qwen3-vl-8b 6.7s tok 3246->3",
+    "[vlm_direct] raw: elevation",
+    "[vlm_direct] cost: calls=1 tok_in=3246 tok_out=3 gpu_s=0.13 api_calls=0"
    ],
    "solver": "pipeline/vlm_direct",
    "assumptions": [],
@@ -8638,14 +8638,14 @@
     "no located evidence from this solver"
    ],
    "cost": {
-    "llm_tokens_in": 3208,
+    "llm_tokens_in": 3246,
     "llm_tokens_out": 3,
-    "gpu_seconds": 0.1313,
+    "gpu_seconds": 0.1328,
     "api_calls": 0,
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 1,
-    "wall_seconds": 0.713
+    "wall_seconds": 8.5189
    },
    "intent": {
     "task": "text",
@@ -8657,7 +8657,7 @@
     "key": "text:unknown:drawing"
    }
   },
-  "recorded_at": "2026-11-14 01:36",
+  "recorded_at": "2026-11-14 01:44",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -8671,7 +8671,7 @@
    "trace": [
     "kind=count unit=count",
     "nvidia:private/nvidia/nemotron-3.5-super-120b-a12b 6.3s tok 2150->159",
-    "raw: is a label \"MH\". |     *   Bottom middle room: There is a label \"MH\". |  | 2.  **Verify the count.** |     *   Room 1: Top left corner. |     *   Room 2: Top right area (next to the bathroom PH). |     *   Room 3: Bottom middle area (next to VH and TK). |  | 3.  **Final Count:** 3. |  | 4.  **Format:** Single integer.3",
+    "raw: is a label \"MH\". |     *   Bottom middle room: There is a label \"MH\". |  | 2.  **Verify the count.** |     *   Room 1: Top left corner. |     *   Room 2: Top right area (next to the bathroom PH). |     *   Room 3: Bottom center area (next to OH and VH). |  | 3.  **Final Count:** 3. |  | 4.  **Format:** Single integer.3",
     "cost: calls=1 tok_in=2150 tok_out=159 gpu_s=0.00 api_calls=1"
    ],
    "solver": "vlm_direct",
@@ -8685,7 +8685,7 @@
     "api_tokens_in": 2150,
     "api_tokens_out": 159,
     "llm_calls": 1,
-    "wall_seconds": 6.5997
+    "wall_seconds": 6.6287
    },
    "intent": {
     "task": "count",
@@ -8697,7 +8697,7 @@
     "key": "count:bedroom:drawing"
    }
   },
-  "recorded_at": "2026-11-14 01:36",
+  "recorded_at": "2026-11-14 01:44",
   "api": "http://127.0.0.1:8102",
   "solver": "vlm_direct",
   "solver_args": {
@@ -8705,31 +8705,31 @@
   }
  },
  {
-  "path": "data/habs/ak0003_sheet_00019.jpg",
+  "path": "data/habs/vi0026_sheet_00003.jpg",
   "question": "What kind of drawing is this (floor plan, elevation, section, site plan)?",
   "answer": {
-   "value": "Site plan",
+   "value": "Elevation",
    "unit": null,
    "confidence": 0.2,
    "evidence": [],
    "trace": [
     "kind=text unit=None",
-    "nvidia:private/nvidia/nemotron-3.5-super-120b-a12b 4.6s tok 3275->3",
-    "raw: Site plan",
-    "cost: calls=1 tok_in=3275 tok_out=3 gpu_s=0.00 api_calls=1"
+    "nvidia:private/nvidia/nemotron-3.5-super-120b-a12b 8.1s tok 3249->3",
+    "raw: Elevation",
+    "cost: calls=1 tok_in=3249 tok_out=3 gpu_s=0.00 api_calls=1"
    ],
    "solver": "vlm_direct",
    "assumptions": [],
    "missing": [],
    "cost": {
-    "llm_tokens_in": 3275,
+    "llm_tokens_in": 3249,
     "llm_tokens_out": 3,
     "gpu_seconds": 0.0,
     "api_calls": 1,
-    "api_tokens_in": 3275,
+    "api_tokens_in": 3249,
     "api_tokens_out": 3,
     "llm_calls": 1,
-    "wall_seconds": 4.8524
+    "wall_seconds": 8.3823
    },
    "intent": {
     "task": "text",
@@ -8741,7 +8741,7 @@
     "key": "text:unknown:drawing"
    }
   },
-  "recorded_at": "2026-11-14 01:37",
+  "recorded_at": "2026-11-14 01:44",
   "api": "http://127.0.0.1:8102",
   "solver": "vlm_direct",
   "solver_args": {
