@@ -200,7 +200,7 @@ def prepare_image(src: Any, max_pixels: int = DEFAULT_MAX_PIXELS, max_side: int 
 class Cost:
     """Cost of the LLM calls made inside a `cost_meter()` block (Stoa scores cost: lower is better).
 
-    gpu_seconds = wall time of local-server calls (upper bound: the server batches requests);
+    gpu_seconds = amortised estimate from tokens (see PREFILL_TPS / DECODE_TPS), not HTTP wall time;
     api_calls counts hosted (nvidia) calls only.
     """
 
@@ -217,7 +217,8 @@ class Cost:
             self.llm_tokens_in += res.prompt_tokens or 0
             self.llm_tokens_out += res.completion_tokens or 0
             if res.backend == "local":
-                self.gpu_seconds += 0.0 if res.cached else res.latency_s
+                self.gpu_seconds += 0.0 if res.cached else gpu_seconds_estimate(res.prompt_tokens or 0,
+                                                                                 res.completion_tokens or 0)
             elif not res.cached:
                 self.api_calls += 1
 
@@ -252,6 +253,18 @@ def cost_meter():
                 parent.api_calls += c.api_calls
 
 
+# Amortised GPU time per token on the shared server (Qwen3-VL-8B bf16, RTX PRO 6000, batched by vLLM).
+# Measured at saturation: dev run of 2,160 questions in ~62 s at ~1.2k prompt tokens each => ~40k prompt tok/s;
+# we use a conservative 25k. Decode: ~1k tok/s aggregate at typical batch sizes. HTTP wall time is NOT used,
+# because it includes queueing behind other agents' requests (F, 00:19: 0.5 s idle vs 7.8 s busy).
+PREFILL_TPS = float(os.environ.get("LLM_PREFILL_TPS", 25_000))
+DECODE_TPS = float(os.environ.get("LLM_DECODE_TPS", 1_000))
+
+
+def gpu_seconds_estimate(tokens_in: int, tokens_out: int) -> float:
+    return round(tokens_in / PREFILL_TPS + tokens_out / DECODE_TPS, 4)
+
+
 def _charge(res: "ChatResult") -> "ChatResult":
     m = _METER.get()
     if m is not None:
@@ -263,7 +276,7 @@ def _charge(res: "ChatResult") -> "ChatResult":
             return res
         tin, tout = res.prompt_tokens or 0, res.completion_tokens or 0
         if res.backend == "local":
-            record_cost(llm_calls=1, llm_tokens_in=tin, llm_tokens_out=tout, gpu_seconds=round(res.latency_s, 4))
+            record_cost(llm_calls=1, llm_tokens_in=tin, llm_tokens_out=tout, gpu_seconds=gpu_seconds_estimate(tin, tout))
         else:
             record_cost(llm_calls=1, llm_tokens_in=tin, llm_tokens_out=tout, api_calls=1, api_tokens_in=tin,
                         api_tokens_out=tout)
