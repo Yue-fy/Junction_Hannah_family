@@ -108,7 +108,10 @@ $JUNCTION_VENV/bin/python -m stoa.eval --list        # registered solvers + impo
   within 2%). `hard2p` = the same questions reworded (other English phrasing, German/French/Finnish;
   `stoa/eval/hard2p.py`). `hard2q` = a third wording (Italian/Dutch/Swedish + new English; `hard2p.py --q`):
   the clean HELD-OUT set since 01:12 (hard2p wordings were quoted in messages, so hard2p is contaminated for
-  dxf/ifc). Develop on `hard2`; on `hard2p`/`hard2q` report aggregates only and never quote their questions. Load in code:
+  dxf/ifc). Develop on `hard2`; on `hard2p`/`hard2q` report aggregates only and never quote their questions.
+  `hard2r` (01:55) = SEALED: a fresh draw of the hard2 recipes in a fourth wording (Spanish/Estonian/Polish + new
+  English; `stoa/eval/hard2r.py`, templates outside git in `$JUNCTION_SHARED/sealed/F/`). Only F and S0 run it, at
+  milestones (test runs), aggregates only; it replaces hard2q as the clean held-out set. Load in code:
   `stoa.eval.splits.load_split("train")` → `list[Question]` with answers.
 - `--limit N` takes the same fixed random subset every run. `--grep REGEX` keeps questions matching the regex
   (case-insensitive), e.g. `--grep 'window|ikkun|fenster|fönster'` for one concept in every language.
