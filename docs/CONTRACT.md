@@ -172,3 +172,6 @@ Additional endpoints (e.g. `GET /ifc-index?path=`) are W4's to add; list them he
 | `LLM_BASE_URL` | `stoa/llm.py` | local OpenAI-compatible server, default `http://127.0.0.1:8001/v1` |
 | `NVIDIA_API_KEY` | `stoa/llm.py` | NVIDIA hosted API (Nemotron); captain's account |
 | `AGENT_ID` | eval | optional; recorded in leaderboard lines |
+| `CC5K_WEIGHTS` | `raster_cc5k` (R1, D8) | pretrained CubiCasa5K weights `.pkl` (CC BY-NC 4.0, outside git) |
+| `CC5K_PYTHON` | `raster_cc5k` (R1, D8) | Python with torch for live CPU inference (default: the junction-train env); cached counts need none |
+| `CC5K_THREADS` | `raster_cc5k` (R1, D8) | optional; CPU threads for live inference (default 6) |
