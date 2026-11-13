@@ -106,7 +106,7 @@ def _extract_code(text: str) -> str:
     return (m.group(1) if m else text).strip()
 
 
-HARDCODED = re.compile(r"^\s*answer\s*=\s*-?[\d.]+\s*(?:#.*)?$", re.M)
+HARDCODED = re.compile(r"^\s*answer\s*=\s*[-+*/().\d\s]+(?:#.*)?$", re.M)
 
 
 def _run(code: str, tables: dict[str, pd.DataFrame]) -> dict:

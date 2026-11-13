@@ -49,6 +49,10 @@ class Table:
     row_boxes: list[tuple]  # unrotated page-space box per data row
     bbox: tuple
     notes: list[str] = field(default_factory=list)
+    run: list[int] = field(default_factory=list)  # row indices (visual rows) of the data rows
+    xs: list[float] = field(default_factory=list)  # column x-centres (visual space)
+    y0: float = 0.0
+    y1: float = 0.0
 
 
 def _union(boxes):
@@ -146,11 +150,12 @@ def find_tables(rows: list[Row], h: float, min_rows: int = 3) -> list[Table]:
             if t is not None:
                 tables.append(t)
                 used.update(run)
-    tables.sort(key=lambda t: (t.bbox[1], t.bbox[0]))
+    tables = _merge(rows, tables, h)
+    tables.sort(key=lambda t: (t.y0, t.bbox[0]))
     return tables
 
 
-def _build(rows: list[Row], run: list[int], h: float) -> Table | None:
+def _build(rows: list[Row], run: list[int], h: float, _depth: int = 0) -> Table | None:
     # leading rows without any digit are header rows when most data rows carry digits (ids, sizes, counts)
     def _key_cells(r: Row) -> list[Cell]:
         fc = _first_cell(r)
@@ -199,8 +204,15 @@ def _build(rows: list[Row], run: list[int], h: float) -> Table | None:
     title = ""
     j = first - 1
     n_head = 0
+    extra = []
     while j >= 0 and rows[first].y - rows[j].y < 9 * h and n_head < 5:
         hc = [c for c in rows[j].cells if col_of(c) is not None]
+        if (len({col_of(c) for c in hc}) >= max(3, 0.5 * len(xs)) and any(ch.isdigit() for c in hc for ch in c.text)
+                and _depth < 3):
+            extra.append(j)  # a data row whose key cell is blank/elsewhere: belongs to the table, not the header
+            first = j
+            j -= 1
+            continue
         if hc:
             n_head += 1
             if len(hc) == 1 and len(xs) > 3 and n_head > 1:
@@ -210,6 +222,8 @@ def _build(rows: list[Row], run: list[int], h: float) -> Table | None:
                 k = col_of(c)
                 head[k] = (c.text + " " + head[k]).strip()
         j -= 1
+    if extra:
+        return _build(rows, sorted(set(run) | set(extra)), h, _depth + 1)
     names, seen = [], {}
     for k, hname in enumerate(head):
         nm = re.sub(r"\s+", " ", hname).strip() or f"col{k}"
@@ -217,7 +231,33 @@ def _build(rows: list[Row], run: list[int], h: float) -> Table | None:
         names.append(nm if seen[nm] == 1 else f"{nm}_{seen[nm]}")
     df = pd.DataFrame(data, columns=names)
     bbox = _union(boxes)
-    return Table(title=title, columns=names, df=df, row_boxes=boxes, bbox=bbox)
+    return Table(title=title, columns=names, df=df, row_boxes=boxes, bbox=bbox, run=list(run), xs=list(xs),
+                 y0=rows[run[0]].y, y1=rows[run[-1]].y)
+
+
+def _merge(rows: list[Row], tables: list[Table], h: float) -> list[Table]:
+    """Rows of one schedule whose key column is blank start at another x and form separate runs; merge tables
+    that overlap vertically (or touch) and whose columns are mostly the same."""
+    changed = True
+    while changed:
+        changed = False
+        tables.sort(key=lambda t: -len(t.run))
+        for i, a in enumerate(tables):
+            for b in tables[i + 1:]:
+                if b.y0 > a.y1 + 6 * h or b.y1 < a.y0 - 6 * h:
+                    continue
+                shared = sum(1 for x in b.xs if any(abs(x - y) <= 1.6 * h for y in a.xs))
+                if shared < 0.7 * len(b.xs) or shared < 3:
+                    continue
+                m = _build(rows, sorted(set(a.run) | set(b.run)), h)
+                if m is None or len(m.xs) < len(a.xs):
+                    continue
+                tables = [t for t in tables if t is not a and t is not b] + [m]
+                changed = True
+                break
+            if changed:
+                break
+    return tables
 
 
 @functools.lru_cache(maxsize=32)
