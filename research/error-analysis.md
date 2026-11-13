@@ -59,6 +59,25 @@ Also:
 - cubicasa drawings often say "Piirros ohjeellinen, ei mittakaavassa" ("indicative drawing, not to
   scale"). If the hidden set asks for areas on such plans, state the scale assumption (Stoa point 3).
 
+## Gating prior vs VLM, chosen on TRAIN (added 00:19)
+
+`train_gate` = 960 train questions (20 per cubicasa template, Swiss and train IFC projects; one language per
+concept). Gate per concept (EN + translations pooled): use vlm_direct only if it beats the prior by >10 points
+and by ≥2 questions on train_gate. Table: `results/gates/vlm_direct_vs_prior.json` (`python -m stoa.eval.gates`).
+VLM chosen for: bedrooms, floors, Swiss apartments, rooms labelled X, Swiss WCs, IFC stairs. Prior kept for:
+showers+bathtubs, bathrooms, WC rooms, balconies, kitchens, WC seats, saunas, windows, doors.
+
+Applied offline to the existing dev runs (an honest estimate, because the gates never saw dev):
+
+| | dev micro | weighted_acc | cubicasa | swiss count |
+|---|---:|---:|---:|---:|
+| prior | 26.9% | 41.0% | 54.1% | 18.2% |
+| vlm_direct | 32.0% | 44.1% | 49.8% | 45.8% |
+| **gated (train-chosen)** | **34.8%** | **48.6%** | **57.2%** | 41.5% |
+
+→ W4 should gate from this file now. Swiss counts drop under gating only because doors/windows/washbasins
+fall back to the prior at n=6; the DXF solver (W2) replaces both there anyway.
+
 ## Generality: the `hard` split (added 00:02)
 
 `hard` = 711 Qs on dev drawings: real translations (the other-language twin), rule paraphrases (EN/SV/DE,

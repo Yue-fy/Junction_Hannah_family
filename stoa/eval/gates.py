@@ -7,8 +7,10 @@ both runs, and a choice: the challenger only if it beats the cheap run by more t
 AND by at least 2 questions; otherwise the cheap run (ties go to the cheaper path).
 Writes $JUNCTION_SHARED/results/gates/<NAME>.json:
     {"cheap": solver, "challenger": solver, "margin": m, "templates": {template: {...}}, "buckets": {...}}
-A router looks up `stoa.data.template_of(question)`, then the bucket, then defaults to the challenger
-(unseen templates should take the general path, per D4).
+Decisions are made per CONCEPT (a template pooled with its translation twins, see stoa.data.concept_map);
+`templates[t]["choice"]` is the concept's decision. A router looks up `stoa.data.template_of(question)` in
+`templates`, then the bucket, and otherwise defaults to the challenger (unseen templates should take the
+general path, per D4).
 """
 
 from __future__ import annotations
@@ -35,11 +37,32 @@ def table(cheap: list[dict], chal: list[dict], margin: float) -> dict:
         return {"n": n, "acc_cheap": round(a / n, 3), "acc_challenger": round(b / n, 3), "choice": choice,
                 "challenger_usd_per_q": round(cost_b, 6)}
 
-    tpl, bucket = collections.defaultdict(list), collections.defaultdict(list)
+    from stoa.data import concept_map, load_questions, template_of
+
+    cmap = concept_map()
+    by_qid = {q.qid: q for q in load_questions()}
+
+    def concept_tpl(x):  # English template of the question's concept (pools EN + translation twins)
+        c = cmap.get(x["qid"])
+        return template_of(by_qid[c].question) if c in by_qid else x["template"]
+
+    tpl, bucket, conc = (collections.defaultdict(list) for _ in range(3))
+    t2c = {}
     for c, x in rows:
         tpl[x["template"]].append((c, x))
         bucket[f"{x['source']}/{x['type']}"].append((c, x))
-    return {"templates": {t: decide(v) for t, v in sorted(tpl.items())},
+        k = concept_tpl(x)
+        conc[k].append((c, x))
+        t2c[x["template"]] = k
+    concepts = {k: decide(v) for k, v in sorted(conc.items())}
+    templates = {}
+    for t, v in sorted(tpl.items()):
+        d = decide(v)
+        d["concept"] = t2c[t]
+        d["choice_template_only"] = d["choice"]
+        d["choice"] = concepts[t2c[t]]["choice"]  # decide on the pooled concept (more data, language-neutral)
+        templates[t] = d
+    return {"templates": templates, "concepts": concepts,
             "buckets": {b: decide(v) for b, v in sorted(bucket.items())}}
 
 
@@ -60,7 +83,7 @@ def main(argv=None) -> int:
     (d / f"{name}.json").write_text(json.dumps(out, indent=1, ensure_ascii=False), encoding="utf-8")
     print(f"| template | n | {out['cheap']} | {out['challenger']} | choice |")
     print("|---|---:|---:|---:|---|")
-    for k, v in list(t["buckets"].items()) + list(t["templates"].items()):
+    for k, v in list(t["buckets"].items()) + list(t["concepts"].items()):
         print(f"| {k[:90]} | {v['n']} | {100*v['acc_cheap']:.0f}% | {100*v['acc_challenger']:.0f}% | "
               f"{out['cheap'] if v['choice'] == 'cheap' else out['challenger']} |")
     # what the gate would score on these questions (optimistic: chosen on the same sample)
