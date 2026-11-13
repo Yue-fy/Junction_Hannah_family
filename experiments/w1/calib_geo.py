@@ -37,18 +37,25 @@ for m in models:
             continue
         lng, wid, fpa = o
         h = e.geo.bbox[5] - e.geo.bbox[2]
+        ax = getattr(e, 'axis_length', None)
         if L:
             tot['len'] += 1
+            hit['len axis'] += ok(ax, L)
+            hit['len axis else obb'] += ok(ax if ax else lng, L)
+            tot['lenax'] += ax is not None
             hit['len obb_long'] += ok(lng, L)
             hit['len fp_area/width'] += ok(fpa / wid if wid > 1e-3 else None, L)
             hit['len obb_long-width'] += ok(lng - wid, L)
         if S:
             tot['side'] += 1
+            hit['side axis*h'] += ok(ax * h if ax else None, S)
+            hit['side vol/(fp_area/axis)'] += ok(e.geo.volume / (fpa / ax) if ax and fpa else None, S)
             hit['side vol/width'] += ok(e.geo.volume / wid if wid > 1e-3 else None, S)
             hit['side lateral/2'] += ok(e.geo.lateral_area / 2, S)
             hit['side obb_long*h'] += ok(lng * h, S)
             hit['side (lateral - 2*wid*h)/2'] += ok((e.geo.lateral_area - 2 * wid * h) / 2, S)
             hit['side fp_len*h - ?'] += ok((fpa / wid) * h if wid > 1e-3 else None, S)
+print('walls with Qto Length that have an axis:', tot['lenax'], '/', tot['len'])
 for k, v in sorted(hit.items()):
     t = tot[k.split()[0]]
     print(f"{k:32s} {v}/{t} = {v / t:.0%}")

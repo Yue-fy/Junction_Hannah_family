@@ -179,6 +179,9 @@ class IfcSolver(BaseSolver):
             ans = self._answer(path, model, idx, it, trace, ctx)
         except Exception as ex:  # noqa: BLE001 - report as a refusal with the reason, never crash the eval
             ans = Answer.abstain(self.name, f"error: {type(ex).__name__}: {ex}", trace=trace)
+        if ans.value is None and str(self.options.get("llm", "1")) != "0" and not any(
+                "error:" in t for t in ans.trace):
+            ans = self._llm_fallback(model, idx, question, it, ans)
         if ans.value is not None and self.options.get("plan2d", "1") != "0":
             try:
                 self._add_2d(path, model, it, ans, ctx.get("storey"))
@@ -497,6 +500,29 @@ class IfcSolver(BaseSolver):
         return self._final(tot, unit, it, conf * 0.95, ev, trace, assumptions, missing)
 
     # ------------------------------------------------------------------------------------------------
+    def _llm_fallback(self, model: str, idx: IfcIndex, question: str, it: Intent, refusal: Answer) -> Answer:
+        """Free-text questions the rules can't answer: local LLM over a deterministic fact card of the model."""
+        from stoa.solvers.ifc.factcard import answer_free_text
+
+        text, card, info = answer_free_text(idx, question, it)
+        trace = list(refusal.trace) + ["rules could not answer; asking the local LLM with a fact card of the model "
+                                       f"({len(card.splitlines())} lines, {len(card)} chars)"]
+        if text is None:
+            trace.append(f"LLM unavailable: {info.get('error')}")
+            return Answer(value=None, solver=self.name, trace=trace, missing=refusal.missing)
+        trace.append("fact card (first lines): " + " | ".join(card.splitlines()[:4])[:400])
+        ev = []
+        if it.kind:
+            ev = [self._ev(model, e, f"{e.eff_cls} {e.name or ''}".strip())
+                  for e in idx.by_class(*KIND_CLASSES.get(it.kind, ()))[:50]]
+        if not ev:
+            ev = [Evidence(file=model, note="IFC model (fact card source)")]
+        return Answer(value=text, unit=None, confidence=0.3, evidence=ev, trace=trace, solver=self.name,
+                      assumptions=["answered by the local LLM from facts extracted from the IFC (counts, types, "
+                                   "materials, fire ratings, rooms); not verified by a rule"],
+                      missing=list(refusal.missing))
+
+    # ------------------------------------------------------------------------------------------------
     def _breakdown(self, idx: IfcIndex, it: Intent, els: list[Element], value_of, ev, trace, assumptions, missing,
                    conf: float, where: str, unit: str | None = None) -> Answer:
         """Text answer: total + breakdown by type name or by storey (IFC-Bench style)."""
@@ -628,6 +654,8 @@ class IfcSolver(BaseSolver):
             return None
         if qkey == "volume":
             return g.volume
+        # NOTE: the wall 'Axis' representation length (index.axis_length) matches Qto Length on only 44% of
+        # walls vs 55-62% for the footprint OBB (experiments/w1/calib_geo.py, 00:35), so it is not used here.
         if qkey in ("length", "side"):
             o = cls._obb(e)
             if o is None:

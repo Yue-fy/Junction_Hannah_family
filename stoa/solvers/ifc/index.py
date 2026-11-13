@@ -27,7 +27,7 @@ from pathlib import Path
 
 from stoa.data import abspath
 
-INDEX_VERSION = 4
+INDEX_VERSION = 6
 
 # classes whose geometry we compute (quantities are asked about them or the viewer highlights them)
 GEOM_CLASSES = (
@@ -75,6 +75,8 @@ class Element:
     qto: dict[str, float] = field(default_factory=dict)  # "Qto_SpaceBaseQuantities.NetFloorArea" -> value (SI)
     props: dict[str, object] = field(default_factory=dict)  # selected pset props ("Pset_*.IsExternal", ...)
     geo: Geo | None = None
+    axis_length: float | None = None  # m, length of the 'Axis' representation (walls), if modelled
+    materials: list[str] | None = None  # material names (layers/constituents/profiles), max 6
 
 
 @dataclass
@@ -89,6 +91,7 @@ class IfcIndex:
     elements: dict[str, Element]
     build_seconds: float = 0.0
     version: int = INDEX_VERSION
+    application: str | None = None  # authoring tool from IfcApplication ("ARCHICAD 20.0.0 (GRAPHISOFT)")
 
     def by_class(self, *classes: str) -> list[Element]:
         cs = set(classes)
@@ -195,7 +198,8 @@ def _storey_of(el, cache: dict) -> tuple[str | None, str | None]:
 
 _QTY_KIND = {"IfcQuantityLength": "LENGTHUNIT", "IfcQuantityArea": "AREAUNIT", "IfcQuantityVolume": "VOLUMEUNIT"}
 _KEEP_PROPS = {"IsExternal", "LoadBearing", "Reference", "Level", "Number", "Name", "Category", "Family", "Type",
-               "Status", "Description"}
+               "Status", "Description", "FireRating", "ThermalTransmittance", "AcousticRating", "Combustible",
+               "SurfaceSpreadOfFlame", "FireExit", "HandicapAccessible", "OccupancyType", "Material"}
 
 
 def _qtos(el, scales: dict[str, float]) -> tuple[dict[str, float], dict[str, object]]:
@@ -230,6 +234,81 @@ def _qtos(el, scales: dict[str, float]) -> tuple[dict[str, float], dict[str, obj
     return qto, props
 
 
+def _axis_length(el, scale: float) -> float | None:
+    """Length of an element's 'Axis' shape representation (IfcPolyline / IfcTrimmedCurve on a line or circle /
+    IfcIndexedPolyCurve / IfcCompositeCurve), in metres. Placement doesn't change lengths."""
+    import math
+
+    rep = getattr(el, "Representation", None)
+    if rep is None:
+        return None
+
+    def curve_len(c) -> float | None:
+        if c.is_a("IfcPolyline"):
+            pts = [tuple(p.Coordinates) for p in c.Points]
+            return sum(math.dist(a, b) for a, b in zip(pts, pts[1:]))
+        if c.is_a("IfcIndexedPolyCurve"):
+            pts = [tuple(p) for p in c.Points.CoordList]
+            return sum(math.dist(a, b) for a, b in zip(pts, pts[1:]))
+        if c.is_a("IfcTrimmedCurve"):
+            b = c.BasisCurve
+            t1 = next((x for x in c.Trim1 if x.is_a("IfcCartesianPoint")), None)
+            t2 = next((x for x in c.Trim2 if x.is_a("IfcCartesianPoint")), None)
+            p1 = next((x for x in c.Trim1 if x.is_a("IfcParameterValue")), None)
+            p2 = next((x for x in c.Trim2 if x.is_a("IfcParameterValue")), None)
+            if b.is_a("IfcLine"):
+                if t1 is not None and t2 is not None:
+                    return math.dist(tuple(t1.Coordinates), tuple(t2.Coordinates))
+                if p1 is not None and p2 is not None:
+                    mag = float(b.Dir.Magnitude) if b.Dir.Magnitude else 1.0
+                    return abs(float(p2.wrappedValue) - float(p1.wrappedValue)) * mag
+            if b.is_a("IfcCircle") and p1 is not None and p2 is not None:
+                a = abs(float(p2.wrappedValue) - float(p1.wrappedValue))
+                a = math.radians(a) if a > 2 * math.pi + 1e-6 else a  # degrees or radians, depending on units
+                return float(b.Radius) * a
+            return None
+        if c.is_a("IfcCompositeCurve"):
+            parts = [curve_len(seg.ParentCurve) for seg in c.Segments]
+            return sum(parts) if parts and None not in parts else None
+        return None
+
+    for r in rep.Representations:
+        if (r.RepresentationIdentifier or "").lower() != "axis":
+            continue
+        tot = 0.0
+        for it in r.Items:
+            v = curve_len(it)
+            if v is None:
+                return None
+            tot += v
+        return tot * scale if tot > 0 else None
+    return None
+
+
+def _materials(el) -> list[str] | None:
+    import ifcopenshell.util.element as ue
+
+    try:
+        m = ue.get_material(el, should_skip_usage=True)
+    except Exception:  # noqa: BLE001
+        return None
+    if m is None:
+        return None
+    names: list[str] = []
+    if m.is_a("IfcMaterial"):
+        names = [m.Name]
+    elif m.is_a("IfcMaterialLayerSet"):
+        names = [ly.Material.Name for ly in m.MaterialLayers if ly.Material]
+    elif m.is_a("IfcMaterialConstituentSet"):
+        names = [c.Material.Name for c in (m.MaterialConstituents or ()) if c.Material]
+    elif m.is_a("IfcMaterialProfileSet"):
+        names = [pr.Material.Name for pr in (m.MaterialProfiles or ()) if pr.Material]
+    elif m.is_a("IfcMaterialList"):
+        names = [x.Name for x in m.Materials]
+    names = [n for n in names if n]
+    return names[:6] or None
+
+
 def _mesh_stats(verts, faces):
     import numpy as np
     from shapely import make_valid
@@ -255,10 +334,18 @@ def _mesh_stats(verts, faces):
             polys.append(p)
     fp_area, rings = None, None
     if polys:
-        try:
-            u = unary_union(polys)
-        except Exception:  # noqa: BLE001
-            u = unary_union([make_valid(p) for p in polys])
+        u = None
+        for attempt in (lambda: unary_union(polys), lambda: unary_union([make_valid(p) for p in polys]),
+                        lambda: unary_union([p.buffer(1e-6) for p in polys]).buffer(-1e-6)):
+            try:
+                u = attempt()
+                break
+            except Exception:  # noqa: BLE001 - GEOS TopologyException on degenerate meshes: try the next repair
+                continue
+        if u is None:
+            mn, mx = v.min(axis=0), v.max(axis=0)
+            return Geo(footprint_area=None, volume=vol, bbox=(*map(float, mn), *map(float, mx)), footprint=None,
+                       lateral_area=lateral, top_area=top)
         fp_area = float(u.area)
         geoms = getattr(u, "geoms", [u])
         rings = []
@@ -270,6 +357,15 @@ def _mesh_stats(verts, faces):
     mn, mx = v.min(axis=0), v.max(axis=0)
     return Geo(footprint_area=fp_area, volume=vol, bbox=(*map(float, mn), *map(float, mx)), footprint=rings,
                lateral_area=lateral, top_area=top)
+
+
+def _application(f) -> str | None:
+    apps = []
+    for a in f.by_type("IfcApplication"):
+        s = " ".join(x for x in (a.ApplicationFullName, a.Version) if x)
+        dev = a.ApplicationDeveloper.Name if a.ApplicationDeveloper and hasattr(a.ApplicationDeveloper, "Name") else None
+        apps.append(s + (f" ({dev})" if dev else ""))
+    return "; ".join(dict.fromkeys(apps)) or None
 
 
 def build_index(path: str, geometry: bool = True, geom_classes=GEOM_CLASSES, threads: int | None = None) -> IfcIndex:
@@ -304,13 +400,15 @@ def build_index(path: str, geometry: bool = True, geom_classes=GEOM_CLASSES, thr
             predefined_type=str(getattr(el, "PredefinedType", None)) if getattr(el, "PredefinedType", None) else None,
             type_name=t.Name if t is not None else None, type_cls=t.is_a() if t is not None else None,
             eff_cls=effective_class(cls, t.is_a() if t is not None else None),
-            storey=storey, parent=parent, qto=qto, props=props)
+            storey=storey, parent=parent, qto=qto, props=props,
+            axis_length=_axis_length(el, scale) if el.is_a("IfcWall") or el.is_a("IfcMember") or el.is_a("IfcBeam") else None,
+            materials=_materials(el) if not el.is_a("IfcSpace") else None)
     if geometry:
         _add_geometry(f, elements, geom_classes, threads)
     return IfcIndex(path=path, schema=f.schema, unit_scale=scale, project_name=proj.Name if proj else None,
                     project_long_name=getattr(proj, "LongName", None) if proj else None,
                     building_names=[b.Name or "" for b in f.by_type("IfcBuilding")], storeys=storeys,
-                    elements=elements, build_seconds=time.perf_counter() - t0)
+                    elements=elements, build_seconds=time.perf_counter() - t0, application=_application(f))
 
 
 def _add_geometry(f, elements: dict[str, Element], geom_classes, threads: int | None) -> None:
