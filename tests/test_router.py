@@ -211,3 +211,14 @@ def test_agent_rows_condition_is_restricted():
     ag = Agent()
     for bad in ('__import__("os")', "name.str.len() > 3", "open('x')"):
         assert ag._rows("data/swiss_dwellings/none.pdf", bad, []).startswith("error")
+
+
+def test_count_cue_with_unit_is_a_quantity():
+    from stoa.router.intent import parse
+
+    assert (parse("How many square feet of net floor area do rooms 1.01 and 1.02 have together?").task, "area") == ("area", "area")
+    assert parse("How many square feet of net floor area do rooms 1.01 and 1.02 have together?").unit == "ft2"
+    assert parse("How many metres of wall are there on 'KG'?").task == "length"
+    assert parse("Wie viele Quadratmeter hat Wohnung A?").task == "area"
+    assert parse("How many doors are there?").task == "count"
+    assert parse("How many rooms are larger than 10 m²?").task == "count"
