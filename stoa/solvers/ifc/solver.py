@@ -26,7 +26,7 @@ from stoa.data import abspath, siblings, source_of
 from stoa.solvers import register
 from stoa.solvers.base import BaseSolver
 from stoa.solvers.ifc.index import Element, IfcIndex, Storey, load_index
-from stoa.solvers.ifc.parse import KIND_CLASSES, Intent, fold, parse
+from stoa.solvers.ifc.parse import KIND_CLASSES, Intent, fold, parse, storey_mention, wants_list
 from stoa.solvers.ifc.resolve import match_model, match_space, match_storey, norm
 
 # share of storey totals within 2% when computed from geometry only (no Qto), measured on train+dev
@@ -35,6 +35,12 @@ GEO_HIT_RATE = {"volume": 0.75, "length": 0.62, "side": 0.43, "floor": 0.95}
 FT2_PER_M2 = 10.763910416709722
 FT_PER_M = 3.280839895013123
 MAX_EVIDENCE = 2000
+# words that signal an aggregation/comparison; if the parse found no operator, the plain value is suspect
+_OPERATOR_WORD = re.compile(r"\b(exceed\w*|surpass\w*|average|mean|median|ratio|times as|percent\w*|proportion|share of|"
+                            r"per (room|space|storey|floor|level|unit|apartment)|at least|at most|more than \d|"
+                            r"less than \d|fewer than \d|greater than \d|smaller than \d|over \d|under \d|"
+                            r"durchschnitt\w*|gemiddeld\w*|promedio|moyenne|keskimaar\w*|sredni\w*|prozent\w*|procent\w*|"
+                            r"porcentaje|pourcentage|anteil)\b|%")
 
 # quantity key suffixes, in order of preference, per (metric, kind)
 QTO_KEYS = {
@@ -181,6 +187,7 @@ class IfcSolver(BaseSolver):
         trace.append(f"model {Path(model).name}: {idx.schema}, {len(idx.storeys)} storeys, {len(idx.elements)} elements"
                      f" (index {idx.build_seconds:.1f}s, cached)")
         it = parse(question)
+        it.question = question
         trace.append(f"parsed: metric={it.metric} kind={it.kind} scope={it.scope} names={it.names}"
                      + (" side-area" if it.side_area else "") + (" gross" if it.gross else ""))
         ctx: dict = {"question": question}
@@ -188,9 +195,43 @@ class IfcSolver(BaseSolver):
             ans = self._answer(path, model, idx, it, trace, ctx)
         except Exception as ex:  # noqa: BLE001 - report as a refusal with the reason, never crash the eval
             ans = Answer.abstain(self.name, f"error: {type(ex).__name__}: {ex}", trace=trace)
-        if ans.value is None and str(self.options.get("llm", "1")) != "0" and not any(
-                "error:" in t for t in ans.trace):
-            ans = self._llm_fallback(model, idx, question, it, ans)
+        if ans.value is not None and it.kind == "space" and it.metric == "area" and isinstance(ans.value, (int, float)):
+            from stoa.solvers.ifc.factcard import placeholder_spaces
+
+            if placeholder_spaces(idx):
+                ans.confidence = min(ans.confidence, 0.15)
+                ans.missing.append("real room areas: this model's IfcSpaces are ~1 m² placeholders (geometry and "
+                                   "quantity sets), so the value is not a floor area")
+        if ans.value is not None and not it.mod and not it.which and it.op is None:
+            # an operator word the parse did not turn into an operator: the atomic value may not be what was asked
+            w = _OPERATOR_WORD.search(fold(question))
+            if w and ans.confidence > 0.5:
+                ans.confidence = 0.5
+                ans.missing.append(f"the question has an operator word ('{w.group(0)}') the rules did not apply")
+                ans.trace.append(f"guard: operator word '{w.group(0)}' not modelled -> confidence capped at 0.5")
+        for note in it.notes:
+            if note.startswith("exclusion"):
+                ans.trace.append(note)
+                if note.startswith("exclusion NOT") and ans.value is not None:
+                    ans.confidence = min(ans.confidence, 0.3)
+                    ans.missing.append(f"the question excludes something the rules can't apply ({note[23:]}); "
+                                       "the value ignores the exclusion")
+        llm_on = str(self.options.get("llm", "1")) != "0"
+        if ans.value is None and llm_on and not any("error:" in t for t in ans.trace):
+            ans = self._llm_fallback(model, idx, question, it, ans, storey=ctx.get("storey"))
+        elif llm_on and isinstance(ans.value, (int, float)) and wants_list(question):
+            # a listing/description was asked; one number is not an answer. Give the LLM the rule's value as a
+            # verified fact (with its scope) plus the fact card, and keep the rule's evidence.
+            rule = ans
+            fact = (f"{rule.value} {rule.unit or ''} -- " + "; ".join(rule.assumptions[:3]))[:400]
+            ans = self._llm_fallback(model, idx, question, it, rule, storey=ctx.get("storey"),
+                                     extra=f"Computed exactly by a rule for this question: {fact}")
+            if ans.value is None:
+                ans = rule
+            else:
+                ans.evidence = rule.evidence or ans.evidence
+                ans.confidence = 0.4
+                ans.trace.insert(0, f"list request: rule value {rule.value} {rule.unit or ''} passed to the LLM as a fact")
         if ans.value is not None and self.options.get("plan2d", "1") != "0":
             try:
                 self._add_2d(path, model, it, ans, ctx.get("storey"))
@@ -248,6 +289,11 @@ class IfcSolver(BaseSolver):
                 trace.append(f"'{n}': no storey, room or model of that name")
                 assumptions.append(f"could not resolve '{n}'")
                 conf *= 0.6
+        if storey is None and not it.names and it.scope != "model" and getattr(it, "question", ""):
+            i, why = storey_mention(it.question, [s.name for s in idx.storeys])
+            if i is not None:
+                storey = idx.storeys[i]
+                trace.append(f"{why} (unquoted)")
         if it.scope == "model" or (model_named and storey is None):
             it.scope = "model"
         elif storey is None and it.metric != "text":
@@ -282,6 +328,10 @@ class IfcSolver(BaseSolver):
             else:
                 return Answer.abstain(self.name, "free-text question: no deterministic rule", trace=trace,
                                       missing=["a quantity question (count/area/volume/length)"])
+        if ctx.get("compose", True):
+            comp = self._compose(path, model, idx, it, trace, ctx)
+            if comp is not None:
+                return comp
         storey, rooms, conf, groups = self._roles(path, idx, it, trace, assumptions)
         sname = storey.name if storey else None
         ctx["storey"] = storey
@@ -515,11 +565,161 @@ class IfcSolver(BaseSolver):
         return self._final(tot, unit, it, conf * 0.95, ev, trace, assumptions, missing)
 
     # ------------------------------------------------------------------------------------------------
-    def _llm_fallback(self, model: str, idx: IfcIndex, question: str, it: Intent, refusal: Answer) -> Answer:
+    def _storey_names(self, idx: IfcIndex, it: Intent) -> tuple[list[tuple[str, Storey]], list[str]]:
+        """Split the quoted names into storeys (exact/normalised match that no room matches better) and others."""
+        st, other = [], []
+        for n in it.names:
+            ms = match_storey(idx, n)
+            sp = match_space(idx, n)
+            if ms is not None and ms.score >= 90 and (not sp or ms.score >= sp[0].score):
+                st.append((n, ms.obj))
+            else:
+                other.append(n)
+        return st, other
+
+    def _compose(self, path: str, model: str, idx: IfcIndex, it: Intent, trace: list[str], ctx: dict) -> Answer | None:
+        """Operators over atomic answers, for question kinds the dataset templates never use (F's hard2):
+        several storeys (sum / which has more / difference), average per element, share of a total, and
+        threshold counts. Each part is answered by `_answer` itself, so it keeps its own evidence and rules;
+        the arithmetic happens here, in code. Returns None when no operator applies."""
+        import dataclasses
+
+        storeys, others = self._storey_names(idx, it)
+        multi = len(storeys) >= 2 and not others and (it.op in ("sum", "argmax", "argmin", "diff", "max", "min")
+                                                     or it.which)
+        if not (multi or it.mod):
+            return None
+        if it.mod == "threshold" and it.metric not in ("area", "volume", "length"):
+            return None
+
+        def sub(names: list[str], **kw) -> tuple[Answer, list[str]]:
+            args = dict(names=list(names), op=None, mod=None, threshold=None, which=False, yes_no=False, notes=[],
+                        filters=dict(it.filters), kinds=list(it.kinds), group_by=None, top_n=False)
+            args.update(kw)
+            sit = dataclasses.replace(it, **args)
+            st: list[str] = []
+            a = self._answer(path, model, idx, sit, st, {"question": ctx.get("question", ""), "compose": False})
+            return a, st
+
+        def done(val, unit, parts: list[Answer], steps: list[str], how: str, conf_k: float = 0.95) -> Answer:
+            conf = conf_k
+            ev, asm, miss = [], [how], []
+            for a in parts:
+                conf *= a.confidence if a.value is not None else 0.0
+                ev += a.evidence
+                asm += [x for x in a.assumptions if x not in asm]
+                miss += [x for x in a.missing if x not in miss]
+            trace.extend(steps)
+            if isinstance(val, str):
+                return Answer(value=val, unit=None, confidence=max(0.0, min(1.0, conf)), evidence=ev[:MAX_EVIDENCE],
+                              trace=trace, solver=self.name, assumptions=asm, missing=miss)
+            if isinstance(val, float):
+                val = round(val, 3)
+            return Answer(value=val, unit=unit, confidence=max(0.0, min(1.0, conf)), evidence=ev[:MAX_EVIDENCE],
+                          trace=trace, solver=self.name, assumptions=asm, missing=miss)
+
+        if multi and not it.mod:
+            parts = [(n, *sub([n])) for n, _ in storeys]
+            if any(a.value is None or isinstance(a.value, str) for _, a, _ in parts):
+                return None
+            steps = [f"{n}: {a.value} {a.unit or ''} ({'; '.join(t[-1:])})" for n, a, t in parts]
+            vals = [(n, float(a.value)) for n, a, _ in parts]
+            unit = parts[0][1].unit
+            if it.which or it.op in ("argmax", "argmin"):
+                low = it.op in ("argmin", "min") or bool(re.search(
+                    r"\b(fewer|less|least|fewest|smaller|smallest|lower|weniger|kleiner|minder|kleiner|menos|menor|moins|"
+                    r"meno|mniej|vahem|mindre)\b", fold(getattr(it, "question", ""))))
+                pick = (min if low else max)(vals, key=lambda x: x[1])
+                tie = sum(1 for _, v in vals if v == pick[1]) > 1
+                return done(pick[0] if not tie else "equal (" + ", ".join(f"{n} {v:g}" for n, v in vals) + ")",
+                            None, [a for _, a, _ in parts], steps + [f"{it.op} over storeys -> {pick[0]}"],
+                            f"compared {it.metric} per storey", 0.95 if not tie else 0.6)
+            if it.op == "diff" and len(vals) == 2:
+                return done(abs(vals[0][1] - vals[1][1]), unit, [a for _, a, _ in parts],
+                            steps + [f"|{vals[0][1]:g} - {vals[1][1]:g}|"], "difference between two storeys")
+            if it.op in ("max", "min"):
+                v = (max if it.op == "max" else min)(v for _, v in vals)
+                return done(v, unit, [a for _, a, _ in parts], steps + [f"{it.op} = {v:g}"], f"{it.op} over storeys")
+            tot = sum(v for _, v in vals)
+            return done(int(tot) if unit == "count" else tot, unit, [a for _, a, _ in parts],
+                        steps + ["sum = " + " + ".join(f"{v:g}" for _, v in vals)], "sum over the named storeys")
+
+        if it.mod == "avg":
+            tot, t1 = sub(it.names)
+            cnt, t2 = sub(it.names, metric="count")
+            if tot.value is None or cnt.value in (None, 0) or isinstance(tot.value, str):
+                return None
+            return done(float(tot.value) / float(cnt.value), tot.unit, [tot, cnt],
+                        [f"total {tot.value} {tot.unit} ({t1[-1] if t1 else ''})", f"count {cnt.value}",
+                         f"average = {tot.value} / {cnt.value}"], f"average = total {it.metric} / number of {it.kind} elements")
+
+        if it.mod == "share":
+            if others and storeys:  # "share of storey S's area that room R takes"
+                part, t1 = sub(others + [n for n, _ in storeys])
+                whole, t2 = sub([n for n, _ in storeys], total=True, kind="space" if it.metric == "area" else it.kind)
+                wdesc = f"all {it.kind or 'rooms'} on '{storeys[0][0]}'"
+            elif it.filters and not others:  # "percentage of wall volume that is load-bearing"
+                part, t1 = sub([n for n, _ in storeys])
+                whole, t2 = sub([n for n, _ in storeys], filters={})
+                wdesc = f"all {it.kind}s" + (f" on '{storeys[0][0]}'" if storeys else "")
+            elif storeys:  # "share of the model's doors on storey S"
+                part, t1 = sub([n for n, _ in storeys])
+                whole, t2 = sub([], scope="model")
+                wdesc = f"the whole model"
+            else:
+                return None
+            if part.value is None or whole.value in (None, 0) or isinstance(part.value, str) or isinstance(whole.value, str):
+                return None
+            pct = float(part.value) / float(whole.value) * 100.0
+            return done(pct, "%", [part, whole], [f"part {part.value} {part.unit}", f"whole ({wdesc}) {whole.value} {whole.unit}",
+                                                  f"share = {part.value} / {whole.value} x 100 = {pct:.2f}%"],
+                        f"share = part / {wdesc} x 100")
+
+        if it.mod == "threshold":
+            op, thr = it.threshold
+            if it.asked_unit == "ft2":
+                thr /= FT2_PER_M2
+            elif it.asked_unit == "ft":
+                thr /= FT_PER_M
+            cmp = {"gt": lambda v: v > thr, "ge": lambda v: v >= thr, "lt": lambda v: v < thr, "le": lambda v: v <= thr}[op]
+            sn = [n for n, _ in storeys]
+            if others:
+                parts = [(n, *sub([n] + sn)) for n in others]
+            else:  # every room of the storey
+                if not storeys or it.kind != "space":
+                    return None
+                els = idx.in_storey(storeys[0][1].guid, "IfcSpace")
+                parts = []
+                for e in els:
+                    v, _ = self._floor_area(e, it, [])
+                    parts.append((e.long_name or e.name, Answer(value=v, unit="m2", confidence=0.97,
+                                                                evidence=[self._ev(model, e, f"{e.long_name or e.name} {v or 0:.2f} m²")]), []))
+            if any(a.value is None or isinstance(a.value, str) for _, a, _ in parts):
+                return None
+            unit_si = {"area": "m2", "volume": "m3", "length": "m"}[it.metric]
+            # sub-answers came back in the asked unit; compare in SI
+            def si(a: Answer) -> float:
+                v = float(a.value)
+                return v / FT2_PER_M2 if a.unit == "ft2" else v / FT_PER_M if a.unit == "ft" else v
+            hit = [(n, si(a)) for n, a, _ in parts if cmp(si(a))]
+            sym = {"gt": ">", "ge": ">=", "lt": "<", "le": "<="}[op]
+            steps = [f"{n}: {si(a):.2f} {unit_si} {'✓' if cmp(si(a)) else '-'}" for n, a, _ in parts]
+            ans = done(len(hit), "count", [a for _, a, _ in parts], steps + [f"{len(hit)} of {len(parts)} have {sym} {thr:g} {unit_si}"],
+                       f"count of the {len(parts)} {'named ' if others else ''}rooms with {it.metric} {sym} {thr:g} {unit_si}")
+            ans.evidence = [ev for (n, a, _) in parts if cmp(si(a)) for ev in a.evidence] or ans.evidence
+            return ans
+        return None
+
+    # ------------------------------------------------------------------------------------------------
+    def _llm_fallback(self, model: str, idx: IfcIndex, question: str, it: Intent, refusal: Answer,
+                      storey: Storey | None = None, extra: str | None = None) -> Answer:
         """Free-text questions the rules can't answer: local LLM over a deterministic fact card of the model."""
         from stoa.solvers.ifc.factcard import answer_free_text
 
-        text, card, info = answer_free_text(idx, question, it)
+        if storey is None:
+            i, _ = storey_mention(question, [s.name for s in idx.storeys])
+            storey = idx.storeys[i] if i is not None else None
+        text, card, info = answer_free_text(idx, question, it, storey=storey, extra=extra)
         trace = list(refusal.trace) + ["rules could not answer; asking the local LLM with a fact card of the model "
                                        f"({len(card.splitlines())} lines, {len(card)} chars)"]
         if text is None:
@@ -686,7 +886,9 @@ class IfcSolver(BaseSolver):
         footprint's min rotated rectangle (62%), side area = volume / footprint width (82%)."""
         g = e.geo
         if g is None:
-            return None
+            # walls modelled with an 'Axis' curve only (no Body, e.g. 225/307 tuwien walls): length = axis length
+            # (within 2% of Qto Length on 94/223 of them); no area or volume without a body
+            return e.axis_length if (qkey == "length" and getattr(e, "axis_length", None)) else None
         if qkey == "volume":
             return g.volume
         # NOTE: the wall 'Axis' representation length (index.axis_length) matches Qto Length on only 44% of

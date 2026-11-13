@@ -7,6 +7,7 @@ Handled shapes (any language the intent parser knows, English phrasing rules her
   argmax   "Which of the rooms 'A', 'B' and 'C' on 'L' has the largest net floor area?" (text answer)
   max/min  "net floor area of the largest of the rooms 'A', 'B' and 'C' on 'L'"
   exists   "Does this apartment have a sauna?" -> count > 0 -> yes/no
+  atleast  "Does this floor plan show at least two WC seats?" -> count >= 2 -> yes/no
 
 `decompose(source, question)` -> Plan(op, subs=[sub-question strings], labels) or None. The pipeline answers each
 sub-question with the normal cascade and combines the values; evidence is the union of the parts.
@@ -29,6 +30,10 @@ _WHICH_LARGEST = re.compile(r"\bwhich\b.*\b(largest|biggest|smallest|greatest)\b
 _OF_LARGEST = re.compile(r"\bof the (largest|biggest|smallest) of\b", re.I)
 _EXISTS = re.compile(r"^\s*(does|do|is there|are there|has|have|onko|gibt es|y a-t-il|c'è|har)\b", re.I)
 _ROOM_NOS = re.compile(r"\brooms?\s+([A-Z]{0,2}\d+(?:\.\d+)+)(?:\s*\((['‘«„\"][^)]*)\))?", re.I)
+_AT_LEAST = re.compile(r"\b(at least|more than|over|mindestens|au moins|v[äa]hint[äa][äa]n)\s+(\d+|one|two|three|four|five|"
+                       r"six|zwei|drei|deux|trois|kaksi|kolme)\b", re.I)
+_NUMWORD = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "zwei": 2, "drei": 3, "deux": 2, "trois": 3,
+            "kaksi": 2, "kolme": 3}
 _APTS = re.compile(r"\bapartments?\s+([A-Z])\s*(?:,|and|&|\+)\s*([A-Z])\b", re.I)
 
 
@@ -38,7 +43,7 @@ COMPONENTS = {"shower_bathtub": ["shower", "bathtub"]}
 
 @dataclass
 class Plan:
-    op: str  # sum | diff | argmax | argmin | max | min | exists
+    op: str  # sum | diff | argmax | argmin | max | min | exists | atleast (note = n)
     subs: list[str]
     labels: list[str] = field(default_factory=list)
     unit: str | None = None
@@ -60,7 +65,7 @@ def _targets_in(text: str) -> list[tuple[int, str]]:
 
 def _sub_for(source: str, target: str, base: Intent) -> str | None:
     it = Intent(task=base.task, target=target, scope=base.scope, unit=base.unit,
-                filters={k: v for k, v in base.filters.items() if k in ("storey", "model")}, lang="en")
+                filters={k: v for k, v in base.filters.items() if k in ("storey", "model", "apartment")}, lang="en")
     return canonical(source, it)
 
 
@@ -71,6 +76,8 @@ def decompose(source: str, question: str) -> Plan | None:
     if known_template(q):  # a question shape seen in train is atomic: solve it directly
         return None
     base = parse(q)
+    if base.filters.get("apartment") and base.task == "count":
+        return None  # "doors and windows of apartment C": dxf scopes apartments itself; else the agent asks per part
     qn = _QUOTED.sub(" <q> ", q)
     quoted = [next(g for g in m.groups() if g).strip() for m in _QUOTED.finditer(q)]
 
@@ -79,7 +86,13 @@ def decompose(source: str, question: str) -> Plan | None:
         ts = [t for _, t in _targets_in(_NEGATION.sub(" ", qn)) if t not in ("apartment", "room")]
         if ts:
             sub = _sub_for(source, ts[0], Intent("count", ts[0], "drawing", "count"))
-            if sub:
+            mt = _AT_LEAST.search(qn)
+            if sub and mt:  # "at least two WC seats?" / "more than one bathroom?" -> count >= n
+                n = _NUMWORD.get(mt.group(2).lower(), None) if not mt.group(2).isdigit() else int(mt.group(2))
+                if n is not None:
+                    n = n + 1 if mt.group(1).lower().startswith(("more", "over")) else n
+                    return Plan("atleast", [sub], [ts[0]], None, str(n))
+            elif sub:
                 return Plan("exists", [sub], [ts[0]], None, f"is there at least one {ts[0]}?")
 
     # diff of counts: "how many more doors than windows"
@@ -175,6 +188,10 @@ def combine(plan: Plan, values: list) -> tuple[object, str]:
     if plan.op == "exists":
         n = nums[0]
         return ("yes" if (n or 0) > 0 else "no"), f"{lab[0]} count = {values[0]} → {'yes' if (n or 0) > 0 else 'no'}"
+    if plan.op == "atleast":
+        n, k = nums[0], int(plan.note)
+        yes = n is not None and n >= k
+        return ("yes" if yes else "no"), f"{lab[0]} count = {values[0]} {'≥' if yes else '<'} {k} → {'yes' if yes else 'no'}"
     if any(n is None for n in nums):
         return None, "a part has no numeric value"
     if plan.op == "sum":

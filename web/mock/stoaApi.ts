@@ -178,7 +178,72 @@ function kg(rel: string) {
   return kgCache.get(rel)!;
 }
 
-type Fixture = { path: string; question: string; answer: Record<string, unknown>; recorded_at?: string };
+/**
+ * Benchmark summary for the "How well it works" view: the latest full runs of the integrated pipeline and two
+ * baselines (just ask the VLM; the per-template prior) on dev and on the hard (generality) split, read from
+ * stoa.eval's leaderboard (STOA_LEADERBOARD, default $JUNCTION_SHARED/results/leaderboard.jsonl). Without it,
+ * the committed snapshot fixtures/bench.json (refresh: curl localhost:5173/api/bench > web/fixtures/bench.json).
+ */
+const LEADERBOARD = process.env.STOA_LEADERBOARD
+  ?? path.join(process.env.JUNCTION_SHARED ?? "/home/fangy4/work/projects/junction-shared", "results/leaderboard.jsonl");
+const BENCH_SNAPSHOT = path.resolve(__dirname, "../fixtures/bench.json");
+type Bucket = { n: number; scored_n?: number; correct?: number; accuracy?: number | null };
+type LbRow = {
+  time: string; run_id: string; solver: string; split: string; n: number; commit?: string; agent?: string; note?: string;
+  limit?: number | null; sources?: unknown; types?: unknown; grep?: unknown; handled_only?: boolean;
+  metrics: Record<string, unknown> & { by_bucket?: Record<string, Bucket>; errors?: number };
+};
+function bench() {
+  if (!fs.existsSync(LEADERBOARD))
+    return fs.existsSync(BENCH_SNAPSHOT) ? { ...JSON.parse(fs.readFileSync(BENCH_SNAPSHOT, "utf8")), from: "snapshot" } : null;
+  const rows = fs.readFileSync(LEADERBOARD, "utf8").split("\n").filter(Boolean).flatMap((l) => {
+    try {
+      return [JSON.parse(l) as LbRow];
+    } catch {
+      return [];
+    }
+  });
+  const full = (r: LbRow) => !r.limit && !r.sources && !r.types && !r.grep && !r.handled_only && !r.metrics.errors;
+  // The pipeline row comes from S0's integration runs on `night` when there is one (agents also log runs of
+  // uncommitted work); baselines take the latest full run of anyone.
+  const pick = (solver: string, split: string, minN: number) => {
+    const ok = rows.filter((r) => r.solver === solver && r.split === split && r.n >= minN && full(r));
+    return (solver === "pipeline" ? ok.filter((r) => r.agent === "S0").at(-1) : undefined) ?? ok.at(-1);
+  };
+  const summary = (r: LbRow | undefined) => {
+    if (!r) return null;
+    const m = r.metrics;
+    const bySource: Record<string, { n: number; correct: number; accuracy: number }> = {};
+    for (const [k, b] of Object.entries(m.by_bucket ?? {})) {
+      const scored = b.scored_n ?? b.n;
+      if (!scored) continue; // text-only buckets are not scored
+      const src = k.split("/")[0];
+      const e = (bySource[src] ??= { n: 0, correct: 0, accuracy: 0 });
+      e.n += scored;
+      e.correct += b.correct ?? Math.round((b.accuracy ?? 0) * scored);
+      e.accuracy = e.correct / e.n;
+    }
+    const keep = ["weighted_acc", "accuracy", "macro_accuracy", "usd_per_1k_q", "latency_p50_s", "latency_p95_s",
+      "evidence_rate", "refusal_rate", "by_tier", "by_kind", "calibration", "cost_mean"];
+    return {
+      run_id: r.run_id, solver: r.solver, split: r.split, time: r.time, commit: r.commit, agent: r.agent, note: r.note, n: r.n,
+      ...Object.fromEntries(keep.map((k) => [k, m[k] ?? null])), by_source: bySource,
+    };
+  };
+  const out: Record<string, Record<string, unknown>> = {};
+  for (const [split, minN] of [["dev", 1500], ["hard", 500]] as const)
+    out[split] = { pipeline: summary(pick("pipeline", split, minN)), vlm_direct: summary(pick("vlm_direct", split, minN)),
+      prior: summary(pick("prior", split, minN)) };
+  // novel question kinds (operators no template covers): hard2 = developed on; hard2q = clean held-out rewording,
+  // reported as an aggregate only (D10)
+  for (const split of ["hard2", "hard2q"]) {
+    const r = rows.filter((x) => x.solver === "pipeline" && x.split === split && x.n >= 200 && full(x));
+    out[split] = { pipeline: summary(r.filter((x) => x.agent === "S0" || x.agent === "F").at(-1) ?? r.at(-1)) };
+  }
+  return { from: "leaderboard", generated: new Date().toISOString(), runs: out };
+}
+
+type Fixture = { path: string; question: string; answer: Record<string, unknown>; recorded_at?: string; solver?: string; solver_args?: Record<string, unknown> };
 const RECORDED = path.resolve(__dirname, "../fixtures/recorded.json");
 /** Recorded live-API answers (fixtures/record.py) first, then the hand-computed fixtures. */
 function fixtures(): Fixture[] {
@@ -193,8 +258,13 @@ function fixtures(): Fixture[] {
 }
 const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
 
-function mockAsk(body: { path: string; question: string; solver?: string }) {
-  const fx = fixtures().find((f) => f.path === body.path && norm(f.question) === norm(body.question));
+const solverKey = (solver?: string, args?: Record<string, unknown>) =>
+  `${solver && solver !== "pipeline" ? solver : "pipeline"} ${JSON.stringify(Object.fromEntries(Object.entries(args ?? {}).sort()))}`;
+
+function mockAsk(body: { path: string; question: string; solver?: string; solver_args?: Record<string, unknown> }) {
+  const want = solverKey(body.solver, body.solver_args);
+  const fx = fixtures().find((f) => f.path === body.path && norm(f.question) === norm(body.question)
+    && solverKey(f.solver, f.solver_args) === want);
   if (fx) return { ...fx.answer, trace: [...((fx.answer.trace as string[]) ?? []),
     fx.recorded_at ? `(mock API: replay of the live answer recorded ${fx.recorded_at})` : "(mock API: precomputed fixture)"] };
   return {
@@ -255,7 +325,7 @@ async function handle(req: Connect.IncomingMessage, res: http.ServerResponse, ne
       return;
     }
     const body = req.method === "POST" ? await readBody(req) : Buffer.alloc(0);
-    const live = await forward(req, route + url.search, body);
+    const live = route === "/bench" ? null : await forward(req, route + url.search, body);
     const optional = ["/questions", "/kg", "/files", "/health"].includes(route);
     if (live && route === "/kg" && live.status === 200) {
       // stoa.kg links only siblings for some sources (opening_design, cubicasa): add the drawing set by folder.
@@ -299,6 +369,10 @@ async function handle(req: Connect.IncomingMessage, res: http.ServerResponse, ne
         .map((q) => ({ question: q.question, type: q.type, unit: q.unit, has_fixture: false }));
       const out = [...fx, ...qs].filter((q) => !seen.has(norm(q.question)) && seen.add(norm(q.question))).slice(0, 40);
       return send(res, 200, { questions: out });
+    }
+    if (route === "/bench") {
+      const b = bench();
+      return b ? send(res, 200, b, "kg") : send(res, 404, { detail: "no leaderboard and no fixtures/bench.json" });
     }
     if (route === "/kg") {
       const rel = url.searchParams.get("path") ?? "";

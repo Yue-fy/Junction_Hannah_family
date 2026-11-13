@@ -38,11 +38,21 @@ Tools (one per step):
 - ask: input = ONE simple question in English that the team's solvers answer reliably (see KNOWN QUESTIONS).
   Split a complex question into such simple questions, one per step.
 - table: input = "". Shows the extracted data table of this drawing (rooms, areas, labels, apartments, storeys).
+- rows: input = a condition on the room table (swiss drawings), e.g. "area_m2 > 10 and numbered and not outdoor" or
+  "apartment == 'B' and name == 'Bad'". Columns: number, name, area_m2, apartment, outdoor, numbered, n_doors,
+  n_windows, n_toilets, n_washbasins, n_bathtubs, n_showers. Returns how many rooms match and their area sum.
 - find_text: input = a word or phrase to search in the drawing's text.
 - look: input = a short question for a vision model looking at the drawing image (use only if nothing else works).
 - calc: input = an arithmetic expression using numbers from earlier tool results, e.g. "(12.5+8.25)/2".
-- answer: input = the final value only (a number, or a short text); set "unit" (count, m2, m3, m, %, or "").
+  Comparisons give 1 or 0, so "(38.65 > 31) + (12.07 > 31)" counts how many values are above 31.
+- answer: input = the final value only (a number, or a short text such as "apartment B", the storey name, "yes"
+  or "no" when the question asks which one / yes or no); set "unit" (count, m2, m3, m, ft2, ft, %, or "").
 Rules: never invent numbers; every number in calc must come from a tool result. Prefer ask over look.
+For "which ... more/larger" questions ask the value for each candidate, then answer with the candidate's name.
+Use table to look up single values (one room's area, its apartment) and to see which rooms exist: never ask about a
+room number you have not seen in the table. To count or sum rooms by a condition ("larger than 10 m²", "not in
+apartment A"), use rows. For TOTALS (all rooms of a floor, an apartment, all rooms labelled X,
+a storey) ask the KNOWN question instead of adding table rows yourself.
 Reply with JSON only: {"thought": "<max 20 words>", "tool": "<tool>", "input": "<string>", "unit": "<unit or empty>"}"""
 
 KNOWN = {
@@ -82,8 +92,14 @@ KNOWN = {
 
 _BIN = {ast.Add: operator.add, ast.Sub: operator.sub, ast.Mult: operator.mul, ast.Div: operator.truediv,
         ast.Pow: operator.pow, ast.Mod: operator.mod, ast.FloorDiv: operator.floordiv}
+_CMP = {ast.Gt: operator.gt, ast.GtE: operator.ge, ast.Lt: operator.lt, ast.LtE: operator.le, ast.Eq: operator.eq,
+        ast.NotEq: operator.ne}
 _FUN = {"min": min, "max": max, "round": round, "abs": abs, "sum": lambda *a: sum(a[0] if len(a) == 1 else a),
         "sqrt": math.sqrt}
+
+
+# numbers a calculation may use without a tool result: small factors, percent, unit conversions (ft, ft²)
+_CONST = {0.0, 1.0, 2.0, 3.0, 4.0, 10.0, 100.0, 1000.0, 0.3048, 3.28084, 3.2808, 10.7639, 10.764, 0.092903, 0.0929}
 
 
 def calc(expr: str) -> float:
@@ -102,6 +118,16 @@ def calc(expr: str) -> float:
             return -ev(n.operand) if isinstance(n.op, ast.USub) else ev(n.operand)
         if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id in _FUN:
             return _FUN[n.func.id](*[ev(a) for a in n.args])
+        if isinstance(n, ast.Compare) and all(type(o) in _CMP for o in n.ops):
+            left, ok = ev(n.left), True
+            for o, c in zip(n.ops, n.comparators):
+                right = ev(c)
+                ok = ok and _CMP[type(o)](left, right)
+                left = right
+            return 1.0 if ok else 0.0
+        if isinstance(n, ast.BoolOp):
+            vals = [bool(ev(v)) for v in n.values]
+            return 1.0 if (all(vals) if isinstance(n.op, ast.And) else any(vals)) else 0.0
         if isinstance(n, (ast.List, ast.Tuple)):
             return [ev(e) for e in n.elts]
         raise ValueError(f"not allowed: {ast.dump(n)[:60]}")
@@ -162,6 +188,46 @@ class Agent:
                 return fact_card(load_index(m), None, max_lines=90)[:4000]
         return "no structured table for this drawing (use ask or look)"
 
+    def _swiss_rooms(self, path: str):
+        dxf = siblings(path).get(".dxf") or (path if path.endswith(".dxf") else None)
+        if source_of(path) != "swiss_dwellings" or not dxf:
+            return None
+        from stoa.solvers.vector import tableqa
+        from stoa.solvers.vector.floor import load_floor
+
+        df = tableqa.floor_tables(load_floor(str(abspath(dxf))))["rooms"].copy()
+        df["numbered"] = df["number"].fillna("").astype(str).str.len() > 0
+        return df
+
+    _COND_OK = re.compile(r"[\w\s.'\"<>=!()&|+\-*/,äöüéèàÄÖÜ²]+")
+
+    def _rows(self, path: str, cond: str, results) -> str:
+        """Deterministic filter over the swiss room table (no attribute access, no calls)."""
+        df = self._swiss_rooms(path)
+        if df is None:
+            return "error: rows works on swiss drawings with a DXF; use table + calc"
+        c = cond.strip().strip("`")
+        if not self._COND_OK.fullmatch(c) or "__" in c or re.search(r"[A-Za-z_)\]]\s*\.", c) or re.search(r"\w\s*\(", c):
+            return "error: use a plain condition like \"area_m2 > 10 and numbered and not outdoor\""
+        c = re.sub(r"\bAND\b", "and", re.sub(r"\bOR\b", "or", c))
+        sub = df.query(c, engine="python")
+        n, tot = len(sub), round(float(sub["area_m2"].sum()), 2)
+        ev: list[Evidence] = []
+        if self.ask_fn is not None:  # the matched rooms' outlines on the drawing (deterministic asks, no LLM)
+            for r in sub.head(6).itertuples():
+                if not r.number:
+                    continue
+                try:
+                    a = self.ask_fn(path, f"What is the net floor area of room {r.number} ('{r.name}') in m²?")
+                except Exception:  # noqa: BLE001
+                    continue
+                ev += [e.model_copy(update={"note": f"room {r.number} '{r.name}' {r.area_m2} m² matches"})
+                       for e in (a.evidence or [])[:1]]
+        results.append((n, 0.9, ev, f"rows: {c[:70]} (count)"))
+        results.append((tot, 0.9, ev, f"rows: {c[:70]} (area sum)"))
+        listed = ", ".join(f"{r.number or '-'} {r.name} {r.area_m2}" for r in sub.head(12).itertuples())
+        return f"{n} room(s) match, area_m2 sum {tot}: {listed}" + (" …" if n > 12 else "")
+
     def _pdf(self, path: str) -> str | None:
         if path.lower().endswith(".pdf"):
             return path
@@ -211,8 +277,8 @@ class Agent:
         msgs = [{"role": "system", "content": SYSTEM}, {"role": "user", "content": ctx}]
         schema = {"type": "object", "properties": {
             "thought": {"type": "string", "maxLength": 200},
-            "tool": {"type": "string", "enum": ["ask", "table", "find_text", "look", "calc", "answer"]},
-            "input": {"type": "string", "maxLength": 400}, "unit": {"type": "string", "maxLength": 12}},
+            "tool": {"type": "string", "enum": ["ask", "table", "rows", "find_text", "look", "calc", "answer"]},
+            "input": {"type": "string", "maxLength": 1200}, "unit": {"type": "string", "maxLength": 12}},
             "required": ["thought", "tool", "input"]}
         trace: list[str] = []
         evidence: list[Evidence] = []
@@ -228,7 +294,7 @@ class Agent:
             if force:
                 msgs.append({"role": "user", "content": "Last step: call answer now with your best value."})
             try:
-                r = llm.chat(msgs, backend=self.backend, max_tokens=220, temperature=0.0, json_schema=schema)
+                r = llm.chat(msgs, backend=self.backend, max_tokens=500, temperature=0.0, json_schema=schema)
             except Exception as e:  # noqa: BLE001
                 trace.append(f"agent: LLM error {type(e).__name__}")
                 break
@@ -254,7 +320,34 @@ class Agent:
                 if n_bad >= 3:
                     break
             msgs.append({"role": "user", "content": f"RESULT of {tool}: {obs[:3600]}"})
-        return self._finish(final, unit, results, evidence, trace, assumptions, missing, cost, t0, question)
+        ans = self._finish(final, unit, results, evidence, trace, assumptions, missing, cost, t0, question)
+        if src == "swiss_dwellings" and self.ask_fn is not None and ans.value is not None and ans.confidence > 0.25:
+            try:
+                self._table_evidence(path, results, ans)
+            except Exception:  # noqa: BLE001 - evidence is a bonus, never a failure
+                pass
+        return ans
+
+    def _table_evidence(self, path: str, results, ans: Answer) -> None:
+        """Rooms whose table area the calculation used -> their drawn outline (asked to the deterministic solver)."""
+        tables = [str(v) for v, c, _, _ in results if c == -2.0]
+        exprs = " ".join(w[6:] for v, c, _, w in results if c == -1.0)
+        if not tables or not exprs:
+            return
+        nums = {float(t) for t in re.findall(r"\d+\.\d+", exprs)}
+        rows = []
+        for line in tables[-1].splitlines():  # "number,name,area_m2,apartment,outdoor"
+            parts = line.split(",")
+            if len(parts) >= 3 and re.fullmatch(r"\d+(?:\.\d+)*", parts[0] or "x") and _num(parts[2]) is not None:
+                rows.append((parts[0], parts[1], _num(parts[2])))
+        hit = [(no, name) for no, name, a in rows if a in nums][:6]
+        for no, name in hit:
+            a = self.ask_fn(path, f"What is the net floor area of room {no} ('{name}') in m²?" if name
+                            else f"What is the net floor area of room {no} in m²?")
+            for e in (a.evidence or [])[:1]:
+                ans.evidence.append(e.model_copy(update={"note": f"room {no} '{name}' used in the calculation"}))
+        if hit:
+            ans.trace.append("evidence: outlines of the rooms used — " + ", ".join(f"{no}" for no, _ in hit))
 
     def _run(self, tool: str, inp: str, path: str, evidence, results, cost_box) -> str:
         try:
@@ -269,7 +362,11 @@ class Agent:
                 results.append((a.value, a.confidence, list(a.evidence), f"ask: {inp[:80]}"))
                 return f"{_fmt(a.value)} {a.unit or ''} (confidence {a.confidence:.2f}, by {a.solver})"
             if tool == "table":
-                return self._table(path)
+                t = self._table(path)
+                results.append((t, -2.0, [], "table"))  # conf -2: data the calc numbers may come from, see _grounding
+                return t
+            if tool == "rows":
+                return self._rows(path, inp, results)
             if tool == "find_text":
                 return self._find_text(path, inp, evidence)
             if tool == "look":
@@ -278,45 +375,95 @@ class Agent:
                 cost_box[0] = Cost.model_validate(c) if isinstance(c, dict) else (c or Cost())
                 if a.value is None:
                     return "no answer"
-                results.append((a.value, min(a.confidence, 0.3), list(a.evidence), f"look: {inp[:80]}"))
-                return f"{_fmt(a.value)} {a.unit or ''} (vision model, unverified)"
+                # vlm_direct's confidence is calibrated on TRAIN (R2: answer-digit logprobs; conf >= 0.8 -> 89% right)
+                results.append((a.value, min(a.confidence, 0.9), list(a.evidence), f"look: {inp[:80]}"))
+                return f"{_fmt(a.value)} {a.unit or ''} (vision model, confidence {a.confidence:.2f})"
             if tool == "calc":
                 v = calc(inp)
-                results.append((v, -1.0, [], f"calc: {inp[:80]}"))  # conf -1: derived, see _finish
+                results.append((v, -1.0, [], f"calc: {inp}"))  # conf -1: derived, see _finish
                 return _fmt(round(v, 4))
             return f"error: unknown tool {tool}"
         except Exception as e:  # noqa: BLE001
             return f"error: {type(e).__name__}: {str(e)[:100]}"
 
+    @staticmethod
+    def _grounding(expr: str, results, question: str):
+        """Trace each number of a calc expression to an ask result, the data table, an earlier calc, the question
+        itself (thresholds, room numbers) or a unit constant. -> (asks used, table used?, ungrounded numbers)."""
+        num = re.compile(r"\d+(?:\.\d+)?")
+        in_q = {float(t) for t in num.findall(question)}
+        table = {float(t) for v, c, _, _ in results if c == -2.0 for t in num.findall(str(v))}
+        asks = [r for r in results if r[1] >= 0 and _num(r[0]) is not None]
+        calcs = [r for r in results if r[1] == -1.0]
+        used: dict[int, tuple] = {}
+        state = {"table": False}
+        bad: list[str] = []
+
+        def close(a, b, rel):
+            return abs(a - b) <= rel * max(abs(b), 1e-9) + 1e-9
+
+        def visit(e: str, depth: int):
+            for t in num.findall(e):
+                y = float(t)
+                hit = next((i for i, a in enumerate(asks) if close(y, _num(a[0]), 0.005)), None)
+                if hit is not None:
+                    used[hit] = asks[hit]
+                elif y in table:
+                    state["table"] = True
+                    state["n_table"] = state.get("n_table", 0) + 1
+                elif y in in_q or y in _CONST:
+                    pass
+                else:
+                    prev = next((c for c in calcs if close(y, c[0], 0.0005) and c[3][6:] != e), None)
+                    if prev is not None and depth < 4:
+                        visit(prev[3][6:], depth + 1)
+                    else:
+                        bad.append(t)
+
+        visit(expr, 0)
+        # adding many table rows by hand is where the model slips (wrong rows, a missed room): less sure
+        return list(used.values()), (state.get("n_table", 0) if state["table"] else 0), bad
+
     def _finish(self, final, unit, results, evidence, trace, assumptions, missing, cost, t0, question) -> Answer:
         value = final
         x = _num(final)
-        if x is None and final is not None:
+        numeric_unit = (unit or "").lower() in ("count", "m2", "m²", "m3", "m³", "m", "ft2", "ft²", "ft", "ft3", "%")
+        mu = re.fullmatch(r"\s*(-?\d+(?:\.\d+)?)\s*(m²|m2|m³|m3|m|ft²|ft2|ft|%|doors?|windows?|rooms?)\s*", str(final or ""))
+        if x is None and mu and not unit:  # "14.11 m²" with no unit field
+            x, unit = float(mu.group(1)), {"m²": "m2", "m³": "m3", "ft²": "ft2"}.get(mu.group(2), mu.group(2))
+            unit = "count" if unit.rstrip("s") in ("door", "window", "room") else unit
+        if x is None and final is not None and numeric_unit:  # "12.5 m2" -> 12.5; "1.OG" (a storey name) stays text
             m = re.search(r"-?\d+(?:\.\d+)?", str(final))
             if m and len(str(final)) < 24:
                 x = float(m.group(0))
         if x is not None:
-            value = int(round(x)) if unit == "count" else round(x, 4)
+            value = int(round(x)) if (unit == "count" or (not unit and x == int(x))) else round(x, 4)
         # confidence: which tool results back this value?
         direct = [(v, c, e, w) for v, c, e, w in results if c >= 0 and _num(v) is not None and x is not None
                   and abs(_num(v) - x) <= 0.005 * max(abs(x), 1)]
-        calcs = [(v, c, e, w) for v, c, e, w in results if c < 0 and x is not None and abs(v - x) <= 0.005 * max(abs(x), 1)]
+        calcs = [(v, c, e, w) for v, c, e, w in results if c == -1.0 and x is not None
+                 and abs(v - x) <= 0.005 * max(abs(x), 1)]
         asked = [(v, c, e, w) for v, c, e, w in results if c >= 0]
-        if calcs and asked:  # the final value was computed: every ask feeds it
-            conf = 0.9
-            for _, c, _, _ in asked:
-                conf *= max(0.05, c)
-            used = asked
-            assumptions.append("value computed from the tool results above (" + calcs[-1][3] + ")")
+        if calcs:  # the final value was computed: trace every number of the calc back to a tool result
+            used, from_table, bad = self._grounding(calcs[-1][3][6:], results, question)
+            if not bad:
+                conf = 0.9 * (1.0 if not from_table else 0.95 if from_table <= 2 else 0.6)
+                for _, c, _, _ in used:
+                    conf *= max(0.05, c)
+                assumptions.append("value computed in code from the tool results above (" + calcs[-1][3][:100] + ")")
+            else:
+                conf, used = 0.25, []
+                missing.append("the calculation uses numbers no tool returned: " + ", ".join(bad[:5]))
         elif direct:
             conf = max(c for _, c, _, _ in direct)
             used = direct[:1]
-        elif False:
-            conf = 0.9
+        elif x is None and value is not None and str(value).strip() and len(asked) >= 2 and len(str(value)) <= 60:
+            # a text answer chosen by comparing values ("which storey has more doors?" -> '0'): backed by the asks
+            conf = 0.85
             for _, c, _, _ in asked:
                 conf *= max(0.05, c)
             used = asked
-            assumptions.append("value computed from the tool results above (" + calcs[-1][3] + ")")
+            assumptions.append("answer chosen by comparing the tool results above")
         else:
             conf = 0.25
             used = []

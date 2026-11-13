@@ -79,6 +79,49 @@ def _rooms_with_name(fm: FloorModel, name) -> list[Room]:
     return [r for r in fm.rooms if (r.name or "").lower() in low]
 
 
+OPCHECK_KINDS = {
+    "A": "one value, or the total/sum of the named things", "B": "difference between two things",
+    "C": "ratio / how many times", "D": "percentage or share of a whole", "E": "average",
+    "F": "how many items are above/below a threshold", "G": "a total excluding some part (e.g. not in apartment X)",
+    "H": "which of the named things is larger/smaller (a name)", "I": "largest/smallest of a set", "J": "yes/no",
+    "K": "something else",
+}
+OPCHECK_PROMPT = ("Classify the operation this floor-plan question asks for. Reply with ONE capital letter only.\n"
+                  + "\n".join(f"{k}: {v}" for k, v in OPCHECK_KINDS.items()) + "\nQuestion: {q}\nLetter:")
+
+
+def _known_template(question: str) -> bool:
+    try:
+        from stoa.router.prior import known_template
+        return known_template(question)
+    except Exception:  # noqa: BLE001 - no train split available: treat as unseen
+        return False
+
+
+def _opcheck(question: str, backend: str = "local") -> str | None:
+    """One short LLM call: which operation does the question ask (letter A-K)? None if the LLM is unavailable."""
+    try:
+        from stoa.llm import chat
+        r = chat(OPCHECK_PROMPT.replace("{q}", question), backend=backend, max_tokens=3, temperature=0.0)
+    except Exception:  # noqa: BLE001
+        return None
+    m = re.search(r"\b([A-K])\b", (r.text or "").strip().upper())
+    return m.group(1) if m else None
+
+
+BEDROOM_FALLBACK = ["Zimmer", "Pièce", "Stanza"]
+
+
+def _bedroom_fallback(fm: FloorModel, t: qparse.Term, names: list[str]) -> tuple[list[str], str | None]:
+    """Many Swiss plans label bedrooms just 'Zimmer'/'Pièce'/'Stanza' (no 'Schlafzimmer'): use those, and say so."""
+    if not t.note.startswith("concept bedroom") or _rooms_with_name(fm, names):
+        return names, None
+    if _rooms_with_name(fm, BEDROOM_FALLBACK):
+        return BEDROOM_FALLBACK, ("no room is labelled as a bedroom (Schlafzimmer/Chambre à coucher/Camera da letto); "
+                                  "counted the rooms labelled 'Zimmer'/'Pièce'/'Stanza' as bedrooms")
+    return names, None
+
+
 def _in_scope(fm: FloorModel, kind: str, bbox, scope: list[str] | None) -> bool:
     """Is an object inside one of the scoped apartments? Fixtures: centre in the UNIT_OUTLINE; doors/windows sit
     in walls, so they count when they touch the outline buffered by 0.3 m (an entrance door counts for the flat)."""
@@ -134,10 +177,20 @@ def _eval_term(fm: FloorModel, t: qparse.Term, qr: qparse.Query) -> _Part:
         return _Part(n, conf, [(it.bbox, it.note) for it in items], tr, asm)
     if k == "count_label":
         if t.arg == "<numbered>":
+            if t.scope:  # "how many rooms does apartment B have": numbered indoor rooms inside its outline
+                rooms = [r for r in fm.rooms if r.number and r.unit in t.scope and not r.outdoor and not r.shaft]
+                out = [r for r in fm.rooms if r.number and r.unit in t.scope and (r.outdoor or r.shaft)]
+                named = [r for r in rooms if r.name]
+                return _Part(len(rooms), 0.6, [(r.bbox, _room_note(r)) for r in rooms],
+                             [f"numbered indoor rooms in apartment(s) {t.scope} = {len(rooms)}"
+                              + (f" (not counted: {', '.join(r.label() for r in out)})" if out else "")],
+                             [f"'rooms' read as every numbered indoor room of apartment(s) {', '.join(t.scope)} (bath, "
+                              f"corridor and storage included; balconies excluded); {len(named)} of them carry a name"])
             rooms = [r for r in fm.rooms if r.number]
             return _Part(len(rooms), 0.5, [(r.bbox, _room_note(r)) for r in rooms],
                          [f"rooms with a number = {len(rooms)}"], ["'rooms' read as every numbered room polygon"])
         names = t.arg if isinstance(t.arg, list) else [t.arg]
+        names, fb = _bedroom_fallback(fm, t, names)
         texts = [tx for tx in fm.texts if tx.text in names] or [tx for tx in fm.texts if tx.text.lower() in {n.lower() for n in names}]
         if t.scope:
             in_rooms = {id(tx): r for r in fm.rooms for tx in r.texts}
@@ -148,6 +201,8 @@ def _eval_term(fm: FloorModel, t: qparse.Term, qr: qparse.Query) -> _Part:
             boxes.append((room.bbox if room else tx.bbox, f"'{tx.text}'" + (f" room {room.number}" if room and room.number else "")))
         conf = RULE_CONF["count_label"] * (0.7 if t.note.startswith("concept") else 1.0)
         asm = [f"{t.note}: labels {names}"] if t.note else []
+        if fb:
+            conf, asm = 0.5, asm + [fb]
         return _Part(len(texts), conf, boxes, [f"rooms labelled {names} = {len(texts)} ROOM_TEXT entries"], asm)
     if k == "area_room":
         rooms = [r for r in fm.rooms if r.number == t.arg]
@@ -161,12 +216,55 @@ def _eval_term(fm: FloorModel, t: qparse.Term, qr: qparse.Query) -> _Part:
         conf = RULE_CONF["area_room"] if r.printed_area is None else 0.995
         return _Part(val, conf, [(r.bbox, _room_note(r))], [f"room {r.label()} polygon area {r.area:.3f} m²", *notes],
                      ["net floor area = area of the room's ROOM_OUTLINE polygon in the DXF (metres)"])
+    if k == "rooms":  # a superlative over a set of rooms: "the largest room (in apartment B / labelled X)"
+        names = t.arg if isinstance(t.arg, list) or t.arg is None else [t.arg]
+        fb = None
+        if names is not None:
+            names, fb = _bedroom_fallback(fm, t, names)
+            cands = _rooms_with_name(fm, names)
+        else:
+            cands = [r for r in fm.rooms if r.number and not r.shaft and (qr.include_outdoor or not r.outdoor)]
+        if t.scope:
+            cands = [r for r in cands if r.unit in t.scope]
+        unnamed = [r for r in cands if not r.name]
+        if names is None and unnamed and len(unnamed) < len(cands):
+            # numbered polygons without a name are mostly ducts/shafts/niches (< 1 m²): not what "a room" means
+            cands = [r for r in cands if r.name]
+        if not cands:
+            return _Part(None, 0.0, [], [f"no rooms match {names or 'numbered rooms'} in scope {t.scope}"],
+                         missing=["no matching room on this floor"])
+        ranked = sorted(cands, key=lambda r: r.area, reverse=(qr.op == "max"))
+        r = ranked[0]
+        tr = [f"{qr.op} over {len(cands)} rooms ({t.note}{', apartment ' + ','.join(t.scope) if t.scope else ''}): "
+              + ", ".join(f"{x.label()} {x.area:.2f}" for x in ranked[:4])]
+        conf = 0.9
+        if len(ranked) > 1 and abs(ranked[1].area - r.area) <= 0.02 * max(r.area, 1e-9):
+            conf = 0.5
+            tr.append(f"tie within 2%: {r.label()} vs {ranked[1].label()}")
+        asm = [f"candidates: {t.note}" + (f" in apartment(s) {', '.join(t.scope)}" if t.scope else "")
+               + ("; outdoor rooms excluded" if names is None and not qr.include_outdoor else "")
+               + (f"; {len(unnamed)} numbered polygons without a room name (ducts/niches) ignored"
+                  if names is None and unnamed and len(cands) < len(unnamed) + len(cands) and all(c.name for c in cands) else "")]
+        if fb:
+            conf, asm = min(conf, 0.5), asm + [fb]
+        p = _Part(r.area, conf * (0.85 if t.note.startswith("concept") else 1.0), [(r.bbox, _room_note(r))], tr, asm)
+        p.room = r
+        return p
     if k == "area_label":
-        rooms = _rooms_with_name(fm, t.arg)
-        val = sum(r.area for r in rooms)
         names = t.arg if isinstance(t.arg, list) else [t.arg]
+        names, fb = _bedroom_fallback(fm, t, names)
+        rooms = _rooms_with_name(fm, names)
+        if t.scope:  # "the kitchen in apartment A"
+            rooms = [r for r in rooms if r.unit in t.scope]
+        val = sum(r.area for r in rooms)
         asm = ["net floor area = sum of ROOM_OUTLINE polygon areas"] + ([f"{t.note}: labels {names}"] if t.note else [])
-        conf = RULE_CONF["area_label"] * (0.7 if t.note.startswith("concept") else 1.0)
+        if t.scope:
+            asm.append(f"restricted to rooms inside apartment(s) {', '.join(t.scope)}")
+        if fb:
+            asm.append(fb)
+        conf = RULE_CONF["area_label"] * (0.7 if t.note.startswith("concept") else 1.0) * (0.95 if t.scope else 1.0)
+        if fb or (t.scope and not rooms):
+            conf = min(conf, 0.5)
         return _Part(val, conf, [(r.bbox, _room_note(r)) for r in rooms],
                      [f"{len(rooms)} rooms labelled {names}: " + " + ".join(f"{r.area:.2f}" for r in rooms)], asm)
     if k == "area_apartment":
@@ -263,7 +361,8 @@ class DxfSolver(BaseSolver):
 
     sources = ("swiss_dwellings",)
 
-    def __init__(self, llm: int | str = 1, backend: str = "local", **kwargs):
+    def __init__(self, llm: int | str = 1, backend: str = "local", opcheck: int | str = 1, **kwargs):
+        self.opcheck = int(opcheck)
         super().__init__(**kwargs)
         self.llm = bool(int(llm))
         self.backend = backend
@@ -288,12 +387,43 @@ class DxfSolver(BaseSolver):
         vocab = fm.names() + KNOWN_NAMES
         qr = qparse.parse(question, vocab, room_numbers={r.number for r in fm.rooms if r.number})
         trace = [f"parsed: {qr.describe()}", *[f"parse note: {n}" for n in qr.notes]]
+        opcheck_cap = False
         if self.llm and not qparse.covered(question, qr):
             ans = self._tableqa(path, dxf_rel, fm, question, trace)
             if ans is not None:
                 return ans
+        elif self.llm and self.opcheck and qr.terms and qr.op in ("sum", "diff") and not _known_template(question):
+            # unseen wording that the rules read as a plain value/sum/difference: one short LLM call checks the
+            # operation (any language); on disagreement the table QA answers instead (F/S0 hard2p/hard2q lesson:
+            # keyword rules miss reworded operators and then answer the simpler question confidently)
+            letter = _opcheck(question, self.backend)
+            neg = qr.op == "diff" and qr.terms[0].kind == "area_total"  # the floor-minus-apartment rule fired
+            ok = letter is None or (qr.op == "sum" and letter == "A") or (qr.op == "diff" and (
+                (letter == "B" and not neg) or (letter == "G" and neg)))
+            trace.append(f"operation check (LLM): '{letter}' = {OPCHECK_KINDS.get(letter, '?')}; rules applied "
+                         f"{qr.op} -> {'agree' if ok else 'disagree'}")
+            if not ok:
+                ans = self._tableqa(path, dxf_rel, fm, question, trace)
+                if ans is not None:
+                    return ans
+                opcheck_cap = True
         if not qr.terms:
             return Answer.abstain(self.name, "question not understood by the DXF parser", trace)
+        if any(t.kind == "area_room" and t.arg == "<all>" for t in qr.terms):  # every numbered indoor room
+            t0 = qr.terms[0]
+            rs = [r for r in fm.rooms if r.number and not r.shaft and (qr.include_outdoor or not r.outdoor)
+                  and (not t0.scope or r.unit in t0.scope)]
+            qr.terms = [qparse.Term("area_room", r.number, k, note=t0.note) for k, r in enumerate(rs)]
+            trace.append(f"over {len(rs)} numbered indoor rooms" + (f" of apartment(s) {t0.scope}" if t0.scope else ""))
+        if any(t.kind == "area_apartment" and t.arg == "<all>" for t in qr.terms):  # every apartment on the floor
+            t0 = qr.terms[0]
+            qr.terms = [qparse.Term("area_apartment", u.label, k, note=t0.note)
+                        for k, u in enumerate(sorted(fm.units, key=lambda u: u.label))]
+            trace.append(f"over all apartments: {[t.arg for t in qr.terms]}")
+            if not qr.terms:
+                return Answer(value=None, unit=qr.unit, confidence=0.0, solver=self.name,
+                              trace=trace + ["no 'Whg./App.' apartment labels on this floor"],
+                              missing=["no apartments identified on this floor"])
         parts = [_eval_term(fm, t, qr) for t in qr.terms]
         for t, p in zip(qr.terms, parts):
             trace += p.trace
@@ -307,15 +437,62 @@ class DxfSolver(BaseSolver):
         conf = 1.0
         for p in parts:
             conf *= p.conf if p.value is not None else 0.2
+        if qparse.operator_unapplied(question, qr) or opcheck_cap:
+            conf = min(conf, 0.3)  # S0 D9: low enough that the pipeline's agent takes over
+            missing.append("the question mentions an operation (average/ratio/share/threshold/per/'not in') that the "
+                           "rule parser did not apply; the value may answer a simpler question")
         # combine --------------------------------------------------------------------------------
         value: float | int | str
         unit = qr.unit
-        if qr.qtype == "text" and qr.op in ("max", "min"):
+        if qr.qtype == "text" and len(parts) == 1 and qr.terms[0].kind == "rooms":
+            r = parts[0].room
+            value = f"room {r.number}" + (f" ({r.name})" if r.name else "") if r.number else (r.name or r.label())
+            trace.append(f"{qr.op}: {r.label()} with {r.area:.2f} m²")
+            unit = None
+        elif qr.qtype == "text" and qr.op in ("max", "min"):
             pairs = [(v, t) for v, t in zip(vals, qr.terms) if v is not None]
             v, t = (max if qr.op == "max" else min)(pairs, key=lambda vt: vt[0])
             value = str(t.arg if not isinstance(t.arg, list) else t.arg[0])
-            trace.append(f"{qr.op} -> {value} ({v:.2f} m²)")
+            if t.kind == "area_apartment":
+                value = f"apartment {value}"
+            elif t.kind in ("area_room", "rooms"):
+                r = getattr(p, "room", None) if t.kind == "rooms" else next((r for r in fm.rooms if r.number == t.arg), None)
+                value = f"room {value}" + (f" ({r.name})" if r is not None and r.name else "")
+            trace.append(f"{qr.op}: " + ", ".join(f"{tt.arg}={vv:.2f}" for vv, tt in pairs) + f" -> {value}")
             unit = None
+        elif qr.op in ("max", "min") and len(known) > 1:  # "the area of the largest apartment"
+            pairs = [(v, t) for v, t in zip(vals, qr.terms) if v is not None]
+            v, t = (max if qr.op == "max" else min)(pairs, key=lambda vt: vt[0])
+            value = v
+            trace.append(f"{qr.op}: " + ", ".join(f"{tt.arg}={vv:.2f}" for vv, tt in pairs) + f" -> {t.arg}")
+        elif qr.op == "mean":
+            if len(parts) == 1 and parts[0].boxes and "over all apartments" not in qr.terms[0].note:
+                # average over the rooms of one label
+                value = known[0] / len(parts[0].boxes)
+                trace.append(f"mean: {known[0]:.2f} / {len(parts[0].boxes)} rooms = {value:.2f}")
+            else:
+                value = sum(known) / len(known)
+                trace.append(f"mean of {[round(v, 2) for v in known]} = {value:.2f}")
+        elif qr.op == "ratio":
+            if len(known) < 2 or not known[1]:
+                return Answer(value=None, unit=None, confidence=0.0, solver=self.name, trace=trace + ["ratio: missing/zero divisor"],
+                              missing=missing or ["divisor not found"])
+            value = round(known[0] / known[1], 3)
+            trace.append(f"ratio: {known[0]:.2f} / {known[1]:.2f} = {value}")
+        elif qr.op == "pct":
+            if len(known) < 2 or not known[1]:
+                return Answer(value=None, unit="%", confidence=0.0, solver=self.name, trace=trace + ["share: missing total"],
+                              missing=missing or ["floor total not found"])
+            value = round(100.0 * known[0] / known[1], 2)
+            trace.append(f"share: 100 × {known[0]:.2f} / {known[1]:.2f} = {value} %")
+        elif qr.op in ("count_gt", "count_lt", "count_ge"):
+            cmp = {"count_gt": lambda v: v > qr.threshold, "count_lt": lambda v: v < qr.threshold,
+                   "count_ge": lambda v: v >= qr.threshold}[qr.op]
+            hits = [t.arg for v, t in zip(vals, qr.terms) if v is not None and cmp(v)]
+            value = len(hits)
+            trace.append(f"{qr.op} {qr.threshold}: " + ", ".join(f"{t.arg}={v:.2f}" for v, t in zip(vals, qr.terms)
+                                                              if v is not None) + f" -> {hits}")
+            unit = "count"
         elif qr.op == "diff":
             value = known[0] - sum(known[1:])
             trace.append(f"difference: {' - '.join(str(round(v, 2)) for v in known)} = {value:.2f}")
@@ -323,7 +500,11 @@ class DxfSolver(BaseSolver):
             value = sum(known)
             if len(known) > 1:
                 trace.append(f"sum: {' + '.join(str(round(v, 2)) for v in known)} = {value:.2f}")
-        if unit == "count":
+        if qr.op == "ratio":
+            unit = None
+        elif qr.op == "pct":
+            unit = "%"
+        elif unit == "count":
             value = int(round(value))
         elif unit == "ft2":
             value = round(value * M2_TO_FT2, 2)
@@ -368,8 +549,8 @@ class DxfSolver(BaseSolver):
                 ok = n_pdf == p.value
                 trace.append(f"cross-check: PDF text layer shows {n_pdf} apartment labels {'✓' if ok else '✗'} (DXF {p.value})")
                 conf = conf if ok else conf * 0.7
-            elif t.kind == "area_room":
-                r = next((r for r in fm.rooms if r.number == t.arg), None)
+            elif t.kind in ("area_room", "rooms"):
+                r = getattr(p, "room", None) if t.kind == "rooms" else next((r for r in fm.rooms if r.number == t.arg), None)
                 if r is not None and r.printed_area is not None:
                     trace.append(f"cross-check: plan prints {r.printed_area:.2f} m² for room {r.number} "
                                  f"({'✓' if abs(r.printed_area - r.area) <= 0.02 * r.printed_area else '✗'} DXF polygon {r.area:.2f} m²)")
@@ -400,6 +581,10 @@ class DxfSolver(BaseSolver):
             value, unit = ("yes" if value else "no"), None
         if isinstance(value, str):
             unit = None
+            # apartments are identified by a letter: answer "apartment B", not "B"
+            if re.fullmatch(r"[A-Z]", value.strip()) and re.search(
+                    r"apartment|wohnung|appartement|appartamento|\bunit\b|logement", question, re.I):
+                value = f"apartment {value.strip()}"
         if unit == "count" and isinstance(value, (int, float)):
             value = int(round(value))
         elif isinstance(value, float):

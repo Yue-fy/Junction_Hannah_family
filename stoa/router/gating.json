@@ -4,16 +4,18 @@
    "acc": {
     "dxf": 0.0,
     "ifc": 0.0,
-    "prior": 0.425,
+    "prior": 0.575,
     "raster": 0.75,
-    "vlm_direct": 0.475
+    "vlm_direct": 0.325,
+    "vlm_lora": 0.875
    },
    "cost_usd": {
     "dxf": 0.0,
     "ifc": 0.0,
     "prior": 0.0,
-    "raster": 0.0994278,
-    "vlm_direct": 0.0053896
+    "raster": 0.0010666,
+    "vlm_direct": 8.48e-05,
+    "vlm_lora": 6.1e-05
    },
    "n": 40
   },
@@ -21,16 +23,18 @@
    "acc": {
     "dxf": 0.0,
     "ifc": 0.0,
-    "prior": 0.925,
-    "raster": 0.9,
-    "vlm_direct": 0.425
+    "prior": 0.825,
+    "raster": 0.825,
+    "vlm_direct": 0.45,
+    "vlm_lora": 0.925
    },
    "cost_usd": {
     "dxf": 0.0,
     "ifc": 0.0,
     "prior": 0.0,
-    "raster": 0.0665278,
-    "vlm_direct": 0.0043155
+    "raster": 0.0,
+    "vlm_direct": 9.88e-05,
+    "vlm_lora": 5.71e-05
    },
    "n": 40
   },
@@ -38,16 +42,18 @@
    "acc": {
     "dxf": 0.0,
     "ifc": 0.0,
-    "prior": 0.2,
-    "raster": 0.575,
-    "vlm_direct": 0.6
+    "prior": 0.275,
+    "raster": 0.725,
+    "vlm_direct": 0.7,
+    "vlm_lora": 0.85
    },
    "cost_usd": {
     "dxf": 0.0,
     "ifc": 0.0,
     "prior": 0.0,
-    "raster": 0.0499669,
-    "vlm_direct": 0.0071111
+    "raster": 0.0010984,
+    "vlm_direct": 3.11e-05,
+    "vlm_lora": 6.59e-05
    },
    "n": 40
   },
@@ -55,16 +61,18 @@
    "acc": {
     "dxf": 0.0,
     "ifc": 0.0,
-    "prior": 0.125,
-    "raster": 0.125,
-    "vlm_direct": 0.2
+    "prior": 0.075,
+    "raster": 0.075,
+    "vlm_direct": 0.15,
+    "vlm_lora": 0.375
    },
    "cost_usd": {
     "dxf": 0.0,
     "ifc": 0.0,
     "prior": 0.0,
     "raster": 0.0,
-    "vlm_direct": 0.0061866
+    "vlm_direct": 2.43e-05,
+    "vlm_lora": 6.31e-05
    },
    "n": 40
   },
@@ -74,14 +82,16 @@
     "ifc": 0.0,
     "prior": 0.975,
     "raster": 0.975,
-    "vlm_direct": 0.8
+    "vlm_direct": 0.825,
+    "vlm_lora": 0.975
    },
    "cost_usd": {
     "dxf": 0.0,
     "ifc": 0.0,
     "prior": 0.0,
     "raster": 0.0,
-    "vlm_direct": 0.0058409
+    "vlm_direct": 0.0001618,
+    "vlm_lora": 6.05e-05
    },
    "n": 40
   },
@@ -89,16 +99,18 @@
    "acc": {
     "dxf": 0.0,
     "ifc": 0.0,
-    "prior": 0.575,
-    "raster": 0.775,
-    "vlm_direct": 0.675
+    "prior": 0.425,
+    "raster": 0.85,
+    "vlm_direct": 0.525,
+    "vlm_lora": 0.975
    },
    "cost_usd": {
     "dxf": 0.0,
     "ifc": 0.0,
     "prior": 0.0,
-    "raster": 0.0358283,
-    "vlm_direct": 0.0040163
+    "raster": 0.0012442,
+    "vlm_direct": 0.0001203,
+    "vlm_lora": 6.76e-05
    },
    "n": 40
   },
@@ -106,16 +118,18 @@
    "acc": {
     "dxf": 0.0,
     "ifc": 0.0,
-    "prior": 0.75,
-    "raster": 0.75,
-    "vlm_direct": 0.275
+    "prior": 0.65,
+    "raster": 0.65,
+    "vlm_direct": 0.3,
+    "vlm_lora": 0.65
    },
    "cost_usd": {
     "dxf": 0.0,
     "ifc": 0.0,
     "prior": 0.0,
     "raster": 0.0,
-    "vlm_direct": 0.0058243
+    "vlm_direct": 3.04e-05,
+    "vlm_lora": 6.29e-05
    },
    "n": 40
   },
@@ -123,16 +137,18 @@
    "acc": {
     "dxf": 0.0,
     "ifc": 0.0,
-    "prior": 0.6,
-    "raster": 0.6,
-    "vlm_direct": 0.575
+    "prior": 0.4,
+    "raster": 0.625,
+    "vlm_direct": 0.4,
+    "vlm_lora": 0.725
    },
    "cost_usd": {
     "dxf": 0.0,
     "ifc": 0.0,
     "prior": 0.0,
-    "raster": 0.0,
-    "vlm_direct": 0.0066202
+    "raster": 0.001253,
+    "vlm_direct": 2.82e-05,
+    "vlm_lora": 6.23e-05
    },
    "n": 40
   },
@@ -140,16 +156,18 @@
    "acc": {
     "dxf": 0.0,
     "ifc": 0.0,
-    "prior": 0.75,
-    "raster": 0.75,
-    "vlm_direct": 0.95
+    "prior": 0.725,
+    "raster": 0.925,
+    "vlm_direct": 0.925,
+    "vlm_lora": 0.975
    },
    "cost_usd": {
     "dxf": 0.0,
     "ifc": 0.0,
     "prior": 0.0,
-    "raster": 0.0,
-    "vlm_direct": 0.0029148
+    "raster": 3.9e-05,
+    "vlm_direct": 2.58e-05,
+    "vlm_lora": 5.95e-05
    },
    "n": 40
   },
@@ -157,16 +175,18 @@
    "acc": {
     "dxf": 0.0,
     "ifc": 0.0,
-    "prior": 0.575,
-    "raster": 0.575,
-    "vlm_direct": 0.525
+    "prior": 0.6,
+    "raster": 0.725,
+    "vlm_direct": 0.55,
+    "vlm_lora": 0.85
    },
    "cost_usd": {
     "dxf": 0.0,
     "ifc": 0.0,
     "prior": 0.0,
-    "raster": 0.0,
-    "vlm_direct": 0.0029485
+    "raster": 0.0012855,
+    "vlm_direct": 2.42e-05,
+    "vlm_lora": 5.86e-05
    },
    "n": 40
   },
@@ -175,15 +195,17 @@
     "dxf": 0.0,
     "ifc": 0.0,
     "prior": 0.6,
-    "raster": 0.8,
-    "vlm_direct": 0.275
+    "raster": 0.825,
+    "vlm_direct": 0.175,
+    "vlm_lora": 0.875
    },
    "cost_usd": {
     "dxf": 0.0,
     "ifc": 0.0,
     "prior": 0.0,
-    "raster": 0.0537127,
-    "vlm_direct": 0.0030274
+    "raster": 0.001009,
+    "vlm_direct": 2e-05,
+    "vlm_lora": 5.58e-05
    },
    "n": 40
   },
@@ -191,16 +213,18 @@
    "acc": {
     "dxf": 0.0,
     "ifc": 0.0,
-    "prior": 0.15,
-    "raster": 0.15,
-    "vlm_direct": 0.125
+    "prior": 0.1,
+    "raster": 0.1,
+    "vlm_direct": 0.125,
+    "vlm_lora": 0.15
    },
    "cost_usd": {
     "dxf": 0.0,
     "ifc": 0.0,
     "prior": 0.0,
     "raster": 0.0,
-    "vlm_direct": 0.0024631
+    "vlm_direct": 3.08e-05,
+    "vlm_lora": 6.97e-05
    },
    "n": 40
   },
@@ -767,16 +791,18 @@
   }
  },
  "meta": {
-  "built": "2026-11-14T00:27:17",
-  "per_key": 40,
+  "built": "2026-11-14T01:38:34",
+  "per_key": 1000,
   "solver_args": {},
   "solvers": [
    "dxf",
    "ifc",
    "prior",
    "raster",
-   "vlm_direct"
+   "schedule",
+   "vlm_direct",
+   "vlm_lora"
   ],
-  "split": "train"
+  "split": "train (swiss/ifc keys, 40/key) + train_gate (all 12 cubicasa keys, 40/key, paired: prior/raster v5/vlm_direct/vlm_lora; the LoRA cc-v2 never saw train_gate drawings)"
  }
 }

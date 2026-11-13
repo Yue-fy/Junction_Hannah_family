@@ -59,8 +59,17 @@ const DXF_Q: Record<string, [string, string]> = {
 
 function checkText(c: KgCrossCheck) {
   const sym = c.ok === null ? "?" : c.ok ? "✓" : "≠";
-  if (c.storey) return { head: c.what, body: `plan ${c.drawn} · IFC ${c.model}`, sym };
+  if (c.storey) {
+    const other = Object.entries(c.drawn_other ?? {}).map(([st, n]) => `+${n} of ${st}`).join(", ");
+    const ifc = c.model_cut !== undefined && c.model_cut !== c.model ? `IFC ${c.model_cut} at the cut (${c.model} on storey)` : `IFC ${c.model}`;
+    return { head: c.what, body: `plan ${c.drawn}${other ? ` ${other}` : ""} · ${ifc}`, sym };
+  }
   return { head: c.what, body: `${c.drawn}/${c.model}`, sym };
+}
+
+/** W1's one-line explanation of a structured check (links()["checks"]), for tooltips. */
+function checkSentence(kg: Kg, c: KgCrossCheck) {
+  return (kg.checks ?? []).find((t) => c.storey && t.text.startsWith(`${c.what} on '${c.storey}'`))?.text;
 }
 
 /** Rooms that belong to what is open: the plan's storey, the whole model, or the swiss floor. */
@@ -130,7 +139,7 @@ export function renderKg(el: HTMLElement, kg: Kg, o: KgOpts) {
   }
   if (!perStorey) checks.forEach((c, i) => {
     const t = checkText(c);
-    pills.push(`<span class="kg-pill ${c.ok === null ? "info" : c.ok ? "ok" : "bad"}" data-check="${i}" title="${esc(c.reason ? `${c.reason}. ` : "")}${esc(c.storey
+    pills.push(`<span class="kg-pill ${c.ok === null ? "info" : c.ok ? "ok" : "bad"}" data-check="${i}" data-what="${esc(c.what)}" data-storey="${esc(c.storey ?? "")}" title="${esc(checkSentence(kg, c) ? `${checkSentence(kg, c)}. ` : "")}${esc(c.reason ? `${c.reason}. ` : "")}${esc(c.storey
       ? `Storey '${c.storey}': ${c.model} in the IFC model, ${c.drawn} drawn on the plan sheet (IfcConvert SVG twin of the PDF). A difference means some elements of this storey are not drawn on this sheet.`
       : `${c.what}: ${c.drawn} of ${c.model} agree`)}">${esc(t.head)} <b>${esc(t.body)}</b> ${t.sym}</span>`);
   });
@@ -163,6 +172,7 @@ export function renderKg(el: HTMLElement, kg: Kg, o: KgOpts) {
     </div>
     <div class="kg-body" ${expanded ? "" : "hidden"}>${body(kg, rooms, checks, files, storeyName, o)}</div>`;
 
+  applyAnswerMatch(el);
   el.querySelectorAll<HTMLButtonElement>("[data-chip]").forEach((b) => b.addEventListener("click", () => {
     const c = chips[Number(b.dataset.chip)];
     if (!c.on) c.act();
@@ -187,6 +197,68 @@ export function renderKg(el: HTMLElement, kg: Kg, o: KgOpts) {
     e.stopPropagation();
     o.openPath(b.dataset.open!);
   }));
+}
+
+/**
+ * The building's graph as a small layered drawing: other models → IFC model → storeys → plan sheets → rooms.
+ * The open file's path through it is highlighted; storeys, sheets and other models are clickable.
+ */
+function graphSvg(kg: Kg, files: KgFile[], current: string) {
+  const storeys = [...(kg.storeys ?? [])].sort((a, b) => b.elevation - a.elevation); // top floor first
+  if (!kg.model || !storeys.length) return "";
+  const project = kg.group ?? kg.source;
+  const plans = new Map(files.filter((f) => f.kind === "plan" && f.storey).map((f) => [f.storey!, f.path]));
+  const roomsBy = new Map<string, number>();
+  for (const r of kg.rooms ?? []) if (r.storey) roomsBy.set(r.storey, (roomsBy.get(r.storey) ?? 0) + 1);
+  const others = [...files.filter((f) => f.kind === "discipline-model").map((f) => ({ path: f.path, label: shortFile(f.path, project), kind: "discipline" })),
+    ...(kg.same_building ?? []).map((p) => ({ path: p, label: base(p), kind: "same building" }))].slice(0, 8);
+  const ROW = 22;
+  const H = Math.max(storeys.length, others.length, 3) * ROW + 26;
+  const shift = others.length ? 0 : 156; // no other models: drop that column
+  const X = { oth: 4, othR: 132, model: 160 - shift, modelW: 112, st: 318 - shift, stW: 92, plan: 448 - shift, planW: 70, room: 556 - shift };
+  const W = 640 - shift;
+  const y = (i: number, n: number) => 24 + (H - 24 - n * ROW) / 2 + i * ROW + ROW / 2;
+  const modelY = 24 + (H - 24) / 2;
+  const cur = kg.storey?.guid;
+  const curve = (x1: number, y1: number, x2: number, y2: number, on: boolean) =>
+    `<path class="${on ? "on" : ""}" d="M${x1},${y1} C${(x1 + x2) / 2},${y1} ${(x1 + x2) / 2},${y2} ${x2},${y2}"/>`;
+  const edges: string[] = [];
+  const nodes: string[] = [];
+  const modelOn = kg.model === current || !!cur;
+  others.forEach((o, i) => {
+    const yy = y(i, others.length);
+    edges.push(curve(X.othR + 4, yy, X.model, modelY, false));
+    nodes.push(`<g class="kn other" data-open="${esc(o.path)}"><title>${esc(o.kind)}: ${esc(o.path)}</title><text x="${X.othR}" y="${yy + 4}" text-anchor="end">${esc(o.label.length > 18 ? o.label.slice(0, 17) + "…" : o.label)}</text></g>`);
+  });
+  const ml = (kg.graph?.nodes ?? kg.nodes)?.find((n) => n.type === "model")?.label;
+  const modelLabel = ml && !/^\d+$/.test(ml) ? ml : shortFile(kg.model, project);
+  nodes.push(`<g class="kn model${modelOn ? " on" : ""}"><title>${esc(kg.model)}</title><rect x="${X.model}" y="${modelY - 14}" width="${X.modelW}" height="28" rx="6"/>
+    <text x="${X.model + X.modelW / 2}" y="${modelY + 4}" text-anchor="middle">${esc(modelLabel.length > 17 ? modelLabel.slice(0, 16) + "…" : modelLabel)}</text></g>`);
+  storeys.forEach((st, i) => {
+    const yy = y(i, storeys.length);
+    const on = st.guid === cur;
+    edges.push(curve(X.model + X.modelW, modelY, X.st, yy, on));
+    nodes.push(`<g class="kn storey${on ? " on" : ""}" data-storey="${esc(st.name)}"><title>storey ${esc(st.name)}, elevation ${st.elevation.toFixed(2)} m</title>
+      <rect x="${X.st}" y="${yy - 9}" width="${X.stW}" height="18" rx="9"/><text x="${X.st + X.stW / 2}" y="${yy + 4}" text-anchor="middle">${esc(st.name.length > 13 ? st.name.slice(0, 12) + "…" : st.name)}</text></g>`);
+    const plan = plans.get(st.guid) ?? st.plan;
+    if (plan) {
+      const pOn = plan === current;
+      edges.push(`<path class="${pOn ? "on" : ""}" d="M${X.st + X.stW},${yy} H${X.plan}"/>`);
+      nodes.push(`<g class="kn plan${pOn ? " on" : ""}" data-open="${esc(plan)}"><title>plan sheet ${esc(plan)}</title><rect x="${X.plan}" y="${yy - 8}" width="${X.planW}" height="16" rx="3"/>
+        <text x="${X.plan + X.planW / 2}" y="${yy + 4}" text-anchor="middle">plan ${esc((plan.match(/_plan-(\d+)/) ?? [])[1] ?? "")}</text></g>`);
+    }
+    const nr = roomsBy.get(st.guid);
+    if (nr) {
+      const from = plan ? X.plan + X.planW : X.st + X.stW;
+      edges.push(`<path class="${on ? "on" : ""}" d="M${from},${yy} H${X.room}"/>`);
+      nodes.push(`<g class="kn rooms${on ? " on" : ""}"><title>${nr} IfcSpace rooms on ${esc(st.name)}${plan ? ", each drawn on the plan sheet with its outline" : ""}</title><circle cx="${X.room + 7}" cy="${yy}" r="6"/><text x="${X.room + 17}" y="${yy + 4}">${nr} room${nr === 1 ? "" : "s"}</text></g>`);
+    }
+  });
+  const head = (x: number, t: string, anchor = "start") => `<text class="kh" x="${x}" y="12" text-anchor="${anchor}">${t}</text>`;
+  return `<svg class="kg-graph" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Knowledge graph of this building">
+    ${others.length ? head(X.othR, "OTHER MODELS", "end") : ""}${head(X.model + X.modelW / 2, "IFC MODEL", "middle")}${head(X.st + X.stW / 2, "STOREYS", "middle")}
+    ${storeys.some((st) => plans.get(st.guid) ?? st.plan) ? head(X.plan + X.planW / 2, "SHEETS", "middle") : ""}${roomsBy.size ? head(X.room, "ROOMS") : ""}
+    <g class="ke">${edges.join("")}</g>${nodes.join("")}</svg>`;
 }
 
 function body(kg: Kg, rooms: KgRoom[], checks: KgCrossCheck[], files: KgFile[], storeyName: Map<string, string>, o: KgOpts) {
@@ -216,7 +288,9 @@ function body(kg: Kg, rooms: KgRoom[], checks: KgCrossCheck[], files: KgFile[], 
     cols.push(`<div class="kg-col wide"><h4>Rooms on ${esc(where)} <small>${both ? `${agree}/${both} areas agree across sources (±2%)` : ""} · click to locate</small></h4>
       <div class="kg-scroll"><table class="kg-table">${head}${rows}</table></div></div>`);
   }
-  if (kg.storeys?.length) {
+  const g = graphSvg(kg, files, o.current);
+  if (g) cols.push(`<div class="kg-col graph"><h4>Graph <small>model · storeys · sheets · rooms, click a node</small></h4><div class="kg-scroll">${g}</div></div>`);
+  if (kg.storeys?.length && !g) {
     const plans = new Map(files.filter((f) => f.storey).map((f) => [f.storey!, f.path]));
     cols.push(`<div class="kg-col"><h4>Storeys <small>click to show in 3D</small></h4><div class="kg-scroll"><table class="kg-table">
       <tr><th>Storey</th><th>Elev. m</th><th>Rooms</th><th>Plan</th></tr>
@@ -227,10 +301,28 @@ function body(kg: Kg, rooms: KgRoom[], checks: KgCrossCheck[], files: KgFile[], 
   }
   if (checks.length) {
     cols.push(`<div class="kg-col"><h4>Cross-checks <small>independent sources, same fact</small></h4><div class="kg-scroll"><table class="kg-table">
-      <tr>${checks.some((c) => c.storey) && !kg.storey ? "<th>Storey</th>" : ""}<th>What</th><th>${checks.some((c) => c.storey) ? "Plan" : "Agree"}</th><th>${checks.some((c) => c.storey) ? "IFC" : "Of"}</th><th></th></tr>
-      ${checks.map((c) => `<tr>${c.storey && !kg.storey ? `<td>${esc(c.storey)}</td>` : ""}<td>${esc(c.what)}</td><td class="num">${c.drawn}</td><td class="num">${c.model}</td><td class="${c.ok === null ? "na" : c.ok ? "ok" : "bad"}" title="${esc(c.reason ?? "")}">${c.ok === null ? "?" : c.ok ? "✓" : "≠"}</td></tr>`).join("")}
-      </table>${kg.storey ? `<p class="kg-note">Plan = elements drawn on this sheet; IFC = elements of storey ${esc(kg.storey.name)} in the model. A ≠ is a real difference between the documents, so the answer card says which source it used.</p>` : ""}</div></div>`);
+      <tr>${checks.some((c) => c.storey) && !kg.storey ? "<th>Storey</th>" : ""}<th>What</th><th>${checks.some((c) => c.storey) ? "Plan" : "Agree"}</th><th title="Elements of the storey that cross the plan's cut plane (floor + 1.2 m) / all elements of the storey">${checks.some((c) => c.storey) ? "IFC at cut / all" : "Of"}</th><th></th></tr>
+      ${checks.map((c) => `<tr>${c.storey && !kg.storey ? `<td>${esc(c.storey)}</td>` : ""}<td>${esc(c.what)}</td><td class="num">${c.drawn}${Object.values(c.drawn_other ?? {}).reduce((a, n) => a + n, 0) ? ` <small>+${Object.values(c.drawn_other ?? {}).reduce((a, n) => a + n, 0)}</small>` : ""}</td><td class="num" title="${esc(checkSentence(kg, c) ?? "")}">${c.model_cut ?? c.model}${c.model_cut !== undefined && c.model_cut !== c.model ? ` <small>/ ${c.model}</small>` : ""}</td><td class="${c.ok === null ? "na" : c.ok ? "ok" : "bad"}" title="${esc(c.reason ?? "")}">${c.ok === null ? "?" : c.ok ? "✓" : "≠"}</td></tr>`).join("")}
+      </table>${kg.storey ? `<p class="kg-note">Plan = elements drawn on this sheet; IFC = elements of storey ${esc(kg.storey.name)} that cross the sheet's cut plane (floor + 1.2 m) / all of the storey. A ≠ is a real difference between the documents, a ? means they cannot be compared (hover for why).</p>` : ""}</div></div>`);
   }
   if (!cols.length) cols.push(`<div class="kg-col"><p class="kg-note">${esc(o.current)} has no linked rooms or storeys.</p></div>`);
   return cols.join("");
+}
+
+const PLURAL: Record<string, string> = { door: "doors", window: "windows", room: "rooms", space: "rooms", wall: "walls", column: "columns" };
+
+/** Highlight the strip's drawing-vs-model pill that checks the same fact as the answer (count of X on a storey). */
+let answerMatch: { what: string; storey?: string } | null = null;
+export function markAnswerCheck(el: HTMLElement, target: string | undefined, storey: string | undefined) {
+  const what = target ? PLURAL[target] : undefined;
+  answerMatch = what ? { what, storey } : null;
+  applyAnswerMatch(el);
+}
+function applyAnswerMatch(el: HTMLElement) {
+  el.querySelectorAll(".kg-pill.match").forEach((p) => p.classList.remove("match"));
+  if (!answerMatch) return;
+  const { what, storey } = answerMatch;
+  el.querySelectorAll<HTMLElement>(".kg-pill[data-what]").forEach((p) => {
+    if (p.dataset.what === what && p.dataset.storey === storey) p.classList.add("match");
+  });
 }

@@ -98,3 +98,26 @@ def test_geometry_fallback_lowers_confidence():
     q = "What is the total length of all walls on 'Level 1', in metres?"
     a = s.solve(DUPLEX, q)
     assert a.value and a.confidence < 0.7 and any("geometry" in x for x in a.assumptions)
+
+
+GDYNIA = "data/ifc_models/bimspeed-gdynia_ruchu-oporu-18.ifc"
+
+
+@pytest.mark.skipif(not abspath(GDYNIA).exists(), reason="gdynia not available")
+@pytest.mark.parametrize("q, gold", [
+    ("What is the average net floor area per room (space) on '1', in m²?", 8.293),
+    ("What percentage of the total net floor area of '0' does the room 'Comunication (0.2)' take up?", 13.09),
+    ("How many of the rooms 'Bathroom (1.5)', 'Room (1.4)', 'Kitchen (1.2)' and 'Room (1.3)' on '1' have a net "
+     "floor area of more than 13 m²?", 1),
+    ("Which storey has more doors on its floor plan, '0' or '-1'?", "0"),
+    ("What is the combined net floor area of all rooms (spaces) on '0' and on '-1', in m²?", 102.92),
+])
+def test_operators_compose_atomic_answers(solver, q, gold):
+    """hard2 kinds (average, share, threshold, which storey, multi-storey sum): composed in code from atomic
+    answers; the storey name '1' must not swallow the '1' of '13 m²'."""
+    a = solver.solve(GDYNIA, q)
+    if isinstance(gold, str):
+        assert a.value == gold
+    else:
+        assert a.value == pytest.approx(gold, rel=0.02)
+    assert a.evidence and a.confidence >= 0.8

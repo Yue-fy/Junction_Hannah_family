@@ -82,6 +82,7 @@ _OUTDOOR_EXCL = re.compile(r"excluding balconies|ohne balkone|hors balcons|esclu
 # "..., not counting separate WC rooms" must not make the target wc_room
 _NEGATION = re.compile(r"(not counting|excluding|except|without|ohne|hors|esclusi|sauf)[^?;.]*|"
                        r"[^,;?]*\b(lukuun ottamatta|ausgenommen)", re.I)
+_NO_LABEL = re.compile(r"\b([A-Z]{0,2}\d+(?:\.\d+)+)\s*\(\s*<q>\s*\)")
 _NUMBERED = re.compile(r"numbered|nummerierten|num[ée]rot[ée]es|numerati", re.I)
 
 
@@ -96,11 +97,28 @@ _OPS = [
     ("diff", r"\b(difference|differs?|compared (?:with|to)|unterschied\w*|diff[ée]rence|differenza|erotus|forskel\w*|"
              r"verschil)\b"),
     ("rest", r"\b(other than|leaving out|apart from|besides|all the other|the other rooms|remaining|übrigen|autres que|"
-             r"lukuun ottamatta <q>)"),
-    ("threshold", r"\b(?:larger|bigger|smaller|more|less|greater|fewer)\s+than\s+\d|\b(?:over|under|above|below|at least|"
-                  r"at most|exceeding)\s+\d"),
+             r"lukuun ottamatta <q>|do(?:es)? not belong|don't belong|not (?:part of|belonging to|in|within) "
+             r"(?:the )?(?:apartment|unit|storey|floor|level|room)|outside (?:of )?(?:the )?(?:apartment|unit)|"
+             r"nicht zu|n'appartiennent pas|ne font pas partie)"),
+    ("ratio", r"\b(how many times|times (?:larger|bigger|smaller|greater|as (?:large|big|many))|divided by|"
+              r"per (?:apartment|unit|storey|floor|level|room|bedroom|person)|mal so (?:gro(?:ß|ss)|viel)|fois plus)\b"),
+    ("threshold", r"\b(?:gr[öo](?:ß|ss)er|kleiner|mehr|weniger)\s+als\s+\d|\bplus (?:grande?s?|petite?s?|de)\s+(?:que\s+)?\d|"
+                  r"\bmoins de\s+\d|\bpi[uù] (?:grandi|piccol[ie]|di)\s+(?:di\s+)?\d|\bmeno di\s+\d|"
+                  r"\b(?:groter|kleiner|meer|minder)\s+dan\s+\d|\b(?:st[öo]rre|mindre|mer)\s+[äa]n\s+\d|"
+                  r"\b(?:suurempi|suurempia|pienempi|pienempi[äa]|enemm[äa]n|v[äa]hemm[äa]n)\s+kuin\s+\d|"
+                  r"\b(?:larger|bigger|smaller|more|less|greater|fewer)\s+than\s+(?:\d+|one|two|three|four|five|six|seven|"
+                  r"eight|nine|ten)\b|\b(?:over|under|above|below|at least|at most|exceeding|mindestens|"
+                  r"h[öo]chstens|au moins|v[äa]hint[äa][äa]n)\s+(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|"
+                  r"zwei|drei|deux|trois|kaksi|kolme)\b"),
+    # comparison between named things: "which storey has more doors, '0' or '-1'?", "apartment B or apartment H"
+    ("compare", r"\bwhich\b[^?]*\b(?:more|fewer|less|larger|bigger|smaller|greater|higher|lower|longer|shorter)\b|"
+                r"<q>\s*,?\s*(?:or|oder|ou|o|vai|eller|of)\s+(?:on\s+)?<q>|"
+                r"\b(?:apartment|unit|wohnung|appartement)\s+[A-Z]\s+(?:or|oder|ou)\s+(?:apartment|unit|wohnung|appartement)?\s*[A-Z]\b"),
+    # two scopes summed: "all rooms on 'A' and on 'B'", "on 'EG' und auf '1.OG'"
+    ("multi_scope", r"\b(?:on|auf|sur|op|in)\s+<q>\s*,?\s*(?:and|und|et|en|og|ja)\s+(?:on|auf|sur|op|in)\s+<q>"),
 ]
 _OPS_RX = [(n, re.compile(p, re.I)) for n, p in _OPS]
+_APT_SCOPE = re.compile(r"\b(?i:apartment|wohnung|appartement|appartamento|asunto|unit)\s+[A-Z0-9]{1,3}\b")
 _GENERIC = {"room", "unknown", "sanitary"}
 
 
@@ -125,6 +143,7 @@ def modifiers(question: str) -> list[str]:
     # several object classes: >= 2 outside parentheses, or an enumeration of >= 3 inside one ("wet rooms
     # (bathrooms, WC rooms and saunas)"); "(kitchen and bathroom combined)" in the sinks template is a definition
     q2 = _fold(question)
+    q2 = _APT_SCOPE.sub(" ", q2)  # "windows in apartment B": the apartment is a scope, not a second object class
     outside = re.sub(r"\([^)]*\)", " ", q2)
     outside = re.sub(r"[^,;?(]*\bexcluded\b", " ", outside)
     t_out = {t for t in targets_mentioned(outside) if t not in _GENERIC}
@@ -225,11 +244,23 @@ def parse(question: str) -> Intent:
     if ma and task in ("area",) and target in ("apartment", "balcony", "room", "unknown"):
         filters["apartment"] = ma.group(1).upper()
         scope, target = "apartment", "apartment"
-    if _LABELLED.search(q_noquote) and quoted:
+    elif ma and task == "count" and (ma.group(1).isupper() or ma.group(1).isdigit()):
+        # "How many windows in apartment B?": keep the scope (never canonicalise it to the whole floor; dxf answers it)
+        rest = q_noquote[:ma.start()] + " " + q_noquote[ma.end():]
+        t2 = next((t for t, rx in _TARGETS if rx.search(rest)), None)
+        if t2 and t2 != "apartment":
+            filters["apartment"] = ma.group(1)
+            scope, target = "apartment", t2
+    nos = _NO_LABEL.findall(q_noquote)
+    if len(nos) >= 2 and scope == "drawing" and task in ("area", "count", "volume", "length", "text", "yesno"):
+        # swiss "rooms 2.03 ('Bad') and 2.01 ('Zimmer')": numbered rooms with their labels, not a room on a storey
+        filters["rooms"] = nos
+        scope, target = "rooms", "room"
+    elif _LABELLED.search(q_noquote) and quoted:
         filters["label"] = quoted[0]
         scope = "label_total" if task in ("area", "volume", "length") else "label"
         target = "room"
-    elif quoted and scope == "drawing":
+    elif quoted and scope == "drawing" and not nos:
         # ifc_models: "the room 'X' on 'Level 1'" / "on 'Level 1'" / "in the model 'X'"
         if _MODEL.search(q_noquote) and task == "count":
             filters["model"] = quoted[-1]

@@ -1,0 +1,94 @@
+/**
+ * "How well it works": the integrated pipeline vs two baselines (just ask the VLM; the per-template prior) on
+ * held-out drawings, from stoa.eval's leaderboard (GET /api/bench, see mock/stoaApi.ts). Stoa scores accuracy,
+ * reasoning, interface and cost, so the view shows accuracy per source, generality (hard split), cost per
+ * 1,000 questions, and how often the cheap deterministic tier answers.
+ *
+ * Colours: categorical slots 1–3 of the dataviz reference palette (validated all-pairs, light mode). Aqua is
+ * below 3:1 on white, so every bar carries a visible value label (the rows double as the table view).
+ */
+const esc = (s: unknown) => String(s ?? "").replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+
+type Run = {
+  run_id: string; solver: string; split: string; time: string; commit?: string; agent?: string; note?: string; n: number;
+  weighted_acc: number | null; accuracy: number | null; usd_per_1k_q: number | null; latency_p50_s: number | null;
+  evidence_rate: number | null;
+  by_tier: Record<string, { share: number; n: number; accuracy: number | null }> | null;
+  by_kind: Record<string, { n: number; accuracy: number | null }> | null;
+  calibration: { hi_conf_share?: number; hi_conf_acc?: number; ece?: number } | null;
+  by_source: Record<string, { n: number; correct: number; accuracy: number }>;
+};
+type Bench = { from: string; generated?: string; runs: Record<string, Record<string, Run | null>> };
+
+const SERIES: { key: string; label: string; color: string; hint: string }[] = [
+  { key: "pipeline", label: "Our pipeline", color: "#2a78d6", hint: "rules / geometry first, local model only when needed" },
+  { key: "vlm_direct", label: "Just ask the VLM", color: "#eb6834", hint: "Qwen3-VL-8B, image + question, no tools" },
+  { key: "prior", label: "Template prior", color: "#1baf7a", hint: "most common training answer for the question type" },
+];
+const SOURCE_LABEL: Record<string, string> = {
+  cubicasa5k: "CubiCasa raster plans", swiss_dwellings: "Swiss plans (PDF + DXF)", ifc_models: "IFC models + sheets",
+  opening_design: "US drawing sets (schedules)", ifc_bench: "IFC-Bench",
+};
+const TIER_LABEL: Record<string, string> = { deterministic: "rules / geometry", local: "local model", api: "hosted model" };
+const EUR_PER_USD = 0.86;
+const pct = (x: number | null | undefined, d = 1) => (x === null || x === undefined ? "–" : `${(x * 100).toFixed(d)}%`);
+const eur = (usd: number | null | undefined) => (usd === null || usd === undefined ? "–" : `€${(usd * EUR_PER_USD).toFixed(2)}`);
+
+function bars(rows: { label: string; sub: string; vals: (number | null)[] }[]) {
+  return `<div class="bn-bars" role="table">
+    ${rows.map((r) => `<div class="bn-row" role="row"><div class="bn-src" role="rowheader">${esc(r.label)}<small>${esc(r.sub)}</small></div>
+      <div class="bn-group" role="cell">${r.vals.map((v, i) => `<div class="bn-bar" title="${esc(SERIES[i].label)}: ${pct(v)}">
+        <i style="width:${v === null ? 0 : Math.max(v * 100, 0.6)}%;background:${SERIES[i].color}"></i><span style="left:calc(${v === null ? 0 : v * 100}% + 6px)">${v === null ? "n/a" : pct(v, 0)}</span></div>`).join("")}</div></div>`).join("")}
+  </div>`;
+}
+
+export function renderBench(el: HTMLElement, b: Bench) {
+  const dev = b.runs.dev ?? {};
+  const hard = b.runs.hard ?? {};
+  const p = dev.pipeline;
+  if (!p) {
+    el.innerHTML = `<p class="bn-empty">No full pipeline run on dev in the leaderboard yet.</p>`;
+    return;
+  }
+  const sources = Object.keys(p.by_source).sort((a, c) => (p.by_source[c].n - p.by_source[a].n));
+  const det = p.by_tier?.deterministic;
+  const hp = hard.pipeline;
+  const kinds = hp?.by_kind ? Object.entries(hp.by_kind) : [];
+  const h2 = b.runs.hard2?.pipeline;
+  const h2q = b.runs.hard2q?.pipeline;
+  const runs = [...Object.values(dev), ...Object.values(hard), h2, h2q].filter((r): r is Run => !!r);
+
+  el.innerHTML = `
+    <div class="bn-head"><h2>How well it works</h2>
+      <p>Measured by <code>stoa.eval</code> on held-out drawings (split by drawing, never seen while building). ${b.from === "snapshot" ? "Snapshot." : "Latest full runs from the team leaderboard."}</p>
+      <button class="bn-close" aria-label="Close">✕</button></div>
+    <div class="bn-tiles">
+      <div class="bn-tile"><div class="k">Accuracy · dev, ${p.n.toLocaleString("en")} questions</div>
+        <div class="v">${pct(p.accuracy)}</div>
+        <div class="s">${pct(p.weighted_acc)} weighted by each source's share of the full dataset · VLM alone ${pct(dev.vlm_direct?.accuracy)}, prior ${pct(dev.prior?.accuracy)}</div></div>
+      <div class="bn-tile"><div class="k">Generality · hard split${hp ? `, ${hp.n} questions` : ""}</div>
+        <div class="v">${pct(hp?.accuracy)}</div>
+        <div class="s">${kinds.length ? kinds.map(([k, v]) => `${esc(k)}s ${pct(v.accuracy, 0)}`).join(" · ") : "translations, paraphrases, compositions"}${h2 ? `<br><b>New question kinds</b> (average, share, threshold, which-is-larger…) ${pct(h2.accuracy, 0)}${h2q ? ` · same kinds reworded, never seen while building: ${pct(h2q.accuracy, 0)}` : ""}` : ""}</div></div>
+      <div class="bn-tile"><div class="k">Cost per 1,000 questions</div>
+        <div class="v">${eur(p.usd_per_1k_q)}</div>
+        <div class="s">median ${p.latency_p50_s !== null ? `${(p.latency_p50_s * 1000).toFixed(0)} ms` : "–"} per question · GPU time + tokens at the eval's rates</div></div>
+      <div class="bn-tile"><div class="k">Answered by rules / geometry</div>
+        <div class="v">${pct(det?.share, 0)}</div>
+        <div class="s">of questions, ${pct(det?.accuracy)} correct, no model call · ${pct(p.evidence_rate, 0)} of answers carry located evidence</div></div>
+    </div>
+    <div class="bn-chart">
+      <div class="bn-chart-head"><h3>Accuracy by source · dev</h3>
+        <div class="bn-legend">${SERIES.map((s) => `<span title="${esc(s.hint)}"><i style="background:${s.color}"></i>${esc(s.label)}</span>`).join("")}</div></div>
+      ${bars(sources.map((s) => ({ label: SOURCE_LABEL[s] ?? s, sub: `${p.by_source[s].n} questions`,
+        vals: SERIES.map((x) => dev[x.key]?.by_source?.[s]?.accuracy ?? null) })))}
+      ${hp ? `<h3 class="bn-sub">Generality · hard split (same drawings, questions translated, paraphrased or combined)</h3>
+      ${bars(Object.keys(hp.by_source).sort((a, c) => hp.by_source[c].n - hp.by_source[a].n).map((s) => ({ label: SOURCE_LABEL[s] ?? s,
+        sub: `${hp.by_source[s].n} questions`, vals: SERIES.map((x) => hard[x.key]?.by_source?.[s]?.accuracy ?? null) })))}` : ""}
+    </div>
+    <div class="bn-foot">
+      ${p.by_tier ? `<div><b>Cascade on dev:</b> ${Object.entries(p.by_tier).map(([t, v]) => `${esc(TIER_LABEL[t] ?? t)} answers ${pct(v.share, 0)} of questions (${pct(v.accuracy, 0)} correct)`).join(" · ")}.</div>` : ""}
+      ${hp?.calibration?.hi_conf_share ? `<div><b>Calibration (hard):</b> ${pct(hp.calibration.hi_conf_share, 0)} of answers have confidence ≥ 0.8, and ${pct(hp.calibration.hi_conf_acc, 0)} of those are right.</div>` : ""}
+      <details><summary>Runs</summary><ul>${runs.map((r) => `<li><code>${esc(r.run_id)}</code> ${esc(r.split)} · ${esc(r.solver)} · n=${r.n} · ${esc(r.commit ?? "")} · ${esc(r.agent ?? "")} · ${esc((r.note ?? "").slice(0, 90))}</li>`).join("")}</ul></details>
+    </div>`;
+  el.querySelector(".bn-close")?.addEventListener("click", () => (el.hidden = true));
+}

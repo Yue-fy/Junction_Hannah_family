@@ -1,7 +1,8 @@
 import "./style.css";
-import { ask, exampleQuestions, fileUrl, knowledgeGraph, listFiles, onBackend } from "./api";
-import { crossChecks, renderCard } from "./card";
-import { renderKg } from "./kg";
+import { ask, benchmark, exampleQuestions, fileUrl, knowledgeGraph, listFiles, onBackend, secondOpinion } from "./api";
+import { renderBench } from "./bench";
+import { agentAsks, crossChecks, renderCard } from "./card";
+import { markAnswerCheck, renderKg } from "./kg";
 import type { Answer, FileInfo, KgRoom } from "./types";
 import { Viewer2D } from "./viewer2d";
 import type { Viewer3D } from "./viewer3d"; // loaded lazily: web-ifc + three are ~4 MB
@@ -129,14 +130,10 @@ function fillStoreys() {
   sel.innerHTML = `<option value="">All storeys</option>` + v.storeys.map((s) => `<option value="${s.id}">${esc(s.name)}</option>`).join("");
   // a plan sheet → its storey ("…_plan-01-1-korrus.pdf" ↔ "1.korrus")
   const m = state.file?.path.match(/_plan-\d+-(.*)\.pdf$/);
-  if (m) {
-    const key = m[1].replace(/[^a-z0-9]/gi, "").toLowerCase();
-    const s = v.storeys.find((x) => x.name.replace(/[^a-z0-9]/gi, "").toLowerCase() === key);
-    if (s) {
-      sel.value = String(s.id);
-      v.setStorey(s.id);
-    }
-  }
+  const key = m?.[1].replace(/[^a-z0-9]/gi, "").toLowerCase();
+  const s = key ? v.storeys.find((x) => x.name.replace(/[^a-z0-9]/gi, "").toLowerCase() === key) : undefined;
+  sel.value = s ? String(s.id) : "";
+  v.setStorey(s ? s.id : null);
 }
 $<HTMLSelectElement>("storey").addEventListener("change", (e) => {
   const val = (e.target as HTMLSelectElement).value;
@@ -146,6 +143,21 @@ $<HTMLSelectElement>("storey").addEventListener("change", (e) => {
 $("fitBtn").addEventListener("click", () => {
   v2d.frameEvidence();
   if (v3d && state.answer) applyEvidence3D(state.answer);
+});
+
+$("benchBtn").addEventListener("click", async () => {
+  const el = $("bench");
+  if (!el.hidden) return void (el.hidden = true);
+  el.hidden = false;
+  el.innerHTML = `<p class="bn-empty">Loading the leaderboard…</p>`;
+  try {
+    renderBench(el, await benchmark());
+  } catch (e) {
+    el.innerHTML = `<p class="bn-empty">No benchmark data (${esc(e)}).</p>`;
+  }
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") $("bench").hidden = true;
 });
 
 // --- files --------------------------------------------------------------------------------------------------
@@ -208,11 +220,13 @@ async function openFile(f: FileInfo, question = "", keep: Answer | null = null, 
   $("fileMeta").textContent = `${f.source} · ${f.n_questions} questions`;
   $("credit").innerHTML = creditLine(f);
   if (!keep) {
+    markAnswerCheck($("linked"), undefined, undefined);
     $("xbanner").hidden = true;
     $("card").className = "card empty";
     $("card").innerHTML = `<p class="hint">Ask a question about this ${f.ext === ".ifc" ? "model" : "drawing"}.</p>`;
   }
   $("pick").hidden = true;
+  $("bench").hidden = true;
   $<HTMLTextAreaElement>("question").value = question;
 
   const is3DOnly = f.ext === ".ifc";
@@ -222,6 +236,7 @@ async function openFile(f: FileInfo, question = "", keep: Answer | null = null, 
     b.disabled = (b.dataset.mode !== "2d" && !state.ifc) || (b.dataset.mode !== "3d" && is3DOnly);
   });
   $<HTMLSelectElement>("storey").hidden = true;
+  if (v3d && state.ifc && v3d.file === state.ifc) fillStoreys(); // same model, other sheet: follow its storey
   if (!keep) setMode(is3DOnly ? "3d" : state.ifc ? "split" : "2d");
   else setMode(is3DOnly ? "3d" : state.mode === "3d" && state.ifc ? "split" : state.ifc ? state.mode : "2d");
 
@@ -411,6 +426,8 @@ async function runAsk() {
 
 async function showAnswer(a: Answer, roundTripMs: number) {
   state.answer = a;
+  const askedPath = state.file?.path ?? "";
+  const askedQ = $<HTMLTextAreaElement>("question").value.trim();
   renderCard($("card"), a, {
     roundTripMs: roundTripMs || (a.cost?.wall_seconds ?? 0) * 1000, onEvidence: focusEvidence,
     describeGuid: (g) => v3d?.describe(g) ?? g, currentFile: state.file?.path ?? "", onOpenSheet: (p) => void openSheet(p),
@@ -418,11 +435,19 @@ async function showAnswer(a: Answer, roundTripMs: number) {
       $<HTMLTextAreaElement>("question").value = q;
       void runAsk();
     },
+    onSecondOpinion: async () => {
+      const t0 = performance.now();
+      const answer = await secondOpinion(askedPath, askedQ);
+      return { answer, ms: performance.now() - t0 };
+    },
   });
   v2d.setEvidence(a.evidence);
   v2d.frameEvidence();
+  // only a storey-scoped count is the same fact as a drawing-vs-model pill (model-wide totals are not)
+  const st = a.intent?.filters?.storey ? String(a.intent.filters.storey) : undefined;
+  markAnswerCheck($("linked"), a.intent?.task === "count" && st ? a.intent.target : undefined, st);
   const xb = $("xbanner");
-  const xcs = crossChecks(a);
+  const xcs = crossChecks(a, agentAsks(a));
   const xc = xcs[0];
   xb.hidden = !xc;
   if (xc) {
@@ -449,6 +474,9 @@ function applyEvidence3D(a: Answer) {
     const s = [...storeyIds][0];
     v.setStorey(s);
     $<HTMLSelectElement>("storey").value = String(s);
+  } else if (storeyIds.size > 1) {
+    v.setStorey(null); // model-wide evidence: show every storey it touches
+    $<HTMLSelectElement>("storey").value = "";
   }
   const pane = $("pane3d");
   pane.dataset.found = String(n);
@@ -475,7 +503,7 @@ function focusEvidence(i: number) {
 }
 
 // --- demo tour: five steps, each one sentence for the presenter ----------------------------------------
-const TOUR: { file: string; q: string; note: string }[] = [
+const TOUR: { file: string; q: string; note: string; bench?: boolean; second?: boolean }[] = [
   { file: "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
     q: "What is the net floor area of the room 'KORIDOR (119)' on '1.korrus', in m²?",
     note: "Area from the IFC model, shown on the drawing and in 3D: same room, same GlobalId." },
@@ -483,26 +511,51 @@ const TOUR: { file: string; q: string; note: string }[] = [
     q: "How many doors are shown on the floor plan of '1.korrus'?",
     note: "Count with one box per door. The drawing and the model agree (cross-check), no model call needed." },
   { file: "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+    q: "How many windows are shown on the floor plan of '1.korrus'?",
+    note: "Windows: the model has 55 on this storey, the drawing shows 52. The cross-check explains the gap instead of hiding it: the plan is a cut at floor + 1.2 m, and 3 windows lie entirely above or below it (see the highlighted check below)." },
+  { file: "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
     q: "How many doors are there in the model 'Maleva tänav 18 korterelamu (Esplanades example model)'?",
     note: "Model-wide question: evidence on five sheets. Click a sheet chip to open it." },
+  { file: "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+    q: "What share of the total room area on '1.korrus' does the room 'KORIDOR (119)' take, in percent?",
+    note: "A question no template covers: a small local model plans the steps (ask, ask, calc), the numbers come from the solvers with their evidence, and the arithmetic is done in code." },
   { file: "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
     q: "How many doors (interior doors and entrance doors together) are drawn on this floor plan?",
     note: "Vector drawing: doors counted on the CAD layer and mapped back onto the PDF." },
   { file: "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
     q: "Wie viele Türen und Fenster sind insgesamt auf diesem Grundriss eingezeichnet?",
     note: "A German question that combines two counts: it is split into two sub-questions, each answered and cross-checked, and the sum is done in code." },
+  { file: "data/cubicasa5k/colorful-4539.png",
+    q: "Kuinka monta makuuhuonetta (MH) pohjapiirustuksessa on?",
+    note: "A scanned Finnish apartment plan, asked in Finnish: the room labels are read once per drawing by the local vision model, and each counted bedroom label ('MH') is marked on the image." },
   { file: "data/habs/ak0003_sheet_00019.jpg",
-    q: "What kind of drawing is this (floor plan, elevation, section, site plan)?",
-    note: "Historical scan with no text layer: the cascade escalates to a local vision model and says how sure it is." },
+    q: "What kind of drawing is this (floor plan, elevation, section, site plan)?", second: true,
+    note: "Historical scan with no text layer: a local vision model answers but is unsure, so we ask NVIDIA Nemotron (hosted) for a second opinion: one paid call, only when needed." },
+  { file: "", q: "", bench: true,
+    note: "Measured on held-out drawings: accuracy per source against two baselines, generality, and cost per 1,000 questions." },
 ];
 let tourStep = -1;
+let tourBack = false;
+// presenter keys: → next step, ← previous step (not while typing a question)
+document.addEventListener("keydown", (e) => {
+  const t = e.target as HTMLElement;
+  if (/^(TEXTAREA|INPUT|SELECT)$/.test(t.tagName) || e.altKey || e.ctrlKey || e.metaKey) return;
+  if (e.key === "ArrowRight" || (e.key === "ArrowLeft" && tourStep > 0)) {
+    e.preventDefault();
+    tourBack = e.key === "ArrowLeft";
+    $("tourBtn").click();
+  }
+});
 $("tourBtn").addEventListener("click", async () => {
-  tourStep = (tourStep + 1) % TOUR.length;
+  tourStep = tourBack ? Math.max(0, tourStep - 1) : (tourStep + 1) % TOUR.length;
+  tourBack = false;
   const t = TOUR[tourStep];
   $("tourBtn").textContent = `Demo ${tourStep + 1}/${TOUR.length} ▸`;
   const note = $("tourNote");
   note.hidden = false;
   note.innerHTML = `<b>${tourStep + 1}/${TOUR.length}</b> ${esc(t.note)}`;
+  $("bench").hidden = true;
+  if (t.bench) return $("benchBtn").click();
   if (state.file?.path !== t.file) {
     const src = t.file.split("/")[1];
     const f = state.files.find((x) => x.path === t.file) ?? (await listFiles("", t.file, 5)).find((x) => x.path === t.file)
@@ -511,6 +564,7 @@ $("tourBtn").addEventListener("click", async () => {
     await openFile(f, t.q);
   } else $<HTMLTextAreaElement>("question").value = t.q;
   await runAsk();
+  if (t.second) document.querySelector<HTMLButtonElement>("#card .second-btn")?.click();
 });
 
 // --- boot ---------------------------------------------------------------------------------------------------
