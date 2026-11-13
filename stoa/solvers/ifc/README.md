@@ -25,6 +25,23 @@ How the dataset's gold values were computed (100% on train; see `experiments/w1/
 - A count "on the floor plan of X" = elements of that class whose spatial container is storey X. Walls are
   IfcWall + IfcWallStandardCase. For IFC2X3 MEP, the effective class comes from the type object.
 
+Question kinds beyond the dataset templates (F's `hard2`: 36/36):
+- Operators composed in `solver._compose` from atomic answers (each part keeps its evidence; arithmetic in code):
+  average per element, share/percentage of a storey or of the model or of an unfiltered total
+  ("% of wall volume that is load-bearing"), threshold counts ("how many of rooms A..D have > 13 m²"),
+  "which storey has more X, A or B" (answers the asked name), sum/difference over several storeys.
+- Exclusions ("excluding external walls", "not counting windows") are applied when they name a filter or a
+  coordinated kind; otherwise confidence is capped at 0.3 and the reason goes to `missing`.
+- Unquoted storeys ("level 4", "on the 1.OG floor", "second floor") are resolved by name, number or ordinal.
+- List/description requests ("What are the spaces on level 4, with their areas?") are not answered with one
+  number: the rule's value goes to the fact-card LLM as a verified fact, with a focus section for the storey.
+- Placeholder rooms (>= 80% of IfcSpaces ~1 m², e.g. sixty5) cap room-area confidence at 0.15 and say why.
+
+2D cross-checks (`stoa.kg`): the ifc_models sheets are horizontal cuts at storey floor + 1.2 m and draw every
+element crossing that plane, of any storey. Checks compare like with like (`_cut_compare`: elements of the
+storey that cross the plane vs drawn elements of that storey; 244/268 plan x class rows equal) and explain the
+rest (lintel walls above the cut, the next floor drawn on a basement sheet). `ok=None` = no 2D data.
+
 Options (`--solver-arg`):
 - `qto=0` ignores Qto and uses geometry only (accuracy measured per kind: volume 69–85%, length 62%, side area 43%).
 - `plan2d=0` turns off the 2D boxes.
