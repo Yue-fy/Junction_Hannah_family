@@ -5,6 +5,11 @@ Integrated `night` (cbd2fe8, all branches at 00:32) on dev v2 (hash f43c5369), h
 `python -m stoa.eval.scorecard 20261114-003232-pipeline-dev-98d6 --hard 20261114-003438-pipeline-hard-63f0 --text 20261114-003818-pipeline-dev-79b6`.
 The sealed test is run only by S0. Read "cubicasa 61%" as the open problem: symbol counting (windows, doors,
 sinks, WC seats); every other source is 98–100% with evidence.
+Cost (00:55): GPU time for local LLM calls is billed from tokens at the server's measured throughput
+(min(reported, estimate)), because latency-timed calls included queueing on the shared server
+(stoa.eval.runner.gpu_seconds_billed). That moved the pipeline from $0.41 to $0.04 per 1k questions.
+Calls answered from the LLM cache are still charged as free by stoa.llm, so a cold run may cost somewhat
+more (told R2).
 
 ## Scorecard: `pipeline` — 20261114-003232-pipeline-dev-98d6
 
@@ -23,7 +28,7 @@ Baseline: `20261113-235744-prior-dev`. CI = 95% cluster bootstrap over drawings.
 | confidence ≥ 0.8: share / accuracy | 67% / 98.1% | 5% / 92.7% | what the user sees as 'sure' |
 | calibration error (ECE) | 0.019 | 0.024 | 0 = confidence = accuracy |
 | confidence ranks right above wrong (AUROC) | 0.91 | 0.88 | 0.5 = confidence is noise |
-| cost per 1,000 questions | $0.41 | $0.00 | LLM tokens, GPU s, API calls priced (runner.RATES) |
+| cost per 1,000 questions | $0.04 | $0.00 | LLM tokens, GPU s, API calls priced (runner.RATES) |
 | LLM calls per question | 0.22 | 0.00 |  |
 | deterministic tier (share / accuracy) | 80% / 86.0% | 100% / 26.9% | no model call at all |
 | latency p50 / p95 | 0.176 s / 1.915 s | 0.0 s / 0.001 s |  |
@@ -32,7 +37,7 @@ Baseline: `20261113-235744-prior-dev`. CI = 95% cluster bootstrap over drawings.
 
 | source | n | accuracy | conf ≥ 0.8 share / acc | ECE | evidence in 2D | counts verifiable | $/1k |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| cubicasa5k | 800 | 61.0% | 23% / 91.9% | 0.015 | 5% | 100% | 1.09 |
+| cubicasa5k | 800 | 61.0% | 23% / 91.9% | 0.015 | 5% | 100% | 0.06 |
 | ifc_bench | 200 | text 42.5% | – | – | 0% | – | 0.10 |
 | ifc_models | 354 | 99.7% | 100% / 99.7% | 0.025 | 93% | 100% | 0.00 |
 | opening_design | 61 | 78.3% | 0% / – | 0.259 | 87% | 58% | 0.34 |

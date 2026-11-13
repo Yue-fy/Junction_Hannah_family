@@ -35,10 +35,27 @@ RATES = {
 }
 
 
+# Local-LLM GPU time from tokens at the shared server's measured throughput (same constants as stoa.llm).
+PREFILL_TPS = float(os.environ.get("LLM_PREFILL_TPS", 25_000))
+DECODE_TPS = float(os.environ.get("LLM_DECODE_TPS", 1_000))
+
+
+def gpu_seconds_billed(c: dict) -> float:
+    """GPU seconds we charge. Solvers that time local LLM calls by HTTP latency include queueing on the
+    shared server (00:30: 30.9 s reported for a 1.6k-in/205-out call that needs ~0.27 s). So when a row has
+    local LLM tokens, charge min(reported, token estimate); GPU work without tokens is charged as reported."""
+    gpu = c.get("gpu_seconds", 0) or 0
+    local_in = max(0, (c.get("llm_tokens_in", 0) or 0) - (c.get("api_tokens_in", 0) or 0))
+    local_out = max(0, (c.get("llm_tokens_out", 0) or 0) - (c.get("api_tokens_out", 0) or 0))
+    if local_in or local_out:
+        gpu = min(gpu, local_in / PREFILL_TPS + local_out / DECODE_TPS) if gpu else gpu
+    return gpu
+
+
 def cost_usd(c: dict) -> float:
     local_in = max(0, c.get("llm_tokens_in", 0) - c.get("api_tokens_in", 0))
     local_out = max(0, c.get("llm_tokens_out", 0) - c.get("api_tokens_out", 0))
-    usd = c.get("gpu_seconds", 0) * RATES["gpu_usd_per_s"] + c.get("wall_seconds", 0) * RATES["cpu_usd_per_s"]
+    usd = gpu_seconds_billed(c) * RATES["gpu_usd_per_s"] + c.get("wall_seconds", 0) * RATES["cpu_usd_per_s"]
     usd += (c.get("api_tokens_in", 0) * RATES["api_usd_per_mtok_in"]
             + c.get("api_tokens_out", 0) * RATES["api_usd_per_mtok_out"]) / 1e6
     if not c.get("gpu_seconds"):
@@ -188,7 +205,7 @@ def summarize(preds: list[dict]) -> dict:
                 d["text_judge"] = round(sum(1 for r in judged if r["text_judge"]) / len(judged), 4)
                 d["text_judged_n"] = len(judged)
         if rows and "cost" in rows[0]:
-            d["usd_per_q"] = round(statistics.fmean(r["cost"]["usd"] for r in rows), 6)
+            d["usd_per_q"] = round(statistics.fmean(cost_usd(r["cost"]) for r in rows), 6)
         return d
 
     out = block(preds)
@@ -217,6 +234,8 @@ def summarize(preds: list[dict]) -> dict:
                             for k, v in sorted(recipes.items())}
     # cost
     if preds and "cost" in preds[0]:
+        for r in preds:  # re-cost stored rows with the current policy (old runs: queueing-inflated GPU time)
+            r["cost"] = {**r["cost"], "usd": round(cost_usd(r["cost"]), 7)}
         keys = ("llm_tokens_in", "llm_tokens_out", "api_tokens_in", "api_tokens_out", "llm_calls", "api_calls",
                 "gpu_seconds", "wall_seconds", "usd")
         out["cost_mean"] = {k: round(statistics.fmean(r["cost"].get(k, 0) for r in preds), 6) for k in keys}
