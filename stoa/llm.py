@@ -200,7 +200,7 @@ def prepare_image(src: Any, max_pixels: int = DEFAULT_MAX_PIXELS, max_side: int 
 class Cost:
     """Cost of the LLM calls made inside a `cost_meter()` block (Stoa scores cost: lower is better).
 
-    gpu_seconds = wall time of local-server calls (upper bound: the server batches requests);
+    gpu_seconds = amortised estimate from tokens (see PREFILL_TPS / DECODE_TPS), not HTTP wall time;
     api_calls counts hosted (nvidia) calls only.
     """
 
@@ -217,7 +217,8 @@ class Cost:
             self.llm_tokens_in += res.prompt_tokens or 0
             self.llm_tokens_out += res.completion_tokens or 0
             if res.backend == "local":
-                self.gpu_seconds += 0.0 if res.cached else res.latency_s
+                self.gpu_seconds += 0.0 if res.cached else gpu_seconds_estimate(res.prompt_tokens or 0,
+                                                                                 res.completion_tokens or 0)
             elif not res.cached:
                 self.api_calls += 1
 
@@ -252,10 +253,33 @@ def cost_meter():
                 parent.api_calls += c.api_calls
 
 
+# Amortised GPU time per token on the shared server (Qwen3-VL-8B bf16, RTX PRO 6000, batched by vLLM).
+# Measured at saturation: dev run of 2,160 questions in ~62 s at ~1.2k prompt tokens each => ~40k prompt tok/s;
+# we use a conservative 25k. Decode: ~1k tok/s aggregate at typical batch sizes. HTTP wall time is NOT used,
+# because it includes queueing behind other agents' requests (F, 00:19: 0.5 s idle vs 7.8 s busy).
+PREFILL_TPS = float(os.environ.get("LLM_PREFILL_TPS", 25_000))
+DECODE_TPS = float(os.environ.get("LLM_DECODE_TPS", 1_000))
+
+
+def gpu_seconds_estimate(tokens_in: int, tokens_out: int) -> float:
+    return round(tokens_in / PREFILL_TPS + tokens_out / DECODE_TPS, 4)
+
+
 def _charge(res: "ChatResult") -> "ChatResult":
     m = _METER.get()
     if m is not None:
         m.add(res)
+    if not res.cached:  # report to the contract's CostMeter (the eval attributes it per question)
+        try:
+            from stoa.contract import record_cost
+        except ImportError:  # older contract without cost metering
+            return res
+        tin, tout = res.prompt_tokens or 0, res.completion_tokens or 0
+        if res.backend == "local":
+            record_cost(llm_calls=1, llm_tokens_in=tin, llm_tokens_out=tout, gpu_seconds=gpu_seconds_estimate(tin, tout))
+        else:
+            record_cost(llm_calls=1, llm_tokens_in=tin, llm_tokens_out=tout, api_calls=1, api_tokens_in=tin,
+                        api_tokens_out=tout)
     return res
 
 
@@ -270,6 +294,7 @@ class ChatResult:
     prompt_tokens: int | None = None
     completion_tokens: int | None = None
     reasoning: str | None = None  # thinking text if the server returned it separately
+    texts: list[str] = field(default_factory=list)  # all n samples when n > 1 (texts[0] == text)
     finish_reason: str | None = None
     cached: bool = False
 
@@ -340,6 +365,7 @@ def chat(
     temperature: float = 0.0,
     top_p: float | None = None,
     seed: int | None = None,
+    n: int = 1,
     thinking: bool | None = False,
     json_schema: dict | None = None,
     max_pixels: int = DEFAULT_MAX_PIXELS,
@@ -391,6 +417,8 @@ def chat(
         kwargs["top_p"] = top_p
     if seed is not None:
         kwargs["seed"] = seed
+    if n > 1:  # one prefill (image encoded once), n decodes: cheap self-consistency on vLLM
+        kwargs["n"] = n
     if body:
         kwargs["extra_body"] = body
 
@@ -409,7 +437,11 @@ def chat(
     client = _client(backend)
     delay = 2.0
     last_err: Exception | None = None
-    for attempt in range(retries + 1):
+    restart_budget = float(os.environ.get("LLM_RESTART_WAIT", 300))  # local server restarts take ~2 min
+    waited = 0.0
+    attempt = 0
+    while attempt <= retries:
+        attempt += 1
         if backend == "nvidia":
             _nvidia_throttle()
         t0 = time.time()
@@ -427,6 +459,7 @@ def chat(
                 prompt_tokens=getattr(resp.usage, "prompt_tokens", None) if resp.usage else None,
                 completion_tokens=getattr(resp.usage, "completion_tokens", None) if resp.usage else None,
                 reasoning=reasoning, finish_reason=ch.finish_reason,
+                texts=[c.message.content or "" for c in resp.choices],
             )
             if cpath is not None:
                 cpath.parent.mkdir(parents=True, exist_ok=True)
@@ -444,7 +477,10 @@ def chat(
             delay = min(delay * 2, 60)
         except (APIConnectionError, APITimeoutError) as e:  # server restarting / overloaded
             last_err = e
+            if backend == "local" and isinstance(e, APIConnectionError) and waited < restart_budget:
+                attempt -= 1  # a restarting local server doesn't use up retries, only the time budget
             time.sleep(delay)
+            waited += delay
             delay = min(delay * 2, 30)
         except APIStatusError as e:
             last_err = e
@@ -453,7 +489,7 @@ def chat(
                 delay = min(delay * 2, 30)
                 continue
             raise  # 400 etc.: the request itself is wrong (e.g. prompt too long) — don't retry
-    raise RuntimeError(f"chat failed after {retries + 1} attempts on {backend}: {last_err!r}")
+    raise RuntimeError(f"chat failed after {attempt} attempts ({waited:.0f}s waiting) on {backend}: {last_err!r}")
 
 
 def chat_many(requests: Iterable[dict], workers: int = 16) -> list[ChatResult | Exception]:

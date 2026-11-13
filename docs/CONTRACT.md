@@ -56,6 +56,10 @@ class MySolver(BaseSolver):
            "api_tokens_in": 0, "api_tokens_out": 0, "llm_calls": 0, "wall_seconds": 0.0}
 }
 ```
+`Answer` validates on assignment too: `ans.cost = {...}` becomes a `Cost`, and `ans.confidence = 1.2` raises
+(the eval records it as an exception, i.e. a refusal; check `errors` in the eval output). `Cost` also behaves
+as a read-only mapping of its non-zero fields, so old code doing `{**d, **(ans.cost or {})}` keeps working.
+
 Stoa (13 Nov): refusing is not useful. `value: null` is allowed but counted as a **refusal**; prefer a best
 estimate with a low `confidence` plus `assumptions` and `missing`.
 
@@ -111,12 +115,25 @@ $JUNCTION_VENV/bin/python -m stoa.eval --list        # registered solvers + impo
   per-question predictions in `$JUNCTION_SHARED/artifacts/eval/<run-id>.jsonl` (gold, prediction,
   evidence, trace, error) for error analysis.
 - Set `AGENT_ID=<your id>` in the environment so the leaderboard line records who ran it.
+- `--judge local|nvidia`: grade text/other answers with an LLM judge (`stoa/eval/judge.py`), reported as
+  `text_judge` per bucket, never part of accuracy; the judge's cost is not charged to the solver.
+- Other tools: `python -m stoa.eval.analyze RUN [--baseline RUN]` (loss tables, examples, calibration),
+  `python -m stoa.eval.leaderboard [--split dev]` (latest full run per solver on the current split version),
+  `python -m stoa.eval.gates CHEAP_RUN CHALLENGER_RUN` (per-concept gate table from `--split train_gate` runs).
+  Extra splits: `train_gate` (960 train Qs for choosing gates/thresholds), `cc5k_heldout` (CC5K-pretrained
+  models only), `hard` (generality), or any split file path.
 
 ## HTTP API (W4 implements `stoa/api.py`, port 8100)
 
 ### `POST /ask`
 Request: `{"path": "data/...", "question": "How many windows ...?", "solver": "pipeline"}` (`solver`
 optional, default `pipeline`). Response `200`: an `Answer` JSON (above). `404` if the file doesn't exist.
+Additive fields (D6, 00:33): `"intent"` (the router's parse of the question, `stoa.router.intent.parse(q).to_dict()`),
+`"plan"` (only for compound questions: `{"op": "sum"|..., "parts": [...], "sub_questions": [...]}`) and
+`"cached"` (bool). Clients must ignore fields they don't know.
+
+### `GET /intent?q=...`
+Returns the router's intent parse for a question (debug/demo).
 
 ### `GET /file?path=data/...`
 Returns the drawing file (PDF, PNG, JPG, SVG, IFC, DXF) with the right content type. Only paths under the

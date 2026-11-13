@@ -48,3 +48,41 @@ def test_groups_and_templates():
     assert drawing_group("data/cubicasa5k/colorful-10052.png") == "cubicasa5k/colorful-10052"
     assert drawing_group("data/ifc_bench/dental_clinic_mep.ifc") == "ifc_bench/dental_clinic"
     assert template_of("How many rooms on floor 3?") == "how many rooms on floor <N>?"
+
+
+def test_cost_backward_compat():
+    from stoa.contract import Cost
+
+    a = Answer(value=1)
+    assert not a.cost and dict(**a.cost) == {}
+    a.cost = {**{"llm_tokens_in": 10, "gpu_seconds": 0.5}, **(a.cost or {})}  # old-style merge
+    assert isinstance(a.cost, Cost) and a.cost.llm_tokens_in == 10 and a.cost.gpu_seconds == 0.5
+    assert {**a.cost} == {"llm_tokens_in": 10, "gpu_seconds": 0.5}
+    assert a.model_dump()["cost"]["llm_tokens_in"] == 10
+
+
+def test_calibration_metrics():
+    from stoa.eval.calibration import calibration
+
+    def row(c, ok, t="count"):
+        return {"type": t, "correct": ok, "confidence": c}
+
+    # perfectly ranked and calibrated at the extremes
+    good = calibration([row(1.0, True)] * 8 + [row(0.0, False)] * 2)
+    assert good["auroc"] == 1.0 and good["ece"] == 0.0 and good["brier"] == 0.0
+    assert good["e_aurc"] == 0.0 and good["hi_conf_share"] == 0.8 and good["hi_conf_acc"] == 1.0
+    # constant confidence carries no ranking information
+    flat = calibration([row(0.3, True)] * 3 + [row(0.3, False)] * 7)
+    assert flat["auroc"] == 0.5 and abs(flat["ece"]) < 1e-9 and flat["hi_conf_acc"] is None
+    # text rows and missing confidences are skipped
+    mixed = calibration([row(0.9, True), row(None, False), {"type": "text", "correct": None, "confidence": 0.5}])
+    assert mixed["n"] == 1 and mixed["n_missing_conf"] == 1
+
+
+def test_select_grep():
+    from stoa.data import Question
+    from stoa.eval.runner import select
+
+    qs = [Question(qid=str(i), path="data/cubicasa5k/a.png", question=q, answer=1, unit=None, type="count")
+          for i, q in enumerate(("How many windows are shown?", "Kuinka monta ikkunaa?", "How many doors?"))]
+    assert len(select(qs, grep="window|ikkun")) == 2
