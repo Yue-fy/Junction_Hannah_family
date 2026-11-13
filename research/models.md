@@ -29,10 +29,18 @@ Cost columns are per question. "dev cc" = dev cubicasa counts (800 q), the bucke
 | Nemotron, thinking on (4096 tok) | smoke cc (80) | 38.8 (50.0 on answered, 22% unanswered) | ~30 s, 1.9k in / 3.1k out, 1.6 API calls | too slow/costly for bulk; local 8B direct on the same 80: 45.0 |
 | (dummy prior, F) | dev | 32.0 | 0 | |
 
-**LoRA in progress (00:13–01:13):** Qwen3-VL-8B + LoRA r16 on TRAIN cubicasa counts (4,366 drawings, multi-turn
-image-once samples, EN/FI + paraphrases, answer-only targets). Adapter: `$JUNCTION_SHARED/artifacts/R2/lora/cc-v1`.
-Scripts: `experiments/r2/lora/{build_data,train_lora}.py`. Training env: `/data/User/fangy4/envs/junction-train`
+| Qwen3-VL-8B + decompose compound questions | dev cc | 42.6 | 2.2 calls | sinks+basins 56→6, showers+baths 35→5: the 8B over-counts EACH kind; rejected |
+| Nemotron, direct prompt, 1024 tok (reasons briefly in the answer) | smoke cc (80) | **50.0** | 8 s, 1.5k in / 313 out, 1.16 API calls, $1.2/1k | best Nemotron mode; local 8B on the same 80: 45.0 (n small) |
+
+**LoRA in progress (00:24–01:25): cc-v2.** Qwen3-VL-8B + LoRA r16 on TRAIN cubicasa counts, *excluding every
+train_gate drawing* (train_gate ⊂ train is used for gating; cc-v1 had seen it and was stopped after 10 min).
+3,905 drawings as multi-turn image-once samples (34.7k Q/A turns, EN/FI + paraphrases, answer-only targets),
+~0.94 s/sample, 27 GB. Adapter: `$JUNCTION_SHARED/artifacts/R2/lora/cc-v2`.
+Scripts: `experiments/r2/lora/{build_data,train_lora,eval_lora.sh}`. Training env: `/data/User/fangy4/envs/junction-train`
 (= coder390-vllm packages via a read-only .pth + peft/accelerate).
+
+Cost accounting: local calls record `gpu_seconds = tokens_in/25k + tokens_out/1k` (amortised throughput measured
+at saturation), not HTTP wall time (which includes queueing behind other agents).
 
 ## Candidates surveyed (23:35–23:50, HF hub listing; vLLM 0.31 registry checked)
 | model | size | vLLM | why interesting | verdict |
@@ -59,4 +67,5 @@ Scripts: `experiments/r2/lora/{build_data,train_lora}.py`. Training env: `/data/
 4. Hosted Nemotron (thinking on, ~30 s, ~5k tokens, 1–2 API calls): only for escalated / demo questions. It is
    not more accurate than the local 8B in direct mode, so it should be used as a reasoning verifier
    (e.g. "here is the count and the points; check it"), not as a first-pass counter.
-5. If the counting LoRA wins on dev cc, it replaces step 2 for raster counts (same server, `model="cc-v1"`).
+5. If the counting LoRA wins on dev cc and on train_gate per concept, it replaces step 2 for those concepts
+   (same server with LoRA enabled, `model="cc-v2"`).
