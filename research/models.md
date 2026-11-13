@@ -15,11 +15,24 @@ Hardware: 1× RTX PRO 6000 Blackwell 96 GB. Shared server budget ≈ 45 GB (`--g
 | licence | Qwen3-VL is Apache-2.0; this copy came bundled with Qwen-Image-2.1 (qwen-research licence on the bundle). Fine for the hackathon; for anything public re-download the Apache original. |
 
 ## Results (vlm_direct = render the page, ask, parse one number)
-| model | style | split | micro acc | macro acc | latency mean | tokens in/out per q | notes |
-|---|---|---|---|---|---|---|---|
-| Qwen3-VL-8B local | CoT, 1024 max tok | smoke | 26.2 | 13.0 | 4.5 s | ~600/~400 | rambles, loops, truncates (finish=length); parse picks dimension text like "1800x2400" |
-| Qwen3-VL-8B local | direct (answer only) | smoke | **32.9** | **28.4** | 0.32 s | ~600/3 | 8× fewer output tokens, better accuracy |
-| (dummy floor, F) | template mode | smoke | 31.6 | – | – | 0 | the floor to beat |
+Cost columns are per question. "dev cc" = dev cubicasa counts (800 q), the bucket that is 68% of the score.
+| model / variant | split | micro acc | cost per q | notes |
+|---|---|---|---|---|
+| Qwen3-VL-8B, CoT (1024 tok) | smoke v0 (246) | 26.2 | 4.5 s, ~600 in / ~400 out | rambles, loops, truncates; parser grabs "1800x2400" |
+| Qwen3-VL-8B, **direct answer** (default) | smoke (206) | **37.0** | 0.3–1 s, ~600–1800 in / 3 out | |
+| Qwen3-VL-8B, direct answer | dev (2215) | 32.0 (macro 16.0) | ~1 s | = dummy prior 32.0 micro; per template: wins swiss apartments (93 vs 19), rooms-by-label (79 vs 19), swiss room area read from plan (36–59 vs ~0); loses cubicasa fixtures (answers "2" to compound "X and Y" questions — F) |
+| Qwen3-VL-8B direct | dev cc | 48.8 | 1.3k in / 2 out | prior: 60.1 |
+| + upscale to 2 Mpx | dev cc | 49.8 | 2.1k in | noise |
+| + point-then-count (count = #points) | dev cc | 34.1 | 1.3k in / 401 out, p95 91 s | looping point lists; use points only as evidence |
+| + self-consistency n=5, T=0.7 | dev cc | 48.9 | 1 request, 10 out | vote share calibrates: 5/5 → 55% acc, 4/5 → 38%, ≤3/5 → ≤20% (routing signal) |
+| Nemotron 3.5 Super VL (hosted), direct | smoke (206) | 33.1 | ~4 s, 1 API call | worse than local 8B on every bucket; reasons in the visible answer even with thinking off (`/no_think`, `reasoning_effort` don't stop it) |
+| Nemotron, thinking on (4096 tok) | smoke cc (80) | 38.8 (50.0 on answered, 22% unanswered) | ~30 s, 1.9k in / 3.1k out, 1.6 API calls | too slow/costly for bulk; local 8B direct on the same 80: 45.0 |
+| (dummy prior, F) | dev | 32.0 | 0 | |
+
+**LoRA in progress (00:13–01:13):** Qwen3-VL-8B + LoRA r16 on TRAIN cubicasa counts (4,366 drawings, multi-turn
+image-once samples, EN/FI + paraphrases, answer-only targets). Adapter: `$JUNCTION_SHARED/artifacts/R2/lora/cc-v1`.
+Scripts: `experiments/r2/lora/{build_data,train_lora}.py`. Training env: `/data/User/fangy4/envs/junction-train`
+(= coder390-vllm packages via a read-only .pth + peft/accelerate).
 
 ## Candidates surveyed (23:35–23:50, HF hub listing; vLLM 0.31 registry checked)
 | model | size | vLLM | why interesting | verdict |
@@ -37,8 +50,13 @@ Hardware: 1× RTX PRO 6000 Blackwell 96 GB. Shared server budget ≈ 45 GB (`--g
 | InternVL3.5-8B/30B-A3B | 17 / 60 GB | ✅ | good docs | not newer than Qwen3.6 |
 | GroundingDINO / OWLv2 / Florence-2 | <2 GB | – | open-vocab detectors | symbols on plans are out-of-domain for them |
 
-## Cascade recommendation (draft, to be measured)
-1. Deterministic parsers first (DXF / IFC / PDF text layer): free and exact.
-2. Local VLM, direct answer (0.3 s, ~600 tokens) for raster-only questions.
-3. Escalate to hosted Nemotron only when the local answer is low-confidence (e.g. self-consistency disagreement
-   across 2 tiles/resolutions, or a count above ~15 on a dense plan).
+## Cascade recommendation (from the numbers so far)
+1. Deterministic parsers first (DXF 99%, IFC 100%, PDF text layer): free, exact, verifiable. The VLM must never
+   override them.
+2. Local Qwen3-VL-8B, answer-only prompt, ~1 s and ~1.5k tokens: raster-only questions, and reading printed
+   labels/areas. Gate per template against the prior on TRAIN (W4 is calibrating this).
+3. Optional free signal: `samples=5` (one request, n=5) → vote share; escalate only when < 1.0 (~20% of questions).
+4. Hosted Nemotron (thinking on, ~30 s, ~5k tokens, 1–2 API calls): only for escalated / demo questions. It is
+   not more accurate than the local 8B in direct mode, so it should be used as a reasoning verifier
+   (e.g. "here is the count and the points; check it"), not as a first-pass counter.
+5. If the counting LoRA wins on dev cc, it replaces step 2 for raster counts (same server, `model="cc-v1"`).
