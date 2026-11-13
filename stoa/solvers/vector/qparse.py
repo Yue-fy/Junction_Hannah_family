@@ -1,0 +1,236 @@
+"""Multilingual question parser for floor-plan questions (EN/DE/FR/IT + a few NL/SV words).
+
+Not a template matcher: it finds the *pieces* of a question (object kinds, quoted room labels grounded in
+the drawing's own vocabulary, room numbers, apartment letters, "total numbered rooms", the asked unit,
+and the operation: sum / difference / largest / smallest) and returns a small expression
+
+    Query(qtype="count"|"area"|"text", op="sum"|"diff"|"max"|"min", terms=[Term(...), ...], unit=...)
+
+so compositions ("doors and windows", "how many more doors than windows", "room 1.06 minus room 1.04",
+"apartments B and D") work without new code. Grounding labels in the floor's vocabulary handles quote
+styles («», „“, '', "") and apostrophes inside labels ('Cage d'escalier').
+"""
+
+from __future__ import annotations
+
+import re
+import unicodedata
+from dataclasses import dataclass, field
+
+# --- vocabularies ----------------------------------------------------------------------------------
+KIND_WORDS: dict[str, list[str]] = {
+    "door": [r"doors?", r"doorways?", r"t[üu]ren", r"t[üu]r", r"portes?", r"porta", r"deuren", r"deur", r"d[öo]rr(?:ar)?"],
+    "window": [r"windows?", r"fenster", r"fen[êe]tres?", r"finestr[ae]", r"ramen", r"raam", r"f[öo]nster"],
+    "toilet": [r"toilets?", r"wcs?", r"toilettes?", r"water[- ]?closets?", r"wc[- ]?seats?", r"gabinett[oi]",
+               r"vasi?\s+wc", r"klosett", r"toiletten"],
+    "washbasin": [r"wash\s?basins?", r"hand\s?basins?", r"lavabos?", r"lavabi", r"lavandin[oi]", r"waschbecken",
+                  r"waschtische?", r"bathroom\s+sinks?", r"basins?", r"wastafels?", r"tv[äa]ttst[äa]ll"],
+    "bathtub": [r"bath\s?tubs?", r"baths?(?!\s?room)", r"badewannen?", r"baignoires?", r"vasch?e?\s+da\s+bagno",
+                r"vasca", r"vasche", r"badkuip(?:en)?", r"badkar"],
+    "shower": [r"showers?", r"duschen", r"dusche", r"douches?", r"docci[ae]", r"docce", r"douche"],
+    "apartment": [r"apartments?", r"flats?", r"residential\s+units?", r"dwellings?", r"dwelling\s+units?",
+                  r"wohnungen", r"wohnung", r"wohneinheiten", r"appartements?", r"logements?", r"appartament[oi]",
+                  r"unit[àa]\s+abitativ[ae]", r"lägenhet(?:er)?", r"woningen", r"woning"],
+}
+# kinds that are fixtures/objects (not rooms); "sink" alone is ambiguous (kitchen sink vs washbasin)
+AMBIGUOUS = {"sink": "washbasin", "sinks": "washbasin"}
+
+# room-name concepts across the swiss vocabulary (used only when no quoted label is given)
+CONCEPTS: dict[str, tuple[list[str], list[str]]] = {
+    # concept: (question words, room labels in the drawings)
+    "bedroom": ([r"bedrooms?", r"schlafzimmer", r"chambres?\s+[àa]\s+coucher", r"camer[ae]\s+da\s+letto", r"sovrum"],
+                ["Schlafzimmer", "Chambre à coucher", "Camera da letto"]),
+    "bathroom": ([r"bathrooms?", r"badezimmer", r"salles?\s+de\s+bains?", r"bagni", r"badkamers?"],
+                 ["Bad", "Bain", "Bagno"]),
+    "kitchen": ([r"kitchens?", r"k[üu]chen?", r"cuisines?", r"cucin[ae]", r"keukens?", r"k[öo]k"],
+                ["Küche", "Cuisine", "Cucina"]),
+    "corridor": ([r"corridors?", r"hallways?", r"halls?", r"korridore?", r"flure?", r"couloirs?", r"corridoi?o?",
+                  r"gangen?"], ["Korridor", "Couloir", "Corridoio"]),
+    "balcony": ([r"balcon(?:y|ies)", r"balkone?", r"balcons?", r"balconi", r"balcone"], ["Balkon", "Balcon", "Balcone"]),
+    "loggia": ([r"loggi(?:a|as|en|e)"], ["Loggia"]),
+    "terrace": ([r"terraces?", r"terrassen?", r"terrazz[ae]"], ["Terrasse"]),
+    "living": ([r"living\s*(?:rooms?|/\s*dining|areas?)?", r"wohnzimmer", r"wohnen", r"s[ée]jours?", r"soggiorn[oi]",
+                r"lounges?"], ["Wohnen/Essen", "Wohnen", "Séjour/repas", "Séjour", "Soggiorno/pranzo", "Soggiorno"]),
+    "dining": ([r"dining\s*(?:rooms?)?", r"essz?immer", r"repas", r"pranzo"], ["Essen", "Repas", "Pranzo"]),
+    "storage": ([r"storage\s*(?:rooms?)?", r"store\s?rooms?", r"closets?", r"reduits?", r"r[ée]duits?",
+                 r"abstellr[äa]ume?", r"ripostigli?o?"], ["Reduit", "Réduit", "Ripostiglio"]),
+    "stairs": ([r"stair\s?(?:cases?|wells?|s)", r"treppenh[äa]user?", r"cages?\s+d'escaliers?", r"vani?\s+scala"],
+               ["Treppenhaus", "Cage d'escalier", "Vano scala"]),
+    "lift": ([r"lifts?", r"elevators?", r"aufz[üu]ge?", r"ascenseurs?", r"ascensor[ei]"], ["Lift", "Ascenseur", "Ascensore"]),
+    "cellar": ([r"cellars?", r"basement\s+compartments?", r"kellerabteile?", r"compartiments?\s+caves?"],
+               ["Compartiment cave"]),
+    "room": ([r"zimmer", r"pi[èe]ces?", r"stanz[ae]"], ["Zimmer", "Pièce", "Stanza", "Raum"]),
+}
+
+COUNT_WORDS = r"how\s+many|count|number\s+of|wie\s+viele|anzahl|combien|nombre\s+de|quant[ie]|quante|numero\s+di|hoeveel|hur\s+m[åa]nga"
+AREA_WORDS = (r"\barea\b|fl[äa]che|surface|superficie|oppervlak|yta\b|m²|m2\b|square\s+met|sq\.?\s*m\b|square\s+f(?:ee|oo)t|"
+              r"sq\.?\s*ft|ft²|ft2\b|how\s+(?:large|big)|wie\s+gross|wie\s+groß")
+FT2 = r"square\s+f(?:ee|oo)t|sq\.?\s*ft|ft²|ft2\b|\bsf\b"
+DIFF = (r"how\s+many\s+more|more\s+\w+\s+than|by\s+how\s+(?:many|much)|difference|minus|larger\s+than|bigger\s+than|"
+        r"greater\s+than|exceeds?|mehr\s+.*\s+als|gr[öo]sser\s+als|größer\s+als|unterschied|differenz|plus\s+de\s+.*\s+que|"
+        r"plus\s+grand\w*\s+que|diff[ée]rence|più\s+.*\s+(?:di|che)|differenza|meer\s+.*\s+dan|fler\s+.*\s+än")
+DIFF_REV = r"fewer|less\s+than|smaller\s+than|weniger|kleiner\s+als|moins\s+de|plus\s+petit\w*\s+que|meno|minder|mindre"
+MAX_W = r"largest|biggest|greatest|gr[öo]ss(?:te|ten)|größte|plus\s+grand|più\s+grande|maggiore|grootste|största"
+MIN_W = r"smallest|kleinste|plus\s+petit|più\s+piccol|minore|kleinste|minsta"
+TOTAL_NUMBERED = r"numbered|nummeriert|num[ée]rot|numerat|genummerd|numrerade"
+JOIN = r"\s*(?:,|and|und|et|e|ed|&|\+|og|en|och)\s*"
+
+ROOMNUM_RE = re.compile(r"(?<![\w.])([A-Z]{0,2}\d{1,3}\.\d{1,3}(?:\.\d{1,3})?)(?![\w.]*\s*(?:m²|m2|ft|%))")
+APT_LEAD = (r"(?:apartments?|units?|flats?|wohnungen|wohnung|whg\.?|appartements?|l'appartement|appartament[oi]|"
+            r"dell'appartamento|app\.?|lägenhet(?:er(?:na)?)?|woning(?:en)?)")
+APT_RE = re.compile("(?i:" + APT_LEAD + r")\s+([A-Z](?:" + JOIN + r"[A-Z])*)(?![\w])")
+QUOTES = "'\"«»„“”‘’‹›`´"
+
+
+@dataclass
+class Term:
+    kind: str  # count | count_label | area_room | area_label | area_apartment | area_total
+    arg: str | list[str] | None = None
+    pos: int = 0  # position in the question (for ordering a difference)
+    note: str = ""  # how it was parsed ("concept bedroom -> Schlafzimmer|...")
+
+
+@dataclass
+class Query:
+    qtype: str  # count | area | text
+    op: str = "sum"  # sum | diff | max | min
+    terms: list[Term] = field(default_factory=list)
+    unit: str | None = None  # count | m2 | ft2
+    notes: list[str] = field(default_factory=list)
+
+    def describe(self) -> str:
+        parts = []
+        for t in self.terms:
+            a = t.arg if not isinstance(t.arg, list) else "|".join(t.arg)
+            parts.append(f"{t.kind}({a})" if a else t.kind)
+        return f"{self.qtype}/{self.op}: " + (" , ".join(parts) or "-") + f" [{self.unit}]"
+
+
+def _norm(s: str) -> str:
+    return unicodedata.normalize("NFC", s).replace(" ", " ")
+
+
+def _find_words(pattern_list: list[str], text: str) -> list[int]:
+    pos = []
+    for p in pattern_list:
+        for m in re.finditer(r"(?<![\w])" + p + r"(?![\w])", text, re.I):
+            pos.append(m.start())
+    return sorted(pos)
+
+
+def find_labels(q: str, vocab: list[str]) -> list[tuple[str, int]]:
+    """Room labels quoted in the question, grounded in `vocab` (longest first); falls back to any quoted span."""
+    out: list[tuple[str, int]] = []
+    taken: list[tuple[int, int]] = []
+    for name in sorted(set(vocab), key=len, reverse=True):
+        for m in re.finditer(re.escape(name), q):
+            s, e = m.start(), m.end()
+            if any(not (e <= a or s >= b) for a, b in taken):
+                continue
+            before = q[:s].rstrip(" ")[-1:] if q[:s].strip() else ""
+            after = q[e:].lstrip(" ")[:1]
+            if before in QUOTES and after in QUOTES:
+                out.append((name, s))
+                taken.append((s, e))
+    if not out:
+        for m in re.finditer(r"[«„“‘\"]\s*([^«»„“”‘’\"]{1,60}?)\s*[»“”’\"]|(?<!\w)'([^']{1,60})'(?!\w)", q):
+            lab = (m.group(1) or m.group(2) or "").strip()
+            if lab and not re.fullmatch(r"[\d.,\s]+", lab):
+                out.append((lab, m.start()))
+    return sorted(out, key=lambda t: t[1])
+
+
+def parse(question: str, vocab: list[str] | None = None, room_numbers: set[str] | None = None) -> Query:
+    q = _norm(question)
+    ql = q.lower()
+    vocab = vocab or []
+    is_count = bool(re.search(COUNT_WORDS, ql))
+    is_area = bool(re.search(AREA_WORDS, ql))
+    unit = "ft2" if re.search(FT2, ql) else "m2"
+    notes: list[str] = []
+
+    labels = find_labels(q, vocab)
+    # room numbers: keep those that exist on the floor if we know them, else anything room-number-like
+    nums = [(m.group(1), m.start()) for m in ROOMNUM_RE.finditer(q)]
+    if room_numbers is not None:
+        known = [(n, p) for n, p in nums if n in room_numbers]
+        if known or not nums:
+            nums = known
+        else:
+            notes.append(f"room numbers {[n for n, _ in nums]} not found on this floor")
+    apts: list[tuple[str, int]] = []
+    for m in APT_RE.finditer(q):
+        for k, letter in enumerate(re.split(JOIN, m.group(1))):
+            if letter:
+                apts.append((letter.strip(), m.start() + k))
+    total_numbered = bool(re.search(TOTAL_NUMBERED, ql))
+
+    op = "sum"
+    if re.search(MAX_W, ql):
+        op = "max"
+    elif re.search(MIN_W, ql) and not re.search(DIFF, ql):
+        op = "min"
+    if re.search(DIFF, ql) or re.search(DIFF_REV, ql):
+        op = "diff"
+    rev = bool(re.search(DIFF_REV, ql)) and not re.search(r"how\s+many\s+more|larger|bigger|greater", ql)
+
+    terms: list[Term] = []
+    # area questions -------------------------------------------------------------------------------
+    if is_area and not (is_count and not re.search(r"m²|m2\b|square|ft|area|fl[äa]che|surface|superficie", ql)):
+        qtype = "area"
+        if nums:
+            terms = [Term("area_room", n, p) for n, p in nums]
+        elif apts:
+            terms = [Term("area_apartment", a, p) for a, p in apts]
+        elif labels:
+            terms = [Term("area_label", lab, p) for lab, p in labels]
+        elif total_numbered or re.search(r"\btotal\b|gesamt|totale?|insgesamt|whole\s+floor|entire\s+floor", ql):
+            terms = [Term("area_total", None, 0)]
+        else:
+            for c, (words, labs) in CONCEPTS.items():
+                for p in _find_words(words, ql)[:1]:
+                    terms.append(Term("area_label", list(labs), p, note=f"concept {c}"))
+            if not terms:
+                terms = [Term("area_total", None, 0, note="no room/apartment/label named; assumed whole floor")]
+        if op in ("max", "min") and len(terms) > 1 and not re.search(r"how\s+(?:large|big|much)|what\s+is\s+the\s+(?:net\s+)?(?:floor\s+)?area", ql):
+            qtype = "text"
+        return _finish(Query(qtype, op, terms, unit if qtype != "text" else None, notes), rev)
+
+    # count questions ------------------------------------------------------------------------------
+    qtype = "count"
+    if labels:
+        terms = [Term("count_label", lab, p) for lab, p in labels]
+    else:
+        found: dict[str, int] = {}
+        for kind, words in KIND_WORDS.items():
+            ps = _find_words(words, ql)
+            if ps:
+                found[kind] = ps[0]
+        if "toilet" in found and "washbasin" not in found and re.search(r"\bwc[- ]?seats?\b", ql):
+            pass
+        if not found:
+            for w, kind in AMBIGUOUS.items():
+                ps = _find_words([w], ql)
+                if ps:
+                    found[kind] = ps[0]
+                    notes.append("'sink' read as washbasin (kitchen sinks are not on the FIXTURE layer rules)")
+                    break
+        # "bath" inside "bathtub" is the same object; "apartment" in "apartment A" is not a count of apartments
+        terms = [Term("count", k, p) for k, p in sorted(found.items(), key=lambda kv: kv[1])]
+        if not terms:
+            for c, (words, labs) in CONCEPTS.items():
+                for p in _find_words(words, ql)[:1]:
+                    terms.append(Term("count_label", list(labs), p, note=f"concept {c}"))
+        if not terms and re.search(r"\brooms?\b|r[äa]ume|pi[èe]ces|locali|kamers|rum\b", ql):
+            terms = [Term("count_label", "<numbered>", 0, note="all numbered rooms")]
+    return _finish(Query(qtype, op if len(terms) > 1 else "sum", terms, "count", notes), rev)
+
+
+def _finish(qr: Query, rev: bool) -> Query:
+    qr.terms.sort(key=lambda t: t.pos)
+    if qr.op == "diff" and len(qr.terms) < 2:
+        qr.op = "sum"
+    if qr.op == "diff" and rev:
+        qr.terms = list(reversed(qr.terms))
+        qr.notes.append("'fewer/smaller than': second minus first")
+    return qr
