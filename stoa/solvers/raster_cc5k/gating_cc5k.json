@@ -1,0 +1,58 @@
+{
+ "entries": {
+  "cubicasa5k|count:door:drawing": {
+   "acc": {
+    "prior": 0.0866,
+    "raster_cc5k": 0.3858
+   },
+   "cost_usd": {
+    "prior": 0.0,
+    "raster_cc5k": 6e-07
+   },
+   "n": 127
+  },
+  "cubicasa5k|count:sink:drawing": {
+   "acc": {
+    "prior": 0.4094,
+    "raster_cc5k": 0.6299
+   },
+   "cost_usd": {
+    "prior": 0.0,
+    "raster_cc5k": 0.0
+   },
+   "n": 127
+  },
+  "cubicasa5k|count:wc:drawing": {
+   "acc": {
+    "prior": 0.4646,
+    "raster_cc5k": 0.7559
+   },
+   "cost_usd": {
+    "prior": 0.0,
+    "raster_cc5k": 0.0
+   },
+   "n": 127
+  },
+  "cubicasa5k|count:window:drawing": {
+   "acc": {
+    "prior": 0.1538,
+    "raster_cc5k": 0.3
+   },
+   "cost_usd": {
+    "prior": 0.0,
+    "raster_cc5k": 0.0
+   },
+   "n": 130
+  }
+ },
+ "meta": {
+  "built": "2026-11-14T01:40:59",
+  "per_key": 2000,
+  "solver_args": {},
+  "solvers": [
+   "prior",
+   "raster_cc5k"
+  ],
+  "split": "cc5k_heldout"
+ }
+}
