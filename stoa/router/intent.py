@@ -74,7 +74,7 @@ _SHEET = re.compile(r"\bsheet\s+([A-Z]{1,3}-?\d{1,4}(?:\.\d+)?)", re.I)
 _LABELLED = re.compile(r"labell?ed|bezeichnung|d[ée]signation|d[ée]sign[ée]e?s|denominazione|denominati|"
                        r"named|called|nimetty", re.I)
 _TOTAL = re.compile(r"\btotal\b|gesamt|totale?\b|samlede|totaal|zusammen|kokku|yhteens|alle\b|all\b|tous|toutes|tutti", re.I)
-_MODEL = re.compile(r"\bin the model\b|enth[äa]lt das modell|\bmodel(?:o|lo|ul|len|e|l|lis|li)?\b|mod[eè]le\b|mudel\w*",
+_MODEL = re.compile(r"\bin the model\b|enth[äa]lt das modell|\bmodel(?:o|lo|ul|u|len|e|l|lis|li)?\b|mod[eè]le\b|mudel\w*",
                     re.I)
 _STOREY_PLAN = re.compile(r"floor plan of|on the floor plan|im grundriss|im geschoss|plantegningen for|plano de la planta|"
                           r"de la planta|plattegrond van|korruse(?:l)?|on <q>|op <q>|på <q>|kondygnacji", re.I)

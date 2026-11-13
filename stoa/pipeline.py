@@ -18,7 +18,8 @@ Options (`--solver-arg k=v`): accept=0.6 (confidence to stop), agree=cheap|alway
 unsure: cheap = only from a deterministic solver; always = also the local VLM),
 api=0 (allow hosted API tier), margin=0.03 (gate margin over the prior), max_tries=3, vlm_args (json dict for
 vlm_direct), use_gate=1, compose=1 (split compound questions), normalise=1 (give template solvers the canonical
-English question when the asked one is a translation/paraphrase).
+English question when the asked one is a translation/paraphrase), crosscheck=1 (W1's stoa.kg.crosscheck note
+in Evidence.note + trace; agreement raises confidence, disagreement lowers it and adds to missing).
 """
 
 from __future__ import annotations
@@ -93,7 +94,7 @@ from stoa.solvers.base import BaseSolver  # noqa: E402
 class Pipeline(BaseSolver):
     def __init__(self, accept: float | str = 0.6, agree: str = "cheap", api: int | str = 0, margin: float | str = 0.03,
                  max_tries: int | str = 3, vlm_args: str | dict | None = None, use_gate: int | str = 1,
-                 compose: int | str = 1, normalise: int | str = 1, **kwargs):
+                 compose: int | str = 1, normalise: int | str = 1, crosscheck: int | str = 1, **kwargs):
         super().__init__(**kwargs)
         self.accept = float(accept)
         self.agree = {"1": "cheap", "0": "never", "2": "always"}.get(str(agree), str(agree))  # cheap|never|always
@@ -103,6 +104,7 @@ class Pipeline(BaseSolver):
         self.use_gate = bool(int(use_gate))
         self.compose = bool(int(compose))
         self.normalise = bool(int(normalise))
+        self.crosscheck = bool(int(crosscheck))
         self.vlm_args = json.loads(vlm_args) if isinstance(vlm_args, str) else dict(vlm_args or {})
         self._solvers: dict[str, object | None] = {}
         self._lock = threading.Lock()
@@ -236,12 +238,37 @@ class Pipeline(BaseSolver):
         best = self._combine(answers, intent, trace)
         if best is None:
             best = self._prior_answer(src, intent, trace, gate)
+        if self.crosscheck and best.value is not None:
+            self._kg_crosscheck(path, intent, best, trace)
         best.cost = total.add(_cost_of(best)) if best.solver == "prior" else total
         best.cost.wall_seconds = round(time.perf_counter() - t0, 4)
         # keep the sub-solver's own steps after ours, short
         best.trace = trace + [f"[{best.solver}] {t}" for t in best.trace[-8:]]
         best.solver = f"pipeline/{best.solver}"
         return best
+
+    def _kg_crosscheck(self, path: str, intent: Intent, ans: Answer, trace: list[str]) -> None:
+        """Stoa point 4: compare with another source of the same building (W1's stoa.kg, when available)."""
+        try:
+            from stoa.kg import crosscheck
+        except Exception:  # noqa: BLE001 - not merged yet
+            return
+        try:
+            note = crosscheck(path, intent, ans)
+        except Exception:  # noqa: BLE001
+            return
+        if not note:
+            return
+        note = note if note.startswith("cross-check") else f"cross-check: {note}"
+        trace.append(note)
+        if "✗" in note and "✓" not in note:
+            ans.confidence = round(ans.confidence * 0.7, 3)
+            ans.missing = [*ans.missing, "another source of the same building disagrees (see cross-check)"]
+        elif "✓" in note and "✗" not in note:
+            ans.confidence = round(min(0.99, ans.confidence + (1 - ans.confidence) * 0.5), 3)
+        if ans.evidence:
+            e0 = ans.evidence[0]
+            ans.evidence[0] = e0.model_copy(update={"note": (e0.note + "; " + note).strip("; ")})
 
     def _combine(self, answers, intent: Intent, trace: list[str]) -> Answer | None:
         if not answers:
