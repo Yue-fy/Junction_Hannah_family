@@ -1,9 +1,9 @@
 import "./style.css";
 import { ask, exampleQuestions, fileUrl, knowledgeGraph, listFiles, onBackend } from "./api";
-import { renderCard } from "./card";
+import { crossChecks, renderCard } from "./card";
 import type { Answer, FileInfo } from "./types";
 import { Viewer2D } from "./viewer2d";
-import { Viewer3D } from "./viewer3d";
+import type { Viewer3D } from "./viewer3d"; // loaded lazily: web-ifc + three are ~4 MB
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -14,10 +14,16 @@ const state: { file: FileInfo | null; answer: Answer | null; mode: Mode; files: 
 
 const v2d = new Viewer2D($("v2d"));
 let v3d: Viewer3D | null = null;
-const viewer3d = () => (v3d ??= makeViewer3D());
+async function viewer3d(): Promise<Viewer3D> {
+  if (!v3d) {
+    const { Viewer3D } = await import("./viewer3d");
+    v3d ??= makeViewer3D(Viewer3D);
+  }
+  return v3d;
+}
 
-function makeViewer3D() {
-  const v = new Viewer3D($("v3d"));
+function makeViewer3D(Ctor: typeof Viewer3D) {
+  const v = new Ctor($("v3d"));
   v.onPick = (guid, label, props) => {
     const pick = $("pick");
     pick.hidden = false;
@@ -27,6 +33,7 @@ function makeViewer3D() {
       v2d.highlightGuids([guid], "picked");
       if (state.mode === "split") v2d.focusGuid(guid);
     }
+    followUp(guid);
   };
   return v;
 }
@@ -38,8 +45,33 @@ v2d.onPickGuid = (guid, label) => {
     const pick = $("pick");
     pick.hidden = false;
     pick.innerHTML = `<b>${esc(label)}</b><div><span>GlobalId</span>${esc(guid)}</div><div><span>picked on</span>drawing</div>`;
+    followUp(guid);
   }
 };
+
+/** A one-click question about the picked element (room → area, door/window → count on its storey). */
+function followUp(guid: string) {
+  const info = v3d?.info(guid);
+  if (!info) return;
+  const t = info.type.toUpperCase();
+  let q = "";
+  if (t === "IFCSPACE") {
+    const room = info.longName ? `${info.longName} (${info.name})` : info.name;
+    q = `What is the net floor area of the room '${room}'${info.storey ? ` on '${info.storey}'` : ""}, in m²?`;
+  } else if (/IFCDOOR|IFCWINDOW|IFCCOLUMN|IFCSTAIR/.test(t)) {
+    const kind = t.includes("DOOR") ? "doors" : t.includes("WINDOW") ? "windows" : t.includes("COLUMN") ? "columns" : "stairs";
+    q = info.storey ? `How many ${kind} are shown on the floor plan of '${info.storey}'?` : `How many ${kind} are there in the model?`;
+  }
+  if (!q) return;
+  const b = document.createElement("button");
+  b.className = "ask-this";
+  b.textContent = `Ask: ${q}`;
+  b.addEventListener("click", () => {
+    $<HTMLTextAreaElement>("question").value = q;
+    void runAsk();
+  });
+  $("pick").append(b);
+}
 v2d.onPickEvidence = (i) => focusEvidence(i);
 
 export const esc = (s: unknown) => String(s ?? "").replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
@@ -65,9 +97,13 @@ let loading3D: Promise<void> | null = null;
 async function ensure3D() {
   if (!state.ifc) return;
   const ifc = state.ifc;
-  const v = viewer3d();
-  if (v.file === ifc) return loading3D ?? undefined;
   const label = $("load3d");
+  if (!v3d) {
+    label.textContent = "loading 3D engine…";
+    label.hidden = false;
+  }
+  const v = await viewer3d();
+  if (v.file === ifc) return loading3D ?? undefined;
   label.textContent = "loading model…";
   label.hidden = false;
   loading3D = v.load(ifc, fileUrl(ifc), (msg) => (label.textContent = msg)).then(() => {
@@ -112,10 +148,33 @@ $("fitBtn").addEventListener("click", () => {
 });
 
 // --- files --------------------------------------------------------------------------------------------------
+// Demo files pinned on top (train split / demo-safe; see board W5). The live API lists alphabetically.
+const DEMO = [
+  "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+  "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+  "data/opening_design/Sports_Complex/Sheets - Current Set/A-801 - Door and Finish Schedules & Wall Types.pdf",
+  "data/ifc_models/bsc-duplex_duplex-a-20110907.ifc",
+  "data/cubicasa5k/colorful-10052.png",
+];
+let demoFiles: FileInfo[] | null = null;
+const HISTORICAL = ["habs", "finna", "europeana", "wikimedia"];
+// Scans have no dataset questions; Stoa says the hidden set may ask about them, so offer general ones.
+const GENERIC_QUESTIONS = [
+  "What kind of drawing is this (floor plan, elevation, section, site plan)?",
+  "How many storeys does this building have?",
+  "What is the scale of this drawing?",
+  "How many windows are shown on this drawing?",
+];
+
 async function refreshFiles() {
   const source = $<HTMLSelectElement>("source").value;
   const q = $<HTMLInputElement>("search").value;
-  state.files = await listFiles(source, q, 80);
+  const list = await listFiles(source, q, 80, !HISTORICAL.includes(source));
+  if (!source && !q) {
+    demoFiles ??= (await Promise.all(DEMO.map((p) => listFiles("", p, 3).then((r) => r.find((x) => x.path === p)).catch(() => undefined))))
+      .filter((x): x is FileInfo => !!x);
+    state.files = [...demoFiles, ...list.filter((f) => !DEMO.includes(f.path))];
+  } else state.files = list;
   const ul = $("files");
   ul.innerHTML = state.files.map((f, i) => {
     const name = f.path.split("/").pop()!;
@@ -135,7 +194,8 @@ $("search").addEventListener("input", () => {
 });
 $("source").addEventListener("change", refreshFiles);
 
-async function openFile(f: FileInfo, question = "") {
+/** Open a file. With `keep`, the current answer stays and its evidence on this file is drawn (multi-sheet). */
+async function openFile(f: FileInfo, question = "", keep: Answer | null = null, focusIndex: number | null = null) {
   state.file = f;
   state.answer = null;
   const url = new URL(location.href);
@@ -146,8 +206,11 @@ async function openFile(f: FileInfo, question = "") {
   $("fileTitle").textContent = f.path.split("/").pop()!;
   $("fileMeta").textContent = `${f.source} · ${f.n_questions} questions`;
   $("credit").innerHTML = creditLine(f);
-  $("card").className = "card empty";
-  $("card").innerHTML = `<p class="hint">Ask a question about this ${f.ext === ".ifc" ? "model" : "drawing"}.</p>`;
+  if (!keep) {
+    $("xbanner").hidden = true;
+    $("card").className = "card empty";
+    $("card").innerHTML = `<p class="hint">Ask a question about this ${f.ext === ".ifc" ? "model" : "drawing"}.</p>`;
+  }
   $("pick").hidden = true;
   $<HTMLTextAreaElement>("question").value = question;
 
@@ -158,7 +221,8 @@ async function openFile(f: FileInfo, question = "") {
     b.disabled = (b.dataset.mode !== "2d" && !state.ifc) || (b.dataset.mode !== "3d" && is3DOnly);
   });
   $<HTMLSelectElement>("storey").hidden = true;
-  setMode(is3DOnly ? "3d" : state.ifc ? "split" : "2d");
+  if (!keep) setMode(is3DOnly ? "3d" : state.ifc ? "split" : "2d");
+  else setMode(is3DOnly ? "3d" : state.mode === "3d" && state.ifc ? "split" : state.ifc ? state.mode : "2d");
 
   void loadExamples(f);
   void loadLinked(f);
@@ -177,6 +241,20 @@ async function openFile(f: FileInfo, question = "") {
       label.textContent = `could not render: ${e}`;
     }
   }
+  if (keep && state.file?.path === f.path) {
+    showAnswer(keep, 0);
+    if (focusIndex !== null) focusEvidence(focusIndex);
+  }
+}
+
+async function openSheet(path: string, focusIndex: number | null = null) {
+  const a = state.answer;
+  const q = $<HTMLTextAreaElement>("question").value;
+  const info = (await listFiles("", path, 5).catch(() => [])).find((x) => x.path === path)
+    ?? (await listFiles(path.split("/")[1], path, 5, false).catch(() => [])).find((x) => x.path === path)
+    ?? { path, source: path.split("/")[1], ext: "." + path.split(".").pop()!.toLowerCase(), siblings: siblingsGuess(path, []),
+      n_questions: 0, license: state.file?.license ?? "", credit: state.file?.credit ?? "", title: "", source_url: "" };
+  await openFile(info, q, a, focusIndex);
 }
 
 function creditLine(f: FileInfo) {
@@ -188,10 +266,28 @@ function creditLine(f: FileInfo) {
 async function loadExamples(f: FileInfo) {
   const sel = $<HTMLSelectElement>("examples");
   sel.innerHTML = `<option value="">Example questions…</option>`;
+  $("chips").innerHTML = "";
   try {
     const qs = await exampleQuestions(f.path);
     if (state.file?.path !== f.path) return;
-    sel.innerHTML = `<option value="">Example questions (${qs.length})…</option>` + qs.map((q) =>
+    const chips = $("chips");
+    const english = qs.filter((q) => /\b(how many|what|which|is there|are there)\b/i.test(q.question));
+    // one question per template ('…' and numbers blanked), interleaved across answer types, fixtures first
+    const tpl = (q: string) => q.replace(/'[^']*'/g, "''").replace(/\d+(\.\d+)?/g, "#");
+    const uniq = english.filter((q, i, arr) => arr.findIndex((x) => tpl(x.question) === tpl(q.question)) === i);
+    const byType = new Map<string, typeof uniq>();
+    for (const q of uniq) byType.set(q.type || String(q.unit), [...(byType.get(q.type || String(q.unit)) ?? []), q]);
+    const interleaved: typeof uniq = [];
+    for (let k = 0; interleaved.length < uniq.length; k++)
+      for (const l of byType.values()) if (l[k]) interleaved.push(l[k]);
+    const pick = qs.length ? [...english.filter((q) => q.has_fixture), ...interleaved.filter((q) => !q.has_fixture)].slice(0, 4)
+      : GENERIC_QUESTIONS.map((question) => ({ question, type: "", unit: null }));
+    chips.innerHTML = pick.map((q) => `<button type="button" class="chip" title="${esc(q.question)}">${esc(q.question.length > 64 ? q.question.slice(0, 61) + "…" : q.question)}</button>`).join("");
+    chips.querySelectorAll<HTMLButtonElement>(".chip").forEach((b, i) => b.addEventListener("click", () => {
+      $<HTMLTextAreaElement>("question").value = pick[i].question;
+      void runAsk();
+    }));
+    sel.innerHTML = `<option value="">More example questions (${qs.length})…</option>` + qs.map((q) =>
       `<option value="${esc(q.question)}">${q.has_fixture ? "★ " : ""}${esc(q.question.length > 110 ? q.question.slice(0, 107) + "…" : q.question)}</option>`).join("");
   } catch {
     /* keep empty */
@@ -267,20 +363,36 @@ async function runAsk() {
   try {
     const a = await ask(f.path, q);
     if (state.file?.path !== f.path) return;
-    state.answer = a;
-    renderCard(card, a, { roundTripMs: performance.now() - t0, onEvidence: focusEvidence, describeGuid: (g) => v3d?.describe(g) ?? g });
-    v2d.setEvidence(a.evidence);
-    v2d.frameEvidence();
-    if (state.ifc && a.evidence.some((e) => e.ifc_guid)) {
-      if (state.mode === "2d" && !v2d.hasGuid(a.evidence.find((e) => e.ifc_guid)!.ifc_guid!)) setMode("split");
-      await ensure3D();
-      applyEvidence3D(a);
-    }
+    await showAnswer(a, performance.now() - t0);
   } catch (e) {
     card.className = "card error";
     card.innerHTML = `<p><b>Request failed.</b> ${esc(e)}</p>`;
   } finally {
     $<HTMLButtonElement>("askBtn").disabled = false;
+  }
+}
+
+async function showAnswer(a: Answer, roundTripMs: number) {
+  state.answer = a;
+  renderCard($("card"), a, {
+    roundTripMs: roundTripMs || (a.cost?.wall_seconds ?? 0) * 1000, onEvidence: focusEvidence,
+    describeGuid: (g) => v3d?.describe(g) ?? g, currentFile: state.file?.path ?? "", onOpenSheet: (p) => void openSheet(p),
+  });
+  v2d.setEvidence(a.evidence);
+  v2d.frameEvidence();
+  const xb = $("xbanner");
+  const xc = crossChecks(a)[0];
+  xb.hidden = !xc;
+  if (xc) {
+    xb.className = `xbanner ${xc.ok ? "ok" : "bad"}`;
+    xb.innerHTML = `<b>${xc.ok ? "✓" : "✗"}</b> ${esc(xc.text)}`;
+  }
+  if (state.ifc && a.evidence.some((e) => e.ifc_guid)) {
+    if (state.mode === "2d" && !v2d.hasGuid(a.evidence.find((e) => e.ifc_guid)!.ifc_guid!)) setMode("split");
+    await ensure3D();
+    applyEvidence3D(a);
+  } else if (v3d && v3d.file === state.ifc) {
+    applyEvidence3D(a); // clears the previous answer's highlight
   }
 }
 
@@ -310,7 +422,8 @@ function focusEvidence(i: number) {
   } else if (ev.ifc_guid && v2d.hasGuid(ev.ifc_guid)) {
     v2d.focusGuid(ev.ifc_guid);
   } else if (ev.bbox && ev.file !== state.file?.path) {
-    window.open(fileUrl(ev.file), "_blank");
+    void openSheet(ev.file, i); // evidence drawn on another sheet of the same project
+    return;
   }
   if (ev.ifc_guid && v3d && state.ifc && v3d.file === state.ifc) {
     if (v3d.isStoreyGuid(ev.ifc_guid)) applyEvidence3D(a); // storey = context: show all evidence on it
@@ -318,13 +431,50 @@ function focusEvidence(i: number) {
   }
 }
 
+// --- demo tour: five steps, each one sentence for the presenter ----------------------------------------
+const TOUR: { file: string; q: string; note: string }[] = [
+  { file: "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+    q: "What is the net floor area of the room 'KORIDOR (119)' on '1.korrus', in m²?",
+    note: "Area from the IFC model, shown on the drawing and in 3D: same room, same GlobalId." },
+  { file: "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+    q: "How many doors are shown on the floor plan of '1.korrus'?",
+    note: "Count with one box per door. The drawing and the model agree (cross-check), no model call needed." },
+  { file: "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+    q: "How many doors are there in the model 'Maleva tänav 18 korterelamu (Esplanades example model)'?",
+    note: "Model-wide question: evidence on five sheets. Click a sheet chip to open it." },
+  { file: "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+    q: "How many doors (interior doors and entrance doors together) are drawn on this floor plan?",
+    note: "Vector drawing: doors counted on the CAD layer and mapped back onto the PDF." },
+  { file: "data/habs/ak0003_sheet_00019.jpg",
+    q: "What kind of drawing is this (floor plan, elevation, section, site plan)?",
+    note: "Historical scan with no text layer: the cascade escalates to a local vision model and says how sure it is." },
+];
+let tourStep = -1;
+$("tourBtn").addEventListener("click", async () => {
+  tourStep = (tourStep + 1) % TOUR.length;
+  const t = TOUR[tourStep];
+  $("tourBtn").textContent = `Demo ${tourStep + 1}/${TOUR.length} ▸`;
+  const note = $("tourNote");
+  note.hidden = false;
+  note.innerHTML = `<b>${tourStep + 1}/${TOUR.length}</b> ${esc(t.note)}`;
+  if (state.file?.path !== t.file) {
+    const src = t.file.split("/")[1];
+    const f = state.files.find((x) => x.path === t.file) ?? (await listFiles("", t.file, 5)).find((x) => x.path === t.file)
+      ?? (await listFiles(src, t.file, 5, false)).find((x) => x.path === t.file);
+    if (!f) return;
+    await openFile(f, t.q);
+  } else $<HTMLTextAreaElement>("question").value = t.q;
+  await runAsk();
+});
+
 // --- boot ---------------------------------------------------------------------------------------------------
 (async () => {
   await refreshFiles();
   const params = new URLSearchParams(location.search);
   const want = params.get("file");
   let f = want ? state.files.find((x) => x.path === want) : state.files[0];
-  if (want && !f) f = (await listFiles("", want.split("/").pop()!, 5)).find((x) => x.path === want);
+  if (want && !f) f = (await listFiles("", want, 5)).find((x) => x.path === want)
+    ?? (await listFiles(want.split("/")[1], want, 5, false)).find((x) => x.path === want); // files without questions
   if (f) {
     await openFile(f, params.get("q") ?? "");
     if (params.get("q")) await runAsk();
