@@ -61,6 +61,8 @@ def main() -> None:
     ap.add_argument("--max-drawings", type=int, default=0)
     ap.add_argument("--para-prob", type=float, default=0.25)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--png-twins", action="store_true",
+                    help="questions asked on a vector file (swiss PDF/DXF) train on its PNG twin (same drawing, raster)")
     ap.add_argument("--exclude-split", default="train_gate",
                     help="drop every drawing that appears in this split (train_gate is used to gate the model; "
                          "training on it would make the gate meaningless). '' = keep all")
@@ -77,7 +79,13 @@ def main() -> None:
         k = kind_of(q.question) if q.source == "cubicasa5k" else template_of(q.question)
         if k is None:
             continue
-        by_drawing[q.path][k].append(q)
+        path = q.path
+        if Path(path).suffix.lower() not in (".png", ".jpg", ".jpeg"):
+            twin = str(Path(path).with_suffix(".png"))
+            if not (a.png_twins and abspath(twin).exists()):
+                continue  # the LoRA only sees raster images
+            path = twin
+        by_drawing[path][k].append(q)
         n_q += 1
 
     paths = sorted(by_drawing)

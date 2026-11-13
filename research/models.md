@@ -33,12 +33,24 @@ Cost columns are per question. "dev cc" = dev cubicasa counts (800 q), the bucke
 | Nemotron, direct prompt, 1024 tok (reasons briefly in the answer) | smoke cc (80) | **50.0** | 8 s, 1.5k in / 313 out, 1.16 API calls, $1.2/1k | best Nemotron mode; local 8B on the same 80: 45.0 (n small) |
 | train_gate cc symbols (160: windows, doors, WC, sinks; EN+FI): prior / 8B / 8B+symbol hints / Nemotron | train_gate | 29.4 / 30.6 / 31.9 / 34.4 | Nemotron 13 s, $1.4/1k | windows 5–15%, doors 5–25% for every model: VLMs can't count plan symbols off the shelf |
 
-**LoRA in progress (00:24–01:25): cc-v2.** Qwen3-VL-8B + LoRA r16 on TRAIN cubicasa counts, *excluding every
-train_gate drawing* (train_gate ⊂ train is used for gating; cc-v1 had seen it and was stopped after 10 min).
-3,905 drawings as multi-turn image-once samples (34.7k Q/A turns, EN/FI + paraphrases, answer-only targets),
-~0.94 s/sample, 27 GB. Adapter: `$JUNCTION_SHARED/artifacts/R2/lora/cc-v2`.
+**LoRA cc-v2 (trained 00:24–01:18) — WINNER on cubicasa counts.** Qwen3-VL-8B + LoRA r16 on TRAIN cubicasa counts,
+*excluding every train_gate drawing*. 3,840 drawings as multi-turn image-once samples (EN/FI + paraphrases,
+answer-only targets), 54 min, 27 GB, final loss ~0.34. Adapter: `$JUNCTION_SHARED/artifacts/R2/lora/cc-v2`.
+Served on :8001 as model `cc-v2` from 01:40 (base unchanged as `default`); solver `vlm_lora`.
+| set | LoRA cc-v2 | raster (W3) | pipeline | prior | base 8B | R1 CC5K net |
+|---|---|---|---|---|---|---|
+| dev cubicasa (800) | **73.9** | 62.5 | 61.8 | 54.1 | 50.4 | (memorised) |
+| train_gate cubicasa (480, unseen by LoRA) | **76.7** | | | 51.9 | 45.6 | (memorised) |
+| hard cubicasa translations / paraphrases / compositions | **75 / 66** / 9.6 | 67 / 62 / 26.5 | 67 / 60 / 19.3 | | | |
+| leak-free for both (200, `cc5k_heldout_notLoRA`) | **79.0** | | | 54.0 | 51.5 | 60.5 |
+Paired: vs raster +11.4 [+8.2, +14.4]; vs CC5K net +18.5 [+11.5, +25.5] (`experiments/r2/paired.py`). Only per-concept loss
+vs raster: EN showers+bathtubs 73 vs 84. Compositions must go through the pipeline's compose step (atomic questions).
+Cost $0.035/1k (780 tok in, 2 out). Confidence: own map (CONF_MAPS["cc-v2"], fit on train_gate), AUROC 0.885–0.928.
+Licence: CubiCasa5K images are CC BY-NC-SA 4.0 → the adapter is non-commercial (same as the CC5K weights).
 Scripts: `experiments/r2/lora/{build_data,train_lora,eval_lora.sh}`. Training env: `/data/User/fangy4/envs/junction-train`
 (= coder390-vllm packages via a read-only .pth + peft/accelerate).
+v3 ideas: 2 epochs (v2 saw each drawing once), rank 32, add swiss PNG-twin counts for style diversity
+(`build_data.py --sources swiss_dwellings --png-twins` → artifacts/R2/lora/train_swiss_png.jsonl, 547 drawings, 7.9k turns).
 
 Cost accounting: local calls record `gpu_seconds = tokens_in/25k + tokens_out/1k` (amortised throughput measured
 at saturation), not HTTP wall time (which includes queueing behind other agents).
