@@ -142,19 +142,25 @@ function kg(rel: string) {
   return { path: rel, project: rel.split("/").slice(1, 3).join("/"), nodes: nodes.slice(0, 30), mock: true };
 }
 
-type Fixture = { path: string; question: string; answer: Record<string, unknown> };
+type Fixture = { path: string; question: string; answer: Record<string, unknown>; recorded_at?: string };
+const RECORDED = path.resolve(__dirname, "../fixtures/recorded.json");
+/** Recorded live-API answers (fixtures/record.py) first, then the hand-computed fixtures. */
 function fixtures(): Fixture[] {
-  try {
-    return JSON.parse(fs.readFileSync(FIXTURES, "utf8")) as Fixture[];
-  } catch {
-    return [];
-  }
+  const read = (f: string) => {
+    try {
+      return JSON.parse(fs.readFileSync(f, "utf8")) as Fixture[];
+    } catch {
+      return [];
+    }
+  };
+  return [...read(RECORDED), ...read(FIXTURES)];
 }
 const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
 
 function mockAsk(body: { path: string; question: string; solver?: string }) {
   const fx = fixtures().find((f) => f.path === body.path && norm(f.question) === norm(body.question));
-  if (fx) return { ...fx.answer, trace: [...((fx.answer.trace as string[]) ?? []), "(mock API: precomputed fixture)"] };
+  if (fx) return { ...fx.answer, trace: [...((fx.answer.trace as string[]) ?? []),
+    fx.recorded_at ? `(mock API: replay of the live answer recorded ${fx.recorded_at})` : "(mock API: precomputed fixture)"] };
   return {
     value: null, unit: null, confidence: 0, evidence: [], solver: "mock",
     trace: ["mock API: no fixture for this question", "start W4's API on :8100 for live answers"],
