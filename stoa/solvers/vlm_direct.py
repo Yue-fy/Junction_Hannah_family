@@ -37,8 +37,12 @@ from stoa.solvers import register
 from stoa.solvers.base import BaseSolver
 
 # Raw answer-digit probability -> calibrated confidence, per answer kind: (upper edge of p bin, accuracy).
-# Fit on TRAIN questions (experiments/r2/fit_conf.py); placeholder = identity-ish until fitted.
-CONF_MAP: dict[str, list[tuple[float, float]]] = {}
+# Fit on 1,500 TRAIN questions (Qwen3-VL-8B, run 20261114-010141-vlm_direct-train-n1500-2461, experiments/r2/fit_conf.py):
+# count AUROC 0.78 (cubicasa 0.74, swiss 0.89), ECE 0.020 after mapping (constant 0.3: 0.196). Refit for another model.
+CONF_MAP: dict[str, list[tuple[float, float]]] = {
+    "count": [(0.489, 0.118), (0.881, 0.343), (0.962, 0.412), (0.991, 0.476), (0.999, 0.494), (1.0, 0.889)],
+    "measure": [(0.071, 0.053), (0.677, 0.053), (1.0, 0.318)],
+}
 
 
 def map_conf(p: float, kind: str) -> float:
@@ -372,6 +376,6 @@ class VlmDirect(BaseSolver):
         p = llm.answer_prob(r, max_digits=0 if kind == "count" else 2) if r.logprobs else None
         if p is not None:
             conf = p if self.conf_mode == "raw" else map_conf(p, kind)
-            trace.append(f"p(answer digits) = {p:.3f} -> confidence {conf:.2f}")
+            trace.append(f"p(answer digits) = {p:.5f} -> confidence {conf:.2f}")
         return Answer(value=value, unit=unit, confidence=round(conf, 3), evidence=evidence, trace=trace,
                       solver=self.name)

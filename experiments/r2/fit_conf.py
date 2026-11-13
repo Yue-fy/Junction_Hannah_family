@@ -62,6 +62,13 @@ def fit(ps: list[float], ys: list[bool], bins: int) -> list[tuple[float, float]]
     for s in range(0, len(order), k):
         ids = order[s:s + k]
         blocks.append([ps[ids[-1]], len(ids), sum(ys[i] for i in ids)])
+    merged = []  # bins sharing an upper edge (many answers have p == 1.0) are one bin
+    for b in blocks:
+        if merged and b[0] <= merged[-1][0]:
+            merged[-1] = [b[0], merged[-1][1] + b[1], merged[-1][2] + b[2]]
+        else:
+            merged.append(b)
+    blocks = merged
     if len(blocks) > 1 and blocks[-1][1] < k // 2:  # merge a small tail
         e, n, c = blocks.pop()
         blocks[-1] = [e, blocks[-1][1] + n, blocks[-1][2] + c]
@@ -74,8 +81,10 @@ def fit(ps: list[float], ys: list[bool], bins: int) -> list[tuple[float, float]]
             i = max(0, i - 1)
         else:
             i += 1
-    out = [(round(e, 4), round((c + 1) / (n + 2), 3)) for e, n, c in blocks]  # Laplace-smoothed
+    out = [(round(e, 6), round((c + 1) / (n + 2), 3)) for e, n, c in blocks]  # Laplace-smoothed
     out[-1] = (1.0, out[-1][1])
+    for i in range(1, len(out)):  # smoothing can break monotonicity of tiny bins
+        out[i] = (out[i][0], max(out[i][1], out[i - 1][1]))
     return out
 
 

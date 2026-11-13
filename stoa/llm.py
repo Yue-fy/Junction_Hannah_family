@@ -510,7 +510,7 @@ def _logprobs_of(choice: Any) -> list[dict] | None:
     content = getattr(lp, "content", None) if lp is not None else None
     if not content:
         return None
-    return [{"t": c.token, "lp": round(float(c.logprob), 4),
+    return [{"t": c.token, "lp": round(float(c.logprob), 6),
              "top": [[a.token, round(float(a.logprob), 4)] for a in (c.top_logprobs or [])]} for c in content]
 
 
@@ -548,7 +548,7 @@ def answer_prob(res: "ChatResult", value: str | None = None, max_digits: int = 0
                 break
             lp += t["lp"]
             nd += 1
-    return round(math.exp(lp), 4)
+    return round(math.exp(lp), 6)
 
 
 def chat_many(requests: Iterable[dict], workers: int = 16) -> list[ChatResult | Exception]:
