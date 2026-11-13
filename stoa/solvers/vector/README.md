@@ -45,6 +45,18 @@ Beyond the templates (all deterministic unless noted):
 Experiments behind the rules: `experiments/w2/` (area_misses.py, unnamed_rooms.py, unnamed_inside.py,
 unnamed_rule.py) and R1's `experiments/r1/swiss_area_def/`.
 
+## `pdf_vector` (swiss-style vector PDF, NO DXF needed)
+Same rules and parser as `dxf`; the floor model comes from the PDF alone (`pdffloor.py`): room polygons = filled
+paths stroked grey 0.54 / width 0.37, apartments = red-brown dash-dot strokes, doors = grey-0.27 strokes, texts =
+spans, metres from the printed scale ("Massstab 1:200 (A3)"). Styles were mapped to DXF layers on 10 floors
+(`experiments/w2/pdf_style_layers.py`). Rooms: 796/797 within 2% of the DXF polygon (`experiments/w2/pdf_rooms.py`).
+Fixtures by path shape (black, width 0.51): 47-line chain = WC/basin ellipse, 68-line chain = bathtub, quad = shower,
+8 Béziers = circle (drain → washbasin): doors and all fixture kinds equal the DXF counts on 25/25 floors
+(`experiments/w2/pdf_symbol_shapes.py`). Windows = touching frame-rectangle + glass-line groups outside every room
+polygon, lines / 3: only 19/25 floors exact (overcounts) → confidence 0.5 + assumption.
+Dev swiss (`--solver pdf_vector --solver-arg llm=0`): **count 96.5%, area 96.5%** with no DXF (dxf: 100% / 97.5%).
+Use: PDF-only drawings, and as an independent second source to cross-check the DXF.
+
 ## `schedule` (opening_design and other vector PDF sheets with tables)
 
 ```bash
