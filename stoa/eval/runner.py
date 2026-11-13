@@ -173,6 +173,16 @@ def summarize(preds: list[dict]) -> dict:
     wb = {k: b["accuracy"] for k, b in out["by_bucket"].items() if b["accuracy"] is not None and k in shares}
     tot = sum(shares[k] for k in wb)
     out["weighted_acc"] = round(sum(shares[k] * a for k, a in wb.items()) / tot, 4) if tot else None
+    # generated splits (hard): accuracy per kind (translation / paraphrase / composition) and recipe
+    if any(r.get("meta") for r in preds):
+        kinds, recipes = collections.defaultdict(list), collections.defaultdict(list)
+        for r in preds:
+            meta = r.get("meta") or {}
+            kinds[meta.get("kind", "?")].append(r)
+            recipes[f"{meta.get('kind', '?')}/{r['source']}/{meta.get('recipe', '?')}"].append(r)
+        out["by_kind"] = {k: block(v) for k, v in sorted(kinds.items())}
+        out["by_recipe"] = {k: {x: block(v)[x] for x in ("n", "accuracy", "text_fuzzy") if x in block(v)}
+                            for k, v in sorted(recipes.items())}
     # cost
     if preds and "cost" in preds[0]:
         keys = ("llm_tokens_in", "llm_tokens_out", "api_tokens_in", "api_tokens_out", "llm_calls", "api_calls",
@@ -210,6 +220,9 @@ def print_report(m: dict, file=sys.stdout) -> None:
           f"{cm.get('llm_tokens_in', 0):.0f}/{cm.get('llm_tokens_out', 0):.0f}  llm calls {cm.get('llm_calls', 0):.2f}  "
           f"api calls {cm.get('api_calls', 0):.2f}  gpu s {cm.get('gpu_seconds', 0):.2f}  wall s mean/p50/p95 "
           f"{m.get('latency_mean_s')}/{m.get('latency_p50_s')}/{m.get('latency_p95_s')}", file=file)
+    if m.get("by_kind"):
+        print("hard kinds: " + "  ".join(f"{k}: n={v['n']} acc {pct(v['accuracy'])} text~ {pct(v.get('text_fuzzy'))}"
+                                         for k, v in m["by_kind"].items()), file=file)
     if m.get("by_tier"):
         print("tiers: " + "  ".join(f"{t}: {100 * v['share']:.0f}% of Qs, acc {pct(v['accuracy'])}"
                                     for t, v in m["by_tier"].items()), file=file)
