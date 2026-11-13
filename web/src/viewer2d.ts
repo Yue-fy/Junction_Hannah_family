@@ -189,6 +189,8 @@ export class Viewer2D {
       const isPoint = r[2] - r[0] < 1 && r[3] - r[1] < 1;
       const g = document.createElementNS(SVGNS, "g");
       g.classList.add("ev");
+      // W1: elements the plan cut does not draw (slabs, high beams) are boxed from the model footprint
+      if (/projected: not drawn/i.test(ev.note ?? "")) g.classList.add("projected");
       g.dataset.index = String(i);
       const shape = document.createElementNS(SVGNS, isPoint ? "circle" : "rect");
       if (isPoint) {
