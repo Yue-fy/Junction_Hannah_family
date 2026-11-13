@@ -59,8 +59,17 @@ const DXF_Q: Record<string, [string, string]> = {
 
 function checkText(c: KgCrossCheck) {
   const sym = c.ok === null ? "?" : c.ok ? "✓" : "≠";
-  if (c.storey) return { head: c.what, body: `plan ${c.drawn} · IFC ${c.model}`, sym };
+  if (c.storey) {
+    const other = Object.entries(c.drawn_other ?? {}).map(([st, n]) => `+${n} of ${st}`).join(", ");
+    const ifc = c.model_cut !== undefined && c.model_cut !== c.model ? `IFC ${c.model_cut} at the cut (${c.model} on storey)` : `IFC ${c.model}`;
+    return { head: c.what, body: `plan ${c.drawn}${other ? ` ${other}` : ""} · ${ifc}`, sym };
+  }
   return { head: c.what, body: `${c.drawn}/${c.model}`, sym };
+}
+
+/** W1's one-line explanation of a structured check (links()["checks"]), for tooltips. */
+function checkSentence(kg: Kg, c: KgCrossCheck) {
+  return (kg.checks ?? []).find((t) => c.storey && t.text.startsWith(`${c.what} on '${c.storey}'`))?.text;
 }
 
 /** Rooms that belong to what is open: the plan's storey, the whole model, or the swiss floor. */
@@ -130,7 +139,7 @@ export function renderKg(el: HTMLElement, kg: Kg, o: KgOpts) {
   }
   if (!perStorey) checks.forEach((c, i) => {
     const t = checkText(c);
-    pills.push(`<span class="kg-pill ${c.ok === null ? "info" : c.ok ? "ok" : "bad"}" data-check="${i}" title="${esc(c.reason ? `${c.reason}. ` : "")}${esc(c.storey
+    pills.push(`<span class="kg-pill ${c.ok === null ? "info" : c.ok ? "ok" : "bad"}" data-check="${i}" title="${esc(checkSentence(kg, c) ? `${checkSentence(kg, c)}. ` : "")}${esc(c.reason ? `${c.reason}. ` : "")}${esc(c.storey
       ? `Storey '${c.storey}': ${c.model} in the IFC model, ${c.drawn} drawn on the plan sheet (IfcConvert SVG twin of the PDF). A difference means some elements of this storey are not drawn on this sheet.`
       : `${c.what}: ${c.drawn} of ${c.model} agree`)}">${esc(t.head)} <b>${esc(t.body)}</b> ${t.sym}</span>`);
   });
@@ -245,7 +254,7 @@ function graphSvg(kg: Kg, files: KgFile[], current: string) {
     }
   });
   const head = (x: number, t: string, anchor = "start") => `<text class="kh" x="${x}" y="12" text-anchor="${anchor}">${t}</text>`;
-  return `<svg class="kg-graph" viewBox="0 0 ${W} ${H}" style="max-width:${Math.round(W * 1.15)}px" role="img" aria-label="Knowledge graph of this building">
+  return `<svg class="kg-graph" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Knowledge graph of this building">
     ${others.length ? head(X.othR, "OTHER MODELS", "end") : ""}${head(X.model + X.modelW / 2, "IFC MODEL", "middle")}${head(X.st + X.stW / 2, "STOREYS", "middle")}
     ${storeys.some((st) => plans.get(st.guid) ?? st.plan) ? head(X.plan + X.planW / 2, "SHEETS", "middle") : ""}${roomsBy.size ? head(X.room, "ROOMS") : ""}
     <g class="ke">${edges.join("")}</g>${nodes.join("")}</svg>`;
@@ -291,9 +300,9 @@ function body(kg: Kg, rooms: KgRoom[], checks: KgCrossCheck[], files: KgFile[], 
   }
   if (checks.length) {
     cols.push(`<div class="kg-col"><h4>Cross-checks <small>independent sources, same fact</small></h4><div class="kg-scroll"><table class="kg-table">
-      <tr>${checks.some((c) => c.storey) && !kg.storey ? "<th>Storey</th>" : ""}<th>What</th><th>${checks.some((c) => c.storey) ? "Plan" : "Agree"}</th><th>${checks.some((c) => c.storey) ? "IFC" : "Of"}</th><th></th></tr>
-      ${checks.map((c) => `<tr>${c.storey && !kg.storey ? `<td>${esc(c.storey)}</td>` : ""}<td>${esc(c.what)}</td><td class="num">${c.drawn}</td><td class="num">${c.model}</td><td class="${c.ok === null ? "na" : c.ok ? "ok" : "bad"}" title="${esc(c.reason ?? "")}">${c.ok === null ? "?" : c.ok ? "✓" : "≠"}</td></tr>`).join("")}
-      </table>${kg.storey ? `<p class="kg-note">Plan = elements drawn on this sheet; IFC = elements of storey ${esc(kg.storey.name)} in the model. A ≠ is a real difference between the documents, so the answer card says which source it used.</p>` : ""}</div></div>`);
+      <tr>${checks.some((c) => c.storey) && !kg.storey ? "<th>Storey</th>" : ""}<th>What</th><th>${checks.some((c) => c.storey) ? "Plan" : "Agree"}</th><th title="Elements of the storey that cross the plan's cut plane (floor + 1.2 m) / all elements of the storey">${checks.some((c) => c.storey) ? "IFC at cut / all" : "Of"}</th><th></th></tr>
+      ${checks.map((c) => `<tr>${c.storey && !kg.storey ? `<td>${esc(c.storey)}</td>` : ""}<td>${esc(c.what)}</td><td class="num">${c.drawn}${Object.values(c.drawn_other ?? {}).reduce((a, n) => a + n, 0) ? ` <small>+${Object.values(c.drawn_other ?? {}).reduce((a, n) => a + n, 0)}</small>` : ""}</td><td class="num" title="${esc(checkSentence(kg, c) ?? "")}">${c.model_cut ?? c.model}${c.model_cut !== undefined && c.model_cut !== c.model ? ` <small>/ ${c.model}</small>` : ""}</td><td class="${c.ok === null ? "na" : c.ok ? "ok" : "bad"}" title="${esc(c.reason ?? "")}">${c.ok === null ? "?" : c.ok ? "✓" : "≠"}</td></tr>`).join("")}
+      </table>${kg.storey ? `<p class="kg-note">Plan = elements drawn on this sheet; IFC = elements of storey ${esc(kg.storey.name)} that cross the sheet's cut plane (floor + 1.2 m) / all of the storey. A ≠ is a real difference between the documents, a ? means they cannot be compared (hover for why).</p>` : ""}</div></div>`);
   }
   if (!cols.length) cols.push(`<div class="kg-col"><p class="kg-note">${esc(o.current)} has no linked rooms or storeys.</p></div>`);
   return cols.join("");
