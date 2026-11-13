@@ -31,14 +31,19 @@ from stoa.router.intent import parse
 SCORED = ("count", "area", "length", "volume")
 
 
-def sample(per_key: int, seed: int = 7, sources: set[str] | None = None):
+def sample(per_key: int, seed: int = 7, sources: set[str] | None = None, split: str = "train",
+           keys: str | None = None):
+    import re
+
     by_key = collections.defaultdict(list)
     intents = {}
-    for q in load_split("train"):
+    for q in load_split(split):
         if q.type not in SCORED or q.source == "ifc_bench" or (sources and q.source not in sources):
             continue
         t = template_of(q.question)
         it = intents.get(t) or intents.setdefault(t, parse(q.question))
+        if keys and not re.search(keys, it.key):
+            continue
         by_key[(q.source, it.key)].append(q)
     out = []
     for k, qs in sorted(by_key.items()):
@@ -119,10 +124,13 @@ def main(argv=None) -> int:
     ap.add_argument("--source", action="append", default=None)
     ap.add_argument("--solver-arg", action="append", default=[], help="name.key=value, e.g. vlm_direct.style=cot")
     ap.add_argument("--out", default=str(gating.GATING_PATH))
+    ap.add_argument("--split", default="train", help="train (default; D4) or cc5k_heldout for pretrained-CC5K "
+                    "solvers (D8: never train_gate)")
+    ap.add_argument("--keys", default=None, help="regex on intent keys, e.g. 'count:(window|door|wc|sink):drawing'")
     a = ap.parse_args(argv)
 
     sources = {s for x in (a.source or []) for s in x.split(",") if s} or None
-    items = sample(a.per_key, sources=sources)
+    items = sample(a.per_key, sources=sources, split=a.split, keys=a.keys)
     print(f"[calibrate] {len(items)} train questions over {len({k for k, _ in items})} keys", file=sys.stderr)
     names = [s for s in a.solvers.split(",") if s]
     kw = collections.defaultdict(dict)
@@ -138,7 +146,9 @@ def main(argv=None) -> int:
     for n in names:
         results[n] = run_solver(n, items, a.workers, kw.get(n, {}))
 
-    old = gating.load(gating.GATING_PATH) if gating.GATING_PATH.exists() else {"entries": {}}
+    from pathlib import Path
+
+    old = gating.load(Path(a.out)) if Path(a.out).exists() else {"entries": {}}
     entries = dict(old.get("entries", {}))
     by_key = collections.defaultdict(list)
     for k, q in items:
@@ -152,7 +162,7 @@ def main(argv=None) -> int:
                 e["acc"][n] = round(sum(r["correct"] for r in rows) / len(rows), 4)
                 e["cost_usd"][n] = round(sum(r.get("usd", 0) for r in rows) / len(rows), 7)
         entries[key] = e
-    meta = {"built": datetime.now().isoformat(timespec="seconds"), "split": "train", "per_key": a.per_key,
+    meta = {"built": datetime.now().isoformat(timespec="seconds"), "split": a.split, "per_key": a.per_key,
             "solvers": sorted(set(old.get("meta", {}).get("solvers", [])) | set(names) | {"prior"}),
             "solver_args": {**old.get("meta", {}).get("solver_args", {}), **{k: v for k, v in kw.items()}}}
     with open(a.out, "w") as f:
