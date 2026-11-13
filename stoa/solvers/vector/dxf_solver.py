@@ -8,6 +8,7 @@ Cross-check (linked data): a room's DXF polygon area vs. the "16.78 m²" printed
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from stoa.contract import Answer, Evidence
@@ -16,7 +17,7 @@ from stoa.solvers import register
 from stoa.solvers.base import BaseSolver
 from stoa.solvers.vector import qparse
 from stoa.solvers.vector.floor import FloorModel, Room, load_floor, window_count
-from stoa.solvers.vector.pdfmap import fit_transform, png_scale
+from stoa.solvers.vector.pdfmap import fit_transform, pdf_span_counts, png_scale
 
 M2_TO_FT2 = 10.763910416709722
 
@@ -270,8 +271,11 @@ class DxfSolver(BaseSolver):
             assumptions.append("converted m² -> ft² (1 m² = 10.7639 ft²)")
         elif unit == "m2":
             value = round(value, 2)
-        # evidence -------------------------------------------------------------------------------
+        # linked data: the PDF text layer is an independent rendering of the same drawing -> cross-check
         mapper = _Mapper(path, dxf_rel)
+        if mapper.pdf_rel:
+            conf = self._cross_check(mapper.pdf_rel, fm, qr, parts, trace, conf)
+        # evidence -------------------------------------------------------------------------------
         evidence = [mapper.ev(bb, note) for p in parts for bb, note in p.boxes]
         if mapper.tf is not None:
             trace.append(f"DXF->PDF fit on {mapper.tf.n_anchors} text anchors, rms {mapper.tf.rms_pt:.2f} pt, "
@@ -282,6 +286,33 @@ class DxfSolver(BaseSolver):
             trace += [f"warning: {w}" for w in fm.warnings[:3]]
         return Answer(value=value, unit=unit, confidence=round(min(max(conf, 0.0), 1.0), 3), evidence=evidence,
                       trace=trace, solver=self.name, assumptions=list(dict.fromkeys(assumptions)), missing=missing)
+
+    @staticmethod
+    def _cross_check(pdf_rel: str, fm: FloorModel, qr, parts, trace: list[str], conf: float) -> float:
+        try:
+            spans = pdf_span_counts(str(abspath(pdf_rel)))
+        except Exception:  # noqa: BLE001
+            return conf
+        for t, p in zip(qr.terms, parts):
+            if p.value is None:
+                continue
+            if t.kind == "count_label" and t.arg != "<numbered>":
+                names = t.arg if isinstance(t.arg, list) else [t.arg]
+                n_pdf = sum(spans.get(nm, 0) for nm in names)
+                ok = n_pdf == p.value
+                trace.append(f"cross-check: PDF text layer shows {n_pdf} label(s) {names} {'✓' if ok else '✗'} (DXF {p.value})")
+                conf = conf if ok else conf * 0.7
+            elif t.kind == "count" and t.arg == "apartment":
+                n_pdf = sum(v for k, v in spans.items() if re.match(r"^(Whg|App)\.\s*[A-Z0-9]{1,3}$", k))
+                ok = n_pdf == p.value
+                trace.append(f"cross-check: PDF text layer shows {n_pdf} apartment labels {'✓' if ok else '✗'} (DXF {p.value})")
+                conf = conf if ok else conf * 0.7
+            elif t.kind == "area_room":
+                r = next((r for r in fm.rooms if r.number == t.arg), None)
+                if r is not None and r.printed_area is not None:
+                    trace.append(f"cross-check: plan prints {r.printed_area:.2f} m² for room {r.number} "
+                                 f"({'✓' if abs(r.printed_area - r.area) <= 0.02 * r.printed_area else '✗'} DXF polygon {r.area:.2f} m²)")
+        return conf
 
     def _tableqa(self, path: str, dxf_rel: str, fm: FloorModel, question: str, trace: list[str]) -> Answer | None:
         """LLM writes pandas over the floor's rooms/objects/apartments tables; we run it (stoa.solvers.vector.tableqa)."""
