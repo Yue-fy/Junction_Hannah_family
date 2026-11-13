@@ -324,7 +324,7 @@ function focusEvidence(i: number) {
   const params = new URLSearchParams(location.search);
   const want = params.get("file");
   let f = want ? state.files.find((x) => x.path === want) : state.files[0];
-  if (want && !f) f = (await listFiles("", want.split("/").pop()!, 5)).find((x) => x.path === want);
+  if (want && !f) f = (await listFiles("", want, 5)).find((x) => x.path === want);
   if (f) {
     await openFile(f, params.get("q") ?? "");
     if (params.get("q")) await runAsk();

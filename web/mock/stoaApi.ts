@@ -228,6 +228,8 @@ async function handle(req: Connect.IncomingMessage, res: http.ServerResponse, ne
       const q = (url.searchParams.get("q") ?? "").toLowerCase();
       const limit = Number(url.searchParams.get("limit") ?? 50);
       const all = [...DEMO, ...[...questionsByPath().keys()].filter((p) => !DEMO.includes(p))];
+      if (q.startsWith("data/") && safeAbs(url.searchParams.get("q")!) && !all.includes(url.searchParams.get("q")!))
+        all.unshift(url.searchParams.get("q")!); // exact path lookup, even for files without questions
       const files = all.filter((p) => (!source || p.split("/")[1] === source) && (!q || p.toLowerCase().includes(q)) && safeAbs(p))
         .slice(0, limit).map(fileInfo);
       return send(res, 200, { files });
