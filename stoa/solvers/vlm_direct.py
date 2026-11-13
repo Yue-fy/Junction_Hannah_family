@@ -399,10 +399,42 @@ class VlmLora(VlmDirect):
     probability mapped on train_gate (AUROC 0.89-0.93). Abstains (llm error) if the server doesn't serve "cc-v2".
     Licence: trained on CubiCasa5K images (CC BY-NC-SA 4.0) -> non-commercial."""
 
+    # Concepts it was trained on (stoa.router.intent targets of the cubicasa templates). On anything else its
+    # confidence is not trustworthy (F 01:28: on novel-operator questions conf >= 0.8 was right 16% of the time).
+    TRAINED = {"window", "wc", "sink", "storey", "shower_bathtub", "sauna", "door", "kitchen", "bedroom", "wc_room",
+               "bathroom", "balcony"}
+    UNTRAINED_CONF = 0.3
+
     def __init__(self, model: str | None = "cc-v2", **kwargs):
         super().__init__(model=model or "cc-v2", **kwargs)
 
+    @staticmethod
+    def _intent(question: str):
+        try:
+            from stoa.router.intent import modifiers, parse
+
+            return parse(question), modifiers(question)
+        except Exception:  # noqa: BLE001 - router not available: be conservative
+            return None, ["unknown"]
+
     def can_handle(self, path: str, question: str) -> bool:
-        if Path(path).suffix.lower() not in IMG_EXT:
+        """Raster image + a plain count question: no operators (sum, difference, average, share, threshold,
+        several classes) -- those must be decomposed by the pipeline first."""
+        if Path(path).suffix.lower() not in IMG_EXT or infer_kind(question)[0] != "count":
             return False
-        return infer_kind(question)[0] == "count"
+        intent, mods = self._intent(question)
+        return intent is not None and intent.task == "count" and not mods
+
+    def solve(self, path: str, question: str) -> Answer:
+        intent, mods = self._intent(question)
+        if mods:
+            return self.abstain(f"question has operators {mods}: decompose it into atomic counts first")
+        ans = super().solve(path, question)
+        target = getattr(intent, "target", "unknown")
+        if ans.value is not None and target not in self.TRAINED and ans.confidence > self.UNTRAINED_CONF:
+            ans.trace.append(f"target '{target}' not among the LoRA's trained concepts: confidence capped at "
+                             f"{self.UNTRAINED_CONF}")
+            ans.confidence = self.UNTRAINED_CONF
+            ans.assumptions = list(ans.assumptions or []) + [
+                f"counting LoRA was not trained on '{target}'; answer is a best guess"]
+        return ans
