@@ -323,6 +323,6 @@ function applyAnswerMatch(el: HTMLElement) {
   if (!answerMatch) return;
   const { what, storey } = answerMatch;
   el.querySelectorAll<HTMLElement>(".kg-pill[data-what]").forEach((p) => {
-    if (p.dataset.what === what && (!storey || !p.dataset.storey || p.dataset.storey === storey)) p.classList.add("match");
+    if (p.dataset.what === what && p.dataset.storey === storey) p.classList.add("match");
   });
 }

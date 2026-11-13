@@ -436,8 +436,9 @@ async function showAnswer(a: Answer, roundTripMs: number) {
   });
   v2d.setEvidence(a.evidence);
   v2d.frameEvidence();
-  if (a.intent?.task === "count") markAnswerCheck($("linked"), a.intent.target, String(a.intent.filters?.storey ?? "") || undefined);
-  else markAnswerCheck($("linked"), undefined, undefined);
+  // only a storey-scoped count is the same fact as a drawing-vs-model pill (model-wide totals are not)
+  const st = a.intent?.filters?.storey ? String(a.intent.filters.storey) : undefined;
+  markAnswerCheck($("linked"), a.intent?.task === "count" && st ? a.intent.target : undefined, st);
   const xb = $("xbanner");
   const xcs = crossChecks(a);
   const xc = xcs[0];
@@ -502,6 +503,9 @@ const TOUR: { file: string; q: string; note: string; bench?: boolean }[] = [
   { file: "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
     q: "How many doors are shown on the floor plan of '1.korrus'?",
     note: "Count with one box per door. The drawing and the model agree (cross-check), no model call needed." },
+  { file: "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+    q: "How many windows are shown on the floor plan of '1.korrus'?",
+    note: "Windows: the model has 55 on this storey, the drawing shows 52. The answer says the sources disagree instead of hiding it (see the highlighted check below)." },
   { file: "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
     q: "How many doors are there in the model 'Maleva tänav 18 korterelamu (Esplanades example model)'?",
     note: "Model-wide question: evidence on five sheets. Click a sheet chip to open it." },

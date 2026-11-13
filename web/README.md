@@ -38,13 +38,15 @@ and shows a one-line note:
    volume in 3D (same IFC GlobalId).
 2. Same sheet: doors on the floor plan → 46 boxes + 46 doors in 3D, banner "drawing 46 = model 46 ✓",
    answered by rules only (cost ≈ €0.00001). Click an evidence row: both views zoom to that door.
-3. Model-wide doors → 211 with evidence on 5 sheets (chips; click one to open that plan, same answer).
-4. Swiss floor plan: doors counted on the DXF layer, boxed on the PDF (36).
-5. Same floor, asked in German, doors and windows together → 64. The card shows "Understood as: count · door +
+3. Same sheet, windows → 55 from the model; the drawing shows 52, so the card, the banner and the highlighted
+   knowledge-graph pill say "sources disagree" (3 windows are not cut by the plan) instead of hiding it.
+4. Model-wide doors → 211 with evidence on 5 sheets (chips; click one to open that plan, same answer).
+5. Swiss floor plan: doors counted on the DXF layer, boxed on the PDF (36).
+6. Same floor, asked in German, doors and windows together → 64. The card shows "Understood as: count · door +
    window · German" and the plan (sum of 2 sub-questions, each clickable); both parts are cross-checked.
-6. HABS historical scan (no questions in the dataset): "what kind of drawing is this?" → the cascade escalates
+7. HABS historical scan (no questions in the dataset): "what kind of drawing is this?" → the cascade escalates
    to the local VLM (strip shows "rules › **local model**"), low confidence and what is missing.
-7. "How well it works": accuracy per source on held-out drawings against "just ask the VLM" and the template
+8. "How well it works": accuracy per source on held-out drawings against "just ask the VLM" and the template
    prior, the hard (generality) split, cost per 1,000 questions, the share answered by rules alone, and
    calibration. Read live from the stoa.eval leaderboard (`STOA_LEADERBOARD`), else `fixtures/bench.json`.
 
