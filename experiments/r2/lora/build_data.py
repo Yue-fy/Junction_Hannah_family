@@ -61,14 +61,18 @@ def main() -> None:
     ap.add_argument("--max-drawings", type=int, default=0)
     ap.add_argument("--para-prob", type=float, default=0.25)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--exclude-split", default="train_gate",
+                    help="drop every drawing that appears in this split (train_gate is used to gate the model; "
+                         "training on it would make the gate meaningless). '' = keep all")
     a = ap.parse_args()
     rng = random.Random(a.seed)
     srcs = set(a.sources.split(","))
 
+    excluded = {q.path for q in load_split(a.exclude_split)} if a.exclude_split else set()
     by_drawing: dict[str, dict[str, list]] = collections.defaultdict(lambda: collections.defaultdict(list))
     n_q = 0
     for q in load_split("train"):
-        if q.source not in srcs or q.type != "count":
+        if q.source not in srcs or q.type != "count" or q.path in excluded:
             continue
         k = kind_of(q.question) if q.source == "cubicasa5k" else template_of(q.question)
         if k is None:
@@ -97,7 +101,8 @@ def main() -> None:
             rng.shuffle(turns)
             f.write(json.dumps({"image": str(abspath(p)), "path": p, "source": p.split("/")[1], "turns": turns}) + "\n")
             n_turns += len(turns)
-    print(f"{len(paths)} drawings, {n_turns} turns (from {n_q} train questions) -> {out}")
+    print(f"{len(paths)} drawings, {n_turns} turns (from {n_q} train questions; {len(excluded)} paths of "
+          f"split {a.exclude_split!r} excluded) -> {out}")
 
 
 if __name__ == "__main__":
