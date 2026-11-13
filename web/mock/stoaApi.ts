@@ -190,6 +190,7 @@ const BENCH_SNAPSHOT = path.resolve(__dirname, "../fixtures/bench.json");
 type Bucket = { n: number; scored_n?: number; correct?: number; accuracy?: number | null };
 type LbRow = {
   time: string; run_id: string; solver: string; split: string; n: number; commit?: string; agent?: string; note?: string;
+  solver_args?: Record<string, unknown> | null;
   limit?: number | null; sources?: unknown; types?: unknown; grep?: unknown; handled_only?: boolean;
   metrics: Record<string, unknown> & { by_bucket?: Record<string, Bucket>; errors?: number };
 };
@@ -234,6 +235,12 @@ function bench() {
   for (const [split, minN] of [["dev", 1500], ["hard", 500]] as const)
     out[split] = { pipeline: summary(pick("pipeline", split, minN)), vlm_direct: summary(pick("vlm_direct", split, minN)),
       prior: summary(pick("prior", split, minN)) };
+  // S0's sealed test (experiments/s0/run_test.sh): only the CLEAN run counts (cc5k=0, or the single run when the
+  // pipeline has no cc5k switch); the cc5k=1 run is labelled inflated (D8) and never shown as the headline.
+  const clean = (r: LbRow) => String(r.solver_args?.cc5k ?? "") === "0" || /test-cc5k0\b/.test(r.note ?? "")
+    || (r.solver_args?.cc5k === undefined && !/cc5k/i.test(r.note ?? ""));
+  const test = rows.filter((r) => r.solver === "pipeline" && r.split === "test" && r.agent === "S0" && r.n >= 500 && full(r) && clean(r)).at(-1);
+  out.test = { pipeline: summary(test) };
   // novel question kinds (operators no template covers): hard2 = developed on; hard2q = clean held-out rewording,
   // reported as an aggregate only (D10)
   for (const split of ["hard2", "hard2q"]) {
