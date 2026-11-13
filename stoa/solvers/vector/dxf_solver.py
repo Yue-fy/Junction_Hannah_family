@@ -206,7 +206,14 @@ class _Mapper:
 
 @register("dxf")
 class DxfSolver(BaseSolver):
+    """Options: llm=1 (table-QA fallback for questions the rule parser doesn't cover), backend=local|nvidia."""
+
     sources = ("swiss_dwellings",)
+
+    def __init__(self, llm: int | str = 1, backend: str = "local", **kwargs):
+        super().__init__(**kwargs)
+        self.llm = bool(int(llm))
+        self.backend = backend
 
     def can_handle(self, path: str, question: str) -> bool:
         if source_of(path) != "swiss_dwellings" and Path(path).suffix.lower() != ".dxf":
@@ -221,6 +228,10 @@ class DxfSolver(BaseSolver):
         vocab = fm.names() + KNOWN_NAMES
         qr = qparse.parse(question, vocab, room_numbers={r.number for r in fm.rooms if r.number})
         trace = [f"parsed: {qr.describe()}", *[f"parse note: {n}" for n in qr.notes]]
+        if self.llm and not qparse.covered(question, qr):
+            ans = self._tableqa(path, dxf_rel, fm, question, trace)
+            if ans is not None:
+                return ans
         if not qr.terms:
             return Answer.abstain(self.name, "question not understood by the DXF parser", trace)
         parts = [_eval_term(fm, t, qr.qtype) for t in qr.terms]
@@ -271,3 +282,34 @@ class DxfSolver(BaseSolver):
             trace += [f"warning: {w}" for w in fm.warnings[:3]]
         return Answer(value=value, unit=unit, confidence=round(min(max(conf, 0.0), 1.0), 3), evidence=evidence,
                       trace=trace, solver=self.name, assumptions=list(dict.fromkeys(assumptions)), missing=missing)
+
+    def _tableqa(self, path: str, dxf_rel: str, fm: FloorModel, question: str, trace: list[str]) -> Answer | None:
+        """LLM writes pandas over the floor's rooms/objects/apartments tables; we run it (stoa.solvers.vector.tableqa)."""
+        from stoa.solvers.vector import tableqa
+
+        trace = [*trace, "rule parser does not cover this question -> table QA over the DXF floor tables"]
+        try:
+            tables = tableqa.floor_tables(fm)
+            res = tableqa.ask(question, tables, backend=self.backend)
+        except Exception as e:  # noqa: BLE001 - LLM down etc.: fall back to the rules
+            trace.append(f"table QA failed: {type(e).__name__}: {e}")
+            return None
+        if res.get("value") is None:
+            trace.append(f"table QA gave no answer ({res.get('error')})")
+            return None
+        trace += ["table QA code: " + " ; ".join(ln.strip() for ln in res["code"].splitlines() if ln.strip())[:600]]
+        mapper = _Mapper(path, dxf_rel)
+        by_id = {r.idx: r for r in fm.rooms}
+        evidence = [mapper.ev(by_id[i].bbox, _room_note(by_id[i])) for i in res["used"] if i in by_id]
+        value, unit = res["value"], res.get("unit")
+        if isinstance(value, bool):
+            value = "yes" if value else "no"
+        if unit == "count" and isinstance(value, (int, float)):
+            value = int(round(value))
+        elif isinstance(value, float):
+            value = round(value, 2)
+        if unit not in ("count", "m2", None):
+            unit = None
+        return Answer(value=value, unit=unit, confidence=0.6 if evidence else 0.45, evidence=evidence, trace=trace,
+                      solver=self.name, assumptions=["the model wrote the query; every number comes from the DXF tables"],
+                      missing=[] if evidence else ["the query did not report which rooms it used"])

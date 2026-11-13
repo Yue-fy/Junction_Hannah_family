@@ -234,3 +234,27 @@ def _finish(qr: Query, rev: bool) -> Query:
         qr.terms = list(reversed(qr.terms))
         qr.notes.append("'fewer/smaller than': second minus first")
     return qr
+
+
+UNCOVERED = re.compile(
+    r"\b(which|welche[rs]?|lequel|laquelle|quale\s+(?:dei|delle)|average|mean|median|durchschnitt|moyenne|media|per\s|each|jede[rs]?|"
+    r"chaque|ogni|ratio|percent|percentage|proportion|share|anteil|with\s+(?:a|an|no|more|at)|without\s+(?:a|an|any|windows?|doors?)|that\s+ha(?:ve|s)|"
+    r"contain\w*|adjacent|next\s+to|neighbo\w+|between|at\s+least|at\s+most|is\s+there|are\s+there\s+any|does|do\s+any|"
+    r"mit\s+(?:einem|einer|mehr)|ohne\s+(?:fenster|t[üu]r)|avec\s+(?:un|une|plus)|sans\s+(?:fen|porte)|senza)\b|%|(?:more|less|larger|smaller)\s+than\s+\d",
+    re.I)
+
+
+def covered(question: str, qr: Query) -> bool:
+    """False if the question has parts the rule parser ignores (then a table-QA fallback should answer)."""
+    if not qr.terms:
+        return False
+    q = _norm(question)
+    if qr.qtype == "count" and APT_RE.search(q) and any(t.kind != "count" or t.arg != "apartment" for t in qr.terms):
+        return False  # "how many bathrooms in apartment B": apartment filter not supported by rules
+    if qr.qtype == "count" and APT_RE.search(q):
+        return False
+    m = UNCOVERED.search(q)
+    if m:
+        # the standard swiss templates contain none of these, except "excluding ... shafts and voids" etc.
+        return False
+    return True
