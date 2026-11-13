@@ -201,7 +201,7 @@ class Cost:
     """Cost of the LLM calls made inside a `cost_meter()` block (Stoa scores cost: lower is better).
 
     gpu_seconds = amortised estimate from tokens (see PREFILL_TPS / DECODE_TPS), not HTTP wall time;
-    api_calls counts hosted (nvidia) calls only.
+    api_calls counts hosted (nvidia) calls only. Cache hits are billed like computed calls.
     """
 
     llm_tokens_in: int = 0
@@ -209,6 +209,7 @@ class Cost:
     gpu_seconds: float = 0.0
     api_calls: int = 0
     calls: int = 0
+    cached_calls: int = 0  # informational: how many of `calls` were served from the disk cache
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False, compare=False)
 
     def add(self, res: "ChatResult") -> None:
@@ -216,10 +217,12 @@ class Cost:
             self.calls += 1
             self.llm_tokens_in += res.prompt_tokens or 0
             self.llm_tokens_out += res.completion_tokens or 0
+            self.cached_calls += 1 if res.cached else 0
+            # Disk-cache hits are billed as if computed (F, 00:53): a warm dev run must cost the same as the
+            # cold test run Stoa will see.
             if res.backend == "local":
-                self.gpu_seconds += 0.0 if res.cached else gpu_seconds_estimate(res.prompt_tokens or 0,
-                                                                                 res.completion_tokens or 0)
-            elif not res.cached:
+                self.gpu_seconds += gpu_seconds_estimate(res.prompt_tokens or 0, res.completion_tokens or 0)
+            else:
                 self.api_calls += 1
 
     def as_dict(self) -> dict:
@@ -251,6 +254,7 @@ def cost_meter():
                 parent.llm_tokens_out += c.llm_tokens_out
                 parent.gpu_seconds += c.gpu_seconds
                 parent.api_calls += c.api_calls
+                parent.cached_calls += c.cached_calls
 
 
 # Amortised GPU time per token on the shared server (Qwen3-VL-8B bf16, RTX PRO 6000, batched by vLLM).
@@ -269,17 +273,18 @@ def _charge(res: "ChatResult") -> "ChatResult":
     m = _METER.get()
     if m is not None:
         m.add(res)
-    if not res.cached:  # report to the contract's CostMeter (the eval attributes it per question)
-        try:
-            from stoa.contract import record_cost
-        except ImportError:  # older contract without cost metering
-            return res
-        tin, tout = res.prompt_tokens or 0, res.completion_tokens or 0
-        if res.backend == "local":
-            record_cost(llm_calls=1, llm_tokens_in=tin, llm_tokens_out=tout, gpu_seconds=gpu_seconds_estimate(tin, tout))
-        else:
-            record_cost(llm_calls=1, llm_tokens_in=tin, llm_tokens_out=tout, api_calls=1, api_tokens_in=tin,
-                        api_tokens_out=tout)
+    # Report to the contract's CostMeter (the eval attributes it per question). Cache hits included, billed
+    # as computed, so warm and cold runs cost the same.
+    try:
+        from stoa.contract import record_cost
+    except ImportError:  # older contract without cost metering
+        return res
+    tin, tout = res.prompt_tokens or 0, res.completion_tokens or 0
+    if res.backend == "local":
+        record_cost(llm_calls=1, llm_tokens_in=tin, llm_tokens_out=tout, gpu_seconds=gpu_seconds_estimate(tin, tout))
+    else:
+        record_cost(llm_calls=1, llm_tokens_in=tin, llm_tokens_out=tout, api_calls=1, api_tokens_in=tin,
+                    api_tokens_out=tout)
     return res
 
 
