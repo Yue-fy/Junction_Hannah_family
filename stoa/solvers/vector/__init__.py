@@ -8,7 +8,10 @@ Modules:
 - `floor.py`   DXF -> FloorModel (rooms, units, doors, windows, fixtures), cached per file
 - `pdfmap.py`  DXF -> PDF page transform fitted from matching text, PDF -> PNG pixel scale
 - `qparse.py`  multilingual question parser (EN/DE/FR/IT) -> small expression over primitives
-- `dxf_solver.py` the `dxf` solver
+- `dxf_solver.py` the `dxf` solver (+ table-QA fallback via `tableqa.py`)
+- `pdftables.py` schedule tables rebuilt from a (rotated) PDF text layer
+- `schedule_solver.py` the `schedule` solver: pdftables + tableqa
 """
 
 from stoa.solvers.vector import dxf_solver  # noqa: F401  (registers "dxf")
+from stoa.solvers.vector import schedule_solver  # noqa: F401  (registers "schedule")

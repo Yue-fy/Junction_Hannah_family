@@ -8,6 +8,7 @@ import concurrent.futures as cf
 import json
 import os
 import random
+import re
 import statistics
 import subprocess
 import sys
@@ -73,8 +74,11 @@ def _parse_kv(items: list[str]) -> dict:
     return out
 
 
-def select(questions: list[Question], sources=None, types=None, limit=None, seed: int = 0) -> list[Question]:
-    qs = [q for q in questions if (not sources or q.source in sources) and (not types or q.type in types)]
+def select(questions: list[Question], sources=None, types=None, limit=None, seed: int = 0,
+           grep: str | None = None) -> list[Question]:
+    rx = re.compile(grep, re.I) if grep else None
+    qs = [q for q in questions if (not sources or q.source in sources) and (not types or q.type in types)
+          and (rx is None or rx.search(q.question))]
     if limit and limit < len(qs):
         idx = sorted(random.Random(seed).sample(range(len(qs)), limit))  # same subset every run
         qs = [qs[i] for i in idx]
@@ -156,6 +160,10 @@ def summarize(preds: list[dict]) -> dict:
         if text:
             d["text_n"] = len(text)
             d["text_fuzzy"] = round(sum(1 for r in text if r["text_fuzzy"]) / len(text), 4)
+            judged = [r for r in text if r.get("text_judge") is not None]
+            if judged:
+                d["text_judge"] = round(sum(1 for r in judged if r["text_judge"]) / len(judged), 4)
+                d["text_judged_n"] = len(judged)
         if rows and "cost" in rows[0]:
             d["usd_per_q"] = round(statistics.fmean(r["cost"]["usd"] for r in rows), 6)
         return d
@@ -195,6 +203,12 @@ def summarize(preds: list[dict]) -> dict:
             tiers[r["tier"]].append(r)
         out["by_tier"] = {t: {"share": round(len(v) / len(preds), 4), **{k: block(v)[k] for k in ("n", "accuracy", "coverage")}}
                           for t, v in sorted(tiers.items())}
+    # calibration of Answer.confidence (Stoa: "know what you don't know"); bins stay in the predictions tools
+    from stoa.eval.calibration import calibration
+
+    cal = calibration(preds)
+    if cal:
+        out["calibration"] = {k: v for k, v in cal.items() if k != "bins"}
     lat = sorted(r["latency_s"] for r in preds)
     if lat:
         out["latency_mean_s"] = round(statistics.fmean(lat), 3)
@@ -214,6 +228,10 @@ def print_report(m: dict, file=sys.stdout) -> None:
               f"{pct(b['evidence_rate']):>6s} {pct(b.get('text_fuzzy')):>6s}", file=file)
     print(f"{'OVERALL (micro, scored types)':34s} {m['n']:6d} {pct(m['accuracy']):>6s} {pct(m['coverage']):>6s} "
           f"{pct(m['acc_when_answered']):>8s} {pct(m['evidence_rate']):>6s} {pct(m.get('text_fuzzy')):>6s}", file=file)
+    if m.get("text_judge") is not None:
+        print(f"text (LLM judge, not in accuracy): {pct(m['text_judge'])} of {m['text_judged_n']} judged; per bucket: "
+              + ", ".join(f"{k} {pct(b['text_judge'])}" for k, b in m["by_bucket"].items() if b.get("text_judge") is not None),
+              file=file)
     print(f"weighted_acc (full-data bucket shares): {pct(m.get('weighted_acc'))}   macro: {pct(m['macro_accuracy'])}   "
           f"refusal: {pct(m.get('refusal_rate'))}   errors: {m['errors']}", file=file)
     cm = m.get("cost_mean") or {}
@@ -221,6 +239,12 @@ def print_report(m: dict, file=sys.stdout) -> None:
           f"{cm.get('llm_tokens_in', 0):.0f}/{cm.get('llm_tokens_out', 0):.0f}  llm calls {cm.get('llm_calls', 0):.2f}  "
           f"api calls {cm.get('api_calls', 0):.2f}  gpu s {cm.get('gpu_seconds', 0):.2f}  wall s mean/p50/p95 "
           f"{m.get('latency_mean_s')}/{m.get('latency_p50_s')}/{m.get('latency_p95_s')}", file=file)
+    cal = m.get("calibration")
+    if cal:
+        print(f"calibration: ECE {cal['ece']:.3f}  Brier {cal['brier']:.3f}  AUROC "
+              f"{'-' if cal['auroc'] is None else format(cal['auroc'], '.3f')}  AURC {cal['aurc']:.3f} (excess {cal['e_aurc']:.3f})  "
+              f"conf>=0.8 on {100 * cal['hi_conf_share']:.0f}% of answers"
+              + (f", {pct(cal['hi_conf_acc']).strip()}% of them right" if cal["hi_conf_acc"] is not None else ""), file=file)
     if m.get("by_kind"):
         print("hard kinds: " + "  ".join(f"{k}: n={v['n']} acc {pct(v['accuracy'])} text~ {pct(v.get('text_fuzzy'))}"
                                          for k, v in m["by_kind"].items()), file=file)
@@ -236,6 +260,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--limit", type=int, default=None, help="fixed random subset of N questions (same every run)")
     ap.add_argument("--source", action="append", default=None, help="filter by source; repeat or comma-separate")
     ap.add_argument("--type", action="append", default=None, help="filter by type (count, area, ...)")
+    ap.add_argument("--grep", default=None, help="only questions matching this regex (case-insensitive), e.g. "
+                    "'windows|ikkun|fenster|fönster' to iterate on one concept in any language")
     ap.add_argument("--workers", type=int, default=4, help="parallel threads calling solver.solve")
     ap.add_argument("--solver-arg", action="append", default=[], help="key=value passed to the solver constructor")
     ap.add_argument("--handled-only", action="store_true", help="abstain without calling solve() when can_handle is False")
@@ -243,6 +269,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--no-leaderboard", action="store_true", help="don't append to results/leaderboard.jsonl")
     ap.add_argument("--allow-test", action="store_true", help="required for --split test (S0 only)")
     ap.add_argument("--quiet", action="store_true")
+    ap.add_argument("--judge", default="none", choices=("none", "local", "nvidia"),
+                    help="grade text/other answers with an LLM judge (reported as text_judge; not in accuracy)")
     a = ap.parse_args(argv)
 
     from stoa.solvers import available, get_solver, import_errors
@@ -261,11 +289,14 @@ def main(argv: list[str] | None = None) -> int:
             print(f"[import error] {mod}\n{tb}", file=sys.stderr)
         return 2
 
-    qs = select(load_split(a.split), sources, types, a.limit)
+    qs = select(load_split(a.split), sources, types, a.limit, grep=a.grep)
     if not qs:
         print("no questions selected", file=sys.stderr)
         return 2
-    run_id = f"{datetime.now().strftime('%Y%m%d-%H%M%S')}-{a.solver}-{a.split}" + (f"-n{len(qs)}" if a.limit else "")
+    # unique even for runs started in the same second (R2 00:00): random suffix + exclusive create below
+    split_tag = Path(a.split).stem if a.split.endswith(".jsonl") else a.split
+    run_id = (f"{datetime.now().strftime('%Y%m%d-%H%M%S')}-{a.solver}-{split_tag}" + (f"-n{len(qs)}" if a.limit else "")
+              + f"-{os.urandom(2).hex()}")
     out_dir = shared_root() / "artifacts" / "eval"
     out_dir.mkdir(parents=True, exist_ok=True)
     preds_path = out_dir / f"{run_id}.jsonl"
@@ -276,7 +307,7 @@ def main(argv: list[str] | None = None) -> int:
         tqdm = None
     preds: list[dict] = []
     t0 = time.time()
-    with open(preds_path, "w", encoding="utf-8") as fout, cf.ThreadPoolExecutor(max_workers=max(1, a.workers)) as ex:
+    with open(preds_path, "x", encoding="utf-8") as fout, cf.ThreadPoolExecutor(max_workers=max(1, a.workers)) as ex:
         futs = [ex.submit(run_one, solver, q, a.handled_only) for q in qs]
         it = cf.as_completed(futs)
         if tqdm and not a.quiet:
@@ -288,6 +319,13 @@ def main(argv: list[str] | None = None) -> int:
     wall = time.time() - t0
     order = {q.qid: i for i, q in enumerate(qs)}
     preds.sort(key=lambda r: order[r["qid"]])
+    if a.judge != "none" and any(r["type"] in ("text", "other") for r in preds):
+        from stoa.eval.judge import judge_rows
+
+        judge_rows(preds, a.judge, workers=a.workers)
+        with open(preds_path, "w", encoding="utf-8") as fout:  # rewrite with verdicts
+            for r in preds:
+                fout.write(json.dumps(r, ensure_ascii=False, default=str) + "\n")
 
     m = summarize(preds)
     m["wall_s"] = round(wall, 1)
@@ -297,7 +335,7 @@ def main(argv: list[str] | None = None) -> int:
     line = {
         "time": datetime.now().isoformat(timespec="seconds"), "run_id": run_id, "solver": a.solver,
         "solver_args": kwargs, "split": a.split, "split_hash": split_hash(a.split), "limit": a.limit, "sources": sorted(sources) or None,
-        "types": sorted(types) or None, "handled_only": a.handled_only, "n": len(qs),
+        "types": sorted(types) or None, "grep": a.grep, "handled_only": a.handled_only, "judge": a.judge, "n": len(qs),
         "commit": _git("rev-parse", "--short", "HEAD"), "branch": _git("rev-parse", "--abbrev-ref", "HEAD"),
         "dirty": bool(status), "agent": os.environ.get("AGENT_ID", ""), "note": a.note,
         "metrics": m, "preds": str(preds_path),
