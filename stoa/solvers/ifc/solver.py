@@ -886,7 +886,9 @@ class IfcSolver(BaseSolver):
         footprint's min rotated rectangle (62%), side area = volume / footprint width (82%)."""
         g = e.geo
         if g is None:
-            return None
+            # walls modelled with an 'Axis' curve only (no Body, e.g. 225/307 tuwien walls): length = axis length
+            # (within 2% of Qto Length on 94/223 of them); no area or volume without a body
+            return e.axis_length if (qkey == "length" and getattr(e, "axis_length", None)) else None
         if qkey == "volume":
             return g.volume
         # NOTE: the wall 'Axis' representation length (index.axis_length) matches Qto Length on only 44% of
