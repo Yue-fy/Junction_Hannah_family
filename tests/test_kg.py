@@ -42,3 +42,35 @@ def test_crosscheck_room_area_by_name():
     note = crosscheck(PLAN, {"task": "area", "target": "room", "filters": {"storey": "1.korrus", "room": "KORIDOR (119)"}},
                       {"value": 63.84})
     assert note and "✗" not in note and "polygon on the plan" in note
+
+
+def test_cut_plane_checks_explain_undrawn_elements():
+    """Barlad: Revit lintel 'walls' above the 1.2 m cut are in the storey but not drawn; the CTA sheet draws the
+    Ground Level elements its cut plane crosses. Neither is a disagreement."""
+    from stoa.kg import links
+
+    base = "data/ifc_models/bimspeed-barlad_ro-arc-m3-e-pth-0000_plan-0"
+    if not abspath(base + "2-ground-level.pdf").exists():
+        pytest.skip("barlad not available")
+    gl = {c["text"].split(":")[0]: c for c in links(base + "2-ground-level.pdf")["checks"]}
+    assert gl["walls on 'Ground Level'"]["ok"] is True and "345 cut by the plan plane" in gl["walls on 'Ground Level'"]["text"]
+    cta = links(base + "1-cta.pdf")["checks"]
+    assert cta and all(c["ok"] is None for c in cta)
+
+
+SWISS = "data/swiss_dwellings/site851_bldg1805_floor9278.pdf"
+
+
+@pytest.mark.skipif(not abspath(SWISS).exists(), reason="swiss floor not available")
+def test_swiss_totals_are_compared_with_totals_not_one_room():
+    from stoa.kg import crosscheck
+    from stoa.router.intent import parse
+
+    q = "What is the total net floor area in m² of all numbered indoor rooms on this floor?"
+    ev = [{"file": SWISS, "page": 0, "bbox": [100, 100, 140, 140]}]
+    note = crosscheck(SWISS, parse(q), {"value": 165.63, "evidence": ev})
+    assert note and "polygon of room" not in note and "numbered indoor rooms" in note
+    assert "sum of their printed areas 165.64 m² ✓" in note
+    apt = crosscheck(SWISS, {"task": "area", "target": "apartment", "scope": "apartment", "filters": {"apartment": "Z"}},
+                     {"value": 50.0, "evidence": ev})
+    assert apt is None  # unknown apartment: no comparison rather than a false ✗
