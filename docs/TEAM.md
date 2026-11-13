@@ -7,9 +7,19 @@ Agents only edit directories their human owns, unless an issue says otherwise.
 | Role | Name | GitHub | Owns (directories) | Strengths |
 |---|---|---|---|---|
 | Captain · product & pitch | Yue | Yue-fy | `docs/`, `pitch/` | |
-| Frontend | TBD | TBD | `frontend/` | |
-| Backend / data / AI | TBD | TBD | `backend/` | |
-| Integration / infra | TBD | TBD | `infra/`, `.github/` | |
+| TBD | Erin | Erin-lab-design | TBD | |
+| TBD | Joanna | Teeeeeemo | TBD | |
+| TBD | Ziying | Ziying666 | TBD | |
+
+Roles to assign (the captain fills this in once we know the challenge):
+
+| Role | Owns |
+|---|---|
+| Frontend | `frontend/` |
+| Backend / data / AI | `backend/` |
+| Integration / infra | `infra/`, `.github/` |
+
+Teammates: add your own strengths in the table above through a PR as part of onboarding.
 
 ## Channels
 
