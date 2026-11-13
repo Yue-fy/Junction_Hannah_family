@@ -30,8 +30,18 @@ from stoa.data import source_of
 from stoa.solvers import register
 from stoa.solvers.base import BaseSolver
 from stoa.solvers.raster import vlm
-from stoa.solvers.raster.classes import ROOM_CLASSES, SYMBOL_CLASSES, question_class, type_code
+from stoa.solvers.raster.classes import ROOM_CLASSES, SYMBOL_CLASSES, question_class, question_op, type_code
 
+CANONICAL = {  # used when a composition needs a `direct` answer for one part
+    "window": "How many windows are shown on this floor plan?",
+    "door": "How many doors are shown on this floor plan? Count doorways fitted with a door; open doorways "
+            "without a door leaf do not count.",
+    "storey": "How many floors (storeys) does this floor plan show?",
+    "wc_seat": "How many toilet bowls (WC seats) are drawn on this floor plan?",
+    "sink": "How many sinks and wash basins (kitchen and bathroom combined; a double-bowl sink counts as one) are "
+            "drawn on this floor plan?",
+    "shower_bath": "How many showers and bathtubs are drawn on this floor plan in total?",
+}
 IMG_EXT = (".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp")
 GATE_FILE = Path(__file__).with_name("gate.json")
 
@@ -89,11 +99,43 @@ class RasterSolver(BaseSolver):
             self.gate.setdefault(c, {"acc": {}})["method"] = m
 
     def can_handle(self, path: str, question: str) -> bool:
-        return Path(path).suffix.lower() in IMG_EXT and question_class(question) is not None
+        return Path(path).suffix.lower() in IMG_EXT and question_op(question)[0] != "none"
 
     # ----------------------------------------------------------------------------------------------
     def solve(self, path: str, question: str) -> Answer:
-        cls = question_class(question)
+        op, classes = question_op(question)
+        if op in ("single", "none"):
+            return self._solve_class(path, question, classes[0] if classes else None)
+        # compositions over our classes: sum ("doors and windows in total"), diff ("how many more X than Y"),
+        # exists ("does it have a sauna? yes/no"). Each part is answered by its own gated method.
+        parts = [self._solve_class(path, None, c) for c in classes]
+        trace = [f"composition op={op} over {classes}"]
+        for c, a in zip(classes, parts):
+            trace.append(f"[{c}] = {a.value} (conf {a.confidence:.2f})")
+            trace.extend(f"  [{c}] {t}" for t in a.trace)
+        ev = [e for a in parts for e in a.evidence]
+        assumptions = [x for a in parts for x in a.assumptions]
+        missing = [x for a in parts for x in a.missing]
+        conf = 1.0
+        for a in parts:
+            conf *= a.confidence
+        if any(a.value is None for a in parts):
+            return Answer(value=None, unit="count", solver=self.name, trace=trace, missing=missing or ["part"])
+        vals = [int(a.value) for a in parts]
+        if op == "sum":
+            value, unit = sum(vals), "count"
+        elif op == "diff":
+            value, unit = vals[0] - vals[1], "count"
+        else:
+            value, unit = ("yes" if vals[0] > 0 else "no"), None
+        trace.append(f"answer = {op}({vals}) = {value}")
+        return Answer(value=value, unit=unit, confidence=round(conf, 3), evidence=ev, solver=self.name,
+                      trace=trace, assumptions=assumptions, missing=missing)
+
+    def _solve_class(self, path: str, question: str | None, cls: str | None) -> Answer:
+        """One object class. `question` is only needed by the `direct` method (None inside compositions:
+        a canonical English question for the class is used)."""
+        question = question or CANONICAL.get(cls, "")
         trace = [f"class={cls}"]
         prior = class_prior().get(cls) if cls else None
         if prior:
