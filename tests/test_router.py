@@ -62,7 +62,7 @@ def test_api_rejects_escape():
     ("cubicasa5k", "How many more windows than doors are shown on this floor plan?", "diff", ["window", "door"]),
     ("cubicasa5k", "Does this apartment have a sauna? Answer yes or no.", "exists", ["sauna"]),
     ("swiss_dwellings", "How many toilets, washbasins, bathtubs and showers are drawn on this floor plan altogether?", "sum",
-     ["wc", "washbasin", "bathtub", "shower"]),
+     ["wc", "washbasin", "shower", "bathtub"]),
     ("swiss_dwellings", "By how many m² is room 1.06 larger than room 1.04 (net floor area)?", "diff", ["room 1.06", "room 1.04"]),
     ("ifc_models", "Which of the rooms 'A (1)', 'B (2)' and 'C (3)' on 'Level 1' has the largest net floor area?", "argmax",
      ["A (1)", "B (2)", "C (3)"]),
