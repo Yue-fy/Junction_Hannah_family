@@ -26,6 +26,7 @@ _GEN_NOTE = {
     "hard2": "development set: operators never seen in questions.jsonl (teams tuned on it)",
     "hard2p": "hard2 reworded (EN/DE/FR/FI); partly seen: some wordings were quoted to solver owners",
     "hard2q": "CLEAN held-out: hard2 operators in a third wording (IT/NL/SV + new EN); aggregates only, no rules written from it (D10)",
+    "hard2r": "SEALED held-out (from 01:55): fresh draw of the hard2 recipes in a fourth wording (ES/ET/PL + new EN); milestone runs only",
 }
 
 def _pct(x, d=1):
