@@ -36,11 +36,14 @@ export const exampleQuestions = (path: string) =>
 
 export const knowledgeGraph = (path: string) => call<Kg>(`/api/kg?path=${encodeURIComponent(path)}`);
 
-export const ask = (path: string, question: string, solver?: string) =>
+export const ask = (path: string, question: string, solver?: string, solverArgs?: Record<string, unknown>) =>
   call<Answer>("/api/ask", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(solver ? { path, question, solver } : { path, question }),
+    body: JSON.stringify(solver ? { path, question, solver, ...(solverArgs ? { solver_args: solverArgs } : {}) } : { path, question }),
   });
+
+/** Hosted NVIDIA Nemotron (vision + reasoning) as an on-demand second opinion: one API call, cached by the API. */
+export const secondOpinion = (path: string, question: string) => ask(path, question, "vlm_direct", { backend: "nvidia" });
 
 export const benchmark = () => fetch("/api/bench").then((r) => (r.ok ? r.json() : Promise.reject(new Error(`${r.status}`))));

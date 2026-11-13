@@ -38,17 +38,34 @@ and shows a one-line note:
    volume in 3D (same IFC GlobalId).
 2. Same sheet: doors on the floor plan → 46 boxes + 46 doors in 3D, banner "drawing 46 = model 46 ✓",
    answered by rules only (cost ≈ €0.00001). Click an evidence row: both views zoom to that door.
-3. Same sheet, windows → 55 from the model; the drawing shows 52, so the card, the banner and the highlighted
-   knowledge-graph pill say "sources disagree" (3 windows are not cut by the plan) instead of hiding it.
+3. Same sheet, windows → 55 from the model; the drawing shows 52. The cross-check explains the gap (the plan
+   is a cut at floor + 1.2 m; 3 windows lie entirely above/below it) and the matching knowledge-graph pill is
+   highlighted ("windows plan 52 · IFC 52 at the cut (55 on storey) ✓").
 4. Model-wide doors → 211 with evidence on 5 sheets (chips; click one to open that plan, same answer).
-5. Swiss floor plan: doors counted on the DXF layer, boxed on the PDF (36).
-6. Same floor, asked in German, doors and windows together → 64. The card shows "Understood as: count · door +
+5. A question no template covers ("what share of the total room area on '1.korrus' does 'KORIDOR (119)'
+   take?") → 7.34 %. The card's **Reasoning** section shows W4's agent chain: ask (total area, 870.29 m², ifc)
+   → ask (KORIDOR, 63.84 m², ifc) → calc `63.841 ÷ 870.288 × 100` → answer. Sub-questions are clickable, each
+   evidence row says which step it came from, and the cross-check is labelled "step 2".
+6. Swiss floor plan: doors counted on the DXF layer, boxed on the PDF (36).
+7. Same floor, asked in German, doors and windows together → 64. The card shows "Understood as: count · door +
    window · German" and the plan (sum of 2 sub-questions, each clickable); both parts are cross-checked.
-7. HABS historical scan (no questions in the dataset): "what kind of drawing is this?" → the cascade escalates
-   to the local VLM (strip shows "rules › **local model**"), low confidence and what is missing.
-8. "How well it works": accuracy per source on held-out drawings against "just ask the VLM" and the template
-   prior, the hard (generality) split, cost per 1,000 questions, the share answered by rules alone, and
-   calibration. Read live from the stoa.eval leaderboard (`STOA_LEADERBOARD`), else `fixtures/bench.json`.
+8. CubiCasa scan (colorful-4539), asked in Finnish: bedrooms → 3, each counted 'MH' label boxed on the image
+   (W3's raster label reader, one local-VLM call per drawing, shared by all its questions).
+9. HABS historical scan (no questions in the dataset): "what kind of drawing is this?" → the local VLM says
+   "site plan" at 20 %, and the tour clicks **Second opinion · NVIDIA Nemotron**: the hosted Nemotron 3.5 Super
+   VL agrees (time, tokens and € shown; its reasoning folded).
+10. "How well it works": accuracy per source on held-out drawings against "just ask the VLM" and the template
+   prior, the hard (generality) split, new question kinds (hard2, plus the clean held-out rewording hard2q as an
+   aggregate), cost per 1,000 questions, the share answered by rules alone, and calibration. Read live from the
+   stoa.eval leaderboard (`STOA_LEADERBOARD`; pipeline rows from S0's integration runs), else
+   `fixtures/bench.json`.
+
+**Second opinion** (any answer from a model tier, or below 80 % confidence, on an image or PDF): one click
+asks hosted NVIDIA Nemotron the same question (`POST /ask {solver: "vlm_direct", solver_args: {backend:
+"nvidia"}}`) and shows whether it agrees. It is never called automatically outside the tour.
+
+**Cost** on the card uses the eval's rates (`stoa/eval/runner.py`), and local-LLM GPU time is billed from
+tokens at the shared server's throughput (as the eval does), not from HTTP latency, which includes queueing.
 
 Also: click any room/door on an IFC sheet to see it in 3D; click an element in 3D to see it on the drawing.
 
@@ -86,7 +103,7 @@ $JUNCTION_VENV/bin/python web/fixtures/make_fixtures.py
 | `src/main.ts` | state, file picker, ask flow, view modes (drawing / 3D / side by side), deep links |
 | `src/viewer2d.ts` | PDF.js / image rendering, evidence overlay, GUID layer from the sheet SVG, pan/zoom |
 | `src/viewer3d.ts` | web-ifc → merged three.js meshes per storey; storey filter, highlight/frame by GlobalId, picking |
-| `src/card.ts` | answer card (value, confidence, "understood as" intent + compound plan, cross-check badge, cost tier/time/tokens/€, trace, evidence) |
+| `src/card.ts` | answer card (value, confidence, "understood as" intent + compound plan, cross-check badge, cost tier/time/tokens/€, trace or the agent's reasoning chain, second opinion, evidence) |
 | `src/kg.ts` | knowledge-graph strip and drawer (linked files, drawing-vs-model checks, rooms, storeys) |
 | `mock/stoaApi.ts` | `/api/*` middleware: forwards to :8100, falls back to the mock (and to `stoa.kg` for `/kg`) |
 
