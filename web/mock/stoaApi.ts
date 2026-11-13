@@ -227,7 +227,11 @@ async function handle(req: Connect.IncomingMessage, res: http.ServerResponse, ne
       const source = url.searchParams.get("source");
       const q = (url.searchParams.get("q") ?? "").toLowerCase();
       const limit = Number(url.searchParams.get("limit") ?? 50);
-      const all = [...DEMO, ...[...questionsByPath().keys()].filter((p) => !DEMO.includes(p))];
+      const withQ = url.searchParams.get("with_questions") !== "false";
+      const all = withQ ? [...DEMO, ...[...questionsByPath().keys()].filter((p) => !DEMO.includes(p))]
+        : source && fs.existsSync(path.join(DATA, "data", source))
+          ? fs.readdirSync(path.join(DATA, "data", source)).filter((f) => /\.(jpe?g|png|pdf|ifc)$/i.test(f)).sort().map((f) => `data/${source}/${f}`)
+          : [];
       if (q.startsWith("data/") && safeAbs(url.searchParams.get("q")!) && !all.includes(url.searchParams.get("q")!))
         all.unshift(url.searchParams.get("q")!); // exact path lookup, even for files without questions
       const files = all.filter((p) => (!source || p.split("/")[1] === source) && (!q || p.toLowerCase().includes(q)) && safeAbs(p))

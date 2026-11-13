@@ -201,3 +201,7 @@ select, input[type="search"], textarea { border: 1px solid var(--line); border-r
 .chips:empty { display: none; }
 .chip { border: 1px solid #c9d6e8; background: #f3f7fc; color: #1d3557; border-radius: 999px; padding: 3px 9px; font-size: 11.5px; cursor: pointer; text-align: left; }
 .chip:hover { background: #e7eef8; border-color: #9fb6d6; }
+
+.xbanner { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 5; padding: 6px 14px; border-radius: 999px; font-size: 13px; box-shadow: 0 4px 14px rgba(20, 30, 50, .14); max-width: 80%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
+.xbanner.ok { background: #e5f5ec; color: #145f35; border: 1px solid #b6e0c6; }
+.xbanner.bad { background: #fff3df; color: #7a4a00; border: 1px solid #f0d3a3; }

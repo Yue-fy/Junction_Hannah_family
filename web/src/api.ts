@@ -27,8 +27,8 @@ async function call<T>(url: string, init?: RequestInit): Promise<T> {
 
 export const fileUrl = (path: string) => `/api/file?path=${encodeURIComponent(path)}`;
 
-export const listFiles = (source = "", q = "", limit = 60) =>
-  call<{ files: FileInfo[] }>(`/api/files?source=${encodeURIComponent(source)}&q=${encodeURIComponent(q)}&limit=${limit}`)
+export const listFiles = (source = "", q = "", limit = 60, withQuestions = true) =>
+  call<{ files: FileInfo[] }>(`/api/files?source=${encodeURIComponent(source)}&q=${encodeURIComponent(q)}&limit=${limit}${withQuestions ? "" : "&with_questions=false"}`)
     .then((r) => r.files);
 
 export const exampleQuestions = (path: string) =>

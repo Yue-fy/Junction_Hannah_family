@@ -1,6 +1,6 @@
 import "./style.css";
 import { ask, exampleQuestions, fileUrl, knowledgeGraph, listFiles, onBackend } from "./api";
-import { renderCard } from "./card";
+import { crossChecks, renderCard } from "./card";
 import type { Answer, FileInfo } from "./types";
 import { Viewer2D } from "./viewer2d";
 import type { Viewer3D } from "./viewer3d"; // loaded lazily: web-ifc + three are ~4 MB
@@ -131,11 +131,19 @@ const DEMO = [
   "data/cubicasa5k/colorful-10052.png",
 ];
 let demoFiles: FileInfo[] | null = null;
+const HISTORICAL = ["habs", "finna", "europeana", "wikimedia"];
+// Scans have no dataset questions; Stoa says the hidden set may ask about them, so offer general ones.
+const GENERIC_QUESTIONS = [
+  "What kind of drawing is this (floor plan, elevation, section, site plan)?",
+  "How many storeys does this building have?",
+  "What is the scale of this drawing?",
+  "How many windows are shown on this drawing?",
+];
 
 async function refreshFiles() {
   const source = $<HTMLSelectElement>("source").value;
   const q = $<HTMLInputElement>("search").value;
-  const list = await listFiles(source, q, 80);
+  const list = await listFiles(source, q, 80, !HISTORICAL.includes(source));
   if (!source && !q) {
     demoFiles ??= (await Promise.all(DEMO.map((p) => listFiles("", p, 3).then((r) => r.find((x) => x.path === p)).catch(() => undefined))))
       .filter((x): x is FileInfo => !!x);
@@ -173,6 +181,7 @@ async function openFile(f: FileInfo, question = "", keep: Answer | null = null, 
   $("fileMeta").textContent = `${f.source} · ${f.n_questions} questions`;
   $("credit").innerHTML = creditLine(f);
   if (!keep) {
+    $("xbanner").hidden = true;
     $("card").className = "card empty";
     $("card").innerHTML = `<p class="hint">Ask a question about this ${f.ext === ".ifc" ? "model" : "drawing"}.</p>`;
   }
@@ -216,6 +225,7 @@ async function openSheet(path: string, focusIndex: number | null = null) {
   const a = state.answer;
   const q = $<HTMLTextAreaElement>("question").value;
   const info = (await listFiles("", path, 5).catch(() => [])).find((x) => x.path === path)
+    ?? (await listFiles(path.split("/")[1], path, 5, false).catch(() => [])).find((x) => x.path === path)
     ?? { path, source: path.split("/")[1], ext: "." + path.split(".").pop()!.toLowerCase(), siblings: siblingsGuess(path, []),
       n_questions: 0, license: state.file?.license ?? "", credit: state.file?.credit ?? "", title: "", source_url: "" };
   await openFile(info, q, a, focusIndex);
@@ -244,7 +254,8 @@ async function loadExamples(f: FileInfo) {
     const interleaved: typeof uniq = [];
     for (let k = 0; interleaved.length < uniq.length; k++)
       for (const l of byType.values()) if (l[k]) interleaved.push(l[k]);
-    const pick = [...english.filter((q) => q.has_fixture), ...interleaved.filter((q) => !q.has_fixture)].slice(0, 4);
+    const pick = qs.length ? [...english.filter((q) => q.has_fixture), ...interleaved.filter((q) => !q.has_fixture)].slice(0, 4)
+      : GENERIC_QUESTIONS.map((question) => ({ question, type: "", unit: null }));
     chips.innerHTML = pick.map((q) => `<button type="button" class="chip" title="${esc(q.question)}">${esc(q.question.length > 64 ? q.question.slice(0, 61) + "…" : q.question)}</button>`).join("");
     chips.querySelectorAll<HTMLButtonElement>(".chip").forEach((b, i) => b.addEventListener("click", () => {
       $<HTMLTextAreaElement>("question").value = pick[i].question;
@@ -343,6 +354,13 @@ async function showAnswer(a: Answer, roundTripMs: number) {
   });
   v2d.setEvidence(a.evidence);
   v2d.frameEvidence();
+  const xb = $("xbanner");
+  const xc = crossChecks(a)[0];
+  xb.hidden = !xc;
+  if (xc) {
+    xb.className = `xbanner ${xc.ok ? "ok" : "bad"}`;
+    xb.innerHTML = `<b>${xc.ok ? "✓" : "✗"}</b> ${esc(xc.text)}`;
+  }
   if (state.ifc && a.evidence.some((e) => e.ifc_guid)) {
     if (state.mode === "2d" && !v2d.hasGuid(a.evidence.find((e) => e.ifc_guid)!.ifc_guid!)) setMode("split");
     await ensure3D();
@@ -393,7 +411,8 @@ function focusEvidence(i: number) {
   const params = new URLSearchParams(location.search);
   const want = params.get("file");
   let f = want ? state.files.find((x) => x.path === want) : state.files[0];
-  if (want && !f) f = (await listFiles("", want, 5)).find((x) => x.path === want);
+  if (want && !f) f = (await listFiles("", want, 5)).find((x) => x.path === want)
+    ?? (await listFiles(want.split("/")[1], want, 5, false)).find((x) => x.path === want); // files without questions
   if (f) {
     await openFile(f, params.get("q") ?? "");
     if (params.get("q")) await runAsk();

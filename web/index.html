@@ -27,6 +27,12 @@
               <option value="opening_design">US drawing sets</option>
               <option value="cubicasa5k">CubiCasa plans (PNG)</option>
               <option value="ifc_bench">IFC-Bench models</option>
+              <optgroup label="Historical scans (no questions yet)">
+                <option value="habs">HABS / HAER (US, measured drawings)</option>
+                <option value="finna">Finna (Finnish archives)</option>
+                <option value="europeana">Europeana</option>
+                <option value="wikimedia">Wikimedia Commons</option>
+              </optgroup>
             </select>
             <input id="search" type="search" placeholder="Filter files…" aria-label="Filter files" />
           </div>
@@ -62,6 +68,7 @@
           <button id="fitBtn" class="ghost" title="Frame the evidence">Frame evidence</button>
         </div>
         <div id="views" data-mode="2d">
+          <div id="xbanner" class="xbanner" hidden></div>
           <div id="pane2d" class="pane"><div id="v2d"></div><div class="pane-label">Drawing</div><div class="loading" id="load2d"></div></div>
           <div id="pane3d" class="pane"><div id="v3d"></div><div class="pane-label">IFC model</div><div class="loading" id="load3d"></div>
             <div id="pick" class="pick" hidden></div></div>
