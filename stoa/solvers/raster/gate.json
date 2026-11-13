@@ -30,13 +30,16 @@
   "note": "points only measured on 60"
  },
  "sink": {
-  "method": "prior",
+  "method": "rooms_rule",
   "acc": {
    "prior": 0.57,
    "direct": 0.6,
-   "points": 0.233
+   "points": 0.233,
+   "rooms_rule": 0.704,
+   "prior_on_same_200": 0.563
   },
-  "n_train": 258
+  "n_train": 258,
+  "note": "rooms_rule = 1 + max(1,#bathroom labels) + #WC labels; 200 TRAIN drawings (labels-train200, runtime classifier): 70.4% vs prior 56.3%, 2-fold-selected gain +14.1 (min +6.0 over 20 splits). F's 60-drawing train sample said +3.3, dev 140 drawings +7.1 n.s. (F-label2fixture). experiments/w3/cv/fixture_rules.py"
  },
  "shower_bath": {
   "method": "prior",

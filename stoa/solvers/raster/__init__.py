@@ -47,7 +47,7 @@ GATE_FILE = Path(__file__).with_name("gate.json")
 
 # Before calibration: R1's HYBRID label policy (chosen on 60 TRAIN drawings, +13.5 pts on dev, KNOWLEDGE 23:57),
 # prior for the rest. Methods: prior | labels | max1 (= max(1, labels)) | labels_code (labels, else the apartment
-# type code such as '3H+K+S') | points | direct. Sauna labels_code: 69% vs labels 62% on TRAIN (label_policy.py).
+# type code such as '3H+K+S') | rooms_rule (sinks from room labels) | points | direct. Sauna labels_code: 69% vs labels 62% on TRAIN (label_policy.py).
 DEFAULT_GATE = {"bedroom": "labels", "kitchen": "prior", "bathroom": "max1", "wc_room": "labels",
                 "sauna": "labels_code", "balcony": "labels",
                 **{c: "prior" for c in SYMBOL_CLASSES}, "storey": "prior"}
@@ -163,6 +163,8 @@ class RasterSolver(BaseSolver):
         try:
             if method in ("labels", "max1", "labels_code"):
                 return self._labels(path, img, key, cls, prior, trace, acc, method)
+            if method == "rooms_rule":
+                return self._rooms_rule(path, img, key, cls, prior, trace, acc)
             if method == "points":
                 return self._points(path, img, key, cls, prior, trace, acc)
             if method == "direct":
@@ -210,7 +212,10 @@ class RasterSolver(BaseSolver):
         codes = [(i, type_code(i.text)) for i in items if type_code(i.text)]
         if codes:
             ci, tc = codes[0]
-            implied = max(0, tc["rooms"] - 1) if cls == "bedroom" else int(cls in tc["classes"])
+            if cls == "bedroom":
+                implied = max(0, tc["rooms"] - 1) if tc["rooms"] else 0
+            else:
+                implied = int(cls in tc["classes"])
             trace.append(f"apartment type code '{ci.text}' implies {cls}={implied}")
             if method == "labels_code" and value == 0 and implied:
                 value = implied
@@ -227,6 +232,48 @@ class RasterSolver(BaseSolver):
         return Answer(value=value, unit="count", confidence=acc.get(method, 0.5), evidence=ev, solver=self.name,
                       trace=trace, assumptions=assumptions,
                       missing=([] if hits else [f"no {name} label found; an unlabelled room would be missed"]))
+
+    def _rooms_rule(self, path, img, key, cls, prior, trace, acc) -> Answer:
+        """Fixtures implied by rooms (same label call as the room questions, no extra cost). Only `sink` so far:
+        sinks = 1 kitchen sink + max(1, #bathroom labels) basins + #WC-room labels basins.
+        TRAIN (200 drawings, experiments/w3/cv/fixture_rules.py): 70.4% vs prior 56.3%."""
+        if cls != "sink":
+            return self._prior_answer(cls, prior, trace + [f"no room rule for {cls}"], acc)
+        items, log, hit = vlm.read_labels(img, key, self.backend)
+        trace.append(f"labels{' (shared with another question)' if hit else ''}: {len(items)} read in "
+                     f"{log.seconds:.1f}s: " + ", ".join(f"{i.text}->{i.cls or '-'}" for i in items)[:600])
+        trace.extend(log.notes)
+        if any(n.startswith("LOOP") for n in log.notes):
+            ans = self._prior_answer(cls, prior, trace, acc)
+            ans.missing.append("the label reading degenerated (repetition loop); answered with the prior")
+            return ans
+        by = collections.defaultdict(list)
+        for i in items:
+            if i.cls in ("kitchen", "bathroom", "wc_room"):
+                by[i.cls].append(i)
+        n_bath, n_wc = max(1, len(by["bathroom"])), len(by["wc_room"])
+        value = 1 + n_bath + n_wc
+        trace.append(f"rule: sinks = 1 (kitchen) + max(1, {len(by['bathroom'])} bathroom labels) + {n_wc} WC labels "
+                     f"= {value}")
+
+        def ev(i, note):
+            return Evidence(file=path, bbox=[round(v, 1) for v in getattr(i, "box", [i.x, i.y, i.x, i.y])],
+                            bbox_space="image_px", note=note)
+        evidence = [ev(by["kitchen"][0], f"kitchen '{by['kitchen'][0].text}' -> kitchen sink")] if by["kitchen"] else []
+        evidence += [ev(i, f"bathroom '{i.text}' -> wash basin") for i in by["bathroom"]]
+        evidence += [ev(i, f"WC '{i.text}' -> wash basin") for i in by["wc_room"]]
+        assumptions = ["sinks inferred from rooms: one kitchen sink, one wash basin per bathroom (at least one) and "
+                       "one per WC room; double-bowl sinks count once"]
+        if not by["kitchen"]:
+            assumptions.append("no kitchen label read; assumed the plan has one kitchen")
+        if not by["bathroom"]:
+            assumptions.append("no bathroom label read; assumed one bathroom")
+        if prior:
+            trace.append(f"cross-check vs prior {prior[0]}: {'agrees ✓' if prior[0] == value else 'differs'}")
+        return Answer(value=value, unit="count", confidence=acc.get("rooms_rule", 0.6), evidence=evidence,
+                      solver=self.name, trace=trace, assumptions=assumptions,
+                      missing=["sink symbols are not detected individually; extra basins (utility room, double "
+                               "basins) would be missed"])
 
     def _points(self, path, img, key, cls, prior, trace, acc) -> Answer:
         items, log, hit = vlm.point_symbols(img, key, cls, self.backend, self.target_px)
