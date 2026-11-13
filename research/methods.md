@@ -71,7 +71,7 @@ Per-template policy chosen on 60 train drawings (574 Qs), then frozen and scored
 | bathroom | max(1, labels) | 88.2% | 88.2% |
 | **all** | | 65.7% | **79.3%**, paired delta +13.5, 95% CI [+7.2, +19.6] (cluster bootstrap) |
 
-19% of dev outputs looped; fixing that is the next lever. Cost: ~2.1k tokens in and ~570 out per
+19% of dev outputs looped. Retrying them with vLLM `repetition_penalty=1.15` (`retry_loops.py`) fixes 26 of 28, and dev rises to **82.1%** (+16.3 vs the prior, 95% CI [+9.4, +22.8]; WC rooms 85.0%, balconies 87.0%). For saunas, use the prior: labels are neutral on dev. Cost: ~2.1k tokens in and ~570 out per
 drawing, and one call answers all 12 room-type questions (EN+FI).
 
 About 25% of all questions (37% of cubicasa) count rooms by type. Finnish plans print the room code
@@ -86,7 +86,23 @@ Upscale 2–3× before OCR.
 Caveats: `MH` can carry a digit (`MH1`, `MH2`). Some kitchens are a niche without a label (`K` missing),
 which is why the "always 1" prior is so strong. Saunas are sometimes only drawn as a bench symbol.
 
-## 3. Symbol counting on raster plans (method, to be measured by W3)
+## 3. Symbol counting on raster plans (measured: Qwen3-VL-8B pointing does NOT work)
+
+Measured with Qwen3-VL-8B (`experiments/r1/symbol_points/`), exact match vs the per-template prior:
+
+| Setting | Split | Windows | Doors | WC seats | Sinks | Showers+tubs |
+|---|---|---|---|---|---|---|
+| prior | train (40 drawings) | 12.5% | 6.7% | 70.0% | 47.5% | 54.1% |
+| full image 2×, one class per prompt | train | 5.0% | 10.0% (loops) | **87.5%** | 15.0% | 43.2% |
+| same, frozen | dev (107) | – | – | 65.4% vs 57.0% (+8.4, CI [−2.8, +19.6]) | – | – |
+| 2×2 tiles, 1280 px each | train_gate (14/16) | 0.0% (0.63×) | 25.0% vs 6.2% | – | – | – |
+| 3×3 tiles, 1024 px each | train_gate | 7.1% (1.74×) | 25.0% (0.72×) | – | – | – |
+| 2×2 tiles, frozen | dev (57) | – | 10.5% vs 17.5% | – | – | – |
+
+The door gain on train_gate (n=16) did not replicate on dev. Tiled counts are unbiased on average
+(pred/gold 0.97) but much too noisy for exact match. This is consistent with AECV-Bench: frontier VLMs
+score ≤ 0.39 on doors. What's left to try: exemplar counters (GeCo2/CountGD), classical CV for door arcs
+and window symbols, or a bigger VLM. The original recipe below is kept for reference.
 
 Recommended order (cheapest first):
 1. VLM pointing: ask for one point per instance (Molmo / Qwen-VL grounding), then count the points.
@@ -203,10 +219,12 @@ Expected cost = Σ_k P(reach k) · cost_k. Pick τ_k from the risk–coverage cu
 accuracy on the same questions. Escalating only then can't lower accuracy, and it cuts cost.
 
 ### 8c. Linked data as a cross-check
-- Swiss: the same floor exists as DXF + PDF + PNG. Fit the affine map DXF→PDF (and PDF→PNG) once per
-  drawing by least squares on matched points, e.g. ROOM_TEXT insertion points ↔ PDF text spans with the
-  same string: `[u v]ᵀ = A [x y]ᵀ + t`, 6 unknowns, ≥ 3 matches, solved with `numpy.linalg.lstsq`. Then
-  every DXF-derived count or area gets evidence boxes on the PDF and PNG for free. A VLM count on the PNG
-  that agrees with the DXF count raises confidence; a disagreement goes into the trace.
+- Swiss (measured, `experiments/r1/link_dxf_pdf/fit_affine.py`): DXF → PDF is one affine map per floor,
+  fitted by least squares on room numbers that occur once in both the DXF `ROOM_TEXT` and the PDF words
+  (PyMuPDF): `[u v] = [x y 1]·A`. It fits **1,036/1,040 floors with RMSE 0.04 pt (max 0.08 pt)**; the other 4
+  have fewer than 3 unique numbers. The PDFs are A3 at 1:100 (859) or 1:200 (177), and the PNG is the page at
+  150 dpi (px = pt × 150/72). Every DXF-derived count or area therefore gets exact evidence boxes on the PDF
+  and PNG. A VLM count on the PNG that agrees with the DXF count raises confidence; a disagreement goes
+  into the trace.
 - ifc_models: the PDFs were rendered from the IFC. Room names printed in the PDF ↔ `IfcSpace.Name/LongName`
   gives the same link, and the drawing count can be checked against the IFC count.

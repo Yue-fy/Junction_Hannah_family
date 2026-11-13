@@ -417,7 +417,8 @@ export class Viewer3D {
       mat.transparent = opacity < 1;
       mat.depthWrite = opacity === 1;
       mat.needsUpdate = true;
-      b.mesh!.visible = !(other && this.activeStorey !== null && b.storey > -1 && this.storeyAbove(b.storey));
+      // with a storey filter: hide storeys above it and elements without a storey (roof proxies, annotations)
+      b.mesh!.visible = !(other && ((b.storey > -1 && this.storeyAbove(b.storey)) || b.storey === -1));
     }
     this.needsRender = true;
   }
@@ -436,7 +437,7 @@ export class Viewer3D {
     const size = box.getSize(new THREE.Vector3()).length();
     const dist = Math.max(size, 4) * 0.9 / Math.tan((this.camera.fov * Math.PI) / 360);
     const dir = new THREE.Vector3(0.6, 0.75, 0.9).normalize();
-    this.camera.position.copy(c).addScaledVector(dir, dist * (obj === this.root ? 0.6 : 1.1));
+    this.camera.position.copy(c).addScaledVector(dir, dist * (obj === this.root ? 0.6 : 0.85));
     this.camera.near = Math.max(dist / 1000, 0.01);
     this.camera.far = dist * 20;
     this.camera.updateProjectionMatrix();
@@ -476,6 +477,18 @@ export class Viewer3D {
       this.highlight([props.GlobalId], false);
       this.onPick(props.GlobalId, `${type.replace(/^IFC/i, "")} ${props.name}`.trim(), props);
     });
+  }
+
+  /** Type, names and storey of one element (for follow-up questions about a picked element). */
+  info(guid: string): { type: string; name: string; longName: string; storey: string } | null {
+    this.ensureGuidIndex();
+    const id = this.guidToId.get(guid);
+    if (id === undefined || !this.api) return null;
+    const l = this.api.GetLine(this.modelID, id);
+    return {
+      type: this.api.GetNameFromTypeCode(l.type) ?? "", name: l.Name?.value ?? "", longName: l.LongName?.value ?? "",
+      storey: this.storeys.find((s) => s.id === this.storeyOf.get(id))?.name ?? "",
+    };
   }
 
   /** Name lookup for evidence labels (e.g. "IfcSpace 119 KORIDOR"). */

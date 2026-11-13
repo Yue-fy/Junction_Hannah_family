@@ -96,3 +96,19 @@ def png_scale(png_path: str, page_w: float) -> float:
 
     with Image.open(png_path) as im:
         return im.size[0] / page_w
+
+
+@functools.lru_cache(maxsize=256)
+def pdf_span_counts(pdf_path: str) -> dict[str, int]:
+    """Text spans on page 0 (each DXF TEXT entity renders as one span) -> occurrence count."""
+    import pymupdf
+
+    out: dict[str, int] = {}
+    with pymupdf.open(pdf_path) as doc:
+        for b in doc[0].get_text("dict")["blocks"]:
+            for line in b.get("lines", []):
+                for sp in line["spans"]:
+                    t = sp["text"].strip()
+                    if t:
+                        out[t] = out.get(t, 0) + 1
+    return out
