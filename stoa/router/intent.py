@@ -74,7 +74,7 @@ _SHEET = re.compile(r"\bsheet\s+([A-Z]{1,3}-?\d{1,4}(?:\.\d+)?)", re.I)
 _LABELLED = re.compile(r"labell?ed|bezeichnung|d[ée]signation|d[ée]sign[ée]e?s|denominazione|denominati|"
                        r"named|called|nimetty", re.I)
 _TOTAL = re.compile(r"\btotal\b|gesamt|totale?\b|samlede|totaal|zusammen|kokku|yhteens|alle\b|all\b|tous|toutes|tutti", re.I)
-_MODEL = re.compile(r"\bin the model\b|enth[äa]lt das modell|\bmodel(?:o|lo|ul|len|e|l|lis|li)?\b|mod[eè]le\b|mudel\w*",
+_MODEL = re.compile(r"\bin the model\b|enth[äa]lt das modell|\bmodel(?:o|lo|ul|u|len|e|l|lis|li)?\b|mod[eè]le\b|mudel\w*",
                     re.I)
 _STOREY_PLAN = re.compile(r"floor plan of|on the floor plan|im grundriss|im geschoss|plantegningen for|plano de la planta|"
                           r"de la planta|plattegrond van|korruse(?:l)?|on <q>|op <q>|på <q>|kondygnacji", re.I)
@@ -83,6 +83,57 @@ _OUTDOOR_EXCL = re.compile(r"excluding balconies|ohne balkone|hors balcons|esclu
 _NEGATION = re.compile(r"(not counting|excluding|except|without|ohne|hors|esclusi|sauf)[^?;.]*|"
                        r"[^,;?]*\b(lukuun ottamatta|ausgenommen)", re.I)
 _NUMBERED = re.compile(r"numbered|nummerierten|num[ée]rot[ée]es|numerati", re.I)
+
+
+# --- modifiers that change WHAT is computed (the hidden set is "harder"): a known key + one of these is NOT the
+# known template ("average area of rooms labelled X" is not "total area of rooms labelled X"). The pipeline sends
+# such questions to the general agent instead of canonicalising them to a template.
+_OPS = [
+    ("avg", r"\b(average|mean|on average|durchschnitt\w*|moyenne|medi[ao]\b|keskim\w*|gennemsnit\w*|genomsnitt\w*|"
+            r"gemiddeld\w*|keskmi\w*|[śs]redni\w*)\b"),
+    ("share", r"\b(percent\w*|percentage|share|proportion|fraction|ratio|prozent\w*|anteil\w*|pourcentage|"
+              r"percentuale|prosent\w*|osuus\w*|andel\w*|procent\w*)\b|%"),
+    ("diff", r"\b(difference|differs?|compared (?:with|to)|unterschied\w*|diff[ée]rence|differenza|erotus|forskel\w*|"
+             r"verschil)\b"),
+    ("rest", r"\b(other than|leaving out|apart from|besides|all the other|the other rooms|remaining|übrigen|autres que|"
+             r"lukuun ottamatta <q>)"),
+    ("threshold", r"\b(?:larger|bigger|smaller|more|less|greater|fewer)\s+than\s+\d|\b(?:over|under|above|below|at least|"
+                  r"at most|exceeding)\s+\d"),
+]
+_OPS_RX = [(n, re.compile(p, re.I)) for n, p in _OPS]
+_GENERIC = {"room", "unknown", "sanitary"}
+
+
+def targets_mentioned(question: str) -> list[str]:
+    """Distinct object classes named in the question (quoted names and 'not counting ...' clauses removed)."""
+    q = _QUOTED.sub(" <q> ", _fold(question))
+    q = _NEGATION.sub(" ", q)
+    out = []
+    for t, rx in _TARGETS:
+        # whole words only here ("indoor" is not a door, "taken" is not Estonian 'aken')
+        m = next((m for m in rx.finditer(q) if m.start() == 0 or not q[m.start() - 1].isalnum()), None)
+        if m:
+            out.append(t)
+            q = q[:m.start()] + " " + q[m.end():]  # "showers and bathtubs" is one target, not shower + bathtub
+    return out
+
+
+def modifiers(question: str) -> list[str]:
+    """Meaning-changing modifiers: avg, share, diff, rest, threshold, multi (several object classes)."""
+    q = _QUOTED.sub(" <q> ", _fold(question))
+    ops = [n for n, rx in _OPS_RX if rx.search(q)]
+    # several object classes: >= 2 outside parentheses, or an enumeration of >= 3 inside one ("wet rooms
+    # (bathrooms, WC rooms and saunas)"); "(kitchen and bathroom combined)" in the sinks template is a definition
+    q2 = _fold(question)
+    outside = re.sub(r"\([^)]*\)", " ", q2)
+    outside = re.sub(r"[^,;?(]*\bexcluded\b", " ", outside)
+    t_out = {t for t in targets_mentioned(outside) if t not in _GENERIC}
+    n_out = len(t_out)
+    n_in = max([len({t for t in targets_mentioned(m) if t not in _GENERIC} - t_out)
+                for m in re.findall(r"\(([^)]*)\)", q2)] or [0])
+    if n_out >= 2 or n_in >= 3:
+        ops.append("multi")
+    return ops
 
 
 @dataclass

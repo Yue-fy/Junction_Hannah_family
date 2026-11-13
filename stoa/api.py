@@ -214,6 +214,17 @@ def questions(path: str = Query(...), limit: int = 50) -> dict:
     return {"questions": [{"question": q.question, "type": q.type, "unit": q.unit} for q in qs[:limit]]}
 
 
+@app.get("/kg")
+def kg(path: str = Query(...)) -> dict:
+    """Linked sources of a drawing (W1's stoa.kg.links): siblings, model, storeys, rooms, cross-checks."""
+    path = _safe_rel(path)
+    try:
+        from stoa.kg import links
+    except Exception as e:  # noqa: BLE001  (stoa.kg not merged yet -> 404, the UI falls back)
+        raise HTTPException(404, f"knowledge graph not available: {type(e).__name__}") from e
+    return links(path)
+
+
 @app.get("/intent")
 def intent(q: str = Query(...)) -> dict:
     from stoa.router.intent import parse
