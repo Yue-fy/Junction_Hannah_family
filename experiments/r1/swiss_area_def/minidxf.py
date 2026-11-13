@@ -15,7 +15,7 @@ def read_entities(path):
         if code == "0":
             if cur:
                 ents.append(cur)
-            cur = {"type": val, "layer": None, "x": [], "y": [], "text": None, "closed": 0}
+            cur = {"type": val, "layer": None, "x": [], "y": [], "text": None, "closed": 0, "r": None, "a": []}
             if val == "ENDSEC":
                 inent, cur = False, None
             continue
@@ -27,6 +27,10 @@ def read_entities(path):
             cur["x"].append(float(val))
         elif code == "20":
             cur["y"].append(float(val))
+        elif code == "40" and cur["type"] in ("ARC", "CIRCLE"):
+            cur["r"] = float(val)
+        elif code in ("50", "51") and cur["type"] == "ARC":
+            cur["a"].append(float(val))
         elif code == "1":
             cur["text"] = val
         elif code == "70" and cur["type"] == "LWPOLYLINE":
