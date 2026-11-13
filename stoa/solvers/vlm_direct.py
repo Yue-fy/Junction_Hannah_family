@@ -8,8 +8,10 @@ Options (pass via the eval tool's solver kwargs, e.g. `--solver vlm_direct -k ba
   model        override the backend's default model id
   max_pixels   image budget (default 3.2 Mpx)
   dpi          PDF render dpi before downscaling (default 150)
-  ground       1 -> for count questions also ask for one box per counted object; the boxes become evidence
-               (and the count is the number of boxes when the model gives both and they disagree: see `trust`)
+  ground       count questions only: "box" (or 1) -> ask for one box per counted object, "point" -> one point
+               per object (cheaper); the boxes/points become evidence and, with count_from=list (default),
+               the answer is the number of (de-duplicated) items; count_from=stated keeps the stated count
+  min_pixels   upscale small images to at least this many pixels before sending (default 0 = never)
   with_text    1 -> append the PDF's text layer (words, reading order) to the prompt (PDF only)
   thinking     1 -> let hybrid-thinking models think (slower)
   style        "direct" (default: answer only, ~10 output tokens, cheapest) or "cot" (reason step by step,
@@ -99,9 +101,14 @@ DIRECT = {
     "text": "Reply with only the answer, as briefly as possible.",
 }
 
-GROUND = ("First list every object you count as JSON, one entry per object: "
-          '[{"bbox_2d": [x1, y1, x2, y2], "label": "<object>"}] (coordinates 0-1000 relative to the image). '
-          "Then give the final count on the last line like `ANSWER: 7`.")
+GROUND = {
+    "box": ("Locate every object that the question asks to count. Output a JSON list with one entry per object: "
+            '[{"bbox_2d": [x1, y1, x2, y2], "label": "<object>"}] (coordinates 0-1000 relative to the image). '
+            "Output [] if there are none. Then give the final count on the last line like `ANSWER: 7`."),
+    "point": ("Point to every object that the question asks to count. Output a JSON list with one entry per "
+              'object: [{"point_2d": [x, y], "label": "<object>"}] (coordinates 0-1000 relative to the image). '
+              "Output [] if there are none. Then give the final count on the last line like `ANSWER: 7`."),
+}
 
 
 @register("vlm_direct")
@@ -110,13 +117,17 @@ class VlmDirect(BaseSolver):
 
     def __init__(self, backend: str = "local", model: str | None = None, max_pixels: int | str = 3_200_000,
                  dpi: int | str = 150, ground: int | str = 0, with_text: int | str = 0, thinking: int | str = 0,
-                 max_tokens: int | str = 1024, style: str = "direct", **kwargs):
+                 max_tokens: int | str = 1024, style: str = "direct", count_from: str = "list",
+                 min_pixels: int | str = 0, **kwargs):
         super().__init__(**kwargs)
         self.backend = backend
         self.model = model
         self.max_pixels = int(max_pixels)
         self.dpi = int(dpi)
-        self.ground = bool(int(ground))
+        g = str(ground).lower()
+        self.ground = {"0": "", "": "", "false": "", "1": "box", "box": "box", "point": "point"}[g]
+        self.count_from = count_from
+        self.min_pixels = int(min_pixels)
         self.with_text = bool(int(with_text))
         self.thinking = bool(int(thinking))
         self.style = style
@@ -181,17 +192,25 @@ class VlmDirect(BaseSolver):
             trace.append(f"rendered page {page} at {self.dpi} dpi -> {img.width}x{img.height}")
         else:
             img = llm.load_image(ap)
+        up = 1.0
+        if self.min_pixels and img.width * img.height < self.min_pixels:
+            up = min((self.min_pixels / (img.width * img.height)) ** 0.5, 4.0)
+            img = img.resize((round(img.width * up), round(img.height * up)), resample=3)
+            up = img.width / (img.width / up)
+            trace.append(f"upscaled x{up:.2f} -> {img.width}x{img.height}")
 
         direct = self.style == "direct" and not self.ground and not self.thinking
         fmt = (DIRECT if direct else FORMAT)[kind].format(unit="ft²" if unit == "ft2" else "m²")
         prompt = question.strip()
         if text_layer:
             prompt += "\n\nText found on the drawing (PDF text layer, reading order):\n" + text_layer
-        prompt += "\n\n" + (GROUND if (self.ground and kind == "count") else fmt)
+        grounded = bool(self.ground) and kind == "count"
+        prompt += "\n\n" + (GROUND[self.ground] if grounded else fmt)
 
         try:
             r = llm.chat(prompt, images=[img], system=SYSTEM, backend=self.backend, model=self.model,
-                         max_tokens=(64 if direct and kind != "text" else 256 if direct else self.max_tokens),
+                         max_tokens=(64 if direct and kind != "text" else 256 if direct else
+                                     max(self.max_tokens, 2048) if grounded else self.max_tokens),
                          thinking=self.thinking, max_pixels=self.max_pixels)
             if r.finish_reason == "length" and not direct and "ANSWER:" not in r.text:
                 # rambling/looping CoT: ask for the answer only, keeping what it saw so far
@@ -209,17 +228,27 @@ class VlmDirect(BaseSolver):
         trace.append("raw: " + out[-300:].replace("\n", " | "))
 
         evidence: list[Evidence] = []
-        if self.ground and kind == "count":
-            boxes = llm.parse_boxes(out, r.images[0])
-            for i, b in enumerate(boxes):
-                bb = b.as_list()
+        items: list[list[float]] = []
+        if grounded:
+            body = out.split("ANSWER:")[0]
+            if self.ground == "point":
+                pts = llm.parse_points(body, r.images[0])
+                pts = llm.nms_points(pts, min_dist=0.004 * max(img.width, img.height))
+                items = [[p.x, p.y, p.x, p.y] for p in pts]
+                labels = [p.label for p in pts]
+            else:
+                bxs = llm.nms_boxes(llm.parse_boxes(body, r.images[0]), iou_thr=0.7)
+                items = [b.as_list() for b in bxs]
+                labels = [b.label for b in bxs]
+            for i, (bb, lab) in enumerate(zip(items, labels)):
+                bb = [v / up for v in bb]  # back to the file's own pixels
                 if px_per_pt:  # rendered PDF -> PDF points
                     evidence.append(Evidence(file=use, page=page, bbox=[v / px_per_pt for v in bb],
-                                             bbox_space="pdf_pt", note=f"{b.label or 'item'} {i + 1}"))
+                                             bbox_space="pdf_pt", note=f"{lab or 'item'} {i + 1}"))
                 else:
                     evidence.append(Evidence(file=use, bbox=bb, bbox_space="image_px",
-                                             note=f"{b.label or 'item'} {i + 1}"))
-            trace.append(f"{len(boxes)} boxes")
+                                             note=f"{lab or 'item'} {i + 1}"))
+            trace.append(f"{len(items)} {self.ground}es" if self.ground == "box" else f"{len(items)} points")
 
         last = out.splitlines()[-1] if out else ""
         if kind == "text":
@@ -232,8 +261,10 @@ class VlmDirect(BaseSolver):
         value = parse_number(m.group(1) if m else (last or out), integer=(kind == "count"))
         if value is None:
             value = parse_number(out, integer=(kind == "count"))
+        if grounded and value is not None and len(items) != value:
+            trace.append(f"stated {value} vs {len(items)} located")
+        if grounded and self.count_from == "list" and (items or re.search(r"\[\s*\]", out)):
+            value = len(items)
         if value is None:
             return self.abstain("could not parse a number", trace)
-        if self.ground and kind == "count" and evidence and len(evidence) != value:
-            trace.append(f"stated {value} vs {len(evidence)} boxes")
         return Answer(value=value, unit=unit, confidence=0.3, evidence=evidence, trace=trace, solver=self.name)
