@@ -16,8 +16,8 @@ def test_links_plan():
     L = links(PLAN)
     assert L["kind"] == "plan" and L["storey"]["name"] == "1.korrus"
     assert L["model"].endswith(".ifc")
-    rooms = {r["long_name"]: r for r in L["rooms"]}
-    r = rooms["KORIDOR"]
+    rooms = {r["name"]: r for r in L["rooms"]}
+    r = rooms["119"]  # two KORIDOR rooms on this storey (105, 119): key by number
     assert r["bbox_pt"] and r["label"] == "KORIDOR 119"
     assert r["drawn_area_m2"] == pytest.approx(r["area_m2"], rel=0.02)  # 2D polygon (fitted scale) = 3D footprint
     doors = next(c for c in L["crosschecks"] if c["what"] == "doors")
