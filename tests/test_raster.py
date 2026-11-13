@@ -57,3 +57,36 @@ def test_question_op_compositions():
     assert question_op("Kuinka monta kylpy- tai pesuhuonetta (esim. KH, KPH, PH, PESUH, SH) pohjapiirustuksessa "
                        "on, erillisiä WC-tiloja lukuun ottamatta?") == ("single", ["bathroom"])
     assert question_op("Hur många fönster finns på planritningen?") == ("single", ["window"])
+
+
+def test_type_codes_without_plus_are_not_rooms():
+    # "2HK+S" (2 rooms + kitchenette + sauna) used to be counted as a sauna ROOM
+    assert label_class("2HK+S") is None and type_code("2HK+S") == {"rooms": 2, "classes": {"kitchen", "sauna"}}
+    assert type_code("H+KK") == {"rooms": None, "classes": {"kitchen"}}  # digit not read
+    assert type_code("H") is None and type_code("KH") is None and label_class("S") == "sauna"
+
+
+def test_sink_rule_from_room_labels(monkeypatch):
+    from stoa.solvers.raster import RasterSolver, vlm
+
+    items = [vlm.Item(10, 10, "KH", "bathroom"), vlm.Item(50, 10, "WC", "wc_room"), vlm.Item(90, 10, "K", "kitchen"),
+             vlm.Item(90, 90, "MH", "bedroom")]
+    monkeypatch.setattr(vlm, "read_labels", lambda img, key, backend="local": (items, vlm.CallLog(), False))
+    s = RasterSolver()
+    a = s._rooms_rule("x.png", None, "x.png", "sink", (2, 0.57, 100), [], {"rooms_rule": 0.7})
+    assert a.value == 3 and a.confidence == 0.7 and len(a.evidence) == 3  # kitchen + KH basin + WC basin
+    items[:] = [vlm.Item(90, 90, "MH", "bedroom")]
+    assert s._rooms_rule("x.png", None, "x.png", "sink", None, [], {}).value == 2  # assumed kitchen + 1 bathroom
+
+
+def test_cond_prior_uses_room_counts(monkeypatch):
+    import json
+    from stoa.solvers.raster import COND_FILE, RasterSolver, vlm
+
+    spec = json.loads(COND_FILE.read_text())["door"]
+    items = [vlm.Item(10, 10, "MH", "bedroom"), vlm.Item(50, 10, "MH", "bedroom"), vlm.Item(90, 10, "S", "sauna")]
+    monkeypatch.setattr(vlm, "read_labels", lambda img, key, backend="local": (items, vlm.CallLog(), False))
+    a = RasterSolver()._cond_prior("x.png", None, "x.png", "door", (7.0, 0.13, 100), [], {})
+    cell = spec["table"]["2,0,1"]
+    assert a.value == cell["mode"] and 0 < a.confidence <= 0.9 and len(a.evidence) == 3
+    assert a.assumptions and "statistical estimate" in a.assumptions[0]

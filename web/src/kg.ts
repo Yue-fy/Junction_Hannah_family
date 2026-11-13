@@ -139,7 +139,7 @@ export function renderKg(el: HTMLElement, kg: Kg, o: KgOpts) {
   }
   if (!perStorey) checks.forEach((c, i) => {
     const t = checkText(c);
-    pills.push(`<span class="kg-pill ${c.ok === null ? "info" : c.ok ? "ok" : "bad"}" data-check="${i}" title="${esc(checkSentence(kg, c) ? `${checkSentence(kg, c)}. ` : "")}${esc(c.reason ? `${c.reason}. ` : "")}${esc(c.storey
+    pills.push(`<span class="kg-pill ${c.ok === null ? "info" : c.ok ? "ok" : "bad"}" data-check="${i}" data-what="${esc(c.what)}" data-storey="${esc(c.storey ?? "")}" title="${esc(checkSentence(kg, c) ? `${checkSentence(kg, c)}. ` : "")}${esc(c.reason ? `${c.reason}. ` : "")}${esc(c.storey
       ? `Storey '${c.storey}': ${c.model} in the IFC model, ${c.drawn} drawn on the plan sheet (IfcConvert SVG twin of the PDF). A difference means some elements of this storey are not drawn on this sheet.`
       : `${c.what}: ${c.drawn} of ${c.model} agree`)}">${esc(t.head)} <b>${esc(t.body)}</b> ${t.sym}</span>`);
   });
@@ -172,6 +172,7 @@ export function renderKg(el: HTMLElement, kg: Kg, o: KgOpts) {
     </div>
     <div class="kg-body" ${expanded ? "" : "hidden"}>${body(kg, rooms, checks, files, storeyName, o)}</div>`;
 
+  applyAnswerMatch(el);
   el.querySelectorAll<HTMLButtonElement>("[data-chip]").forEach((b) => b.addEventListener("click", () => {
     const c = chips[Number(b.dataset.chip)];
     if (!c.on) c.act();
@@ -306,4 +307,22 @@ function body(kg: Kg, rooms: KgRoom[], checks: KgCrossCheck[], files: KgFile[], 
   }
   if (!cols.length) cols.push(`<div class="kg-col"><p class="kg-note">${esc(o.current)} has no linked rooms or storeys.</p></div>`);
   return cols.join("");
+}
+
+const PLURAL: Record<string, string> = { door: "doors", window: "windows", room: "rooms", space: "rooms", wall: "walls", column: "columns" };
+
+/** Highlight the strip's drawing-vs-model pill that checks the same fact as the answer (count of X on a storey). */
+let answerMatch: { what: string; storey?: string } | null = null;
+export function markAnswerCheck(el: HTMLElement, target: string | undefined, storey: string | undefined) {
+  const what = target ? PLURAL[target] : undefined;
+  answerMatch = what ? { what, storey } : null;
+  applyAnswerMatch(el);
+}
+function applyAnswerMatch(el: HTMLElement) {
+  el.querySelectorAll(".kg-pill.match").forEach((p) => p.classList.remove("match"));
+  if (!answerMatch) return;
+  const { what, storey } = answerMatch;
+  el.querySelectorAll<HTMLElement>(".kg-pill[data-what]").forEach((p) => {
+    if (p.dataset.what === what && p.dataset.storey === storey) p.classList.add("match");
+  });
 }
