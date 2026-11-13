@@ -31,7 +31,8 @@ Deep links: `/?file=<dataset-relative path>&q=<question>` opens a file and asks 
 
 ## Demo script (30 s)
 
-Click **Demo tour ▸** (top left). Each click opens a file, asks one question and shows a one-line note:
+Click **Demo tour ▸** (top left), or press → / ← (when not typing). Each step opens a file, asks one question
+and shows a one-line note:
 
 1. Esplanades plan 1.korrus: area of 'KORIDOR (119)' → 63.84 m²; the room outline on the drawing and its
    volume in 3D (same IFC GlobalId).

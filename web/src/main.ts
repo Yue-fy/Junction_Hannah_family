@@ -515,8 +515,20 @@ const TOUR: { file: string; q: string; note: string; bench?: boolean }[] = [
     note: "Measured on held-out drawings: accuracy per source against two baselines, generality, and cost per 1,000 questions." },
 ];
 let tourStep = -1;
+let tourBack = false;
+// presenter keys: → next step, ← previous step (not while typing a question)
+document.addEventListener("keydown", (e) => {
+  const t = e.target as HTMLElement;
+  if (/^(TEXTAREA|INPUT|SELECT)$/.test(t.tagName) || e.altKey || e.ctrlKey || e.metaKey) return;
+  if (e.key === "ArrowRight" || (e.key === "ArrowLeft" && tourStep > 0)) {
+    e.preventDefault();
+    tourBack = e.key === "ArrowLeft";
+    $("tourBtn").click();
+  }
+});
 $("tourBtn").addEventListener("click", async () => {
-  tourStep = (tourStep + 1) % TOUR.length;
+  tourStep = tourBack ? Math.max(0, tourStep - 1) : (tourStep + 1) % TOUR.length;
+  tourBack = false;
   const t = TOUR[tourStep];
   $("tourBtn").textContent = `Demo ${tourStep + 1}/${TOUR.length} ▸`;
   const note = $("tourNote");
