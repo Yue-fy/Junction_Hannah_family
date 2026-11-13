@@ -270,7 +270,8 @@ def _swiss_floor(pdf: str, dxf: str) -> dict:
     for r in fm.rooms:
         if not (r.number or r.name):
             continue
-        d = {"number": r.number, "name": r.name, "area_m2_dxf": round(r.area, 2), "apartment": r.unit}
+        d = {"number": r.number, "name": r.name, "area_m2_dxf": round(r.area, 2), "apartment": r.unit,
+             "outdoor": bool(r.outdoor), "shaft": bool(r.shaft)}
         if r.printed_area is not None:
             d["area_m2_printed"] = r.printed_area
             d["printed_matches_dxf"] = abs(r.printed_area - r.area) <= 0.02 * max(r.area, 1e-9)
@@ -462,6 +463,43 @@ def _evidence_guids(answer) -> list[str]:
     return out
 
 
+def _swiss_total_check(val: float, scope, filt: dict, rooms: list[dict]) -> str | None:
+    """Totals (apartment / all numbered indoor rooms / rooms labelled X): compare with the sum of the PRINTED
+    room areas of the same rooms (independent of the DXF polygons) and the DXF polygon sum. Room sets follow
+    the dataset's definitions (numbered, indoor; floor totals also drop shafts). None if no set is known."""
+    if filt.get("apartment"):
+        sel = [r for r in rooms if r.get("apartment") == filt["apartment"] and r["number"] and not r.get("outdoor")]
+        what = f"apartment {filt['apartment']}"
+    elif filt.get("label"):
+        lab = filt["label"] if isinstance(filt["label"], str) else str(filt["label"])
+        sel = [r for r in rooms if r["name"] == lab] or [r for r in rooms if (r["name"] or "").lower() == lab.lower()]
+        what = f"rooms labelled '{lab}'"
+    elif scope in ("floor_total", "storey_total"):
+        sel = [r for r in rooms if r["number"] and not r.get("outdoor") and not r.get("shaft")]
+        what = "numbered indoor rooms"
+    else:
+        return None
+    if not sel:
+        return None
+    dxf = sum(r["area_m2_dxf"] for r in sel)
+    named = [r for r in sel if r["name"]]
+    dxf_named = sum(r["area_m2_dxf"] for r in named)
+    if _mark(val, dxf, 0.02) != "✓" and len(named) < len(sel) and _mark(val, dxf_named, 0.02) == "✓":
+        # numbered rooms without a name (shafts/voids/storage?) are the dataset's one ambiguity: say which reading
+        parts = [f"DXF polygons of the {len(named)} named {what} {dxf_named:.2f} m² ✓ (with the "
+                 f"{len(sel) - len(named)} unnamed numbered rooms: {dxf:.2f} m²)"]
+        sel = named
+    else:
+        parts = [f"DXF polygons of the {len(sel)} {what} {dxf:.2f} m² {_mark(val, dxf, 0.02)}"]
+    printed = [r["area_m2_printed"] for r in sel if "area_m2_printed" in r]
+    if printed and len(printed) == len(sel):
+        pv = sum(printed)
+        parts.append(f"sum of their printed areas {pv:.2f} m² {_mark(val, pv, 0.02)}")
+    elif printed:
+        parts.append(f"{len(printed)}/{len(sel)} rooms have a printed area")
+    return f"answer {val:.2f} m² vs " + "; ".join(parts)
+
+
 def _mark(a, b, tol=0.0) -> str:
     if a is None or b is None:
         return "?"
@@ -560,19 +598,24 @@ def _crosscheck(path: str, intent, answer) -> str | None:
                 return f"answer {int(round(val))} vs DXF layer count {n} {_mark(val, n)}"
         if task == "area":
             filt = (intent.get("filters") if isinstance(intent, dict) else getattr(intent, "filters", None)) or {}
+            rooms = f.get("rooms", [])
+            agg = scope in ("apartment", "floor_total", "storey_total", "label_total") or (
+                not filt.get("room_no") and (filt.get("apartment") or filt.get("label")))
+            if agg:
+                return _swiss_total_check(val, scope, filt, rooms)
             room = None
             if filt.get("room_no"):
-                room = next((r for r in f.get("rooms", []) if r["number"] == filt["room_no"]), None)
-            if room is None:  # the room whose pdf box overlaps the answer's evidence box most
+                room = next((r for r in rooms if r["number"] == filt["room_no"]), None)
+            if room is None:  # single-room question without a number: the room under the ONE evidence box
                 boxes = [e.get("bbox") if isinstance(e, dict) else e.bbox for e in
                          (getattr(answer, "evidence", None) or (answer.get("evidence") if isinstance(answer, dict) else None) or [])]
                 boxes = [b for b in boxes if b]
-                if boxes:
+                if len(boxes) == 1 and scope in (None, "room", "drawing"):
                     def ov(a, b):
                         w = min(a[2], b[2]) - max(a[0], b[0])
                         h = min(a[3], b[3]) - max(a[1], b[1])
                         return max(w, 0) * max(h, 0)
-                    best = max(f.get("rooms", []), key=lambda r: ov(r.get("bbox_pt") or [0, 0, 0, 0], boxes[0]), default=None)
+                    best = max(rooms, key=lambda r: ov(r.get("bbox_pt") or [0, 0, 0, 0], boxes[0]), default=None)
                     room = best if best and ov(best.get("bbox_pt") or [0, 0, 0, 0], boxes[0]) > 0 else None
             if room is None:
                 return None
