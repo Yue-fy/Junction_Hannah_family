@@ -22,7 +22,7 @@ from stoa.data import Question, template_of
 from stoa.eval.scoring import score, text_fuzzy
 from stoa.eval.splits import load_split, shared_root
 
-SCORED_TYPES = ("count", "area", "length", "volume")
+SCORED_TYPES = ("count", "area", "length", "volume", "ratio")  # ratio: dimensionless (%, x:y), generated splits only
 
 # Cost score = estimated USD per question. Rates are assumptions, written down so runs are comparable:
 RATES = {

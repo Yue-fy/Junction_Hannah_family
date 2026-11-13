@@ -24,7 +24,7 @@ from pathlib import Path
 
 from stoa.eval.splits import shared_root
 
-SCORED_TYPES = ("count", "area", "length", "volume")  # = stoa.eval.runner.SCORED_TYPES (no import cycle)
+SCORED_TYPES = ("count", "area", "length", "volume", "ratio")  # = stoa.eval.runner.SCORED_TYPES (no import cycle)
 
 HI = 0.8
 

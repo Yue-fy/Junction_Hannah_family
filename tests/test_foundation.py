@@ -96,3 +96,15 @@ def test_resbim_plan_links_to_model():
     assert ifc_model_for("data/ifc_models/resbim-0_plan.png") == "data/ifc_models/resbim-0_model.ifc"
     assert siblings("data/ifc_models/resbim-0_plan.png")[".ifc"] == "data/ifc_models/resbim-0_model.ifc"
     assert drawing_group("data/ifc_models/resbim-0_plan.png") == drawing_group("data/ifc_models/resbim-0_model.ifc")
+
+
+def test_ratio_type_scored_and_threshold():
+    import random
+
+    from stoa.eval.hard2 import _threshold_any
+    from stoa.eval.scoring import score
+
+    assert score("ratio", 8.4, "%", "8.5", "%") is True and score("ratio", 1.07, None, 1.2, None) is False
+    for seed in range(20):
+        t = _threshold_any([10.0, 20.0], random.Random(seed))
+        assert t is None or all(abs(v - t) > 0.05 * max(v, t) for v in (10.0, 20.0))
