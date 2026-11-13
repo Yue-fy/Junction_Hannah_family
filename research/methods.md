@@ -137,3 +137,41 @@ area + circulation + services, and shafts (`Schächte`) and outdoor areas sit ou
   with evidence. This also produces a calibrated confidence for free.
 - Evidence = the exact primitives summed or counted (polygons, points, IFC GlobalIds), so the UI can
   highlight them and a human can verify in seconds.
+
+## 8. Stoa's feedback (23:40): generality, cost, calibrated estimates, linked data
+
+Stoa says the hidden test is harder and different, and that they score reasoning, interface and cost.
+Template rules (sections 2 and 4) are fast paths. Each needs a general fallback.
+
+### 8a. Calibrated estimate instead of refusal (measured)
+`experiments/r1/door_scale/door_scale.py`. When a drawing has no scale, take the median door-leaf width
+as 0.857 m. Swiss DXF ground truth (789 floors, 25,120 door arcs):
+
+| Area error | Share of floors |
+|---|---|
+| ≤ 2% | 11.7% |
+| ≤ 5% | 28.9% |
+| ≤ 10% | 53.4% |
+| ≤ 20% | 84.9% |
+
+Median area error is 9.2%. This is a usable estimate, not an exact answer. Return it with
+`assumptions=["no scale found; assumed median door leaf 0.86 m"]`, an 80% interval of ±17% on area, and
+`missing=["scale bar or dimension strings"]`. The same pattern works for counts: return the posterior mode
+from the prior (section 1) with its probability as the confidence, e.g. "1 kitchen (96% of similar plans
+have exactly one)".
+
+### 8b. Cost-aware cascade (to be measured once W4's pipeline reports cost)
+Stage k answers if its confidence ≥ τ_k, otherwise it escalates:
+deterministic geometry (DXF/IFC/PDF text, ~0 cost) → OCR/CV → small local VLM → hosted Nemotron.
+Expected cost = Σ_k P(reach k) · cost_k. Pick τ_k from the risk–coverage curve of stage k on dev
+(`experiments/r1/stats/compare.py RUN`): the smallest τ at which accuracy-when-answered ≥ the next stage's
+accuracy on the same questions. Escalating only then can't lower accuracy, and it cuts cost.
+
+### 8c. Linked data as a cross-check
+- Swiss: the same floor exists as DXF + PDF + PNG. Fit the affine map DXF→PDF (and PDF→PNG) once per
+  drawing by least squares on matched points, e.g. ROOM_TEXT insertion points ↔ PDF text spans with the
+  same string: `[u v]ᵀ = A [x y]ᵀ + t`, 6 unknowns, ≥ 3 matches, solved with `numpy.linalg.lstsq`. Then
+  every DXF-derived count or area gets evidence boxes on the PDF and PNG for free. A VLM count on the PNG
+  that agrees with the DXF count raises confidence; a disagreement goes into the trace.
+- ifc_models: the PDFs were rendered from the IFC. Room names printed in the PDF ↔ `IfcSpace.Name/LongName`
+  gives the same link, and the drawing count can be checked against the IFC count.
