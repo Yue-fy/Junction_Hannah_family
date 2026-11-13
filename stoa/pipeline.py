@@ -14,7 +14,8 @@
 5. Last resort: the train prior for this intent, with assumptions and what is missing. Never `value=None`.
    Hosted Nemotron (`vlm_direct` with backend=nvidia) only with `api=1` and only when still unsure.
 
-Options (`--solver-arg k=v`): accept=0.6 (confidence to stop), agree=1 (cross-check when unsure),
+Options (`--solver-arg k=v`): accept=0.6 (confidence to stop), agree=cheap|always|never (second opinion when
+unsure: cheap = only from a deterministic solver; always = also the local VLM),
 api=0 (allow hosted API tier), margin=0.03 (gate margin over the prior), max_tries=3, vlm_args (json dict for
 vlm_direct), use_gate=1, compose=1 (split compound questions), normalise=1 (give template solvers the canonical
 English question when the asked one is a translation/paraphrase).
@@ -90,12 +91,12 @@ from stoa.solvers.base import BaseSolver  # noqa: E402
 
 @register("pipeline")
 class Pipeline(BaseSolver):
-    def __init__(self, accept: float | str = 0.6, agree: int | str = 1, api: int | str = 0, margin: float | str = 0.03,
+    def __init__(self, accept: float | str = 0.6, agree: str = "cheap", api: int | str = 0, margin: float | str = 0.03,
                  max_tries: int | str = 3, vlm_args: str | dict | None = None, use_gate: int | str = 1,
                  compose: int | str = 1, normalise: int | str = 1, **kwargs):
         super().__init__(**kwargs)
         self.accept = float(accept)
-        self.agree = bool(int(agree))
+        self.agree = {"1": "cheap", "0": "never", "2": "always"}.get(str(agree), str(agree))  # cheap|never|always
         self.api = bool(int(api))
         self.margin = float(margin)
         self.max_tries = int(max_tries)
@@ -217,14 +218,20 @@ class Pipeline(BaseSolver):
             if ans.value is None:
                 trace.append(f"{name}: abstained ({(ans.missing or ['?'])[0][:80]})")
                 continue
-            conf = acc.get(name, ans.confidence) if gate else ans.confidence
+            if gate and name in acc:  # train hit rate for this key, smoothed (k+1)/(n+2): 40/40 -> 0.976, not 1.0
+                conf = (acc[name] * gate["n"] + 1) / (gate["n"] + 2)
+            else:
+                conf = ans.confidence
             trace.append(f"{name}: {ans.value} {ans.unit or ''} (conf {conf:.2f}"
                          + (", train hit rate" if name in acc else "") + ")")
             answers.append((name, ans, conf))
-            if conf >= self.accept or not self.agree:
+            if conf >= self.accept or self.agree == "never" or len(answers) >= 2:
                 break
-            if len(answers) >= 2:
+            # unsure: a second opinion only if it is cheap (deterministic), or always with agree=always
+            rest = [n for n in order[order.index(name) + 1:] if self._get(n) is not None]
+            if not rest or (self.agree == "cheap" and TIER.get(rest[0], "local") != "deterministic"):
                 break
+            trace.append(f"unsure (conf {conf:.2f} < {self.accept}): asking {rest[0]} for a cross-check")
         best = self._combine(answers, intent, trace)
         if best is None:
             best = self._prior_answer(src, intent, trace, gate)
