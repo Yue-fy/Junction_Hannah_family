@@ -203,10 +203,12 @@ Expected cost = Σ_k P(reach k) · cost_k. Pick τ_k from the risk–coverage cu
 accuracy on the same questions. Escalating only then can't lower accuracy, and it cuts cost.
 
 ### 8c. Linked data as a cross-check
-- Swiss: the same floor exists as DXF + PDF + PNG. Fit the affine map DXF→PDF (and PDF→PNG) once per
-  drawing by least squares on matched points, e.g. ROOM_TEXT insertion points ↔ PDF text spans with the
-  same string: `[u v]ᵀ = A [x y]ᵀ + t`, 6 unknowns, ≥ 3 matches, solved with `numpy.linalg.lstsq`. Then
-  every DXF-derived count or area gets evidence boxes on the PDF and PNG for free. A VLM count on the PNG
-  that agrees with the DXF count raises confidence; a disagreement goes into the trace.
+- Swiss (measured, `experiments/r1/link_dxf_pdf/fit_affine.py`): DXF → PDF is one affine map per floor,
+  fitted by least squares on room numbers that occur once in both the DXF `ROOM_TEXT` and the PDF words
+  (PyMuPDF): `[u v] = [x y 1]·A`. It fits **1,036/1,040 floors with RMSE 0.04 pt (max 0.08 pt)**; the other 4
+  have fewer than 3 unique numbers. The PDFs are A3 at 1:100 (859) or 1:200 (177), and the PNG is the page at
+  150 dpi (px = pt × 150/72). Every DXF-derived count or area therefore gets exact evidence boxes on the PDF
+  and PNG. A VLM count on the PNG that agrees with the DXF count raises confidence; a disagreement goes
+  into the trace.
 - ifc_models: the PDFs were rendered from the IFC. Room names printed in the PDF ↔ `IfcSpace.Name/LongName`
   gives the same link, and the drawing count can be checked against the IFC count.
