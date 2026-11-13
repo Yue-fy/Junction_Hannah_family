@@ -69,7 +69,7 @@
     "key": "area:room:room"
    }
   },
-  "recorded_at": "2026-11-14 01:33",
+  "recorded_at": "2026-11-14 01:36",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -1087,7 +1087,7 @@
     "key": "count:door:storey"
    }
   },
-  "recorded_at": "2026-11-14 01:33",
+  "recorded_at": "2026-11-14 01:36",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -2295,7 +2295,7 @@
     "key": "count:window:storey"
    }
   },
-  "recorded_at": "2026-11-14 01:33",
+  "recorded_at": "2026-11-14 01:36",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -6775,7 +6775,7 @@
     "key": "count:door:model"
    }
   },
-  "recorded_at": "2026-11-14 01:33",
+  "recorded_at": "2026-11-14 01:36",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -6922,7 +6922,7 @@
     "key": "area:room:room"
    }
   },
-  "recorded_at": "2026-11-14 01:33",
+  "recorded_at": "2026-11-14 01:36",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -7436,7 +7436,7 @@
     "key": "count:door:drawing"
    }
   },
-  "recorded_at": "2026-11-14 01:33",
+  "recorded_at": "2026-11-14 01:36",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -7638,7 +7638,7 @@
     "key": "count:room:label"
    }
   },
-  "recorded_at": "2026-11-14 01:33",
+  "recorded_at": "2026-11-14 01:36",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -8525,7 +8525,7 @@
     ]
    }
   },
-  "recorded_at": "2026-11-14 01:33",
+  "recorded_at": "2026-11-14 01:36",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -8612,7 +8612,7 @@
     "key": "count:bedroom:drawing"
    }
   },
-  "recorded_at": "2026-11-14 01:33",
+  "recorded_at": "2026-11-14 01:36",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -8657,7 +8657,95 @@
     "key": "text:unknown:drawing"
    }
   },
-  "recorded_at": "2026-11-14 01:33",
+  "recorded_at": "2026-11-14 01:36",
   "api": "http://127.0.0.1:8102"
+ },
+ {
+  "path": "data/cubicasa5k/colorful-4539.png",
+  "question": "Kuinka monta makuuhuonetta (MH) pohjapiirustuksessa on?",
+  "answer": {
+   "value": 3,
+   "unit": "count",
+   "confidence": 0.3,
+   "evidence": [],
+   "trace": [
+    "kind=count unit=count",
+    "nvidia:private/nvidia/nemotron-3.5-super-120b-a12b 6.3s tok 2150->159",
+    "raw: is a label \"MH\". |     *   Bottom middle room: There is a label \"MH\". |  | 2.  **Verify the count.** |     *   Room 1: Top left corner. |     *   Room 2: Top right area (next to the bathroom PH). |     *   Room 3: Bottom middle area (next to VH and TK). |  | 3.  **Final Count:** 3. |  | 4.  **Format:** Single integer.3",
+    "cost: calls=1 tok_in=2150 tok_out=159 gpu_s=0.00 api_calls=1"
+   ],
+   "solver": "vlm_direct",
+   "assumptions": [],
+   "missing": [],
+   "cost": {
+    "llm_tokens_in": 2150,
+    "llm_tokens_out": 159,
+    "gpu_seconds": 0.0,
+    "api_calls": 1,
+    "api_tokens_in": 2150,
+    "api_tokens_out": 159,
+    "llm_calls": 1,
+    "wall_seconds": 6.5997
+   },
+   "intent": {
+    "task": "count",
+    "target": "bedroom",
+    "scope": "drawing",
+    "unit": "count",
+    "filters": {},
+    "lang": "fi",
+    "key": "count:bedroom:drawing"
+   }
+  },
+  "recorded_at": "2026-11-14 01:36",
+  "api": "http://127.0.0.1:8102",
+  "solver": "vlm_direct",
+  "solver_args": {
+   "backend": "nvidia"
+  }
+ },
+ {
+  "path": "data/habs/ak0003_sheet_00019.jpg",
+  "question": "What kind of drawing is this (floor plan, elevation, section, site plan)?",
+  "answer": {
+   "value": "Site plan",
+   "unit": null,
+   "confidence": 0.2,
+   "evidence": [],
+   "trace": [
+    "kind=text unit=None",
+    "nvidia:private/nvidia/nemotron-3.5-super-120b-a12b 4.6s tok 3275->3",
+    "raw: Site plan",
+    "cost: calls=1 tok_in=3275 tok_out=3 gpu_s=0.00 api_calls=1"
+   ],
+   "solver": "vlm_direct",
+   "assumptions": [],
+   "missing": [],
+   "cost": {
+    "llm_tokens_in": 3275,
+    "llm_tokens_out": 3,
+    "gpu_seconds": 0.0,
+    "api_calls": 1,
+    "api_tokens_in": 3275,
+    "api_tokens_out": 3,
+    "llm_calls": 1,
+    "wall_seconds": 4.8524
+   },
+   "intent": {
+    "task": "text",
+    "target": "unknown",
+    "scope": "drawing",
+    "unit": null,
+    "filters": {},
+    "lang": "en",
+    "key": "text:unknown:drawing"
+   }
+  },
+  "recorded_at": "2026-11-14 01:37",
+  "api": "http://127.0.0.1:8102",
+  "solver": "vlm_direct",
+  "solver_args": {
+   "backend": "nvidia"
+  }
  }
 ]

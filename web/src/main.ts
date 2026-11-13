@@ -1,7 +1,7 @@
 import "./style.css";
-import { ask, benchmark, exampleQuestions, fileUrl, knowledgeGraph, listFiles, onBackend } from "./api";
+import { ask, benchmark, exampleQuestions, fileUrl, knowledgeGraph, listFiles, onBackend, secondOpinion } from "./api";
 import { renderBench } from "./bench";
-import { crossChecks, renderCard } from "./card";
+import { agentAsks, crossChecks, renderCard } from "./card";
 import { markAnswerCheck, renderKg } from "./kg";
 import type { Answer, FileInfo, KgRoom } from "./types";
 import { Viewer2D } from "./viewer2d";
@@ -426,12 +426,19 @@ async function runAsk() {
 
 async function showAnswer(a: Answer, roundTripMs: number) {
   state.answer = a;
+  const askedPath = state.file?.path ?? "";
+  const askedQ = $<HTMLTextAreaElement>("question").value.trim();
   renderCard($("card"), a, {
     roundTripMs: roundTripMs || (a.cost?.wall_seconds ?? 0) * 1000, onEvidence: focusEvidence,
     describeGuid: (g) => v3d?.describe(g) ?? g, currentFile: state.file?.path ?? "", onOpenSheet: (p) => void openSheet(p),
     onAsk: (q) => {
       $<HTMLTextAreaElement>("question").value = q;
       void runAsk();
+    },
+    onSecondOpinion: async () => {
+      const t0 = performance.now();
+      const answer = await secondOpinion(askedPath, askedQ);
+      return { answer, ms: performance.now() - t0 };
     },
   });
   v2d.setEvidence(a.evidence);
@@ -440,7 +447,7 @@ async function showAnswer(a: Answer, roundTripMs: number) {
   const st = a.intent?.filters?.storey ? String(a.intent.filters.storey) : undefined;
   markAnswerCheck($("linked"), a.intent?.task === "count" && st ? a.intent.target : undefined, st);
   const xb = $("xbanner");
-  const xcs = crossChecks(a);
+  const xcs = crossChecks(a, agentAsks(a));
   const xc = xcs[0];
   xb.hidden = !xc;
   if (xc) {
@@ -496,7 +503,7 @@ function focusEvidence(i: number) {
 }
 
 // --- demo tour: five steps, each one sentence for the presenter ----------------------------------------
-const TOUR: { file: string; q: string; note: string; bench?: boolean }[] = [
+const TOUR: { file: string; q: string; note: string; bench?: boolean; second?: boolean }[] = [
   { file: "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
     q: "What is the net floor area of the room 'KORIDOR (119)' on '1.korrus', in m²?",
     note: "Area from the IFC model, shown on the drawing and in 3D: same room, same GlobalId." },
@@ -522,8 +529,8 @@ const TOUR: { file: string; q: string; note: string; bench?: boolean }[] = [
     q: "Kuinka monta makuuhuonetta (MH) pohjapiirustuksessa on?",
     note: "A scanned Finnish apartment plan, asked in Finnish: the room labels are read once per drawing by the local vision model, and each counted bedroom label ('MH') is marked on the image." },
   { file: "data/habs/ak0003_sheet_00019.jpg",
-    q: "What kind of drawing is this (floor plan, elevation, section, site plan)?",
-    note: "Historical scan with no text layer: the cascade escalates to a local vision model and says how sure it is." },
+    q: "What kind of drawing is this (floor plan, elevation, section, site plan)?", second: true,
+    note: "Historical scan with no text layer: a local vision model answers but is unsure, so we ask NVIDIA Nemotron (hosted) for a second opinion: one paid call, only when needed." },
   { file: "", q: "", bench: true,
     note: "Measured on held-out drawings: accuracy per source against two baselines, generality, and cost per 1,000 questions." },
 ];
@@ -557,6 +564,7 @@ $("tourBtn").addEventListener("click", async () => {
     await openFile(f, t.q);
   } else $<HTMLTextAreaElement>("question").value = t.q;
   await runAsk();
+  if (t.second) document.querySelector<HTMLButtonElement>("#card .second-btn")?.click();
 });
 
 // --- boot ---------------------------------------------------------------------------------------------------

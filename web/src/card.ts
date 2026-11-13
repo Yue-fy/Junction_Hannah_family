@@ -236,7 +236,48 @@ function intentHtml(a: Answer, run: AgentRun | null) {
   return `<div class="intent"><span class="lbl">Understood as</span>${bits.join(" · ")}${lang}${a.cached ? `<span class="cached" title="Same question answered before; served from the API cache">cached</span>` : ""}</div>${plan}`;
 }
 
+/** The ask inputs of an agent answer, aligned with its steps ("" for non-ask steps). */
+export function agentAsks(a: Answer): string[] {
+  const run = agentRun(a.trace);
+  return run ? run.steps.map((s) => (s.tool === "ask" ? s.input : "")) : [];
+}
+
+// --- second opinion from the hosted model (button in the card; only for model-tier or unsure answers on images/PDFs)
+function sameAnswer(a: Answer, b: Answer): boolean | null {
+  if (a.value === null || a.value === undefined || b.value === null || b.value === undefined) return null;
+  if (typeof a.value === "number") {
+    const y = Number(b.value);
+    if (!Number.isFinite(y)) return false;
+    const x = a.value;
+    return a.unit === "count" || (Number.isInteger(x) && Number.isInteger(y)) ? x === y : Math.abs(x - y) <= 0.02 * Math.abs(x);
+  }
+  const s = String(a.value).toLowerCase().trim();
+  const t = String(b.value).toLowerCase().trim();
+  return s === t || (t.length > 2 && s.includes(t)) || (s.length > 2 && t.includes(s));
+}
+
+function modelName(b: Answer) {
+  const m = (b.trace ?? []).map((l) => l.match(/^(nvidia|local):(\S+)/)).find((x) => x);
+  const id = m?.[2] ?? "";
+  if (/nemotron-3\.5-super/i.test(id)) return "NVIDIA Nemotron 3.5 Super VL (hosted)";
+  return id ? `${id.split("/").pop()} (${m![1] === "nvidia" ? "hosted" : "local"})` : "hosted model";
+}
+
+export function secondOpinionHtml(a: Answer, b: Answer, ms: number) {
+  const same = sameAnswer(a, b);
+  const unit = b.unit ? UNIT_LABEL[b.unit] ?? b.unit : "";
+  const c: Cost = b.cost ?? {};
+  const wall = c.wall_seconds && c.wall_seconds > 0 ? c.wall_seconds : ms / 1000;
+  const raw = (b.trace ?? []).find((l) => /^raw:/.test(l))?.replace(/^raw:\s*/, "") ?? "";
+  const verdict = b.value === null || b.value === undefined ? `<b>No answer</b> from ${esc(modelName(b))}`
+    : `<b>${same ? "✓ Second opinion agrees" : "≠ Second opinion differs"}</b> ${esc(modelName(b))} says <b>${esc(fmtValue(b))}${unit ? ` ${esc(unit)}` : ""}</b>`;
+  return `<div class="xcheck second ${same ? "ok" : "bad"}">${verdict}
+    <small>${wall.toFixed(1)} s · ${((c.api_tokens_in ?? c.llm_tokens_in ?? 0) + (c.api_tokens_out ?? c.llm_tokens_out ?? 0)).toLocaleString()} tok · ${esc(fmtEur(costUsd({ ...c, wall_seconds: wall })))}</small>
+    ${raw ? `<details><summary>its reasoning</summary><p>${esc(raw.replace(/\s*\|\s*/g, " ").slice(0, 900))}</p></details>` : ""}</div>`;
+}
+
 export interface CardOpts {
+  onSecondOpinion?: () => Promise<{ answer: Answer; ms: number }>;
   onAsk?: (question: string) => void;
   roundTripMs: number;
   onEvidence: (i: number) => void;
@@ -271,7 +312,7 @@ export function renderCard(el: HTMLElement, a: Answer, opts: CardOpts) {
   const conf = Math.round((a.confidence ?? 0) * 100);
   const confClass = conf >= 85 ? "hi" : conf >= 55 ? "mid" : "lo";
   const run = agentRun(a.trace);
-  const asks = run ? run.steps.map((s) => (s.tool === "ask" ? s.input : "")) : [];
+  const asks = agentAsks(a);
   const checks = crossChecks(a, asks);
   const unit = a.unit ? UNIT_LABEL[a.unit] ?? a.unit : "";
   const isText = typeof a.value === "string";
@@ -292,6 +333,8 @@ export function renderCard(el: HTMLElement, a: Answer, opts: CardOpts) {
     ${intentHtml(a, run)}
     ${checks.map((x) => `<div class="xcheck ${x.ok ? "ok" : "bad"}"><b>${x.ok ? "✓ Cross-checked" : "✗ Sources disagree"}</b> ${esc(x.text)}</div>`).join("")}
     ${cascadeHtml(tier)}
+    ${opts.onSecondOpinion && /\.(png|jpe?g|pdf)$/i.test(opts.currentFile) && (tier !== "deterministic" || (a.confidence ?? 0) < 0.8)
+      ? `<div class="second-slot"><button class="second-btn" title="Ask NVIDIA Nemotron 3.5 Super VL (hosted vision + reasoning model) the same question: one API call, only when you click">Second opinion · NVIDIA Nemotron</button></div>` : ""}
     <div class="cost">
       <span title="Wall time">⏱ ${wall < 1 ? `${Math.round(wall * 1000)} ms` : `${wall.toFixed(1)} s`}</span>
       <span title="LLM tokens in / out">${tokens ? `${(c.llm_tokens_in ?? 0).toLocaleString()} / ${(c.llm_tokens_out ?? 0).toLocaleString()} tok` : "0 tokens"}</span>
@@ -313,5 +356,20 @@ export function renderCard(el: HTMLElement, a: Answer, opts: CardOpts) {
     b.addEventListener("click", () => opts.onAsk?.(b.dataset.q!));
     b.addEventListener("keydown", (e) => e.key === "Enter" && opts.onAsk?.(b.dataset.q!));
   });
+  const sb = el.querySelector<HTMLButtonElement>(".second-btn");
+  if (sb && opts.onSecondOpinion) {
+    const go = opts.onSecondOpinion;
+    sb.addEventListener("click", async () => {
+      const slot = sb.parentElement!;
+      sb.disabled = true;
+      sb.textContent = "Asking NVIDIA Nemotron…";
+      try {
+        const r = await go();
+        slot.innerHTML = secondOpinionHtml(a, r.answer, r.ms);
+      } catch (e) {
+        slot.innerHTML = `<div class="xcheck bad"><b>Second opinion failed</b> ${esc(e)}</div>`;
+      }
+    });
+  }
   el.querySelectorAll<HTMLButtonElement>(".sheet").forEach((b) => b.addEventListener("click", () => b.dataset.file !== opts.currentFile && opts.onOpenSheet(b.dataset.file!)));
 }

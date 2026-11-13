@@ -243,7 +243,7 @@ function bench() {
   return { from: "leaderboard", generated: new Date().toISOString(), runs: out };
 }
 
-type Fixture = { path: string; question: string; answer: Record<string, unknown>; recorded_at?: string };
+type Fixture = { path: string; question: string; answer: Record<string, unknown>; recorded_at?: string; solver?: string; solver_args?: Record<string, unknown> };
 const RECORDED = path.resolve(__dirname, "../fixtures/recorded.json");
 /** Recorded live-API answers (fixtures/record.py) first, then the hand-computed fixtures. */
 function fixtures(): Fixture[] {
@@ -258,8 +258,13 @@ function fixtures(): Fixture[] {
 }
 const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
 
-function mockAsk(body: { path: string; question: string; solver?: string }) {
-  const fx = fixtures().find((f) => f.path === body.path && norm(f.question) === norm(body.question));
+const solverKey = (solver?: string, args?: Record<string, unknown>) =>
+  `${solver && solver !== "pipeline" ? solver : "pipeline"} ${JSON.stringify(Object.fromEntries(Object.entries(args ?? {}).sort()))}`;
+
+function mockAsk(body: { path: string; question: string; solver?: string; solver_args?: Record<string, unknown> }) {
+  const want = solverKey(body.solver, body.solver_args);
+  const fx = fixtures().find((f) => f.path === body.path && norm(f.question) === norm(body.question)
+    && solverKey(f.solver, f.solver_args) === want);
   if (fx) return { ...fx.answer, trace: [...((fx.answer.trace as string[]) ?? []),
     fx.recorded_at ? `(mock API: replay of the live answer recorded ${fx.recorded_at})` : "(mock API: precomputed fixture)"] };
   return {

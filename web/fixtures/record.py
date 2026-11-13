@@ -41,19 +41,35 @@ QUESTIONS = [
 ]
 
 
+# On-demand second opinions (hosted NVIDIA Nemotron) the tour may click: (path, question).
+SECOND = [
+    ("data/cubicasa5k/colorful-4539.png", "Kuinka monta makuuhuonetta (MH) pohjapiirustuksessa on?"),
+    ("data/habs/ak0003_sheet_00019.jpg",
+     "What kind of drawing is this (floor plan, elevation, section, site plan)?"),
+]
+SECOND_SOLVER = ("vlm_direct", {"backend": "nvidia"})
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--api", default="http://127.0.0.1:8100")
     args = ap.parse_args()
     out = []
-    for path, q in QUESTIONS:
-        req = urllib.request.Request(f"{args.api}/ask", data=json.dumps({"path": path, "question": q}).encode(),
+    jobs = [(p, q, None) for p, q in QUESTIONS] + [(p, q, SECOND_SOLVER) for p, q in SECOND]
+    for path, q, solver in jobs:
+        body = {"path": path, "question": q}
+        if solver:
+            body.update(solver=solver[0], solver_args=solver[1])
+        req = urllib.request.Request(f"{args.api}/ask", data=json.dumps(body).encode(),
                                      headers={"Content-Type": "application/json"})
         with urllib.request.urlopen(req, timeout=600) as r:
             ans = json.load(r)
         ans.pop("cached", None)
-        out.append({"path": path, "question": q, "answer": ans, "recorded_at": time.strftime("%Y-%m-%d %H:%M"),
-                    "api": args.api})
+        rec = {"path": path, "question": q, "answer": ans, "recorded_at": time.strftime("%Y-%m-%d %H:%M"),
+               "api": args.api}
+        if solver:
+            rec.update(solver=solver[0], solver_args=solver[1])
+        out.append(rec)
         print(f"{path.split('/')[-1][:48]:48} {ans.get('value')!s:>10} {ans.get('unit')} conf={ans.get('confidence')} "
               f"{ans.get('solver')} ev={len(ans.get('evidence', []))}")
     (HERE / "recorded.json").write_text(json.dumps(out, indent=1, ensure_ascii=False))
