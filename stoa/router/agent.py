@@ -328,8 +328,9 @@ class Agent:
                 cost_box[0] = Cost.model_validate(c) if isinstance(c, dict) else (c or Cost())
                 if a.value is None:
                     return "no answer"
-                results.append((a.value, min(a.confidence, 0.3), list(a.evidence), f"look: {inp[:80]}"))
-                return f"{_fmt(a.value)} {a.unit or ''} (vision model, unverified)"
+                # vlm_direct's confidence is calibrated on TRAIN (R2: answer-digit logprobs; conf >= 0.8 -> 89% right)
+                results.append((a.value, min(a.confidence, 0.9), list(a.evidence), f"look: {inp[:80]}"))
+                return f"{_fmt(a.value)} {a.unit or ''} (vision model, confidence {a.confidence:.2f})"
             if tool == "calc":
                 v = calc(inp)
                 results.append((v, -1.0, [], f"calc: {inp}"))  # conf -1: derived, see _finish
