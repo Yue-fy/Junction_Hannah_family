@@ -109,7 +109,7 @@ def _cluster_1d(vals: list[float], tol: float) -> list[float]:
 def _first_cell(r: Row) -> Cell | None:
     """Key cell of a row: the first cell, skipping 1-2 character grid markers ("E", "D") in front of it."""
     cells = r.cells
-    if len(cells) >= 2 and len(cells[0].text) <= 2 and cells[1].x0 - cells[0].x1 > 40:
+    if len(cells) >= 2 and len(cells[0].text) == 1 and cells[0].text.isalpha() and cells[1].x0 - cells[0].x1 > 40:
         cells = cells[1:]
     return cells[0] if len(cells) >= 3 else None
 

@@ -106,9 +106,17 @@ def _extract_code(text: str) -> str:
     return (m.group(1) if m else text).strip()
 
 
+HARDCODED = re.compile(r"^\s*answer\s*=\s*-?[\d.]+\s*(?:#.*)?$", re.M)
+
+
 def _run(code: str, tables: dict[str, pd.DataFrame]) -> dict:
+    code = re.sub(r"(?<=[A-Za-z])'(?=S\b)", r"\\'", code)  # WOMEN'S inside '...' -> WOMEN\'S
+    code = "\n".join(ln for ln in code.splitlines() if not re.match(r"\s*(import\s+(pandas|re|math|numpy)\b|from\s+\w+\s+import)", ln))
     if re.search(r"\b(import|open|exec|eval|__\w+__|os\.|sys\.|subprocess)\b", code):
         raise ValueError("code uses a forbidden construct")
+    if HARDCODED.search(code):
+        raise ValueError("`answer` is a typed-in number; compute it from the DataFrames (filter rows, then "
+                         "len()/sum()) so the result is traceable to rows")
     env = {"pd": pd, "math": math, "re": re, "statistics": statistics, "__builtins__": SAFE_BUILTINS}
     env.update({k: v.copy() for k, v in tables.items()})
     exec(compile(code, "<tableqa>", "exec"), env)  # noqa: S102 - restricted namespace, local data only
@@ -126,7 +134,7 @@ def _run(code: str, tables: dict[str, pd.DataFrame]) -> dict:
     return {"value": ans, "unit": env.get("unit"), "used": [int(u) for u in list(used)[:200] if str(u).lstrip("-").isdigit()]}
 
 
-def ask(question: str, tables: dict[str, pd.DataFrame], backend: str = "local", tries: int = 2, doc: str = DOC,
+def ask(question: str, tables: dict[str, pd.DataFrame], backend: str = "local", tries: int = 3, doc: str = DOC,
         id_col: str = "room_id", units: str = '"count", "m2"') -> dict:
     from stoa.llm import chat
 
@@ -134,11 +142,15 @@ def ask(question: str, tables: dict[str, pd.DataFrame], backend: str = "local", 
     msgs = [{"role": "user", "content": PROMPT.format(doc=doc, data=_render(tables), question=question, names=names,
                                                       id_col=id_col, units=units)}]
     last = {"value": None, "unit": None, "used": [], "code": "", "error": "no attempt"}
-    for _ in range(tries):
+    for attempt in range(tries):
         r = chat(msgs, backend=backend, max_tokens=500, temperature=0.0)
         code = _extract_code(r.text)
         try:
             res = _run(code, tables)
+            v = res["value"]
+            if v is None or (isinstance(v, str) and not v.strip()) or (v == 0 and not res["used"] and attempt < tries - 1):
+                raise ValueError(f"the query returned {v!r} (no matching rows). Look at the actual cell values and "
+                                 "column contents shown above (headers may be misaligned) and fix the filter")
             if WHICH.search(question) and not isinstance(res["value"], str):
                 raise ValueError(f"the question asks WHICH one, but answer = {res['value']!r}; set answer to the "
                                  "identifier string (apartment letter / room number / name)")
