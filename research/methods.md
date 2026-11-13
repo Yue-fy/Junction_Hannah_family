@@ -71,7 +71,7 @@ Per-template policy chosen on 60 train drawings (574 Qs), then frozen and scored
 | bathroom | max(1, labels) | 88.2% | 88.2% |
 | **all** | | 65.7% | **79.3%**, paired delta +13.5, 95% CI [+7.2, +19.6] (cluster bootstrap) |
 
-19% of dev outputs looped; fixing that is the next lever. Cost: ~2.1k tokens in and ~570 out per
+19% of dev outputs looped. Retrying them with vLLM `repetition_penalty=1.15` (`retry_loops.py`) fixes 26 of 28, and dev rises to **82.1%** (+16.3 vs the prior, 95% CI [+9.4, +22.8]; WC rooms 85.0%, balconies 87.0%). For saunas, use the prior: labels are neutral on dev. Cost: ~2.1k tokens in and ~570 out per
 drawing, and one call answers all 12 room-type questions (EN+FI).
 
 About 25% of all questions (37% of cubicasa) count rooms by type. Finnish plans print the room code
