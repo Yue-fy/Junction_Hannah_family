@@ -130,14 +130,10 @@ function fillStoreys() {
   sel.innerHTML = `<option value="">All storeys</option>` + v.storeys.map((s) => `<option value="${s.id}">${esc(s.name)}</option>`).join("");
   // a plan sheet → its storey ("…_plan-01-1-korrus.pdf" ↔ "1.korrus")
   const m = state.file?.path.match(/_plan-\d+-(.*)\.pdf$/);
-  if (m) {
-    const key = m[1].replace(/[^a-z0-9]/gi, "").toLowerCase();
-    const s = v.storeys.find((x) => x.name.replace(/[^a-z0-9]/gi, "").toLowerCase() === key);
-    if (s) {
-      sel.value = String(s.id);
-      v.setStorey(s.id);
-    }
-  }
+  const key = m?.[1].replace(/[^a-z0-9]/gi, "").toLowerCase();
+  const s = key ? v.storeys.find((x) => x.name.replace(/[^a-z0-9]/gi, "").toLowerCase() === key) : undefined;
+  sel.value = s ? String(s.id) : "";
+  v.setStorey(s ? s.id : null);
 }
 $<HTMLSelectElement>("storey").addEventListener("change", (e) => {
   const val = (e.target as HTMLSelectElement).value;
@@ -239,6 +235,7 @@ async function openFile(f: FileInfo, question = "", keep: Answer | null = null, 
     b.disabled = (b.dataset.mode !== "2d" && !state.ifc) || (b.dataset.mode !== "3d" && is3DOnly);
   });
   $<HTMLSelectElement>("storey").hidden = true;
+  if (v3d && state.ifc && v3d.file === state.ifc) fillStoreys(); // same model, other sheet: follow its storey
   if (!keep) setMode(is3DOnly ? "3d" : state.ifc ? "split" : "2d");
   else setMode(is3DOnly ? "3d" : state.mode === "3d" && state.ifc ? "split" : state.ifc ? state.mode : "2d");
 
