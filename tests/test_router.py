@@ -102,3 +102,43 @@ def test_modifiers_and_agent_calc():
 
     with pytest.raises(Exception):
         calc("__import__('os').system('true')")
+
+
+def test_operator_modifiers_cycle3():
+    """F's hard2 kinds: complement, ratio, word thresholds, comparisons, two scopes go to the agent, not a template."""
+    from stoa.router.intent import modifiers
+
+    assert "rest" in modifiers("What is the total net floor area, in m², of the numbered indoor rooms on this floor that "
+                               "do not belong to apartment A?")
+    assert "ratio" in modifiers("How many times larger is apartment B than apartment A by net floor area?")
+    assert "threshold" in modifiers("Does this floor plan show at least two toilet seats (WC bowls)? Answer yes or no.")
+    assert "threshold" in modifiers("How many of the rooms 3.01 ('Wohnen') and 3.05 ('Bad') have a net floor area of "
+                                    "more than 15 m²?")
+    assert "compare" in modifiers("Which is smaller by net floor area, apartment B or apartment H?")
+    assert "compare" in modifiers("Which storey has more doors on its floor plan, '0' or '-1'?")
+    assert "multi_scope" in modifiers("What is the combined net floor area of all rooms (spaces) on '2. Level' and on "
+                                      "'Attic', in m²?")
+    assert modifiers("How many doors are shown on the floor plan of 'Level 1'?") == []
+    assert modifiers("What is the net floor area of the room 'Kitchen (1.2)' on '1', in m²?") == []
+
+
+def test_atleast_plan_and_calc_compare():
+    from stoa.router.agent import Agent, calc
+    from stoa.router.compose import combine, decompose
+
+    p = decompose("cubicasa5k", "Does this floor plan show at least two toilet seats (WC bowls)? Answer yes or no.")
+    assert p is not None and p.op == "atleast" and p.note == "2"
+    assert combine(p, [1])[0] == "no" and combine(p, [2])[0] == "yes"
+    assert calc("(38.65 > 31) + (12.07 > 31)") == 1.0
+    # grounding: every calc number must come from a tool result / the table / the question / a constant
+    res = [(113.02, 0.976, [], "ask: B"), (105.93, 0.976, [], "ask: A"), (1.067, -1.0, [], "calc: 113.02 / 105.93")]
+    used, n_table, bad = Agent._grounding("113.02 / 105.93", res, "How many times larger is B than A?")
+    assert len(used) == 2 and not bad and n_table == 0
+    assert Agent._grounding("113.02 / 99.5", res, "?")[2] == ["99.5"]
+
+
+def test_gate_keeps_near_perfect_solver_first():
+    from stoa.router import gating
+
+    order, _ = gating.plan("swiss_dwellings", "area:room:room", ["dxf", "pdf_vector", "vlm_direct"])
+    assert order[0] == "dxf"

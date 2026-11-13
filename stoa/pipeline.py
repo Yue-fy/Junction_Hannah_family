@@ -29,6 +29,7 @@ asks this pipeline's atomic cascade simple sub-questions and does the arithmetic
 from __future__ import annotations
 
 import json
+import re
 import threading
 import time
 from pathlib import Path
@@ -174,11 +175,17 @@ class Pipeline(BaseSolver):
 
     def _agent_reason(self, path: str, question: str, intent: Intent, cands: list[str]) -> str | None:
         """Why this question should go to the general agent first (None = it should not)."""
-        if not self.use_agent or intent.task not in ("count", "area", "volume", "length") or known_template(question):
+        if not self.use_agent or known_template(question):
             return None
         if source_of(path) == "ifc_bench":  # free-text model questions: W1's fact-card path keeps the breakdown
             return None
         mods = modifiers(question)
+        if intent.task not in ("count", "area", "volume", "length"):
+            # text / yes-no: only comparisons and operators over named things ("which storey has more doors, '0' or
+            # '-1'?", "which is smaller, apartment B or H?"); plain look-ups stay with the solvers
+            if mods and set(mods) & {"compare", "threshold", "multi_scope", "rest", "ratio", "avg", "share", "diff"}:
+                return "modifier " + "+".join(mods) + " (comparison/operator over named things); not a known template"
+            return None
         if mods:
             return "modifier " + "+".join(mods) + " changes what is computed; not a known template"
         if intent.target == "unknown" and not any(TIER.get(c) == "deterministic" for c in cands):
@@ -228,7 +235,8 @@ class Pipeline(BaseSolver):
             trace.append("no train gate for this kind of question: general path by file type")
 
         canon = None
-        if self.normalise and not known_template(question):
+        if self.normalise and not known_template(question) and not modifiers(question):
+            # the canonical template drops operators ("average", "share", "not in apartment A"): never for those
             canon = canonical(src, intent)
         total = Cost()
         answers: list[tuple[str, Answer, float]] = []  # (solver, answer, calibrated confidence)
@@ -263,6 +271,10 @@ class Pipeline(BaseSolver):
                 continue
             if gate and name in acc:  # train hit rate for this key, smoothed (k+1)/(n+2): 40/40 -> 0.976, not 1.0
                 conf = (acc[name] * gate["n"] + 1) / (gate["n"] + 2)
+                if ask == question and not known_template(question) and TIER.get(name) == "deterministic":
+                    # an unseen wording asked as is: the template's train rate does not vouch for how the solver
+                    # read it (F hard2: "how many times larger is B than A" -> apartment count at 0.976)
+                    conf = min(conf, ans.confidence)
             else:
                 conf = ans.confidence
             trace.append(f"{name}: {ans.value} {ans.unit or ''} (conf {conf:.2f}"
@@ -280,6 +292,9 @@ class Pipeline(BaseSolver):
             best = self._prior_answer(src, intent, trace, gate)
         if self.crosscheck and best.value is not None:
             self._kg_crosscheck(path, intent, best, trace)
+        if why and best.value is not None:  # the agent failed on an operator question: the template answer may ignore it
+            best.confidence = round(min(best.confidence, 0.3), 3)
+            best.missing = [*best.missing, f"the question has an operator the solvers may not apply ({why.split(';')[0]})"]
         best.cost = total.add(_cost_of(best)) if best.solver == "prior" else total
         best.cost.wall_seconds = round(time.perf_counter() - t0, 4)
         # keep the sub-solver's own steps after ours, short
@@ -298,6 +313,12 @@ class Pipeline(BaseSolver):
         except Exception:  # noqa: BLE001
             return
         if not note:
+            return
+        if intent.scope in ("apartment", "floor_total", "storey_total", "label_total", "model") and \
+                re.search(r"polygon of room|vs (?:the )?room ", note):
+            # an aggregate (apartment / floor / all rooms labelled X) compared with ONE room's polygon is not a check:
+            # 272 correct swiss dev totals got a false ✗ this way (night 00:47)
+            trace.append("cross-check skipped: the linked source only knows single rooms for this aggregate")
             return
         note = note if note.startswith("cross-check") else f"cross-check: {note}"
         trace.append(note)
