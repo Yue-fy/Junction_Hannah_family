@@ -316,7 +316,9 @@ class RasterSolver(BaseSolver):
         ev = [Evidence(file=path, bbox=[round(v, 1) for v in getattr(i, "box", [i.x, i.y, i.x, i.y])],
                        bbox_space="image_px", note=f"basis of the estimate: {i.cls.replace('_', ' ')} label '{i.text}'")
               for i in basis]
-        conf = round(max(0.05, min(0.9, 0.8 * cell["hit"])), 3)  # read labels are noisier than gold (train: x0.8)
+        # the cell hit rate is measured with GOLD room counts; read labels are noisier, so cap it at the TRAIN
+        # accuracy measured with read labels (doors 0.23, windows 0.22, WC seats 0.75)
+        conf = round(max(0.05, min(0.8 * cell["hit"], spec.get("train_acc_read_labels", 0.9))), 3)
         return Answer(value=value, unit="count", confidence=conf, evidence=ev, solver=self.name, trace=trace,
                       assumptions=[f"statistical estimate: plans with {desc} most often have {value} {name}s "
                                    f"(training data, {cell['n']} plans); the {name} symbols were not counted one by one"],
