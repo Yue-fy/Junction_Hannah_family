@@ -53,7 +53,7 @@ IMG_EXT = (".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp", ".gif")
 # tier of each solver (cost order); unknown names count as "local"
 TIER = {"dxf": "deterministic", "ifc": "deterministic", "schedule": "deterministic", "pdf_vector": "deterministic",
         "pdf_text": "deterministic", "raster": "local", "vlm_direct": "local", "agent": "local",
-        "vlm_nvidia": "api", "prior": "deterministic", "raster_cc5k": "local"}
+        "vlm_nvidia": "api", "prior": "deterministic", "raster_cc5k": "local", "vlm_lora": "local"}
 
 
 def route(path: str, intent: Intent | None = None) -> list[str]:
@@ -72,6 +72,8 @@ def route(path: str, intent: Intent | None = None) -> list[str]:
         out += ["pdf_vector", "pdf_text"]
     if ext in IMG_EXT or any(e in sib for e in IMG_EXT):
         out.append("raster")
+        if src == "cubicasa5k":  # R2's counting LoRA (cc-v2): gated per concept on train_gate (it never saw those)
+            out.append("vlm_lora")
     out += ["vlm_direct"]  # the general agent is called explicitly by the pipeline (agent=1), not routed
     seen: set[str] = set()
     return [x for x in out if not (x in seen or seen.add(x))]
