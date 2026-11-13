@@ -79,7 +79,26 @@ def _rooms_with_name(fm: FloorModel, name) -> list[Room]:
     return [r for r in fm.rooms if (r.name or "").lower() in low]
 
 
-def _eval_term(fm: FloorModel, t: qparse.Term, qtype: str) -> _Part:
+def _in_scope(fm: FloorModel, kind: str, bbox, scope: list[str] | None) -> bool:
+    """Is an object inside one of the scoped apartments? Fixtures: centre in the UNIT_OUTLINE; doors/windows sit
+    in walls, so they count when they touch the outline buffered by 0.3 m (an entrance door counts for the flat)."""
+    if not scope:
+        return True
+    from shapely.geometry import Point
+    from shapely.geometry import box as sbox
+
+    b = sbox(*bbox)
+    for u in fm.units:
+        if u.label in scope and u.poly is not None:
+            if kind in ("door", "window"):
+                if u.poly.buffer(0.3).intersects(b):
+                    return True
+            elif u.poly.contains(Point(b.centroid.x, b.centroid.y)):
+                return True
+    return False
+
+
+def _eval_term(fm: FloorModel, t: qparse.Term, qr: qparse.Query) -> _Part:
     k = t.kind
     if k == "count":
         kind = t.arg
@@ -89,6 +108,15 @@ def _eval_term(fm: FloorModel, t: qparse.Term, qtype: str) -> _Part:
                          [f"apartments = {len(fm.units)} labels {sorted(u.label for u in fm.units)}"],
                          [f"counted {KIND_DESC['apartment']}"])
         items = fm.items.get(kind, [])
+        if t.scope:
+            items = [it for it in items if _in_scope(fm, kind, it.bbox, t.scope)]
+            missing = [] if all(u.poly is not None for u in fm.units if u.label in t.scope) else \
+                [f"no UNIT_OUTLINE for apartment(s) {t.scope}"]
+            how = ("objects touching the UNIT_OUTLINE (±0.3 m)" if kind in ("door", "window")
+                   else "objects whose centre lies inside the UNIT_OUTLINE")
+            asm = [f"counted {KIND_DESC[kind]}", f"restricted to apartment(s) {', '.join(t.scope)}: {how}"]
+            return _Part(len(items), 0.8 if kind in ("door", "window") else 0.9, [(it.bbox, it.note) for it in items],
+                         [f"{kind}s in apartment(s) {t.scope} = {len(items)}"], asm, missing)
         n = window_count(fm) if kind == "window" else len(items)
         tr = [f"{kind}s = {n} ({KIND_DESC[kind]})"]
         if kind == "window" and n != len(items):
@@ -101,6 +129,9 @@ def _eval_term(fm: FloorModel, t: qparse.Term, qtype: str) -> _Part:
                          [f"rooms with a number = {len(rooms)}"], ["'rooms' read as every numbered room polygon"])
         names = t.arg if isinstance(t.arg, list) else [t.arg]
         texts = [tx for tx in fm.texts if tx.text in names] or [tx for tx in fm.texts if tx.text.lower() in {n.lower() for n in names}]
+        if t.scope:
+            in_rooms = {id(tx): r for r in fm.rooms for tx in r.texts}
+            texts = [tx for tx in texts if (r := in_rooms.get(id(tx))) is not None and r.unit in t.scope]
         boxes = []
         for tx in texts:
             room = next((r for r in fm.rooms if tx in r.texts), None)
@@ -133,25 +164,36 @@ def _eval_term(fm: FloorModel, t: qparse.Term, qtype: str) -> _Part:
         if unit is None:
             return _Part(None, 0.0, [], [f"apartment {t.arg} not found; labels {[u.label for u in fm.units]}"],
                          missing=[f"no 'Whg./App. {t.arg}' label on this floor"])
-        rooms = [r for r in fm.rooms if r.unit == t.arg and r.number and not r.outdoor]
-        excl = [r for r in fm.rooms if r.unit == t.arg and (r.outdoor or not r.number)]
+        if qr.gross and unit.poly is not None:
+            val = unit.poly.area
+            return _Part(val, 0.25, [(unit.bbox, f"apartment {t.arg} outline {val:.2f} m²")],
+                         [f"apartment {t.arg}: UNIT_OUTLINE polygon area {val:.2f} m² (asked: gross)"],
+                         ["gross floor area is not in the DXF; returned the apartment outline area (≈ net + partitions, "
+                          "median 1.02 x the rooms' net area); exterior walls not included"],
+                         ["wall thickness / gross-area standard (e.g. SIA 416 GF) to add the walls"])
+        rooms = [r for r in fm.rooms if r.unit == t.arg and r.number and (qr.include_outdoor or not r.outdoor)]
+        excl = [r for r in fm.rooms if r.unit == t.arg and ((r.outdoor and not qr.include_outdoor) or not r.number)]
         val = sum(r.area for r in rooms)
         tr = [f"apartment {t.arg}: {len(rooms)} numbered indoor rooms inside its UNIT_OUTLINE = {val:.2f} m²"]
         if excl:
             tr.append("excluded: " + ", ".join(r.label() for r in excl))
         asm = ["apartment = rooms whose label lies inside the UNIT_OUTLINE holding 'Whg./App. X'",
-               "outdoor rooms (Balkon/Loggia/Terrasse/…) excluded"]
+               "outdoor rooms (Balkon/Loggia/Terrasse/…) " + ("INCLUDED (asked)" if qr.include_outdoor else "excluded")]
         conf, asm2, miss = _unnamed_caveat(rooms, val)
         return _Part(val, min(conf, RULE_CONF["area_apartment"]) if unit.poly is not None else 0.3,
                      [(r.bbox, _room_note(r)) for r in rooms], tr, asm + asm2, miss)
     if k == "area_total":
-        rooms = [r for r in fm.rooms if r.number and not r.outdoor and not r.shaft]
-        excl = [r for r in fm.rooms if r.number and (r.outdoor or r.shaft)]
+        rooms = [r for r in fm.rooms if r.number and (qr.include_outdoor or not r.outdoor) and not r.shaft]
+        excl = [r for r in fm.rooms if r.number and ((r.outdoor and not qr.include_outdoor) or r.shaft)]
         val = sum(r.area for r in rooms)
         tr = [f"{len(rooms)} numbered indoor rooms = {val:.2f} m²"]
         if excl:
             tr.append("excluded outdoor/shaft: " + ", ".join(r.label() for r in excl))
-        asm = ["total = numbered ROOM_OUTLINE polygons, minus outdoor rooms (Balkon/Loggia/Terrasse/…) and shafts"]
+        asm = ["total = numbered ROOM_OUTLINE polygons, minus shafts and "
+               + ("NOT minus outdoor rooms (asked to include them)" if qr.include_outdoor else
+                  "minus outdoor rooms (Balkon/Loggia/Terrasse/…)")]
+        if qr.gross:
+            asm.append("gross area asked but walls are not modelled: this is the net total (an underestimate)")
         if t.note:
             asm.append(t.note)
         conf, asm2, miss = _unnamed_caveat(rooms, val)
@@ -235,7 +277,7 @@ class DxfSolver(BaseSolver):
                 return ans
         if not qr.terms:
             return Answer.abstain(self.name, "question not understood by the DXF parser", trace)
-        parts = [_eval_term(fm, t, qr.qtype) for t in qr.terms]
+        parts = [_eval_term(fm, t, qr) for t in qr.terms]
         for t, p in zip(qr.terms, parts):
             trace += p.trace
         assumptions = [a for p in parts for a in p.assumptions]
@@ -294,7 +336,7 @@ class DxfSolver(BaseSolver):
         except Exception:  # noqa: BLE001
             return conf
         for t, p in zip(qr.terms, parts):
-            if p.value is None:
+            if p.value is None or t.scope:  # the PDF text layer has no apartment scope to compare with
                 continue
             if t.kind == "count_label" and t.arg != "<numbered>":
                 names = t.arg if isinstance(t.arg, list) else [t.arg]

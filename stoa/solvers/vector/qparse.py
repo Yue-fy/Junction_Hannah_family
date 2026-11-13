@@ -62,6 +62,11 @@ CONCEPTS: dict[str, tuple[list[str], list[str]]] = {
     "room": ([r"zimmer", r"pi[èe]ces?", r"stanz[ae]"], ["Zimmer", "Pièce", "Stanza", "Raum"]),
 }
 
+INCLUDE_OUT = (r"(?:including|incl\.?|inklusive|inkl\.?|einschliesslich|y\s+compris|compris|inclus|incluse?|compres[io]|"
+               r"comprese|with)\s+(?:the\s+|die\s+|les\s+|i\s+)?(?:balcon|balkon|loggi|terrass|terrac|outdoor|au(?:ss|ß)en|"
+               r"ext[ée]rieur|estern)")
+GROSS = (r"\bgross\s+(?:floor\s+|internal\s+|external\s+|living\s+)?area|\bgfa\b|brutto|\bbgf\b|"
+         r"surface\s+(?:de\s+plancher\s+)?brute|superficie\s+lorda")  # not "wie gross ist" (= how large)
 COUNT_WORDS = r"how\s+many|count|number\s+of|wie\s+viele|anzahl|combien|nombre\s+de|quant[ie]|quante|numero\s+di|hoeveel|hur\s+m[åa]nga"
 AREA_WORDS = (r"\barea\b|fl[äa]che|surface|superficie|oppervlak|yta\b|m²|m2\b|square\s+met|sq\.?\s*m\b|square\s+f(?:ee|oo)t|"
               r"sq\.?\s*ft|ft²|ft2\b|how\s+(?:large|big)|wie\s+gross|wie\s+groß")
@@ -88,6 +93,7 @@ class Term:
     arg: str | list[str] | None = None
     pos: int = 0  # position in the question (for ordering a difference)
     note: str = ""  # how it was parsed ("concept bedroom -> Schlafzimmer|...")
+    scope: list[str] | None = None  # apartment letters the term is restricted to ("windows in apartment B")
 
 
 @dataclass
@@ -97,6 +103,8 @@ class Query:
     terms: list[Term] = field(default_factory=list)
     unit: str | None = None  # count | m2 | ft2
     notes: list[str] = field(default_factory=list)
+    include_outdoor: bool = False  # "including balconies"
+    gross: bool = False  # "gross floor area"
 
     def describe(self) -> str:
         parts = []
@@ -192,9 +200,12 @@ def parse(question: str, vocab: list[str] | None = None, room_numbers: set[str] 
                     terms.append(Term("area_label", list(labs), p, note=f"concept {c}"))
             if not terms:
                 terms = [Term("area_total", None, 0, note="no room/apartment/label named; assumed whole floor")]
+        inc = bool(re.search(INCLUDE_OUT, ql))
+        gross = bool(re.search(GROSS, ql))
         if op in ("max", "min") and len(terms) > 1 and not re.search(r"how\s+(?:large|big|much)|what\s+is\s+the\s+(?:net\s+)?(?:floor\s+)?area", ql):
             qtype = "text"
-        return _finish(Query(qtype, op, terms, unit if qtype != "text" else None, notes), rev)
+        qr = Query(qtype, op, terms, unit if qtype != "text" else None, notes, include_outdoor=inc, gross=gross)
+        return _finish(qr, rev)
 
     # count questions ------------------------------------------------------------------------------
     qtype = "count"
@@ -223,6 +234,11 @@ def parse(question: str, vocab: list[str] | None = None, room_numbers: set[str] 
                     terms.append(Term("count_label", list(labs), p, note=f"concept {c}"))
         if not terms and re.search(r"\brooms?\b|r[äa]ume|pi[èe]ces|locali|kamers|rum\b", ql):
             terms = [Term("count_label", "<numbered>", 0, note="all numbered rooms")]
+    # "windows in apartment B": the apartment word + letter is a scope, not a count of apartments
+    if apts and any(not (t.kind == "count" and t.arg == "apartment") for t in terms):
+        terms = [t for t in terms if not (t.kind == "count" and t.arg == "apartment")]
+        for t in terms:
+            t.scope = [a for a, _ in apts]
     return _finish(Query(qtype, op if len(terms) > 1 else "sum", terms, "count", notes), rev)
 
 
@@ -239,7 +255,7 @@ def _finish(qr: Query, rev: bool) -> Query:
 UNCOVERED = re.compile(
     r"\b(which|welche[rs]?|lequel|laquelle|quale\s+(?:dei|delle)|average|mean|median|durchschnitt|moyenne|media|per\s|each|jede[rs]?|"
     r"chaque|ogni|ratio|percent|percentage|proportion|share|anteil|with\s+(?:a|an|no|more|at)|without\s+(?:a|an|any|windows?|doors?)|that\s+ha(?:ve|s)|"
-    r"ha(?:ve|s)\s+(?:a|an|no|any|more|at\s+least|\d+)\b|contain\w*|adjacent|next\s+to|neighbo\w+|between|at\s+least|at\s+most|is\s+there|are\s+there\s+any|does|do\s+any|"
+    r"ha(?:ve|s)\s+(?:a|an|no|any|more|at\s+least|\d+)\b|contain\w*|adjacent|next\s+to|neighbo\w+|between|at\s+least|at\s+most|is\s+there|are\s+there\s+any|do\s+any|"
     r"mit\s+(?:einem|einer|mehr)|ohne\s+(?:fenster|t[üu]r)|avec\s+(?:un|une|plus)|sans\s+(?:fen|porte)|senza)\b|%|(?:more|less|larger|smaller)\s+than\s+\d",
     re.I)
 
@@ -249,10 +265,10 @@ def covered(question: str, qr: Query) -> bool:
     if not qr.terms:
         return False
     q = _norm(question)
-    if qr.qtype == "count" and APT_RE.search(q) and any(t.kind != "count" or t.arg != "apartment" for t in qr.terms):
-        return False  # "how many bathrooms in apartment B": apartment filter not supported by rules
-    if qr.qtype == "count" and APT_RE.search(q):
-        return False
+    if qr.qtype == "count" and APT_RE.search(q) and not all(t.scope for t in qr.terms):
+        return False  # an apartment letter the rules did not attach to every term
+    if YESNO.match(q.strip()):
+        return False  # yes/no question
     m = UNCOVERED.search(q)
     if m:
         # the standard swiss templates contain none of these, except "excluding ... shafts and voids" etc.
