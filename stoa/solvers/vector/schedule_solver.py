@@ -138,7 +138,17 @@ class ScheduleSolver(BaseSolver):
                              note=(f"note line {i - 900000}" if i >= 900000 else f"table row {i}"))
                     for i in res.get("used", []) if i in boxes]
         conf = 0.55 if evidence else 0.4
+        missing = [] if evidence else ["the query did not report which rows it used"]
+        about_table = re.search(r"schedul|listed|table|legend|\bkey\b|specified|finish", question, re.I)
+        about_drawing = re.search(r"\b(drawn|shown|depicted|visible)\b|\bin\s+(?:the\s+)?(?:enlarged\s+)?plan\b",
+                                  question, re.I)
+        if about_drawing and not about_table:
+            conf = min(conf, 0.15)
+            missing.append("the question is about symbols drawn on a plan; schedules and text can't count those "
+                           "(needs symbol detection on the drawing)")
+        if value == 0 and not evidence:
+            conf = min(conf, 0.2)
         return Answer(value=value, unit=unit, confidence=conf, evidence=evidence, trace=trace, solver=self.name,
                       assumptions=["tables rebuilt from the PDF text layer (row/column alignment); the model wrote "
                                    "the query, the numbers come from the extracted rows"],
-                      missing=[] if evidence else ["the query did not report which rows it used"])
+                      missing=missing)
