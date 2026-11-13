@@ -32,7 +32,7 @@ Baseline: `20261113-235744-prior-dev`. CI = 95% cluster bootstrap over drawings.
 | LLM calls per question | 0.23 | 0.00 |  |
 | deterministic tier (share / accuracy) | 80% / 86.1% | 100% / 26.9% | no model call at all |
 | latency p50 / p95 | 0.284 s / 3.564 s | 0.0 s / 0.001 s |  |
-| text answers, LLM-judged | 40.5% of 200 | – | free text (ifc_bench, schedules); judge is lenient ±5 pts |
+| text answers, judged | 40.5% of 200 | – | free text (ifc_bench, schedules); numeric check, else LLM (±5 pts) |
 | generality (hard): translation / paraphrase / composition | 86% / 84% / 65% | – | unseen wordings, languages, units, multi-step |
 | generality (hard2): scored / judged text / AUROC / conf ≥ 0.8 acc | 77.8% / 47.8% / 0.51 / 95.8% | – | n=256; operators never seen in questions.jsonl |
 | generality (hard2p): scored / judged text / AUROC / conf ≥ 0.8 acc | 56.1% / 56.7% / 0.53 / 69.5% | – | n=256; operators never seen in questions.jsonl |

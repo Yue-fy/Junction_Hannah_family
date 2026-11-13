@@ -82,7 +82,7 @@ def scorecard(dev: str, hard: str | None = None, text: str | None = None, baseli
                 r["text_judge"] = verdict[r["qid"]]
     tn, tacc = _text(rows)
     if tn:
-        out.append(f"| text answers, LLM-judged | {_pct(tacc)} of {tn} | – | free text (ifc_bench, schedules); judge is lenient ±5 pts |")
+        out.append(f"| text answers, judged | {_pct(tacc)} of {tn} | – | free text (ifc_bench, schedules); numeric check, else LLM (±5 pts) |")
     if hard:
         hm = summarize(load(hard))
         kinds = hm.get("by_kind") or {}
