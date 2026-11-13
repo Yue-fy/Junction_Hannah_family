@@ -28,9 +28,10 @@ Count/quantity/area columns are numbers; for values like "108 SF" a parsed twin 
 other columns (ids, room numbers, types) are strings: compare them with strings ("118", not 118).
 Use double quotes for strings that contain an apostrophe ("WOMEN'S LOCKER").
 Counting rows: one row = one item unless a Count/Qty column says otherwise.
-{tables}
-Other text on the sheet (legends, notes; not tables):
-{text}"""
+Text answers: give the value as printed; if the question also asks what a code means, find the code in `notes`
+(e.g. notes[notes.text.str.contains("F4")]) and answer "F4 - <meaning>"; if it asks for two things (how many
+and what total), answer one string with both ("3 rooms, 4541 SF"); include those notes rows in `used`.
+{tables}"""
 
 
 NUM_RE = re.compile(r"^-?\d[\d,]*(?:\.\d+)?$")
@@ -94,10 +95,21 @@ class ScheduleSolver(BaseSolver):
             tables[name] = df
             desc.append(f"- `{name}`: {t.title or 'untitled'}, {len(df)} rows, columns {list(df.columns)}")
         # sheet text outside the tables (legends/notes), capped
-        # legends and notes are short rows; long rows are table rows (already in the tables)
-        other = [" | ".join(c.text for c in r.cells)[:160] for r in rows if len(r.cells) <= 3]
-        text = "\n".join(t for t in other if len(t) > 2)[:9000]
-        doc = DOC.format(tables="\n".join(desc), text=text)
+        # legends and notes are short rows (long rows are table rows): a `notes` table, so the code can look up
+        # what a code means ("F4") and the lines it used become evidence too
+        notes, nid = [], 900000
+        for r in rows:
+            if len(r.cells) <= 3:
+                txt = " | ".join(c.text for c in r.cells)[:160]
+                if len(txt) > 2:
+                    notes.append({"row_id": nid, "text": txt})
+                    boxes[nid] = tuple(min(c.box[k] for c in r.cells) if k < 2 else max(c.box[k] for c in r.cells)
+                                       for k in range(4))
+                    nid += 1
+        tables["notes"] = pd.DataFrame(notes[:300])
+        desc.append(f"- `notes`: other text lines of the sheet (legends, keys, general notes), {len(notes[:300])} rows,"
+                    " columns ['row_id', 'text']")
+        doc = DOC.format(tables="\n".join(desc))
         trace = [f"{len(tabs)} tables from the PDF text layer: " + "; ".join(
             f"{n} ({len(df)}x{len(df.columns) - 1})" for n, df in tables.items())]
         try:
@@ -115,6 +127,7 @@ class ScheduleSolver(BaseSolver):
             value, unit = ("yes" if value else "no"), None
         if isinstance(value, str):
             unit = None
+            value = re.sub(r"(\d+')\s*-\s*(\d)", r"\1-\2", value).strip()  # 5' - 10 3/8" -> 5'-10 3/8"
         elif unit == "count":
             value = int(round(float(value)))
         elif isinstance(value, float):
@@ -122,9 +135,20 @@ class ScheduleSolver(BaseSolver):
         if unit not in ("count", "ft2", "m2", "ft", "m", None):
             unit = None
         evidence = [Evidence(file=path, page=0, bbox=[round(v, 1) for v in boxes[i]], bbox_space="pdf_pt",
-                             note=f"row {i}") for i in res.get("used", []) if i in boxes]
+                             note=(f"note line {i - 900000}" if i >= 900000 else f"table row {i}"))
+                    for i in res.get("used", []) if i in boxes]
         conf = 0.55 if evidence else 0.4
+        missing = [] if evidence else ["the query did not report which rows it used"]
+        about_table = re.search(r"schedul|listed|table|legend|\bkey\b|specified|finish", question, re.I)
+        about_drawing = re.search(r"\b(drawn|shown|depicted|visible)\b|\bin\s+(?:the\s+)?(?:enlarged\s+)?plan\b",
+                                  question, re.I)
+        if about_drawing and not about_table:
+            conf = min(conf, 0.15)
+            missing.append("the question is about symbols drawn on a plan; schedules and text can't count those "
+                           "(needs symbol detection on the drawing)")
+        if value == 0 and not evidence:
+            conf = min(conf, 0.2)
         return Answer(value=value, unit=unit, confidence=conf, evidence=evidence, trace=trace, solver=self.name,
                       assumptions=["tables rebuilt from the PDF text layer (row/column alignment); the model wrote "
                                    "the query, the numbers come from the extracted rows"],
-                      missing=[] if evidence else ["the query did not report which rows it used"])
+                      missing=missing)
