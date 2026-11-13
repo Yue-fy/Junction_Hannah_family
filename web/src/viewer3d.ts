@@ -479,6 +479,18 @@ export class Viewer3D {
     });
   }
 
+  /** Type, names and storey of one element (for follow-up questions about a picked element). */
+  info(guid: string): { type: string; name: string; longName: string; storey: string } | null {
+    this.ensureGuidIndex();
+    const id = this.guidToId.get(guid);
+    if (id === undefined || !this.api) return null;
+    const l = this.api.GetLine(this.modelID, id);
+    return {
+      type: this.api.GetNameFromTypeCode(l.type) ?? "", name: l.Name?.value ?? "", longName: l.LongName?.value ?? "",
+      storey: this.storeys.find((s) => s.id === this.storeyOf.get(id))?.name ?? "",
+    };
+  }
+
   /** Name lookup for evidence labels (e.g. "IfcSpace 119 KORIDOR"). */
   describe(guid: string): string {
     this.ensureGuidIndex();

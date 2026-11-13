@@ -210,3 +210,6 @@ select, input[type="search"], textarea { border: 1px solid var(--line); border-r
 .xbanner.ok { background: #e5f5ec; color: #145f35; border: 1px solid #b6e0c6; }
 .xbanner.bad { background: #fff3df; color: #7a4a00; border: 1px solid #f0d3a3; }
 .tour-note:empty { padding: 0; }
+.pick .ask-this { display: block; margin-top: 8px; width: 100%; text-align: left; border: 0; background: var(--navy); color: #fff; border-radius: 6px; padding: 6px 8px; font-size: 12px; cursor: pointer; }
+.pick .ask-this:hover { background: #24477a; }
+.pick { pointer-events: auto; }

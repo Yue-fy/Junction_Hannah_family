@@ -33,6 +33,7 @@ function makeViewer3D(Ctor: typeof Viewer3D) {
       v2d.highlightGuids([guid], "picked");
       if (state.mode === "split") v2d.focusGuid(guid);
     }
+    followUp(guid);
   };
   return v;
 }
@@ -44,8 +45,33 @@ v2d.onPickGuid = (guid, label) => {
     const pick = $("pick");
     pick.hidden = false;
     pick.innerHTML = `<b>${esc(label)}</b><div><span>GlobalId</span>${esc(guid)}</div><div><span>picked on</span>drawing</div>`;
+    followUp(guid);
   }
 };
+
+/** A one-click question about the picked element (room → area, door/window → count on its storey). */
+function followUp(guid: string) {
+  const info = v3d?.info(guid);
+  if (!info) return;
+  const t = info.type.toUpperCase();
+  let q = "";
+  if (t === "IFCSPACE") {
+    const room = info.longName ? `${info.longName} (${info.name})` : info.name;
+    q = `What is the net floor area of the room '${room}'${info.storey ? ` on '${info.storey}'` : ""}, in m²?`;
+  } else if (/IFCDOOR|IFCWINDOW|IFCCOLUMN|IFCSTAIR/.test(t)) {
+    const kind = t.includes("DOOR") ? "doors" : t.includes("WINDOW") ? "windows" : t.includes("COLUMN") ? "columns" : "stairs";
+    q = info.storey ? `How many ${kind} are shown on the floor plan of '${info.storey}'?` : `How many ${kind} are there in the model?`;
+  }
+  if (!q) return;
+  const b = document.createElement("button");
+  b.className = "ask-this";
+  b.textContent = `Ask: ${q}`;
+  b.addEventListener("click", () => {
+    $<HTMLTextAreaElement>("question").value = q;
+    void runAsk();
+  });
+  $("pick").append(b);
+}
 v2d.onPickEvidence = (i) => focusEvidence(i);
 
 export const esc = (s: unknown) => String(s ?? "").replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
