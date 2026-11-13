@@ -1,7 +1,7 @@
 import type { Answer, ExampleQuestion, FileInfo, Kg } from "./types";
 
 // All calls go to `/api/*`; the Vite middleware forwards to W4's API (:8100) or falls back to the mock.
-export type Backend = "live" | "mock" | "disk" | "unknown";
+export type Backend = "live" | "mock" | "disk" | "kg" | "unknown";
 export let lastBackend: Backend = "unknown";
 const listeners: ((b: Backend) => void)[] = [];
 export const onBackend = (f: (b: Backend) => void) => listeners.push(f);
@@ -9,7 +9,7 @@ export const onBackend = (f: (b: Backend) => void) => listeners.push(f);
 async function call<T>(url: string, init?: RequestInit): Promise<T> {
   const r = await fetch(url, init);
   const b = (r.headers.get("X-Stoa-Backend") as Backend) ?? "unknown";
-  if (b !== "disk") {
+  if (b !== "disk" && b !== "kg") {
     lastBackend = b;
     listeners.forEach((f) => f(b));
   }

@@ -29,6 +29,7 @@ export class Viewer2D {
   private overlay: SVGSVGElement;
   private guidLayer: SVGGElement;
   private evLayer: SVGGElement;
+  private kgLayer: SVGGElement;
   private w = 1;
   private h = 1;
   private z = 1;
@@ -52,7 +53,9 @@ export class Viewer2D {
     this.guidLayer = document.createElementNS(SVGNS, "g");
     this.guidLayer.classList.add("guid-layer");
     this.evLayer = document.createElementNS(SVGNS, "g");
-    this.overlay.append(this.guidLayer, this.evLayer);
+    this.kgLayer = document.createElementNS(SVGNS, "g");
+    this.kgLayer.classList.add("kg-layer");
+    this.overlay.append(this.guidLayer, this.kgLayer, this.evLayer);
     el.append(this.stage);
     this.installPanZoom();
   }
@@ -64,6 +67,7 @@ export class Viewer2D {
     this.stage.replaceChildren();
     this.guidLayer.replaceChildren();
     this.evLayer.replaceChildren();
+    this.kgLayer.replaceChildren();
     this.guidEls.clear();
     this.el.dataset.state = "loading";
     if (/\.pdf$/i.test(file)) {
@@ -148,8 +152,30 @@ export class Viewer2D {
     for (const gid of guids) this.guidEls.get(gid)?.classList.add(cls);
   }
 
+  /** Outline one knowledge-graph item (a room's pdf_pt box) and zoom to it; `null` clears the mark. */
+  markBox(bbox: number[] | null, label = "", space: "pdf_pt" | "image_px" = "pdf_pt") {
+    this.kgLayer.replaceChildren();
+    if (!bbox) return false;
+    const r = this.toContent({ file: this.file, bbox, bbox_space: space });
+    if (!r) return false;
+    const pad = Math.max(this.w, this.h) * 0.002;
+    const rect = document.createElementNS(SVGNS, "rect");
+    rect.setAttribute("x", String(r[0] - pad));
+    rect.setAttribute("y", String(r[1] - pad));
+    rect.setAttribute("width", String(r[2] - r[0] + 2 * pad));
+    rect.setAttribute("height", String(r[3] - r[1] + 2 * pad));
+    const text = document.createElementNS(SVGNS, "text");
+    text.setAttribute("x", String(r[0]));
+    text.setAttribute("y", String(r[1] - pad * 2));
+    text.setAttribute("font-size", String(Math.min(Math.max(this.w, this.h) * 0.007, Math.max((r[3] - r[1]) * 0.12, Math.max(this.w, this.h) * 0.0025))));
+    text.textContent = label;
+    this.kgLayer.append(rect, text);
+    return this.zoomTo(r, 0.8);
+  }
+
   /** Draw evidence that lives on this file (bbox), plus GUID highlights for ifc_guid evidence. */
   setEvidence(evidence: Evidence[]) {
+    this.kgLayer.replaceChildren();
     this.evLayer.replaceChildren();
     this.evidence = [];
     const guids: string[] = [];
