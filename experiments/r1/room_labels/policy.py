@@ -6,7 +6,8 @@ Policies per template (k = count of unique labels mapped to the class; loop = ou
   max1           : max(1, k)            (rooms that nearly always exist but are often unlabelled)
   labels|prior0  : k if k > 0 else prior
 Any policy falls back to the prior when the VLM output looped (one text repeated > LOOP times).
-Run: $JUNCTION_VENV/bin/python -I policy.py  (uses the cached v2 label outputs from run.py)
+Run: $JUNCTION_VENV/bin/python -I policy.py train dev [--retry]  (cached v2 outputs; --retry swaps looped ones
+for the retry_loops.py output)
 """
 import collections
 import json
@@ -18,6 +19,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import run  # noqa: E402
 
 LOOP = 6
+RETRY = "--retry" in sys.argv
 
 
 def tpl(q):
@@ -64,6 +66,9 @@ def evaluate(split):
         if not os.path.exists(f):
             continue
         text = json.load(open(f))["text"]
+        fr = f.replace(".labels.v2.json", ".labels.v2r.json")
+        if RETRY and looped(text) and os.path.exists(fr):
+            text = json.load(open(fr))["text"]
         k = run.count_labels(text)[tpl(d["question"])]
         loop = looped(text)
         t = tpl(d["question"])
@@ -81,7 +86,7 @@ def evaluate(split):
 
 
 if __name__ == "__main__":
-    for split in sys.argv[1:] or ["train"]:
+    for split in [x for x in sys.argv[1:] if not x.startswith("--")] or ["train"]:
         S = evaluate(split)
         rows = S.pop("_rows")
         out = os.path.join(run.CACHE, f"policy_{split}")

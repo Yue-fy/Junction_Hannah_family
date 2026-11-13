@@ -56,7 +56,10 @@ If something says `TBD`, the captain hasn't decided it yet. Ask your human; do n
   (vLLM, OpenAI-compatible) on port 8001
 - Install: `uv venv --python 3.12 $JUNCTION_VENV && uv pip install --python $JUNCTION_VENV/bin/python -e .`
   then `cd web && npm install`
-- Run locally: API `$JUNCTION_VENV/bin/python -m uvicorn stoa.api:app --port 8100` (planned), web `cd web && npm run dev`
+- Run locally: API `$JUNCTION_VENV/bin/python -m uvicorn stoa.api:app --port 8100` (endpoints: `/health`,
+  `POST /ask`, `/file`, `/files`, `/questions`, `/intent`), web `cd web && npm run dev` (planned)
+- Solvers (`python -m stoa.eval --list`): `pipeline` (team entry point: route + gated cascade), `dxf` (swiss),
+  `ifc` (IFC models), `raster` (cubicasa), `vlm_direct` (local VLM), `prior` / `dummy` (fallback)
 - Checks before every PR (lint / types / tests): `$JUNCTION_VENV/bin/python -m pytest -q` and
   `$JUNCTION_VENV/bin/python -m stoa.eval --solver dummy --split smoke --limit 20`
 - Dataset: outside git, at `$STOA_DATA` (full) / `$STOA_PREVIEW` (preview). Never commit it.

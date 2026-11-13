@@ -36,6 +36,11 @@ KIND_CLASSES: dict[str, tuple[str, ...]] = {
     "footing": ("IfcFooting",),
     "pile": ("IfcPile",),
     "opening": ("IfcOpeningElement",),
+    # MEP (IFC2X3 generic flow classes resolve to these through their type object, see index.effective_class)
+    "duct_fitting": ("IfcDuctFitting",), "duct": ("IfcDuctSegment",), "pipe_fitting": ("IfcPipeFitting",),
+    "pipe": ("IfcPipeSegment",), "air_terminal": ("IfcAirTerminal",), "outlet": ("IfcOutlet",),
+    "switch": ("IfcSwitchingDevice",), "valve": ("IfcValve",), "damper": ("IfcDamper",), "pump": ("IfcPump",),
+    "cable": ("IfcCableSegment", "IfcCableCarrierSegment"), "fire_terminal": ("IfcFireSuppressionTerminal",),
     "storey": ("IfcBuildingStorey",),
 }
 
@@ -45,6 +50,18 @@ _LEX: list[tuple[str, tuple[str, ...]]] = [
                   "aparato sanitario", "sanitair", "sanitet", "sanitar", "toilets and", "wc and")),
     ("light", ("light fixture", "lighting fixture", "luminaire", "leuchte", "luminaria", "lamp", "armatur",
                "verlichtingsarmatu", "valgusti", "oprawy oswietl", "corpuri de iluminat")),
+    ("duct_fitting", ("duct fitting", "luftkanalformteil", "formstuck", "kanaalhulpstuk")),
+    ("pipe_fitting", ("pipe fitting", "rohrformteil", "fitting")),
+    ("air_terminal", ("air terminal", "diffuser", "grille", "luftauslass", "luchtrooster")),
+    ("fire_terminal", ("sprinkler", "fire suppression")),
+    ("duct", ("duct", "luftkanal", "luchtkanaal")),
+    ("pipe", ("pipe", "rohr", "leiding", "tuberia")),
+    ("outlet", ("outlet", "receptacle", "socket", "steckdose", "wandcontactdoos")),
+    ("switch", ("switch", "schalter", "schakelaar")),
+    ("valve", ("valve", "ventil", "klep", "valvula")),
+    ("damper", ("damper", "klappe")),
+    ("pump", ("pump", "pumpe", "pomp")),
+    ("cable", ("cable", "kabel", "cable tray")),
     ("curtain_wall", ("curtain wall", "vorhangfassade", "muro cortina", "gardinvaeg", "vliesgevel")),
     ("stair_flight", ("stair flight", "treppenlauf", "tramo de escalera", "trappelob")),
     ("space", ("room", "space", "raum", "raeume", "rume", "local", "rum", "ruimte", "ruum", "pomieszcz",
@@ -114,6 +131,15 @@ _DIFF = ("difference", "minus", "larger than", "bigger than", "smaller than", "m
          "differenza", "piu di")
 _CONJ = re.compile(r"\b(and|und|en|y|e|og|ja|i|si|et|och|plus|or|oder|of|o|eller|sau|ou)\b|[+&,/]")
 _NET = ("net", "netto", "util", "neto", "nett")
+_EXTERNAL = re.compile(r"\b(external|exterior|outer|outside|facade|aussen\w*|ausseren|buiten\w*|exterior\w*|ydre|udvendig\w*|"
+                       r"valis\w*|zewnetrzn\w*|exterieur\w*|estern\w*|ulko\w*|yttre)\b")
+_INTERNAL = re.compile(r"\b(internal|interior|inner|inside|innen\w*|inneren|binnen\w*|interior\w*|indvendig\w*|indre|"
+                       r"sise\w*|wewnetrzn\w*|interieur\w*|intern\w*|sisa\w*|inre)\b")
+_LOADBEARING = re.compile(r"\b(load[- ]?bearing|structural|tragend\w*|dragend\w*|portant\w*|baerende|kandev\w*|nosn\w*|"
+                          r"kantav\w*|barande)\b")
+_ELEVATION = re.compile(r"\b(elevation|hohenkote|hoehenkote|hohe uber|peil|cota|kote|niveau|altitude|absolute height)\b")
+_HEIGHT = re.compile(r"\b(height|high|hohe|hoehe|hoch|hoogte|altura|hojde|korgus|wysokosc|inaltime|hauteur|altezza|"
+                     r"korkeus|hojd)\b")
 # "floor area" compounds: they name the measured quantity of a ROOM, not a floor slab ("vloer", "Boden", "dæk")
 _FLOOR_AREA = re.compile(r"(net(to)?[- ]?)?(floor ?area|floor ?space|vloer ?oppervlak\w*|grund ?flache|grundflaeche|"
                          r"boden ?flache|bodenflaeche|poranda ?pind|porandapind|gulvareal\w*|nettoareal\w*|"
@@ -144,6 +170,10 @@ class Intent:
     gross: bool = False
     asked_unit: str | None = None  # unit the question asks for (m2, ft2, m3, m, ft, ...)
     kinds: list[str] = field(default_factory=list)  # coordinated kinds ("doors and windows") -> summed
+    filters: dict[str, bool] = field(default_factory=dict)  # {"IsExternal": True, "LoadBearing": True}
+    attr: str | None = None  # storey attribute asked: "elevation" | "height"
+    group_by: str | None = None  # "type" | "storey": answer with a breakdown (text) besides the total
+    top_n: bool = False  # "which rooms are the largest" without names -> list the top rooms
     op: str | None = None  # None | sum | max | min | argmax | argmin | diff | more
     yes_no: bool = False  # "are there more X than Y?" -> "yes"/"no"
     notes: list[str] = field(default_factory=list)
@@ -263,6 +293,22 @@ def parse(question: str) -> Intent:
     it = Intent(metric=metric, kind=kind, names=names, side_area=side,
                 total=_has(t, _TOTAL) or (metric != "count" and len(names) <= 1),
                 net=not gross, gross=gross, asked_unit=asked_unit, kinds=kinds or ([kind] if kind else []))
+    if _EXTERNAL.search(t):
+        it.filters["IsExternal"] = True
+    elif _INTERNAL.search(t):
+        it.filters["IsExternal"] = False
+    if _LOADBEARING.search(t):
+        it.filters["LoadBearing"] = True
+    if kind == "storey" or (kind is None and names and (_ELEVATION.search(t) or _HEIGHT.search(t))):
+        if _ELEVATION.search(t):
+            it.metric, it.kind, it.attr = "length", "storey", "elevation"
+        elif _HEIGHT.search(t) and metric != "count":
+            it.metric, it.kind, it.attr = "length", "storey", "height"
+    if re.search(r"\b(types?|typen|tipos?|typer|tuubid|typy|tipuri)\b", t) and not names:
+        it.group_by = "type"
+    if re.search(r"\b(by|per|for each|each|on each|across( all)?)\b.{0,12}\b(level|floor|storey|story|geschoss|etage)s?\b"
+                 r"|\b(level|floor|storey)[- ]by[- ](level|floor|storey)\b|\bbreakdown\b.{0,20}\b(level|floor|storey)", t):
+        it.group_by = "storey"
     which = _has(t, _WHICH)
     comparative_which = which and re.search(r"\b(bigger|larger|greater|smaller|grosser|groesser|kleiner|groter|"
                                             r"kleiner|storre|mindre|mayor|menor)\b", t)
@@ -287,6 +333,8 @@ def parse(question: str) -> Intent:
             it.kind = hs[0]
     if it.op in ("argmax", "argmin"):
         it.metric = "area" if metric in ("text", "area") else metric
+        if not names and (kind in (None, "space")):
+            it.top_n, it.kind = True, "space"
     if _has(t, _MODEL) and not _has(t, ("floor plan", "grundriss", "plattegrond", "plantegning", "plaan")):
         it.scope = "model"
     elif metric == "area" and kind == "space" and len(names) >= 2 and not it.total:

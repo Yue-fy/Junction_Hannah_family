@@ -115,6 +115,13 @@ $JUNCTION_VENV/bin/python -m stoa.eval --list        # registered solvers + impo
   per-question predictions in `$JUNCTION_SHARED/artifacts/eval/<run-id>.jsonl` (gold, prediction,
   evidence, trace, error) for error analysis.
 - Set `AGENT_ID=<your id>` in the environment so the leaderboard line records who ran it.
+- `--judge local|nvidia`: grade text/other answers with an LLM judge (`stoa/eval/judge.py`), reported as
+  `text_judge` per bucket, never part of accuracy; the judge's cost is not charged to the solver.
+- Other tools: `python -m stoa.eval.analyze RUN [--baseline RUN]` (loss tables, examples, calibration),
+  `python -m stoa.eval.leaderboard [--split dev]` (latest full run per solver on the current split version),
+  `python -m stoa.eval.gates CHEAP_RUN CHALLENGER_RUN` (per-concept gate table from `--split train_gate` runs).
+  Extra splits: `train_gate` (960 train Qs for choosing gates/thresholds), `cc5k_heldout` (CC5K-pretrained
+  models only), `hard` (generality), or any split file path.
 
 ## HTTP API (W4 implements `stoa/api.py`, port 8100)
 

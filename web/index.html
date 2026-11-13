@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Blueprints Talk</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231d3557'/%3E%3Cpath d='M8 23V9h9a5 5 0 0 1 0 10h-5' stroke='%23ff6a13' stroke-width='3' fill='none'/%3E%3C/svg%3E" />
+  </head>
+  <body>
+    <div id="app">
+      <aside id="side">
+        <header class="brand">
+          <div class="logo">B</div>
+          <div>
+            <h1>Blueprints Talk</h1>
+            <p>Ask a drawing or a building model. Every answer shows where it came from.</p>
+          </div>
+          <div class="brand-right">
+            <span id="backend" class="badge" title="Which backend answered the last request">API …</span>
+            <button id="tourBtn" class="tour" title="Step through the demo questions">Demo tour ▸</button>
+          </div>
+        </header>
+
+        <section class="panel" id="picker">
+          <div class="row">
+            <select id="source" aria-label="Source">
+              <option value="">All sources</option>
+              <option value="ifc_models">IFC models + plans</option>
+              <option value="swiss_dwellings">Swiss dwellings (PDF/DXF)</option>
+              <option value="opening_design">US drawing sets</option>
+              <option value="cubicasa5k">CubiCasa plans (PNG)</option>
+              <option value="ifc_bench">IFC-Bench models</option>
+              <optgroup label="Historical scans (no questions yet)">
+                <option value="habs">HABS / HAER (US, measured drawings)</option>
+                <option value="finna">Finna (Finnish archives)</option>
+                <option value="europeana">Europeana</option>
+                <option value="wikimedia">Wikimedia Commons</option>
+              </optgroup>
+            </select>
+            <input id="search" type="search" placeholder="Filter files…" aria-label="Filter files" />
+          </div>
+          <ul id="files" class="files"></ul>
+        </section>
+
+        <section class="panel" id="ask">
+          <form id="askForm">
+            <textarea id="question" rows="3" placeholder="e.g. How many doors are shown on the floor plan?"></textarea>
+            <div id="chips" class="chips"></div>
+            <div class="row">
+              <select id="examples" aria-label="Example questions"><option value="">Example questions…</option></select>
+              <button id="askBtn" type="submit">Ask</button>
+            </div>
+          </form>
+        </section>
+
+        <section id="card" class="card empty">
+          <p class="hint">Pick a drawing, then ask a question. The answer card shows the value, how sure we are,
+            what it cost, the reasoning, and the evidence to click through.</p>
+        </section>
+      </aside>
+
+      <main id="main">
+        <div id="toolbar">
+          <div class="file-title"><span id="fileTitle">No file</span><small id="fileMeta"></small></div>
+          <div class="seg" id="modes" role="tablist">
+            <button data-mode="2d" role="tab">Drawing</button>
+            <button data-mode="3d" role="tab">3D model</button>
+            <button data-mode="split" role="tab">Side by side</button>
+          </div>
+          <select id="storey" aria-label="Storey" hidden></select>
+          <button id="fitBtn" class="ghost" title="Frame the evidence">Frame evidence</button>
+        </div>
+        <div id="tourNote" class="tour-note"></div>
+        <div id="views" data-mode="2d">
+          <div id="xbanner" class="xbanner" hidden></div>
+          <div id="pane2d" class="pane"><div id="v2d"></div><div class="pane-label">Drawing</div><div class="loading" id="load2d"></div></div>
+          <div id="pane3d" class="pane"><div id="v3d"></div><div class="pane-label">IFC model</div><div class="loading" id="load3d"></div>
+            <div id="pick" class="pick" hidden></div></div>
+        </div>
+        <div id="linked" class="linked"></div>
+        <footer id="credit" class="credit"></footer>
+      </main>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
