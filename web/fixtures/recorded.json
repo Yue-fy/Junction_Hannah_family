@@ -5,7 +5,7 @@
   "answer": {
    "value": 63.841,
    "unit": "m2",
-   "confidence": 0.97,
+   "confidence": 0.988,
    "evidence": [
     {
      "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
@@ -18,7 +18,7 @@
      ],
      "bbox_space": "pdf_pt",
      "ifc_guid": "2yu9t5gFecDw4PK0F5sh2s",
-     "note": "KORIDOR 63.84 m² | label 'KORIDOR 119'"
+     "note": "KORIDOR 63.84 m² | label 'KORIDOR 119'; cross-check: answer 63.84 m² vs IFC geometry 63.84 m² ✓; room polygon on the plan (1:100, scale fitted on all rooms) 63.84 m² ✓"
     },
     {
      "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
@@ -31,10 +31,11 @@
    ],
    "trace": [
     "intent: area room [room] (storey=1.korrus, room=KORIDOR (119)) (lang en)",
-    "no train gate for this kind of question: general path by file type",
-    "ifc: 63.841 m2 (conf 0.97)",
+    "gate (train n=40): prior 2%, ifc 100%, vlm_direct 2%; skip vlm_direct",
+    "ifc: 63.841 m2 (conf 0.98, train hit rate)",
+    "cross-check: answer 63.84 m² vs IFC geometry 63.84 m² ✓; room polygon on the plan (1:100, scale fitted on all rooms) 63.84 m² ✓",
     "[ifc] asked on bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf; answering from its source model bsc-esplanades_1807-ep-ar-v18.ifc",
-    "[ifc] model bsc-esplanades_1807-ep-ar-v18.ifc: IFC2X3, 7 storeys, 2249 elements (index 4.0s, cached)",
+    "[ifc] model bsc-esplanades_1807-ep-ar-v18.ifc: IFC2X3, 7 storeys, 2249 elements (index 7.3s, cached)",
     "[ifc] parsed: metric=area kind=space scope=room names=['KORIDOR (119)', '1.korrus']",
     "[ifc] storey '1.korrus' -> '1.korrus' (exact, 100) guid 1oZ0wPs_PE8ANCPg3bIs4j",
     "[ifc] room 'KORIDOR (119)' -> IfcSpace 'KORIDOR (119)' (exact, 100) guid 2yu9t5gFecDw4PK0F5sh2s",
@@ -53,7 +54,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 0.0204
+    "wall_seconds": 0.0313
    },
    "intent": {
     "task": "area",
@@ -68,7 +69,7 @@
     "key": "area:room:room"
    }
   },
-  "recorded_at": "2026-11-14 00:24",
+  "recorded_at": "2026-11-14 00:40",
   "api": "http://127.0.0.1:8101"
  },
  {
@@ -77,7 +78,7 @@
   "answer": {
    "value": 46,
    "unit": "count",
-   "confidence": 0.97,
+   "confidence": 0.987,
    "evidence": [
     {
      "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
@@ -90,7 +91,7 @@
      ],
      "bbox_space": "pdf_pt",
      "ifc_guid": "3Z0LniWg2KrPAx$bJQIbx5",
-     "note": "IfcDoor ARUKS - 012"
+     "note": "IfcDoor ARUKS - 012; cross-check: answer 46 vs IFC model: 46 IfcDoor on storey '1.korrus' ✓; plan drawing: 46 symbols ✓"
     },
     {
      "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
@@ -1048,10 +1049,11 @@
    ],
    "trace": [
     "intent: count door [storey] (storey=1.korrus) (lang en)",
-    "no train gate for this kind of question: general path by file type",
-    "ifc: 46 count (conf 0.97)",
+    "gate (train n=37): prior 16%, ifc 100%, vlm_direct 0%; skip vlm_direct",
+    "ifc: 46 count (conf 0.97, train hit rate)",
+    "cross-check: answer 46 vs IFC model: 46 IfcDoor on storey '1.korrus' ✓; plan drawing: 46 symbols ✓",
     "[ifc] asked on bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf; answering from its source model bsc-esplanades_1807-ep-ar-v18.ifc",
-    "[ifc] model bsc-esplanades_1807-ep-ar-v18.ifc: IFC2X3, 7 storeys, 2249 elements (index 4.0s, cached)",
+    "[ifc] model bsc-esplanades_1807-ep-ar-v18.ifc: IFC2X3, 7 storeys, 2249 elements (index 7.3s, cached)",
     "[ifc] parsed: metric=count kind=door scope=storey names=['1.korrus']",
     "[ifc] storey '1.korrus' -> '1.korrus' (exact, 100) guid 1oZ0wPs_PE8ANCPg3bIs4j",
     "[ifc] 46 elements of IfcDoor in storey '1.korrus'",
@@ -1071,7 +1073,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 0.943
+    "wall_seconds": 0.0063
    },
    "intent": {
     "task": "count",
@@ -1085,7 +1087,7 @@
     "key": "count:door:storey"
    }
   },
-  "recorded_at": "2026-11-14 00:24",
+  "recorded_at": "2026-11-14 00:40",
   "api": "http://127.0.0.1:8101"
  },
  {
@@ -1094,7 +1096,7 @@
   "answer": {
    "value": 211,
    "unit": "count",
-   "confidence": 0.97,
+   "confidence": 0.972,
    "evidence": [
     {
      "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
@@ -1107,7 +1109,7 @@
      ],
      "bbox_space": "pdf_pt",
      "ifc_guid": "3Z0LniWg2KrPAx$bJQIbx5",
-     "note": "IfcDoor ARUKS - 012"
+     "note": "IfcDoor ARUKS - 012; cross-check: answer 211 vs IFC model total 211 IfcDoor ✓"
     },
     {
      "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
@@ -5530,10 +5532,11 @@
    ],
    "trace": [
     "intent: count door [model] (model=Maleva tänav 18 korterelamu (Esplanades example model)) (lang en)",
-    "no train gate for this kind of question: general path by file type",
-    "ifc: 211 count (conf 0.97)",
+    "gate (train n=16): prior 0%, ifc 100%, vlm_direct 0%; skip vlm_direct",
+    "ifc: 211 count (conf 0.94, train hit rate)",
+    "cross-check: answer 211 vs IFC model total 211 IfcDoor ✓",
     "[ifc] asked on bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf; answering from its source model bsc-esplanades_1807-ep-ar-v18.ifc",
-    "[ifc] model bsc-esplanades_1807-ep-ar-v18.ifc: IFC2X3, 7 storeys, 2249 elements (index 4.0s, cached)",
+    "[ifc] model bsc-esplanades_1807-ep-ar-v18.ifc: IFC2X3, 7 storeys, 2249 elements (index 7.3s, cached)",
     "[ifc] parsed: metric=count kind=door scope=model names=['Maleva tänav 18 korterelamu (Esplanades example model)']",
     "[ifc] 'Maleva tänav 18 korterelamu (Esplanades example model)' taken as the model's name (not in IfcProject/IfcBuilding names; the file is the model)",
     "[ifc] 211 elements of IfcDoor in whole model",
@@ -5550,7 +5553,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 0.1073
+    "wall_seconds": 0.0084
    },
    "intent": {
     "task": "count",
@@ -5564,7 +5567,7 @@
     "key": "count:door:model"
    }
   },
-  "recorded_at": "2026-11-14 00:24",
+  "recorded_at": "2026-11-14 00:40",
   "api": "http://127.0.0.1:8101"
  },
  {
@@ -5573,7 +5576,7 @@
   "answer": {
    "value": 36,
    "unit": "count",
-   "confidence": 0.99,
+   "confidence": 0.988,
    "evidence": [
     {
      "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
@@ -5586,7 +5589,7 @@
      ],
      "bbox_space": "pdf_pt",
      "ifc_guid": null,
-     "note": "door 1"
+     "note": "door 1; cross-check: answer 36 vs DXF layer count 36 ✓"
     },
     {
      "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
@@ -6046,8 +6049,9 @@
    ],
    "trace": [
     "intent: count door [drawing] (lang en)",
-    "no train gate for this kind of question: general path by file type",
-    "dxf: 36 count (conf 0.99)",
+    "gate (train n=40): prior 5%, dxf 100%, raster 0%, vlm_direct 5%; skip raster, vlm_direct",
+    "dxf: 36 count (conf 0.98, train hit rate)",
+    "cross-check: answer 36 vs DXF layer count 36 ✓",
     "[dxf] parsed: count/sum: count(door) [count]",
     "[dxf] doors = 36 (door leaves (5-vertex polylines) on DXF layer DOOR)",
     "[dxf] DXF->PDF fit on 33 text anchors, rms 0.05 pt, scale 1:200"
@@ -6065,7 +6069,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 0.0966
+    "wall_seconds": 0.018
    },
    "intent": {
     "task": "count",
@@ -6077,7 +6081,7 @@
     "key": "count:door:drawing"
    }
   },
-  "recorded_at": "2026-11-14 00:24",
+  "recorded_at": "2026-11-14 00:40",
   "api": "http://127.0.0.1:8101"
  },
  {
@@ -6086,7 +6090,7 @@
   "answer": {
    "value": 12,
    "unit": "count",
-   "confidence": 0.98,
+   "confidence": 0.976,
    "evidence": [
     {
      "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
@@ -6247,10 +6251,11 @@
    ],
    "trace": [
     "intent: count room [label] (label=Zimmer) (lang en)",
-    "no train gate for this kind of question: general path by file type",
-    "dxf: 12 count (conf 0.98)",
+    "gate (train n=40): prior 25%, dxf 100%, raster 0%, vlm_direct 80%; skip raster",
+    "dxf: 12 count (conf 0.98, train hit rate)",
     "[dxf] parsed: count/sum: count_label(Zimmer) [count]",
     "[dxf] rooms labelled ['Zimmer'] = 12 ROOM_TEXT entries",
+    "[dxf] cross-check: PDF text layer shows 12 label(s) ['Zimmer'] ✓ (DXF 12)",
     "[dxf] DXF->PDF fit on 33 text anchors, rms 0.05 pt, scale 1:200"
    ],
    "solver": "pipeline/dxf",
@@ -6264,7 +6269,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 0.0192
+    "wall_seconds": 0.0172
    },
    "intent": {
     "task": "count",
@@ -6278,7 +6283,894 @@
     "key": "count:room:label"
    }
   },
-  "recorded_at": "2026-11-14 00:24",
+  "recorded_at": "2026-11-14 00:40",
+  "api": "http://127.0.0.1:8101"
+ },
+ {
+  "path": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+  "question": "Wie viele Türen und Fenster sind insgesamt auf diesem Grundriss eingezeichnet?",
+  "answer": {
+   "value": 64,
+   "unit": "count",
+   "confidence": 0.976,
+   "evidence": [
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      553.8,
+      109.5,
+      569.3,
+      126.5
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door: door 1; cross-check: answer 36 vs DXF layer count 36 ✓"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      569.5,
+      110.2,
+      584.2,
+      126.5
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door: door 2"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      534.0,
+      127.0,
+      551.7,
+      143.0
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door: door 3"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      582.5,
+      132.7,
+      596.3,
+      145.0
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door: door 4"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      564.8,
+      143.2,
+      580.0,
+      161.2
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door: door 5"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      585.5,
+      162.5,
+      604.0,
+      179.3
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door: door 6"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      585.5,
+      162.5,
+      604.0,
+      179.3
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door: door 7"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      572.0,
+      166.1,
+      586.0,
+      183.2
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door: door 8"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      572.0,
+      166.1,
+      586.0,
+      183.2
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door: door 9"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      556.7,
+      178.1,
+      571.2,
+      195.8
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door: door 10"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      556.7,
+      178.1,
+      571.2,
+      195.8
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door: door 11"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      586.4,
+      183.2,
+      600.0,
+      195.0
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door: door 12"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      572.7,
+      208.9,
+      586.3,
+      224.3
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door: door 13"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      572.7,
+      208.9,
+      586.3,
+      224.3
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door: door 14"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      639.5,
+      312.2,
+      654.5,
+      330.4
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door: door 15"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      655.4,
+      328.8,
+      671.0,
+      342.6
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door: door 16"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      623.6,
+      328.9,
+      641.4,
+      343.9
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door: door 17"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      655.4,
+      344.6,
+      672.1,
+      359.6
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door: door 18"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      655.5,
+      399.7,
+      672.8,
+      415.2
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door: door 19"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      621.5,
+      409.9,
+      636.5,
+      426.7
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door: door 20"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      601.2,
+      425.8,
+      615.7,
+      438.4
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door: door 21"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      643.9,
+      431.1,
+      660.5,
+      450.9
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door: door 22"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      643.9,
+      431.1,
+      660.5,
+      450.9
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door: door 23"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      665.7,
+      433.6,
+      681.0,
+      447.4
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door: door 24"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      604.4,
+      456.1,
+      623.0,
+      472.9
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door: door 25"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      621.7,
+      462.8,
+      641.8,
+      480.2
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door: door 26"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      621.7,
+      462.8,
+      641.8,
+      480.2
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door: door 27"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      622.0,
+      479.7,
+      637.4,
+      496.7
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door: door 28"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      644.2,
+      483.1,
+      660.3,
+      502.2
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door: door 29"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      644.2,
+      483.1,
+      660.3,
+      502.2
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door: door 30"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      665.9,
+      486.5,
+      680.5,
+      499.6
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door: door 31"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      656.2,
+      518.8,
+      673.2,
+      534.0
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door: door 32"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      616.2,
+      536.5,
+      631.4,
+      553.7
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door: door 33"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      656.8,
+      567.4,
+      674.6,
+      583.2
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door: door 34"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      625.3,
+      577.0,
+      643.1,
+      591.9
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door: door 35"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      641.6,
+      591.4,
+      657.4,
+      609.0
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door: door 36"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      653.2,
+      643.3,
+      677.9,
+      650.4
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "window: window 1 (3 lines); cross-check: answer 28 vs DXF layer count 28 ✓"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      603.4,
+      643.2,
+      627.2,
+      650.4
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "window: window 2 (3 lines)"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      566.7,
+      598.5,
+      573.8,
+      633.0
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "window: window 3 (3 lines)"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      566.4,
+      550.8,
+      573.5,
+      574.3
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "window: window 4 (3 lines)"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      706.7,
+      545.0,
+      714.3,
+      568.6
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "window: window 5 (3 lines)"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      706.6,
+      518.0,
+      714.2,
+      542.2
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "window: window 6 (3 lines)"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      566.2,
+      503.7,
+      573.3,
+      527.6
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "window: window 7 (3 lines)"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      706.4,
+      487.1,
+      713.9,
+      501.8
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "window: window 8 (3 lines)"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      706.4,
+      487.1,
+      713.9,
+      501.8
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "window: window 9 (3 lines)"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      566.0,
+      458.2,
+      573.1,
+      481.2
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "window: window 10 (3 lines)"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      706.2,
+      457.1,
+      713.8,
+      477.7
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "window: window 11 (3 lines)"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      565.9,
+      426.0,
+      572.9,
+      440.6
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "window: window 12 (3 lines)"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      705.8,
+      391.2,
+      713.4,
+      415.2
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "window: window 13 (3 lines)"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      565.7,
+      384.9,
+      572.7,
+      408.1
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "window: window 14 (3 lines)"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      705.5,
+      343.9,
+      713.1,
+      367.5
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "window: window 15 (3 lines)"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      565.5,
+      339.2,
+      572.5,
+      361.9
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "window: window 16 (3 lines)"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      705.2,
+      289.0,
+      712.8,
+      319.2
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "window: window 17 (3 lines)"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      574.5,
+      288.9,
+      581.8,
+      311.9
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "window: window 18 (3 lines)"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      640.6,
+      272.7,
+      655.3,
+      279.3
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "window: window 19 (3 lines)"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      623.8,
+      239.6,
+      631.3,
+      263.5
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "window: window 20 (3 lines)"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      623.7,
+      212.5,
+      631.3,
+      236.7
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "window: window 21 (3 lines)"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      623.6,
+      182.1,
+      631.1,
+      196.8
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "window: window 22 (3 lines)"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      623.6,
+      182.1,
+      631.1,
+      196.8
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "window: window 23 (3 lines)"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      623.6,
+      150.8,
+      631.1,
+      172.8
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "window: window 24 (3 lines)"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      475.9,
+      137.1,
+      483.0,
+      167.6
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "window: window 25 (3 lines)"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      623.5,
+      126.6,
+      631.0,
+      142.0
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "window: window 26 (3 lines)"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      546.2,
+      71.6,
+      569.7,
+      78.8
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "window: window 27 (3 lines)"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      589.7,
+      71.5,
+      613.9,
+      78.6
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "window: window 28 (3 lines)"
+    }
+   ],
+   "trace": [
+    "compound question → sum over 2 parts: door, window",
+    "part 'door': \"How many doors (interior doors and entrance doors together) are drawn on this floor plan?\" → 36 count (conf 0.99, pipeline/dxf)",
+    "part 'window': \"How many windows are drawn on this floor plan?\" → 28 count (conf 0.99, pipeline/dxf)",
+    "combine: door 36 + window 28 = 64"
+   ],
+   "solver": "pipeline/compose",
+   "assumptions": [
+    "door: counted door leaves (5-vertex polylines) on DXF layer DOOR",
+    "window: counted windows on DXF layer WINDOW (3 polylines per window)"
+   ],
+   "missing": [],
+   "cost": {
+    "llm_tokens_in": 0,
+    "llm_tokens_out": 0,
+    "gpu_seconds": 0.0,
+    "api_calls": 0,
+    "api_tokens_in": 0,
+    "api_tokens_out": 0,
+    "llm_calls": 0,
+    "wall_seconds": 1.2624
+   },
+   "intent": {
+    "task": "count",
+    "target": "window",
+    "scope": "drawing",
+    "unit": "count",
+    "filters": {},
+    "lang": "de",
+    "key": "count:window:drawing"
+   },
+   "plan": {
+    "op": "sum",
+    "parts": [
+     "door",
+     "window"
+    ],
+    "sub_questions": [
+     "How many doors (interior doors and entrance doors together) are drawn on this floor plan?",
+     "How many windows are drawn on this floor plan?"
+    ]
+   }
+  },
+  "recorded_at": "2026-11-14 00:40",
   "api": "http://127.0.0.1:8101"
  },
  {
@@ -6294,9 +7186,9 @@
     "no train gate for this kind of question: general path by file type",
     "vlm_direct: site plan  (conf 0.20)",
     "[vlm_direct] kind=text unit=None",
-    "[vlm_direct] local:qwen3-vl-8b 3.8s tok 3208->3",
+    "[vlm_direct] local:qwen3-vl-8b 0.8s tok 3208->3",
     "[vlm_direct] raw: site plan",
-    "[vlm_direct] cost: calls=1 tok_in=3208 tok_out=3 gpu_s=3.79 api_calls=0"
+    "[vlm_direct] cost: calls=1 tok_in=3208 tok_out=3 gpu_s=0.13 api_calls=0"
    ],
    "solver": "pipeline/vlm_direct",
    "assumptions": [],
@@ -6306,12 +7198,12 @@
    "cost": {
     "llm_tokens_in": 3208,
     "llm_tokens_out": 3,
-    "gpu_seconds": 3.786,
+    "gpu_seconds": 0.1313,
     "api_calls": 0,
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 1,
-    "wall_seconds": 4.0034
+    "wall_seconds": 1.2555
    },
    "intent": {
     "task": "text",
@@ -6323,7 +7215,7 @@
     "key": "text:unknown:drawing"
    }
   },
-  "recorded_at": "2026-11-14 00:24",
+  "recorded_at": "2026-11-14 00:40",
   "api": "http://127.0.0.1:8101"
  }
 ]

@@ -188,6 +188,13 @@ class IfcSolver(BaseSolver):
             ans = self._answer(path, model, idx, it, trace, ctx)
         except Exception as ex:  # noqa: BLE001 - report as a refusal with the reason, never crash the eval
             ans = Answer.abstain(self.name, f"error: {type(ex).__name__}: {ex}", trace=trace)
+        for note in it.notes:
+            if note.startswith("exclusion"):
+                ans.trace.append(note)
+                if note.startswith("exclusion NOT") and ans.value is not None:
+                    ans.confidence = min(ans.confidence, 0.3)
+                    ans.missing.append(f"the question excludes something the rules can't apply ({note[23:]}); "
+                                       "the value ignores the exclusion")
         if ans.value is None and str(self.options.get("llm", "1")) != "0" and not any(
                 "error:" in t for t in ans.trace):
             ans = self._llm_fallback(model, idx, question, it, ans)
@@ -282,6 +289,10 @@ class IfcSolver(BaseSolver):
             else:
                 return Answer.abstain(self.name, "free-text question: no deterministic rule", trace=trace,
                                       missing=["a quantity question (count/area/volume/length)"])
+        if ctx.get("compose", True):
+            comp = self._compose(path, model, idx, it, trace, ctx)
+            if comp is not None:
+                return comp
         storey, rooms, conf, groups = self._roles(path, idx, it, trace, assumptions)
         sname = storey.name if storey else None
         ctx["storey"] = storey
@@ -515,6 +526,144 @@ class IfcSolver(BaseSolver):
         return self._final(tot, unit, it, conf * 0.95, ev, trace, assumptions, missing)
 
     # ------------------------------------------------------------------------------------------------
+    def _storey_names(self, idx: IfcIndex, it: Intent) -> tuple[list[tuple[str, Storey]], list[str]]:
+        """Split the quoted names into storeys (exact/normalised match that no room matches better) and others."""
+        st, other = [], []
+        for n in it.names:
+            ms = match_storey(idx, n)
+            sp = match_space(idx, n)
+            if ms is not None and ms.score >= 90 and (not sp or ms.score >= sp[0].score):
+                st.append((n, ms.obj))
+            else:
+                other.append(n)
+        return st, other
+
+    def _compose(self, path: str, model: str, idx: IfcIndex, it: Intent, trace: list[str], ctx: dict) -> Answer | None:
+        """Operators over atomic answers, for question kinds the dataset templates never use (F's hard2):
+        several storeys (sum / which has more / difference), average per element, share of a total, and
+        threshold counts. Each part is answered by `_answer` itself, so it keeps its own evidence and rules;
+        the arithmetic happens here, in code. Returns None when no operator applies."""
+        import dataclasses
+
+        storeys, others = self._storey_names(idx, it)
+        multi = len(storeys) >= 2 and not others and (it.op in ("sum", "argmax", "argmin", "diff", "max", "min")
+                                                     or it.which)
+        if not (multi or it.mod):
+            return None
+        if it.mod == "threshold" and it.metric not in ("area", "volume", "length"):
+            return None
+
+        def sub(names: list[str], **kw) -> tuple[Answer, list[str]]:
+            sit = dataclasses.replace(it, names=list(names), op=None, mod=None, threshold=None, which=False,
+                                      yes_no=False, notes=[], filters=dict(it.filters), kinds=list(it.kinds),
+                                      group_by=None, top_n=False, **kw)
+            st: list[str] = []
+            a = self._answer(path, model, idx, sit, st, {"question": ctx.get("question", ""), "compose": False})
+            return a, st
+
+        def done(val, unit, parts: list[Answer], steps: list[str], how: str, conf_k: float = 0.95) -> Answer:
+            conf = conf_k
+            ev, asm, miss = [], [how], []
+            for a in parts:
+                conf *= a.confidence if a.value is not None else 0.0
+                ev += a.evidence
+                asm += [x for x in a.assumptions if x not in asm]
+                miss += [x for x in a.missing if x not in miss]
+            trace.extend(steps)
+            if isinstance(val, str):
+                return Answer(value=val, unit=None, confidence=max(0.0, min(1.0, conf)), evidence=ev[:MAX_EVIDENCE],
+                              trace=trace, solver=self.name, assumptions=asm, missing=miss)
+            if isinstance(val, float):
+                val = round(val, 3)
+            return Answer(value=val, unit=unit, confidence=max(0.0, min(1.0, conf)), evidence=ev[:MAX_EVIDENCE],
+                          trace=trace, solver=self.name, assumptions=asm, missing=miss)
+
+        if multi and not it.mod:
+            parts = [(n, *sub([n])) for n, _ in storeys]
+            if any(a.value is None or isinstance(a.value, str) for _, a, _ in parts):
+                return None
+            steps = [f"{n}: {a.value} {a.unit or ''} ({'; '.join(t[-1:])})" for n, a, t in parts]
+            vals = [(n, float(a.value)) for n, a, _ in parts]
+            unit = parts[0][1].unit
+            if it.op in ("argmax", "argmin", "max", "min") and it.which or it.op in ("argmax", "argmin"):
+                pick = (max if it.op in ("argmax", "max") else min)(vals, key=lambda x: x[1])
+                tie = sum(1 for _, v in vals if v == pick[1]) > 1
+                return done(pick[0] if not tie else "equal (" + ", ".join(f"{n} {v:g}" for n, v in vals) + ")",
+                            None, [a for _, a, _ in parts], steps + [f"{it.op} over storeys -> {pick[0]}"],
+                            f"compared {it.metric} per storey", 0.95 if not tie else 0.6)
+            if it.op == "diff" and len(vals) == 2:
+                return done(abs(vals[0][1] - vals[1][1]), unit, [a for _, a, _ in parts],
+                            steps + [f"|{vals[0][1]:g} - {vals[1][1]:g}|"], "difference between two storeys")
+            if it.op in ("max", "min"):
+                v = (max if it.op == "max" else min)(v for _, v in vals)
+                return done(v, unit, [a for _, a, _ in parts], steps + [f"{it.op} = {v:g}"], f"{it.op} over storeys")
+            tot = sum(v for _, v in vals)
+            return done(int(tot) if unit == "count" else tot, unit, [a for _, a, _ in parts],
+                        steps + ["sum = " + " + ".join(f"{v:g}" for _, v in vals)], "sum over the named storeys")
+
+        if it.mod == "avg":
+            tot, t1 = sub(it.names)
+            cnt, t2 = sub(it.names, metric="count")
+            if tot.value is None or cnt.value in (None, 0) or isinstance(tot.value, str):
+                return None
+            return done(float(tot.value) / float(cnt.value), tot.unit, [tot, cnt],
+                        [f"total {tot.value} {tot.unit} ({t1[-1] if t1 else ''})", f"count {cnt.value}",
+                         f"average = {tot.value} / {cnt.value}"], f"average = total {it.metric} / number of {it.kind} elements")
+
+        if it.mod == "share":
+            if others and storeys:  # "share of storey S's area that room R takes"
+                part, t1 = sub(others + [n for n, _ in storeys])
+                whole, t2 = sub([n for n, _ in storeys], total=True, kind="space" if it.metric == "area" else it.kind)
+                wdesc = f"all {it.kind or 'rooms'} on '{storeys[0][0]}'"
+            elif storeys:  # "share of the model's doors on storey S"
+                part, t1 = sub([n for n, _ in storeys])
+                whole, t2 = sub([], scope="model")
+                wdesc = f"the whole model"
+            else:
+                return None
+            if part.value is None or whole.value in (None, 0) or isinstance(part.value, str) or isinstance(whole.value, str):
+                return None
+            pct = float(part.value) / float(whole.value) * 100.0
+            return done(pct, "%", [part, whole], [f"part {part.value} {part.unit}", f"whole ({wdesc}) {whole.value} {whole.unit}",
+                                                  f"share = {part.value} / {whole.value} x 100 = {pct:.2f}%"],
+                        f"share = part / {wdesc} x 100")
+
+        if it.mod == "threshold":
+            op, thr = it.threshold
+            if it.asked_unit == "ft2":
+                thr /= FT2_PER_M2
+            elif it.asked_unit == "ft":
+                thr /= FT_PER_M
+            cmp = {"gt": lambda v: v > thr, "ge": lambda v: v >= thr, "lt": lambda v: v < thr, "le": lambda v: v <= thr}[op]
+            sn = [n for n, _ in storeys]
+            if others:
+                parts = [(n, *sub([n] + sn)) for n in others]
+            else:  # every room of the storey
+                if not storeys or it.kind != "space":
+                    return None
+                els = idx.in_storey(storeys[0][1].guid, "IfcSpace")
+                parts = []
+                for e in els:
+                    v, _ = self._floor_area(e, it, [])
+                    parts.append((e.long_name or e.name, Answer(value=v, unit="m2", confidence=0.97,
+                                                                evidence=[self._ev(model, e, f"{e.long_name or e.name} {v or 0:.2f} m²")]), []))
+            if any(a.value is None or isinstance(a.value, str) for _, a, _ in parts):
+                return None
+            unit_si = {"area": "m2", "volume": "m3", "length": "m"}[it.metric]
+            # sub-answers came back in the asked unit; compare in SI
+            def si(a: Answer) -> float:
+                v = float(a.value)
+                return v / FT2_PER_M2 if a.unit == "ft2" else v / FT_PER_M if a.unit == "ft" else v
+            hit = [(n, si(a)) for n, a, _ in parts if cmp(si(a))]
+            sym = {"gt": ">", "ge": ">=", "lt": "<", "le": "<="}[op]
+            steps = [f"{n}: {si(a):.2f} {unit_si} {'✓' if cmp(si(a)) else '-'}" for n, a, _ in parts]
+            ans = done(len(hit), "count", [a for _, a, _ in parts], steps + [f"{len(hit)} of {len(parts)} have {sym} {thr:g} {unit_si}"],
+                       f"count of the {len(parts)} {'named ' if others else ''}rooms with {it.metric} {sym} {thr:g} {unit_si}")
+            ans.evidence = [ev for (n, a, _) in parts if cmp(si(a)) for ev in a.evidence] or ans.evidence
+            return ans
+        return None
+
+    # ------------------------------------------------------------------------------------------------
     def _llm_fallback(self, model: str, idx: IfcIndex, question: str, it: Intent, refusal: Answer) -> Answer:
         """Free-text questions the rules can't answer: local LLM over a deterministic fact card of the model."""
         from stoa.solvers.ifc.factcard import answer_free_text
@@ -609,8 +758,28 @@ class IfcSolver(BaseSolver):
                 note = ev.note + (f" | label '{itm.label}'" if itm.label else "")
                 ev2d.append(Evidence(file=plan, page=0, bbox=[round(v, 2) for v in itm.bbox], bbox_space="pdf_pt",
                                      ifc_guid=g, note=note[:160]))
+        n_proj = 0
+        if not model_scope:  # same-storey elements the cut plan doesn't draw (slabs, beams): projected box
+            from stoa.solvers.ifc.index import load_index
+            from stoa.solvers.ifc.plan2d import project_box
+
+            idx = load_index(model)
+            for ev in ans.evidence:
+                g = ev.ifc_guid or ""
+                if not g or g in seen or g not in idx.elements:
+                    continue
+                b = project_box(model, plans[0], idx.elements[g])
+                if b is None:
+                    continue
+                seen.add(g)
+                n_proj += 1
+                ev2d.append(Evidence(file=plans[0], page=0, bbox=[round(v, 2) for v in b], bbox_space="pdf_pt",
+                                     ifc_guid=g, note=(ev.note + " | projected: not drawn on this plan")[:160]))
         n3d = len([e for e in ans.evidence if e.ifc_guid])
         files = sorted({e.file for e in ev2d})
+        if n_proj:
+            ans.trace.append(f"{n_proj} elements not drawn on the cut plan: boxed by projecting the model footprint "
+                             "with a model->plan transform fitted on the drawn elements")
         ans.trace.append(f"2D link: {len(ev2d)}/{n3d} evidence elements drawn on "
                          + (", ".join(Path(f).name for f in files) if files else Path(plans[0]).name)
                          + ("" if asked_plan or model_scope else " (plan of the same storey)"))

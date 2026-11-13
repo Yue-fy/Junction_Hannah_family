@@ -45,6 +45,8 @@ def canonical(source: str, it: Intent) -> str | None:
     f = it.filters
     if it.target == "unknown":
         return None
+    if f.get("apartment") and (it.task == "count" or f.get("label")):
+        return None  # apartment-scoped counts / labels: no template keeps the scope; the solver gets the question as is
     if source == "swiss_dwellings":
         if it.key == "area:room:room" and f.get("room_no"):
             lab = f.get("label") or f.get("room")

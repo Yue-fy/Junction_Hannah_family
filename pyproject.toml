@@ -23,6 +23,10 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest"]
+# raster_cc5k (D8: pretrained CubiCasa5K model, CPU). Install the CPU wheel, not PyPI's CUDA build (~3 GB):
+#   uv pip install --python $JUNCTION_VENV/bin/python torch --index-url https://download.pytorch.org/whl/cpu
+# (dry run 01:10: torch 2.15.0+cpu + filelock, fsspec, jinja2, markupsafe, mpmath, setuptools, sympy; numpy unchanged)
+cc5k = ["torch>=2.4"]
 
 [build-system]
 requires = ["setuptools>=68"]

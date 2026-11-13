@@ -41,7 +41,8 @@ def plan(source: str, key: str, candidates: list[str], margin: float = 0.03, min
 
     Returns (solvers to try, gate entry or None). With a gate: solvers measured on this key are kept only if
     acc > prior + margin, sorted by accuracy (cheaper first on ties within 1 point); solvers the gate has not
-    measured (e.g. landed after calibration) keep their routing order and go first if deterministic.
+    measured (e.g. landed after calibration) keep their routing order and go first, after measured solvers that
+    are >= 90% right on train for this key.
     """
     e = entry(source, key)
     if not e or e.get("n", 0) < min_n:
@@ -52,4 +53,7 @@ def plan(source: str, key: str, candidates: list[str], margin: float = 0.03, min
     unmeasured = [c for c in candidates if c not in acc]
     good = [c for c in measured if acc[c] > p + margin]
     good.sort(key=lambda c: (-round(acc[c] * 100), candidates.index(c)))
-    return unmeasured + good, e
+    # a solver that landed after calibration goes first, unless a measured one is already near-perfect on this key
+    # (pdf_vector must not jump ahead of dxf's 100% on swiss; schedule must go ahead of vlm_direct's 19%)
+    sure = [c for c in good if acc[c] >= 0.9]
+    return sure + unmeasured + [c for c in good if c not in sure], e

@@ -86,3 +86,35 @@ def test_select_grep():
     qs = [Question(qid=str(i), path="data/cubicasa5k/a.png", question=q, answer=1, unit=None, type="count")
           for i, q in enumerate(("How many windows are shown?", "Kuinka monta ikkunaa?", "How many doors?"))]
     assert len(select(qs, grep="window|ikkun")) == 2
+
+
+def test_resbim_plan_links_to_model():
+    from stoa.data import data_root, drawing_group, ifc_model_for, siblings
+
+    if not (data_root() / "data/ifc_models/resbim-0_model.ifc").exists():
+        return
+    assert ifc_model_for("data/ifc_models/resbim-0_plan.png") == "data/ifc_models/resbim-0_model.ifc"
+    assert siblings("data/ifc_models/resbim-0_plan.png")[".ifc"] == "data/ifc_models/resbim-0_model.ifc"
+    assert drawing_group("data/ifc_models/resbim-0_plan.png") == drawing_group("data/ifc_models/resbim-0_model.ifc")
+
+
+def test_ratio_type_scored_and_threshold():
+    import random
+
+    from stoa.eval.hard2 import _threshold_any
+    from stoa.eval.scoring import score
+
+    assert score("ratio", 8.4, "%", "8.5", "%") is True and score("ratio", 1.07, None, 1.2, None) is False
+    for seed in range(20):
+        t = _threshold_any([10.0, 20.0], random.Random(seed))
+        assert t is None or all(abs(v - t) > 0.05 * max(v, t) for v in (10.0, 20.0))
+
+
+def test_judge_numeric_precheck():
+    from stoa.eval.judge import numeric_verdict as n
+
+    assert n("The total length of exterior walls is 267.45 m.", "284.636")[0] is False
+    assert n("The concrete volume is 273.91 cu m.", "273.9 m3")[0] is True
+    assert n("Created with Revit 2020.", "Revit 2019")[0] is False  # integers without unit: exact
+    assert n("Total: 8 doors", "There are 8 doors")[0] is True
+    assert n("10 walls, 472.018 sq ft", "472")[0] is None  # several numbers: LLM decides

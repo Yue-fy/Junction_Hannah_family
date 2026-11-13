@@ -106,12 +106,18 @@ def _ifc_models_stems(root: str) -> tuple[str, ...]:
 
 
 def ifc_model_for(path: str, root: Path | None = None) -> str | None:
-    """`data/ifc_models/<model>_<view>.pdf` -> `data/ifc_models/<model>.ifc` (longest matching model stem)."""
+    """`data/ifc_models/<model>_<view>.pdf` -> `data/ifc_models/<model>.ifc` (longest matching model stem);
+    `resbim-N_plan.png` -> `resbim-N_model.ifc`."""
     rootp = root or data_root()
     stem = Path(path).stem
-    for m in _ifc_models_stems(str(rootp)):
+    stems = _ifc_models_stems(str(rootp))
+    for m in stems:
         if stem == m or stem.startswith(m + "_"):
             return f"data/ifc_models/{m}.ifc"
+    # ResBIM pairs: resbim-N_plan.png (annotated raster plan) <-> resbim-N_model.ifc (W1, 00:31)
+    base = re.sub(r"_plan$", "", stem)
+    if base != stem and f"{base}_model" in stems:
+        return f"data/ifc_models/{base}_model.ifc"
     return None
 
 
