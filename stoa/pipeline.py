@@ -197,15 +197,16 @@ class Pipeline(BaseSolver):
             s = self._get(name)
             if s is None:
                 continue
+            # unseen wording (translation/paraphrase) of a known kind: every solver gets the canonical English
+            # question (template solvers match it; the VLM is also far better in English, F's error analysis)
+            ask = canon if (canon and canon != question) else question
             try:
-                if not s.can_handle(path, question):
+                if not (s.can_handle(path, ask) or (ask != question and s.can_handle(path, question))):
                     continue
             except Exception:  # noqa: BLE001
                 continue
             tries += 1
-            ask = question
-            if name != "vlm_direct" and name != "vlm_nvidia" and canon and canon != question:
-                ask = canon
+            if ask != question:
                 trace.append(f"{name}: asked the canonical form \"{canon[:100]}\"")
             try:
                 ans = s.solve(path, ask)

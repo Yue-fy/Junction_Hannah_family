@@ -109,6 +109,11 @@ def ask(req: AskRequest) -> dict:
         from stoa.router.intent import parse
 
         out["intent"] = parse(req.question).to_dict()
+        from stoa.router.compose import decompose
+
+        plan = decompose(source_of(path), req.question)
+        if plan is not None:
+            out["plan"] = {"op": plan.op, "parts": plan.labels, "sub_questions": plan.subs}
     except Exception:  # noqa: BLE001
         pass
     with _ANS_LOCK:
