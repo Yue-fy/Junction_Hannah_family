@@ -44,9 +44,18 @@ CONF_MAP: dict[str, list[tuple[float, float]]] = {
     "measure": [(0.071, 0.053), (0.677, 0.053), (1.0, 0.318)],
 }
 
+# Per served model (vlm_direct `model=` option). cc-v2 = counting LoRA, fit on train_gate cubicasa (480 Qs it never saw):
+# raw p is already calibrated (ECE 0.040), AUROC 0.895. Non-count kinds fall back to CONF_MAP.
+CONF_MAPS: dict[str, dict[str, list[tuple[float, float]]]] = {
+    "cc-v2": {"count": [(0.44214, 0.22), (0.68038, 0.659), (0.86552, 0.817), (0.95507, 0.915), (0.98891, 0.963),
+                        (1.0, 0.988)]},
+}
 
-def map_conf(p: float, kind: str) -> float:
-    table = CONF_MAP.get(kind) or CONF_MAP.get("count" if kind == "count" else "measure")
+
+def map_conf(p: float, kind: str, model: str | None = None) -> float:
+    cmap = CONF_MAPS.get(model or "", {})
+    table = cmap.get(kind) or (cmap.get("count") if kind == "count" else None) \
+        or CONF_MAP.get(kind) or CONF_MAP.get("count" if kind == "count" else "measure")
     if not table:
         return round(min(0.9, max(0.05, p)), 3)
     for edge, acc in table:
@@ -375,7 +384,7 @@ class VlmDirect(BaseSolver):
         conf = 0.3
         p = llm.answer_prob(r, max_digits=0 if kind == "count" else 2) if r.logprobs else None
         if p is not None:
-            conf = p if self.conf_mode == "raw" else map_conf(p, kind)
+            conf = p if self.conf_mode == "raw" else map_conf(p, kind, self.model)
             trace.append(f"p(answer digits) = {p:.5f} -> confidence {conf:.2f}")
         return Answer(value=value, unit=unit, confidence=round(conf, 3), evidence=evidence, trace=trace,
                       solver=self.name)
