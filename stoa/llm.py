@@ -1,0 +1,676 @@
+"""Shared LLM / VLM client for every agent (owner: R2).
+
+Two backends, both OpenAI-compatible:
+  - "local"  : our vLLM server ($LLM_BASE_URL, default http://127.0.0.1:8001/v1). Model alias "default"
+               always points at whatever serving/start.sh launched (see `served_model()`).
+  - "nvidia" : NVIDIA hosted API (https://integrate.api.nvidia.com/v1, key in $NVIDIA_API_KEY).
+               Default model nvidia/nemotron-3.5-super-vl-120b-a12b. Rate-limited across *all* processes
+               on this machine through a file lock (env NVIDIA_RPM, default 30 requests/minute).
+
+Quick start:
+    from stoa.llm import chat, parse_boxes
+    r = chat("How many doors are in this floor plan? Answer with one integer.", images=["plan.png"])
+    print(r.text)
+    r = chat('Locate every door. Output JSON [{"bbox_2d":[x1,y1,x2,y2],"label":"door"}].', images=[img])
+    boxes = parse_boxes(r.text, r.images[0])          # -> boxes in ORIGINAL image pixels
+
+Coordinates: Qwen3-VL / Qwen3.5 / Qwen3.6 answer grounding prompts in relative 0..1000 coordinates of the
+image they saw. `parse_boxes/parse_points` map them back to the original image's pixels (and through tiles,
+see `tile_image`). Never print or log API keys.
+"""
+
+from __future__ import annotations
+
+import base64
+import contextlib
+import contextvars
+import fcntl
+import hashlib
+import io
+import json
+import math
+import os
+import re
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Iterable, Sequence
+
+from PIL import Image
+
+Image.MAX_IMAGE_PIXELS = None  # drawings can be huge; we downscale ourselves
+
+SHARED = Path(os.environ.get("JUNCTION_SHARED", "/home/fangy4/work/projects/junction-shared"))
+
+BACKENDS: dict[str, dict[str, Any]] = {
+    "local": {
+        "base_url": os.environ.get("LLM_BASE_URL", "http://127.0.0.1:8001/v1"),
+        "api_key_env": None,
+        "model": os.environ.get("LLM_MODEL", "default"),
+        "coords": "rel1000",
+        "timeout": 300.0,
+    },
+    "nvidia": {
+        "base_url": os.environ.get("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1"),
+        "api_key_env": "NVIDIA_API_KEY",
+        "model": os.environ.get("NVIDIA_MODEL", "nvidia/nemotron-3.5-super-vl-120b-a12b"),
+        "coords": "rel1000",  # verify per model with experiments/r2/grounding_check.py
+        "timeout": 300.0,
+    },
+}
+
+# Default pixel budget per image. Qwen3-VL: 1 visual token per 32x32 px => 3.1 Mpx ~ 3,000 tokens.
+DEFAULT_MAX_PIXELS = int(os.environ.get("LLM_MAX_PIXELS", 3_200_000))
+DEFAULT_MAX_SIDE = 4096
+
+
+# --------------------------------------------------------------------------------------------- images
+@dataclass
+class ImageInfo:
+    """How an image was sent, so model coordinates can be mapped back to the original file's pixels.
+
+    original pixel = offset + sent pixel / scale
+    `offset` is non-zero when the image is a tile cut out of a bigger image (see `tile_image`).
+    """
+
+    orig_w: int
+    orig_h: int
+    sent_w: int
+    sent_h: int
+    scale: float = 1.0  # sent / original (<= 1 when downscaled)
+    offset: tuple[float, float] = (0.0, 0.0)  # top-left of this image inside the parent image (parent px)
+
+    def to_original(self, x: float, y: float) -> tuple[float, float]:
+        return (self.offset[0] + x / self.scale, self.offset[1] + y / self.scale)
+
+
+@dataclass
+class Tile:
+    image: Image.Image
+    x0: int
+    y0: int  # top-left in the parent image's pixels
+
+
+def load_image(src: Any) -> Image.Image:
+    """Accept a PIL image, a path, raw bytes, or a numpy array (HxW[xC], uint8)."""
+    if isinstance(src, Image.Image):
+        img = src
+    elif isinstance(src, (str, Path)):
+        img = Image.open(src)
+        img.load()
+    elif isinstance(src, (bytes, bytearray)):
+        img = Image.open(io.BytesIO(src))
+        img.load()
+    else:  # numpy
+        img = Image.fromarray(src)
+    if img.mode not in ("RGB", "L"):
+        if img.mode in ("RGBA", "LA", "P"):
+            bg = Image.new("RGB", img.size, (255, 255, 255))
+            rgba = img.convert("RGBA")
+            bg.paste(rgba, mask=rgba.split()[-1])
+            img = bg
+        else:
+            img = img.convert("RGB")
+    return img
+
+
+def downscale(img: Image.Image, max_pixels: int = DEFAULT_MAX_PIXELS, max_side: int = DEFAULT_MAX_SIDE
+              ) -> tuple[Image.Image, float]:
+    """Shrink (never enlarge) to fit the pixel budget. Returns (image, scale = new/old)."""
+    w, h = img.size
+    s = min(1.0, math.sqrt(max_pixels / max(1, w * h)), max_side / max(w, h))
+    if s >= 0.999:
+        return img, 1.0
+    nw, nh = max(1, round(w * s)), max(1, round(h * s))
+    return img.resize((nw, nh), Image.LANCZOS), nw / w
+
+
+def tile_image(img: Image.Image, tile: int = 1280, overlap: int = 160) -> list[Tile]:
+    """Cut an image into overlapping square-ish tiles (parent pixel offsets kept for mapping back).
+
+    Counting tip: de-duplicate detections in the overlap zones (e.g. by box IoU / point distance in
+    parent pixels) before counting.
+    """
+    w, h = img.size
+    step = max(1, tile - overlap)
+    xs = list(range(0, max(1, w - overlap), step)) or [0]
+    ys = list(range(0, max(1, h - overlap), step)) or [0]
+    tiles = []
+    for y0 in ys:
+        for x0 in xs:
+            x1, y1 = min(w, x0 + tile), min(h, y0 + tile)
+            # shift the last row/column back so every tile is full-size when possible
+            x0b, y0b = max(0, x1 - tile), max(0, y1 - tile)
+            tiles.append(Tile(img.crop((x0b, y0b, x1, y1)), x0b, y0b))
+    # drop exact duplicates created by the shift
+    seen, out = set(), []
+    for t in tiles:
+        if (t.x0, t.y0) not in seen:
+            seen.add((t.x0, t.y0))
+            out.append(t)
+    return out
+
+
+def render_pdf_page(path: str | Path, page: int = 0, dpi: int = 150, max_pixels: int | None = None
+                    ) -> tuple[Image.Image, float]:
+    """Render a PDF page to RGB. Returns (image, px_per_pt) so pixel boxes map to PDF points: pt = px / px_per_pt.
+
+    If max_pixels is given, the dpi is lowered so the render fits the budget.
+    """
+    import pymupdf
+
+    with pymupdf.open(path) as doc:
+        pg = doc[page]
+        zoom = dpi / 72.0
+        if max_pixels:
+            w_pt, h_pt = pg.rect.width, pg.rect.height
+            zoom = min(zoom, math.sqrt(max_pixels / max(1.0, w_pt * h_pt)))
+        pix = pg.get_pixmap(matrix=pymupdf.Matrix(zoom, zoom), alpha=False)
+        img = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
+    return img, zoom
+
+
+def _encode(img: Image.Image, fmt: str = "PNG") -> str:
+    buf = io.BytesIO()
+    if fmt.upper() == "JPEG":
+        img.convert("RGB").save(buf, format="JPEG", quality=92)
+        mime = "image/jpeg"
+    else:
+        img.save(buf, format="PNG", optimize=False)
+        mime = "image/png"
+    return f"data:{mime};base64,{base64.b64encode(buf.getvalue()).decode()}"
+
+
+def prepare_image(src: Any, max_pixels: int = DEFAULT_MAX_PIXELS, max_side: int = DEFAULT_MAX_SIDE,
+                  offset: tuple[float, float] = (0.0, 0.0), fmt: str = "PNG") -> tuple[dict, ImageInfo]:
+    """-> (OpenAI image_url content part, ImageInfo). Pass a `Tile` to keep its parent offset."""
+    if isinstance(src, Tile):
+        offset = (float(src.x0), float(src.y0))
+        src = src.image
+    img = load_image(src)
+    small, scale = downscale(img, max_pixels, max_side)
+    info = ImageInfo(img.width, img.height, small.width, small.height, scale, offset)
+    return {"type": "image_url", "image_url": {"url": _encode(small, fmt)}}, info
+
+
+# --------------------------------------------------------------------------------------------- cost
+@dataclass
+class Cost:
+    """Cost of the LLM calls made inside a `cost_meter()` block (Stoa scores cost: lower is better).
+
+    gpu_seconds = wall time of local-server calls (upper bound: the server batches requests);
+    api_calls counts hosted (nvidia) calls only.
+    """
+
+    llm_tokens_in: int = 0
+    llm_tokens_out: int = 0
+    gpu_seconds: float = 0.0
+    api_calls: int = 0
+    calls: int = 0
+    _lock: threading.Lock = field(default_factory=threading.Lock, repr=False, compare=False)
+
+    def add(self, res: "ChatResult") -> None:
+        with self._lock:
+            self.calls += 1
+            self.llm_tokens_in += res.prompt_tokens or 0
+            self.llm_tokens_out += res.completion_tokens or 0
+            if res.backend == "local":
+                self.gpu_seconds += 0.0 if res.cached else res.latency_s
+            elif not res.cached:
+                self.api_calls += 1
+
+    def as_dict(self) -> dict:
+        return {"llm_tokens_in": self.llm_tokens_in, "llm_tokens_out": self.llm_tokens_out,
+                "gpu_seconds": round(self.gpu_seconds, 3), "api_calls": self.api_calls}
+
+    def __str__(self) -> str:
+        return (f"cost: calls={self.calls} tok_in={self.llm_tokens_in} tok_out={self.llm_tokens_out} "
+                f"gpu_s={self.gpu_seconds:.2f} api_calls={self.api_calls}")
+
+
+_METER: contextvars.ContextVar[Cost | None] = contextvars.ContextVar("stoa_llm_cost", default=None)
+
+
+@contextlib.contextmanager
+def cost_meter():
+    """`with cost_meter() as c: ...chat(...)...` -> c.as_dict(). Nested meters all get charged."""
+    parent = _METER.get()
+    c = Cost()
+    tok = _METER.set(c)
+    try:
+        yield c
+    finally:
+        _METER.reset(tok)
+        if parent is not None:  # roll up into the enclosing meter
+            with parent._lock:
+                parent.calls += c.calls
+                parent.llm_tokens_in += c.llm_tokens_in
+                parent.llm_tokens_out += c.llm_tokens_out
+                parent.gpu_seconds += c.gpu_seconds
+                parent.api_calls += c.api_calls
+
+
+def _charge(res: "ChatResult") -> "ChatResult":
+    m = _METER.get()
+    if m is not None:
+        m.add(res)
+    return res
+
+
+# --------------------------------------------------------------------------------------------- client
+@dataclass
+class ChatResult:
+    text: str
+    images: list[ImageInfo] = field(default_factory=list)  # one per input image, in order
+    model: str = ""
+    backend: str = ""
+    latency_s: float = 0.0
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
+    reasoning: str | None = None  # thinking text if the server returned it separately
+    finish_reason: str | None = None
+    cached: bool = False
+
+
+_clients: dict[str, Any] = {}
+_clients_lock = threading.Lock()
+
+
+def _client(backend: str):
+    from openai import OpenAI
+
+    with _clients_lock:
+        if backend not in _clients:
+            cfg = BACKENDS[backend]
+            key = os.environ.get(cfg["api_key_env"], "") if cfg["api_key_env"] else "EMPTY"
+            if cfg["api_key_env"] and not key:
+                raise RuntimeError(f"backend {backend!r} needs ${cfg['api_key_env']} in the environment")
+            _clients[backend] = OpenAI(base_url=cfg["base_url"], api_key=key, timeout=cfg["timeout"],
+                                       max_retries=0)
+        return _clients[backend]
+
+
+def served_model(backend: str = "local") -> str:
+    """The concrete model id behind the "default" alias (first id listed by /v1/models)."""
+    try:
+        ids = [m.id for m in _client(backend).models.list().data]
+        return next((i for i in ids if i != "default"), ids[0] if ids else "")
+    except Exception as e:  # noqa: BLE001
+        return f"unavailable ({type(e).__name__})"
+
+
+def _nvidia_throttle() -> None:
+    """Space out NVIDIA API calls across every process on this machine (file lock + timestamp)."""
+    rpm = float(os.environ.get("NVIDIA_RPM", 30))
+    interval = 60.0 / max(rpm, 0.1)
+    lock = SHARED / "locks" / "nvidia-api.lock"
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    with open(lock, "a+") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        try:
+            f.seek(0)
+            last = float((f.read().strip() or "0"))
+            wait = last + interval - time.time()
+            if wait > 0:
+                time.sleep(wait)
+            f.seek(0)
+            f.truncate()
+            f.write(f"{time.time():.3f}")
+            f.flush()
+        finally:
+            fcntl.flock(f, fcntl.LOCK_UN)
+
+
+def _cache_path(key_obj: Any) -> Path:
+    h = hashlib.sha256(json.dumps(key_obj, sort_keys=True, default=str).encode()).hexdigest()
+    root = Path(os.environ.get("STOA_LLM_CACHE_DIR", str(SHARED / "artifacts" / "llm-cache")))
+    return root / h[:2] / f"{h}.json"
+
+
+def chat(
+    messages: str | list[dict],
+    images: Sequence[Any] | None = None,
+    *,
+    backend: str = "local",
+    model: str | None = None,
+    system: str | None = None,
+    max_tokens: int = 1024,
+    temperature: float = 0.0,
+    top_p: float | None = None,
+    seed: int | None = None,
+    thinking: bool | None = False,
+    json_schema: dict | None = None,
+    max_pixels: int = DEFAULT_MAX_PIXELS,
+    max_side: int = DEFAULT_MAX_SIDE,
+    image_format: str = "PNG",
+    retries: int = 6,
+    cache: bool | None = None,
+    extra_body: dict | None = None,
+) -> ChatResult:
+    """One chat completion.
+
+    messages : a prompt string, or OpenAI-style messages. `images` are inserted (before the text) into the
+               LAST user message, which is how Qwen-VL models like it. Images can be PIL / path / bytes /
+               numpy / `Tile`.
+    thinking : False -> ask hybrid-thinking models (Qwen3.5/3.6, Nemotron) to answer directly; True -> let
+               them think (slower, sometimes better at arithmetic); None -> model default.
+    json_schema: a JSON schema dict -> guided decoding (vLLM `structured_outputs`/`guided_json`).
+    cache    : on-disk response cache (temperature 0 only). Default from env STOA_LLM_CACHE=1.
+    """
+    cfg = BACKENDS[backend]
+    model = model or cfg["model"]
+    msgs: list[dict] = [{"role": "user", "content": messages}] if isinstance(messages, str) else \
+        [dict(m) for m in messages]
+    if system:
+        msgs.insert(0, {"role": "system", "content": system})
+
+    infos: list[ImageInfo] = []
+    if images:
+        parts = []
+        for im in images:
+            part, info = prepare_image(im, max_pixels, max_side, fmt=image_format)
+            parts.append(part)
+            infos.append(info)
+        idx = max(i for i, m in enumerate(msgs) if m["role"] == "user")
+        content = msgs[idx]["content"]
+        text_parts = [{"type": "text", "text": content}] if isinstance(content, str) else list(content)
+        msgs[idx]["content"] = parts + text_parts
+
+    body: dict[str, Any] = dict(extra_body or {})
+    if thinking is not None:
+        body.setdefault("chat_template_kwargs", {})["enable_thinking"] = bool(thinking)
+    if json_schema is not None:
+        if backend == "local":
+            body["structured_outputs"] = {"json": json_schema}
+        else:
+            body["guided_json"] = json_schema
+    kwargs: dict[str, Any] = dict(model=model, messages=msgs, max_tokens=max_tokens, temperature=temperature)
+    if top_p is not None:
+        kwargs["top_p"] = top_p
+    if seed is not None:
+        kwargs["seed"] = seed
+    if body:
+        kwargs["extra_body"] = body
+
+    use_cache = (os.environ.get("STOA_LLM_CACHE") == "1") if cache is None else cache
+    use_cache = use_cache and temperature == 0.0
+    cpath = None
+    if use_cache:
+        concrete = served_model(backend) if (backend == "local" and model == "default") else model
+        cpath = _cache_path({"b": backend, "m": concrete, "k": {**kwargs, "model": concrete}})
+        if cpath.exists():
+            d = json.loads(cpath.read_text())
+            return _charge(ChatResult(images=infos, cached=True, **d))
+
+    from openai import APIConnectionError, APIStatusError, APITimeoutError, RateLimitError
+
+    client = _client(backend)
+    delay = 2.0
+    last_err: Exception | None = None
+    for attempt in range(retries + 1):
+        if backend == "nvidia":
+            _nvidia_throttle()
+        t0 = time.time()
+        try:
+            resp = client.chat.completions.create(**kwargs)
+            ch = resp.choices[0]
+            msg = ch.message
+            reasoning = getattr(msg, "reasoning_content", None) or getattr(msg, "reasoning", None)
+            text = msg.content or ""
+            if not text and reasoning and thinking is False:
+                text = reasoning  # some servers put everything into reasoning when thinking is off
+            res = ChatResult(
+                text=text, images=infos, model=resp.model or model, backend=backend,
+                latency_s=time.time() - t0,
+                prompt_tokens=getattr(resp.usage, "prompt_tokens", None) if resp.usage else None,
+                completion_tokens=getattr(resp.usage, "completion_tokens", None) if resp.usage else None,
+                reasoning=reasoning, finish_reason=ch.finish_reason,
+            )
+            if cpath is not None:
+                cpath.parent.mkdir(parents=True, exist_ok=True)
+                d = {k: v for k, v in res.__dict__.items() if k not in ("images", "cached")}
+                cpath.write_text(json.dumps(d))
+            return _charge(res)
+        except RateLimitError as e:  # 429: back off, honour Retry-After when given
+            last_err = e
+            ra = None
+            try:
+                ra = float(e.response.headers.get("retry-after"))  # type: ignore[union-attr]
+            except Exception:  # noqa: BLE001
+                pass
+            time.sleep(ra if ra else delay)
+            delay = min(delay * 2, 60)
+        except (APIConnectionError, APITimeoutError) as e:  # server restarting / overloaded
+            last_err = e
+            time.sleep(delay)
+            delay = min(delay * 2, 30)
+        except APIStatusError as e:
+            last_err = e
+            if e.status_code in (500, 502, 503, 504):
+                time.sleep(delay)
+                delay = min(delay * 2, 30)
+                continue
+            raise  # 400 etc.: the request itself is wrong (e.g. prompt too long) — don't retry
+    raise RuntimeError(f"chat failed after {retries + 1} attempts on {backend}: {last_err!r}")
+
+
+def chat_many(requests: Iterable[dict], workers: int = 16) -> list[ChatResult | Exception]:
+    """Run many `chat(**req)` calls concurrently (vLLM batches them). Errors are returned, not raised."""
+    reqs = list(requests)
+
+    def one(r: dict):
+        try:
+            return chat(**r)
+        except Exception as e:  # noqa: BLE001
+            return e
+
+    ctx = contextvars.copy_context()  # so cost_meter() around chat_many still sees every call
+
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        return list(ex.map(lambda r: ctx.copy().run(one, r), reqs))
+
+
+# --------------------------------------------------------------------------------------------- parsing
+@dataclass
+class Box:
+    x0: float
+    y0: float
+    x1: float
+    y1: float
+    label: str = ""
+
+    @property
+    def center(self) -> tuple[float, float]:
+        return ((self.x0 + self.x1) / 2, (self.y0 + self.y1) / 2)
+
+    def as_list(self) -> list[float]:
+        return [self.x0, self.y0, self.x1, self.y1]
+
+
+@dataclass
+class Point:
+    x: float
+    y: float
+    label: str = ""
+
+
+_FENCE = re.compile(r"```(?:json)?\s*(.*?)```", re.S)
+
+
+def extract_json(text: str) -> Any:
+    """Best-effort JSON from model output: fenced block, else the first {...} or [...] that parses."""
+    text = re.sub(r"<think>.*?</think>", "", text, flags=re.S)
+    cands = _FENCE.findall(text) + [text]
+    for c in cands:
+        c = c.strip()
+        try:
+            return json.loads(c)
+        except Exception:  # noqa: BLE001
+            pass
+        for open_c, close_c in (("[", "]"), ("{", "}")):
+            i = c.find(open_c)
+            while i != -1:
+                depth = 0
+                for j in range(i, len(c)):
+                    if c[j] == open_c:
+                        depth += 1
+                    elif c[j] == close_c:
+                        depth -= 1
+                        if depth == 0:
+                            try:
+                                return json.loads(c[i:j + 1])
+                            except Exception:  # noqa: BLE001
+                                break
+                i = c.find(open_c, i + 1)
+    return None
+
+
+def _to_px(x: float, y: float, info: ImageInfo | tuple[int, int] | None, coords: str) -> tuple[float, float]:
+    """Model coords -> original-image pixels. coords: rel1000 | rel1 | pct | abs (abs = pixels of the sent image)."""
+    if info is None:
+        return x, y
+    if isinstance(info, tuple):
+        info = ImageInfo(info[0], info[1], info[0], info[1])
+    if coords == "rel1000":
+        sx, sy = x / 1000.0 * info.sent_w, y / 1000.0 * info.sent_h
+    elif coords == "rel1":
+        sx, sy = x * info.sent_w, y * info.sent_h
+    elif coords == "pct":
+        sx, sy = x / 100.0 * info.sent_w, y / 100.0 * info.sent_h
+    else:
+        sx, sy = x, y
+    return info.to_original(sx, sy)
+
+
+_NUM = r"-?\d+(?:\.\d+)?"
+_BOX_TAG = re.compile(rf"\(\s*({_NUM})\s*,\s*({_NUM})\s*\)\s*,\s*\(\s*({_NUM})\s*,\s*({_NUM})\s*\)")
+_POINT_TAG = re.compile(r"<point\s+x=\"([\d.]+)\"\s+y=\"([\d.]+)\"[^>]*?(?:alt=\"([^\"]*)\")?[^>]*>", re.I)
+_LIST4 = re.compile(rf"\[\s*({_NUM})\s*,\s*({_NUM})\s*,\s*({_NUM})\s*,\s*({_NUM})\s*\]")
+_LIST2 = re.compile(rf"\[\s*({_NUM})\s*,\s*({_NUM})\s*\]")
+
+
+def _walk(obj: Any):
+    if isinstance(obj, dict):
+        yield obj
+        for v in obj.values():
+            yield from _walk(v)
+    elif isinstance(obj, list):
+        for v in obj:
+            yield from _walk(v)
+
+
+def parse_boxes(text: str, info: ImageInfo | tuple[int, int] | None = None, coords: str = "rel1000"
+                ) -> list[Box]:
+    """Boxes from model output, in original-image pixels.
+
+    Understands Qwen JSON ({"bbox_2d":[x1,y1,x2,y2],"label":..}, also "bbox"/"box"), Qwen tags
+    (<|box_start|>(x1,y1),(x2,y2)<|box_end|>), and bare [x1,y1,x2,y2] lists as a last resort.
+    """
+    out: list[Box] = []
+    data = extract_json(text)
+    if data is not None:
+        for d in _walk(data):
+            for k in ("bbox_2d", "bbox", "box", "box_2d"):
+                b = d.get(k)
+                if isinstance(b, list) and len(b) == 4 and all(isinstance(v, (int, float)) for v in b):
+                    x0, y0 = _to_px(b[0], b[1], info, coords)
+                    x1, y1 = _to_px(b[2], b[3], info, coords)
+                    out.append(Box(min(x0, x1), min(y0, y1), max(x0, x1), max(y0, y1),
+                                   str(d.get("label", d.get("name", "")))))
+                    break
+        if out:
+            return out
+    for m in _BOX_TAG.finditer(text):
+        a, b, c, d = (float(v) for v in m.groups())
+        x0, y0 = _to_px(a, b, info, coords)
+        x1, y1 = _to_px(c, d, info, coords)
+        out.append(Box(min(x0, x1), min(y0, y1), max(x0, x1), max(y0, y1)))
+    if out:
+        return out
+    for m in _LIST4.finditer(text):
+        a, b, c, d = (float(v) for v in m.groups())
+        x0, y0 = _to_px(a, b, info, coords)
+        x1, y1 = _to_px(c, d, info, coords)
+        out.append(Box(min(x0, x1), min(y0, y1), max(x0, x1), max(y0, y1)))
+    return out
+
+
+def parse_points(text: str, info: ImageInfo | tuple[int, int] | None = None, coords: str = "rel1000"
+                 ) -> list[Point]:
+    """Points from model output, in original-image pixels.
+
+    Understands Qwen JSON ({"point_2d":[x,y],"label":..}, also "point"), Molmo tags
+    (<point x="12.3" y="45.6" alt="door"> in percent -> pass coords="pct"), and box centres as fallback.
+    """
+    out: list[Point] = []
+    data = extract_json(text)
+    if data is not None:
+        for d in _walk(data):
+            for k in ("point_2d", "point", "pt"):
+                p = d.get(k)
+                if isinstance(p, list) and len(p) == 2 and all(isinstance(v, (int, float)) for v in p):
+                    x, y = _to_px(p[0], p[1], info, coords)
+                    out.append(Point(x, y, str(d.get("label", ""))))
+                    break
+        if out:
+            return out
+    for m in _POINT_TAG.finditer(text):
+        x, y = _to_px(float(m.group(1)), float(m.group(2)), info, "pct" if coords == "rel1000" else coords)
+        out.append(Point(x, y, m.group(3) or ""))
+    if out:
+        return out
+    boxes = parse_boxes(text, info, coords)
+    if boxes:
+        return [Point(*b.center, b.label) for b in boxes]
+    for m in _LIST2.finditer(text):
+        x, y = _to_px(float(m.group(1)), float(m.group(2)), info, coords)
+        out.append(Point(x, y))
+    return out
+
+
+def nms_points(points: list[Point], min_dist: float) -> list[Point]:
+    """Greedy de-duplication of points closer than `min_dist` px (e.g. after tiling)."""
+    kept: list[Point] = []
+    for p in points:
+        if all((p.x - q.x) ** 2 + (p.y - q.y) ** 2 >= min_dist ** 2 for q in kept):
+            kept.append(p)
+    return kept
+
+
+def nms_boxes(boxes: list[Box], iou_thr: float = 0.5) -> list[Box]:
+    """Greedy de-duplication of boxes (larger boxes first)."""
+    def area(b: Box) -> float:
+        return max(0.0, b.x1 - b.x0) * max(0.0, b.y1 - b.y0)
+
+    def iou(a: Box, b: Box) -> float:
+        ix = max(0.0, min(a.x1, b.x1) - max(a.x0, b.x0))
+        iy = max(0.0, min(a.y1, b.y1) - max(a.y0, b.y0))
+        inter = ix * iy
+        u = area(a) + area(b) - inter
+        return inter / u if u > 0 else 0.0
+
+    kept: list[Box] = []
+    for b in sorted(boxes, key=area, reverse=True):
+        if all(iou(b, k) < iou_thr for k in kept):
+            kept.append(b)
+    return kept
+
+
+if __name__ == "__main__":  # smoke test: python -m stoa.llm [backend]
+    import sys
+
+    be = sys.argv[1] if len(sys.argv) > 1 else "local"
+    print("model:", served_model(be) if be == "local" else BACKENDS[be]["model"])
+    img = Image.new("RGB", (800, 400), "white")
+    from PIL import ImageDraw
+
+    dr = ImageDraw.Draw(img)
+    dr.rectangle((100, 100, 300, 300), outline="black", width=6)
+    dr.ellipse((500, 150, 600, 250), outline="red", width=6)
+    r = chat('Locate the red circle. Output JSON [{"bbox_2d":[x1,y1,x2,y2],"label":"circle"}].',
+             images=[img], backend=be, max_tokens=200)
+    print(r.text.strip()[:300])
+    print("boxes (px, expect ~[500,150,600,250]):", [[round(v) for v in b.as_list()] for b in parse_boxes(r.text, r.images[0])])
+    print(f"latency {r.latency_s:.1f}s, tokens {r.prompt_tokens}->{r.completion_tokens}")
