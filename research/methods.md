@@ -141,11 +141,29 @@ Tried and not adopted:
 - A per-class probability threshold instead of argmax (P(window) ≥ τ, τ = 0.15–0.45; 227 val drawings):
   never better (windows 44.1% argmax vs 43.6%). The missed windows are not near-misses in probability.
 
-**Memorisation check (D3).** On the drawings cached so far (colorful + high_quality styles), accuracy on
-drawings from the model's original *train* list is about the same as on held-out *test* drawings of the
-same styles: windows 49.3% vs 45.5%, doors 52.8% vs 60.0%, WC seats 84.6% vs 84.6%, sinks 63.2% vs 67.5%
-(n = 521 vs 123). So there is little memorisation, and dev numbers should be close to leak-safe ones.
-Check the architectural style when its cache is complete.
+**Memorisation check (D3).** Accuracy on drawings from the model's original *train* list is about the
+same as on held-out *test* drawings of the same style, so there is little memorisation:
+
+| Style (n train / test) | Windows | Doors | WC seats | Sinks |
+|---|---|---|---|---|
+| colorful (153 / 66) | 41 / 45 | 51 / 55 | 76 / 83 | 56 / 62 |
+| high_quality (785 / 59) | 51 / 47 | 54 / 64 | 86 / 85 | 66 / 72 |
+| architectural (2153 / 258) | 28 / 28 | 36 / 29 | 76 / 72 | 54 / 56 |
+
+On 127 of our dev drawings (all in the CC5K train list): windows 37, doors 45, WC 79, sinks 60. Dev numbers
+for this model should be within a few points of the leak-safe ones.
+
+**Out-of-domain check (ResBIM).** Sixty Revit plans from `data/ifc_models/resbim-N_plan.png` (7572×4189), with the
+paired IFC's IfcWindow/IfcDoor counts as ground truth (`resbim_check.py`):
+
+| Preprocessing | Windows exact | Doors exact |
+|---|---|---|
+| whole image → 2000 px long side | **77%** (12/15 on plans whose count isn't the common 4) | 0% (always under) |
+| crop to ink box → 1000 px | 65% | 12% |
+| crop → 1500 / 2000 px | 55% / 33% | 2% / 0% |
+
+Windows transfer to an unseen style; doors don't (Revit draws thin swing arcs). `predict.py` now resizes
+images whose long side is over 3000 px to 2000 px and maps the boxes back to original pixels.
 
 **Room segmentation as a cross-check (Stoa point 4).** Room-type regions = components of room class
 (Bed Room 5, Bath 6, Kitchen 3, Outdoor 1) ≥ min_frac·H·W (val-chosen: 1.2e-2, 1.2e-2, 1.6e-2, 2.4e-2;

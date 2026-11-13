@@ -157,3 +157,57 @@ def test_apartment_scope_kept_for_counts():
     assert it.filters.get("apartment") == "C" and canonical("swiss_dwellings", it) is None
     assert decompose("swiss_dwellings", "How many doors and windows does apartment C have in total?") is None
     assert parse("How many bedrooms does this apartment have?").filters == {}
+
+
+def test_cc5k_switch(monkeypatch, tmp_path):
+    """D8: cc5k=1 sends cubicasa window counts to raster_cc5k with its cc5k_heldout rate; cc5k=0 never calls it."""
+    import json
+
+    import stoa.pipeline as pl
+    from stoa.contract import Answer
+    from stoa.solvers import _REGISTRY
+    from stoa.solvers.base import BaseSolver
+
+    calls = []
+
+    class Stub(BaseSolver):
+        def can_handle(self, path, question):
+            return True
+
+        def solve(self, path, question):
+            calls.append(question)
+            return Answer(value=7, unit="count", confidence=0.5, solver="raster_cc5k")
+
+    gate = tmp_path / "gating_cc5k.json"
+    gate.write_text(json.dumps({"meta": {}, "entries": {"cubicasa5k|count:window:drawing": {
+        "n": 100, "acc": {"prior": 0.15, "raster_cc5k": 0.40}, "cost_usd": {}}}}))
+    monkeypatch.setattr(pl, "GATING_CC5K", gate)
+    monkeypatch.setitem(_REGISTRY, "raster_cc5k", Stub)
+    q, path = "How many windows are shown on this floor plan?", "data/cubicasa5k/x.png"
+    off = pl.Pipeline(cc5k=0, crosscheck=0)._solve_atomic(path, q)
+    assert not calls and off.solver != "pipeline/raster_cc5k"
+    on = pl.Pipeline(cc5k=1, crosscheck=0)._solve_atomic(path, q)
+    assert calls and on.value == 7 and on.solver == "pipeline/raster_cc5k"
+    assert abs(on.confidence - (0.40 * 100 + 1) / 102) < 1e-3
+
+
+def test_unit_fit_and_multilingual_threshold():
+    from stoa.contract import Answer
+    from stoa.pipeline import _fits
+    from stoa.router.intent import modifiers
+
+    assert not _fits("count", Answer(value=275.05, unit="m2", confidence=0.3))
+    assert _fits("count", Answer(value=12, unit="count", confidence=0.9)) and _fits("text", Answer(value="B", confidence=0.5))
+    for q in ("Wie viele Räume sind größer als 10 m²?", "Combien de pièces font plus de 12 m² ?",
+              "Hoeveel ruimtes zijn groter dan 10 m²?", "Hur många rum är större än 10 m²?"):
+        assert "threshold" in modifiers(q), q
+
+
+def test_agent_rows_condition_is_restricted():
+    from stoa.router.agent import Agent
+
+    ok = Agent._COND_OK
+    assert ok.fullmatch("area_m2 > 10 and numbered and not outdoor")
+    ag = Agent()
+    for bad in ('__import__("os")', "name.str.len() > 3", "open('x')"):
+        assert ag._rows("data/swiss_dwellings/none.pdf", bad, []).startswith("error")

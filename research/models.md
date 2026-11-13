@@ -33,12 +33,24 @@ Cost columns are per question. "dev cc" = dev cubicasa counts (800 q), the bucke
 | Nemotron, direct prompt, 1024 tok (reasons briefly in the answer) | smoke cc (80) | **50.0** | 8 s, 1.5k in / 313 out, 1.16 API calls, $1.2/1k | best Nemotron mode; local 8B on the same 80: 45.0 (n small) |
 | train_gate cc symbols (160: windows, doors, WC, sinks; EN+FI): prior / 8B / 8B+symbol hints / Nemotron | train_gate | 29.4 / 30.6 / 31.9 / 34.4 | Nemotron 13 s, $1.4/1k | windows 5–15%, doors 5–25% for every model: VLMs can't count plan symbols off the shelf |
 
-**LoRA in progress (00:24–01:25): cc-v2.** Qwen3-VL-8B + LoRA r16 on TRAIN cubicasa counts, *excluding every
-train_gate drawing* (train_gate ⊂ train is used for gating; cc-v1 had seen it and was stopped after 10 min).
-3,905 drawings as multi-turn image-once samples (34.7k Q/A turns, EN/FI + paraphrases, answer-only targets),
-~0.94 s/sample, 27 GB. Adapter: `$JUNCTION_SHARED/artifacts/R2/lora/cc-v2`.
+**LoRA cc-v2 (trained 00:24–01:18) — WINNER on cubicasa counts.** Qwen3-VL-8B + LoRA r16 on TRAIN cubicasa counts,
+*excluding every train_gate drawing*. 3,840 drawings as multi-turn image-once samples (EN/FI + paraphrases,
+answer-only targets), 54 min, 27 GB, final loss ~0.34. Adapter: `$JUNCTION_SHARED/artifacts/R2/lora/cc-v2`.
+Served on :8001 as model `cc-v2` from 01:40 (base unchanged as `default`); solver `vlm_lora`.
+| set | LoRA cc-v2 | raster (W3) | pipeline | prior | base 8B | R1 CC5K net |
+|---|---|---|---|---|---|---|
+| dev cubicasa (800) | **73.9** | 62.5 | 61.8 | 54.1 | 50.4 | (memorised) |
+| train_gate cubicasa (480, unseen by LoRA) | **76.7** | | | 51.9 | 45.6 | (memorised) |
+| hard cubicasa translations / paraphrases / compositions | **75 / 66** / 9.6 | 67 / 62 / 26.5 | 67 / 60 / 19.3 | | | |
+| leak-free for both (200, `cc5k_heldout_notLoRA`) | **79.0** | | | 54.0 | 51.5 | 60.5 |
+Paired: vs raster +11.4 [+8.2, +14.4]; vs CC5K net +18.5 [+11.5, +25.5] (`experiments/r2/paired.py`). Only per-concept loss
+vs raster: EN showers+bathtubs 73 vs 84. Compositions must go through the pipeline's compose step (atomic questions).
+Cost $0.035/1k (780 tok in, 2 out). Confidence: own map (CONF_MAPS["cc-v2"], fit on train_gate), AUROC 0.885–0.928.
+Licence: CubiCasa5K images are CC BY-NC-SA 4.0 → the adapter is non-commercial (same as the CC5K weights).
 Scripts: `experiments/r2/lora/{build_data,train_lora,eval_lora.sh}`. Training env: `/data/User/fangy4/envs/junction-train`
 (= coder390-vllm packages via a read-only .pth + peft/accelerate).
+v3 ideas: 2 epochs (v2 saw each drawing once), rank 32, add swiss PNG-twin counts for style diversity
+(`build_data.py --sources swiss_dwellings --png-twins` → artifacts/R2/lora/train_swiss_png.jsonl, 547 drawings, 7.9k turns).
 
 Cost accounting: local calls record `gpu_seconds = tokens_in/25k + tokens_out/1k` (amortised throughput measured
 at saturation), not HTTP wall time (which includes queueing behind other agents).
@@ -58,6 +70,39 @@ at saturation), not HTTP wall time (which includes queueing behind other agents)
 | PaddleOCR-VL 1.6, MinerU2.5-Pro, DeepSeek-OCR-2 | 1–3 GB | mixed | OCR/layout | R1/W3 territory; PDF text layers already cover swiss/ifc_models |
 | InternVL3.5-8B/30B-A3B | 17 / 60 GB | ✅ | good docs | not newer than Qwen3.6 |
 | GroundingDINO / OWLv2 / Florence-2 | <2 GB | – | open-vocab detectors | symbols on plans are out-of-domain for them |
+
+## Confidence from logprobs (cycle 2, 01:10)
+`llm.chat(logprobs=5)` + `llm.answer_prob()` = probability the model gave to its answer's digits (free on vLLM).
+vlm_direct maps it through `CONF_MAP` (fit on 1,500 TRAIN Qs with `experiments/r2/fit_conf.py`):
+| raw p(digits) | ≤0.49 | ≤0.88 | ≤0.96 | ≤0.991 | ≤0.999 | >0.999 |
+|---|---|---|---|---|---|---|
+| count accuracy (train) | 12% | 34% | 41% | 48% | 49% | 89% |
+Count AUROC 0.78 (cubicasa 0.74, swiss 0.89); ECE 0.02 mapped vs 0.20 for the old constant 0.3. Areas (swiss, 8B reads
+them badly: 5% right) AUROC 0.87. The map is model-specific: refit it for a LoRA or another model.
+Held-out check: full dev (2,215) ECE 0.024, AUROC 0.869, conf ≥ 0.8 on 14% at 89% right; full hard (711; paraphrases,
+translations) ECE 0.054, AUROC 0.868. Accuracy unchanged (dev micro 32.6, hard 25.3); $0.08–0.16 per 1k.
+
+Gate "8B if p ≥ T else baseline" (`experiments/r2/conf_gate.py`), cubicasa: beats the prior (train 55.5 → 58.1 at
+T=0.9999, dev 54.1 → 57.4 at T=0.999) but not W3's per-class `raster` (dev 62.5 → 61.6). WC seats are the one concept
+where it may add (dev 69 vs 59 EN, 64 vs 55 FI; to be confirmed on TRAIN by W3).
+
+Escalation to hosted Nemotron (`experiments/r2/escalate.py`): on TRAIN cubicasa Qs where the 8B is unsure (raw p < 0.88,
+36% of them; 60 sampled) Nemotron 36.7 vs prior 31.7 vs 8B 23.3; $1.57/1k, 11 s. Not worth it for bulk counting.
+
+## Historical scans (no questions in the data)
+View-type recognition on finna scans (`experiments/r2/scan_views.py`, weak gold from Finnish title keywords):
+8B 68% exact view set on 100 (P 0.79–0.97, R 0.84–1.00 per view), 3.2k tokens/scan; Nemotron 50% on 40 (59% parsed)
+vs the 8B's 62.5% on the same 40. The local 8B is enough to type untitled scans for the KG.
+
+## Leak-free symbol comparison (cycle 2)
+`$JUNCTION_SHARED/artifacts/R2/cc5k_heldout_notLoRA.jsonl` = R1's cc5k_heldout (original CC5K test list, so the
+pretrained CC5K net never saw them) minus drawings in the LoRA's training data minus sealed-test drawings:
+200 Qs on 50 drawings (56 dev, 132 train_gate, 12 smoke). ~15 Qs per concept: small, read per-concept numbers as ±12 pts.
+| solver | all | windows | doors | WC seats | sinks | showers+baths |
+|---|---|---|---|---|---|---|
+| prior | 54.0 | 26.7 | 11.1 | 47.1 | 42.9 | 57.1 |
+| Qwen3-VL-8B direct | 51.5 | 13.3 | 44.4 | 82.4 | 57.1 | 28.6 |
+| R1 CC5K net (plain_over_prior) | 60.5 | 40.0 | 22.2 | 88.2 | 57.1 | 57.1 (prior) |
 
 ## Cascade recommendation (from the numbers so far)
 1. Deterministic parsers first (DXF 99%, IFC 100%, PDF text layer): free, exact, verifiable. The VLM must never

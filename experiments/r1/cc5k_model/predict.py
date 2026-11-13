@@ -38,14 +38,23 @@ def model():
     return _M
 
 
+MAX_SIDE = int(os.environ.get("CC5K_MAX_SIDE", "3000"))  # larger images (e.g. 7572 px ResBIM plans) are resized
+RESIZE_TO = int(os.environ.get("CC5K_RESIZE_TO", "2000"))  # to this long side: windows 77% vs IFC on ResBIM
+
+
 def maps(path):
-    """(icons, rooms) argmax maps at the image's own size."""
-    im = np.asarray(Image.open(path).convert("RGB"), np.float32)
+    """(icons, rooms, scale) argmax maps at the working size; scale = working px / original px."""
+    pil = Image.open(path).convert("RGB")
+    scale = 1.0
+    if max(pil.size) > MAX_SIDE:
+        scale = RESIZE_TO / max(pil.size)
+        pil = pil.resize((round(pil.size[0] * scale), round(pil.size[1] * scale)), Image.LANCZOS)
+    im = np.asarray(pil, np.float32)
     x = torch.from_numpy(2 * (im / 255.0) - 1).permute(2, 0, 1)[None]
     with torch.no_grad():
         y = model()(x)[:, 21:]
         y = F.interpolate(y, size=im.shape[:2], mode="bilinear", align_corners=True)[0]
-    return y[12:].argmax(0).numpy().astype(np.uint8), y[:12].argmax(0).numpy().astype(np.uint8)
+    return y[12:].argmax(0).numpy().astype(np.uint8), y[:12].argmax(0).numpy().astype(np.uint8), scale
 
 
 def boxes(mask, min_area, k):
@@ -59,16 +68,18 @@ def boxes(mask, min_area, k):
 
 def predict(path):
     t0 = time.process_time()
-    icons, rooms = maps(path)
+    icons, rooms, sc = maps(path)
     H, W = icons.shape
+    orig = lambda bs: [[round(v / sc) for v in b] for b in bs]  # boxes in ORIGINAL image px
     out = {}
     for t, (cls, mf, k) in FROZEN.items():
-        bx = [b for c in cls for b in boxes(icons == c, max(1, mf * H * W), k)]
+        bx = orig([b for c in cls for b in boxes(icons == c, max(1, mf * H * W), k)])
         out[t] = {"count": len(bx), "confidence": confidence(t, len(bx)), "boxes": bx}
-    room_counts = {t: {"count": len(b), "boxes": b} for t, (c, mf) in ROOMS_FROZEN.items()
+    room_counts = {t: {"count": len(b), "boxes": orig(b)} for t, (c, mf) in ROOMS_FROZEN.items()
                    for b in [boxes(rooms == c, mf * H * W, 0)]}
     return {"path": path, "cpu_seconds": round(time.process_time() - t0, 2),
-            "model": "CubiCasa5K multi-task (Kalervo et al. 2019), CC BY-NC 4.0 weights", "counts": out, "rooms": room_counts}
+            "model": "CubiCasa5K multi-task (Kalervo et al. 2019), CC BY-NC 4.0 weights",
+            "work_scale": round(sc, 4), "counts": out, "rooms": room_counts}
 
 
 if __name__ == "__main__":

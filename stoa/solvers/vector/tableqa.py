@@ -88,7 +88,8 @@ Compute everything from the DataFrames: never type a number or room_id from the 
 No imports, no printing. Reply with one ```python code block only."""
 
 
-WHICH = re.compile(r"^\s*(which|welche[rs]?|quel(?:le)?s?\s+(?:appartement|pièce|logement)|quale|in\s+which)\b", re.I)
+WHICH = re.compile(r"^\s*(which|welche[rs]?|quel(?:le)?s?\s+(?:appartement|pièce|logement)|lequel|laquelle|quale|"
+                   r"in\s+which|welk[e]?|vilk(?:en|et)|cu[áa]l|kumpi|kt[óo]r[ey])\b", re.I)
 
 
 def _render(tables: dict[str, pd.DataFrame], max_rows: int = 160) -> str:

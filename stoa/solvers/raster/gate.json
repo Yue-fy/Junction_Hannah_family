@@ -1,42 +1,51 @@
 {
- "_about": "Per-class method for the raster solver, chosen on TRAIN only (never dev). Switch away from the prior only with >= 5 pts margin (cost counts). Symbols/storey: experiments/w3/calibrate.py (points on 60 train drawings, direct on 260). Room classes and fixtures-from-rooms: experiments/w3/labels_train.py on 200 train drawings (artifacts/W3/calib/labels-train200.jsonl).",
+ "_about": "Per-class method for the raster solver, chosen on TRAIN only (never dev). Switch away from the prior only with >= 5 pts margin (cost counts). Symbols/storey: experiments/w3/calibrate.py (points on 60 train drawings, direct on 260). Room classes and fixtures-from-rooms: experiments/w3/labels_train.py on 200 train drawings (artifacts/W3/calib/labels-train200.jsonl). Cycle 2 (01:30): sink rooms_rule and wc_seat cond_prior from labels-train500 (500 TRAIN drawings).",
  "window": {
   "method": "prior",
   "acc": {
    "prior": 0.15,
-   "direct": 0.11
+   "direct": 0.11,
+   "cond_prior": 0.188
   },
   "n_train": 260,
-  "note": "n60 said direct 23% vs 12%: noise; n260 reverses it"
+  "note": "n60 said direct 23% vs 12%: noise; n260 reverses it",
+  "note_cond_prior": "cond_prior (['bedroom', 'wc_room', 'sauna']) on 500 TRAIN drawings with read labels: 18.8 vs 14.4 (n=500); 2-fold held-out gain +3.2 < 5-pt bar (200-drawing sample had said +5.8/+6.6); dev 01:15 run n.s. slightly negative -> prior. Flip with --solver-arg gate=door:cond_prior,window:cond_prior. Classical CV arcs / VLM crop verify: below prior."
  },
  "door": {
   "method": "prior",
   "acc": {
    "prior": 0.12,
    "direct": 0.15,
-   "points": 0.067
+   "points": 0.067,
+   "cond_prior": 0.209
   },
-  "n_train": 203
+  "n_train": 203,
+  "note_cond_prior": "cond_prior (['bedroom', 'wc_room', 'sauna']) on 500 TRAIN drawings with read labels: 20.9 vs 15.1 (n=397); 2-fold held-out gain +4.1 < 5-pt bar (200-drawing sample had said +5.8/+6.6); dev 01:15 run n.s. slightly negative -> prior. Flip with --solver-arg gate=door:cond_prior,window:cond_prior. Classical CV arcs / VLM crop verify: below prior."
  },
  "wc_seat": {
-  "method": "prior",
+  "method": "cond_prior",
   "acc": {
    "prior": 0.65,
    "direct": 0.53,
    "points": 0.717,
-   "max(1,wc_room labels)": 0.7
+   "max(1,wc_room labels)": 0.7,
+   "cond_prior": 0.746,
+   "prior_on_same_500": 0.686
   },
   "n_train": 260,
-  "note": "points only measured on 60"
+  "note": "points only measured on 60",
+  "note_cond_prior": "cond_prior = mode of WC seats given #bedroom labels (larger flats have a 2nd WC); 500 TRAIN drawings: 74.6 vs prior 68.6, 2-fold held-out +5.8 (min +2.4); dev 01:15: EN +13.8 [+4.6,+23.1], FI +4.8 n.s."
  },
  "sink": {
-  "method": "prior",
+  "method": "rooms_rule",
   "acc": {
-   "prior": 0.57,
+   "prior": 0.596,
+   "rooms_rule": 0.693,
    "direct": 0.6,
    "points": 0.233
   },
-  "n_train": 258
+  "n_train": 495,
+  "note": "rooms_rule = 1 + max(1,#bathroom labels) + #WC labels; 495 TRAIN drawings (labels-train500, runtime classifier, LOOP->prior): 69.3% vs prior 59.6% (+9.7); first 200: 70.4 vs 56.3; dev 01:04: EN +18.8 [+4.2,+33.3], FI +10.0 n.s. experiments/w3/cv/fixture_rules.py"
  },
  "shower_bath": {
   "method": "prior",

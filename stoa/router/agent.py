@@ -38,6 +38,9 @@ Tools (one per step):
 - ask: input = ONE simple question in English that the team's solvers answer reliably (see KNOWN QUESTIONS).
   Split a complex question into such simple questions, one per step.
 - table: input = "". Shows the extracted data table of this drawing (rooms, areas, labels, apartments, storeys).
+- rows: input = a condition on the room table (swiss drawings), e.g. "area_m2 > 10 and numbered and not outdoor" or
+  "apartment == 'B' and name == 'Bad'". Columns: number, name, area_m2, apartment, outdoor, numbered, n_doors,
+  n_windows, n_toilets, n_washbasins, n_bathtubs, n_showers. Returns how many rooms match and their area sum.
 - find_text: input = a word or phrase to search in the drawing's text.
 - look: input = a short question for a vision model looking at the drawing image (use only if nothing else works).
 - calc: input = an arithmetic expression using numbers from earlier tool results, e.g. "(12.5+8.25)/2".
@@ -46,8 +49,10 @@ Tools (one per step):
   or "no" when the question asks which one / yes or no); set "unit" (count, m2, m3, m, ft2, ft, %, or "").
 Rules: never invent numbers; every number in calc must come from a tool result. Prefer ask over look.
 For "which ... more/larger" questions ask the value for each candidate, then answer with the candidate's name.
-Use table to look up single values (one room's area, its apartment). For TOTALS (all rooms of a floor, an apartment,
-all rooms labelled X, a storey) ask the KNOWN question instead of adding table rows yourself.
+Use table to look up single values (one room's area, its apartment) and to see which rooms exist: never ask about a
+room number you have not seen in the table. To count or sum rooms by a condition ("larger than 10 m²", "not in
+apartment A"), use rows. For TOTALS (all rooms of a floor, an apartment, all rooms labelled X,
+a storey) ask the KNOWN question instead of adding table rows yourself.
 Reply with JSON only: {"thought": "<max 20 words>", "tool": "<tool>", "input": "<string>", "unit": "<unit or empty>"}"""
 
 KNOWN = {
@@ -183,6 +188,46 @@ class Agent:
                 return fact_card(load_index(m), None, max_lines=90)[:4000]
         return "no structured table for this drawing (use ask or look)"
 
+    def _swiss_rooms(self, path: str):
+        dxf = siblings(path).get(".dxf") or (path if path.endswith(".dxf") else None)
+        if source_of(path) != "swiss_dwellings" or not dxf:
+            return None
+        from stoa.solvers.vector import tableqa
+        from stoa.solvers.vector.floor import load_floor
+
+        df = tableqa.floor_tables(load_floor(str(abspath(dxf))))["rooms"].copy()
+        df["numbered"] = df["number"].fillna("").astype(str).str.len() > 0
+        return df
+
+    _COND_OK = re.compile(r"[\w\s.'\"<>=!()&|+\-*/,äöüéèàÄÖÜ²]+")
+
+    def _rows(self, path: str, cond: str, results) -> str:
+        """Deterministic filter over the swiss room table (no attribute access, no calls)."""
+        df = self._swiss_rooms(path)
+        if df is None:
+            return "error: rows works on swiss drawings with a DXF; use table + calc"
+        c = cond.strip().strip("`")
+        if not self._COND_OK.fullmatch(c) or "__" in c or re.search(r"[A-Za-z_)\]]\s*\.", c) or re.search(r"\w\s*\(", c):
+            return "error: use a plain condition like \"area_m2 > 10 and numbered and not outdoor\""
+        c = re.sub(r"\bAND\b", "and", re.sub(r"\bOR\b", "or", c))
+        sub = df.query(c, engine="python")
+        n, tot = len(sub), round(float(sub["area_m2"].sum()), 2)
+        ev: list[Evidence] = []
+        if self.ask_fn is not None:  # the matched rooms' outlines on the drawing (deterministic asks, no LLM)
+            for r in sub.head(6).itertuples():
+                if not r.number:
+                    continue
+                try:
+                    a = self.ask_fn(path, f"What is the net floor area of room {r.number} ('{r.name}') in m²?")
+                except Exception:  # noqa: BLE001
+                    continue
+                ev += [e.model_copy(update={"note": f"room {r.number} '{r.name}' {r.area_m2} m² matches"})
+                       for e in (a.evidence or [])[:1]]
+        results.append((n, 0.9, ev, f"rows: {c[:70]} (count)"))
+        results.append((tot, 0.9, ev, f"rows: {c[:70]} (area sum)"))
+        listed = ", ".join(f"{r.number or '-'} {r.name} {r.area_m2}" for r in sub.head(12).itertuples())
+        return f"{n} room(s) match, area_m2 sum {tot}: {listed}" + (" …" if n > 12 else "")
+
     def _pdf(self, path: str) -> str | None:
         if path.lower().endswith(".pdf"):
             return path
@@ -232,8 +277,8 @@ class Agent:
         msgs = [{"role": "system", "content": SYSTEM}, {"role": "user", "content": ctx}]
         schema = {"type": "object", "properties": {
             "thought": {"type": "string", "maxLength": 200},
-            "tool": {"type": "string", "enum": ["ask", "table", "find_text", "look", "calc", "answer"]},
-            "input": {"type": "string", "maxLength": 400}, "unit": {"type": "string", "maxLength": 12}},
+            "tool": {"type": "string", "enum": ["ask", "table", "rows", "find_text", "look", "calc", "answer"]},
+            "input": {"type": "string", "maxLength": 1200}, "unit": {"type": "string", "maxLength": 12}},
             "required": ["thought", "tool", "input"]}
         trace: list[str] = []
         evidence: list[Evidence] = []
@@ -249,7 +294,7 @@ class Agent:
             if force:
                 msgs.append({"role": "user", "content": "Last step: call answer now with your best value."})
             try:
-                r = llm.chat(msgs, backend=self.backend, max_tokens=220, temperature=0.0, json_schema=schema)
+                r = llm.chat(msgs, backend=self.backend, max_tokens=500, temperature=0.0, json_schema=schema)
             except Exception as e:  # noqa: BLE001
                 trace.append(f"agent: LLM error {type(e).__name__}")
                 break
@@ -275,7 +320,34 @@ class Agent:
                 if n_bad >= 3:
                     break
             msgs.append({"role": "user", "content": f"RESULT of {tool}: {obs[:3600]}"})
-        return self._finish(final, unit, results, evidence, trace, assumptions, missing, cost, t0, question)
+        ans = self._finish(final, unit, results, evidence, trace, assumptions, missing, cost, t0, question)
+        if src == "swiss_dwellings" and self.ask_fn is not None and ans.value is not None and ans.confidence > 0.25:
+            try:
+                self._table_evidence(path, results, ans)
+            except Exception:  # noqa: BLE001 - evidence is a bonus, never a failure
+                pass
+        return ans
+
+    def _table_evidence(self, path: str, results, ans: Answer) -> None:
+        """Rooms whose table area the calculation used -> their drawn outline (asked to the deterministic solver)."""
+        tables = [str(v) for v, c, _, _ in results if c == -2.0]
+        exprs = " ".join(w[6:] for v, c, _, w in results if c == -1.0)
+        if not tables or not exprs:
+            return
+        nums = {float(t) for t in re.findall(r"\d+\.\d+", exprs)}
+        rows = []
+        for line in tables[-1].splitlines():  # "number,name,area_m2,apartment,outdoor"
+            parts = line.split(",")
+            if len(parts) >= 3 and re.fullmatch(r"\d+(?:\.\d+)*", parts[0] or "x") and _num(parts[2]) is not None:
+                rows.append((parts[0], parts[1], _num(parts[2])))
+        hit = [(no, name) for no, name, a in rows if a in nums][:6]
+        for no, name in hit:
+            a = self.ask_fn(path, f"What is the net floor area of room {no} ('{name}') in m²?" if name
+                            else f"What is the net floor area of room {no} in m²?")
+            for e in (a.evidence or [])[:1]:
+                ans.evidence.append(e.model_copy(update={"note": f"room {no} '{name}' used in the calculation"}))
+        if hit:
+            ans.trace.append("evidence: outlines of the rooms used — " + ", ".join(f"{no}" for no, _ in hit))
 
     def _run(self, tool: str, inp: str, path: str, evidence, results, cost_box) -> str:
         try:
@@ -293,6 +365,8 @@ class Agent:
                 t = self._table(path)
                 results.append((t, -2.0, [], "table"))  # conf -2: data the calc numbers may come from, see _grounding
                 return t
+            if tool == "rows":
+                return self._rows(path, inp, results)
             if tool == "find_text":
                 return self._find_text(path, inp, evidence)
             if tool == "look":
@@ -301,8 +375,9 @@ class Agent:
                 cost_box[0] = Cost.model_validate(c) if isinstance(c, dict) else (c or Cost())
                 if a.value is None:
                     return "no answer"
-                results.append((a.value, min(a.confidence, 0.3), list(a.evidence), f"look: {inp[:80]}"))
-                return f"{_fmt(a.value)} {a.unit or ''} (vision model, unverified)"
+                # vlm_direct's confidence is calibrated on TRAIN (R2: answer-digit logprobs; conf >= 0.8 -> 89% right)
+                results.append((a.value, min(a.confidence, 0.9), list(a.evidence), f"look: {inp[:80]}"))
+                return f"{_fmt(a.value)} {a.unit or ''} (vision model, confidence {a.confidence:.2f})"
             if tool == "calc":
                 v = calc(inp)
                 results.append((v, -1.0, [], f"calc: {inp}"))  # conf -1: derived, see _finish

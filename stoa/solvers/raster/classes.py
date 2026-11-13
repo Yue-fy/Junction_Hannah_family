@@ -152,7 +152,8 @@ def label_classes(text: str) -> set[str]:
     return hits
 
 
-_TYPE_CODE = re.compile(r"^\s*(\d{1,2})\s*H\s*(\+|$)", re.I)  # apartment type "4H+K+S", "2 H + KK", "1H"
+# apartment type "4H+K+S", "2 H + KK", "1H", "2HK+S", "3HKS"; without the digit only when '+' follows ("H+KK")
+_TYPE_CODE = re.compile(r"^\s*(?:(\d{1,2})\s*H(?=\s*(?:\+|K|$))|H(?=\s*\+))", re.I)
 
 
 def type_code(text: str) -> dict | None:
@@ -168,7 +169,9 @@ def type_code(text: str) -> dict | None:
         for cls, codes in CODES.items():
             if tok in codes:
                 classes.add(cls)
-    return {"rooms": int(m.group(1)), "classes": classes}
+    for tok in re.findall(r"KK|KT|K|S", rest.split("+")[0]) if rest[:1] not in "+" else []:
+        classes |= {c for c, codes in CODES.items() if tok in codes}  # "2HKS" -> kitchen, sauna
+    return {"rooms": int(m.group(1)) if m.group(1) else None, "classes": classes}
 
 
 def label_class(text: str) -> str | None:
