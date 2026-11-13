@@ -27,12 +27,12 @@ const UNIT_LABEL: Record<string, string> = { m2: "m²", m3: "m³", ft2: "ft²", 
 
 const esc = (s: unknown) => String(s ?? "").replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
+/** Per-question cost as "€X per 1,000 questions like this" (µ-euros per question mean nothing to a jury). */
 function fmtEur(usd: number) {
-  const eur = usd * EUR_PER_USD;
-  if (eur === 0) return "€0";
-  if (eur < 0.0001) return `€${(eur * 1e6).toFixed(1)}µ`;
-  if (eur < 0.01) return `€${eur.toFixed(5)}`;
-  return `€${eur.toFixed(3)}`;
+  const per1k = usd * EUR_PER_USD * 1000;
+  if (per1k === 0) return "€0 / 1k Qs";
+  if (per1k < 0.01) return "< €0.01 / 1k Qs";
+  return `€${per1k < 10 ? per1k.toFixed(2) : per1k.toFixed(0)} / 1k Qs`;
 }
 
 function fmtValue(a: Answer) {
@@ -82,8 +82,9 @@ function evLabel(ev: Evidence[], g: { idx: number[]; first: number }, n: number,
   const e = items.find((x) => x.bbox) ?? items[0];
   const note = items.map((x) => x.note).find((x) => x) || (e.ifc_guid ? describe(e.ifc_guid) : "evidence");
   const where = has2D && has3D ? "2D + 3D" : has3D ? "3D" : has2D ? "2D" : "";
+  const projected = items.some((x) => /projected: not drawn/i.test(x.note ?? ""));
   const files = new Set(items.map((x) => x.file.split("/").pop()));
-  return `<li class="ev-item" data-i="${g.idx.find((i) => ev[i].bbox) ?? g.first}" title="${esc([...files].join(" · "))}"><span class="n">${n}</span><span class="t">${esc(note)}</span><span class="w">${where}</span></li>`;
+  return `<li class="ev-item" data-i="${g.idx.find((i) => ev[i].bbox) ?? g.first}" title="${esc([...files].join(" · "))}"><span class="n">${n}</span><span class="t">${esc(note.replace(/\s*\|\s*projected: not drawn on this plan\s*$/i, ""))}${projected ? `<span class="proj" title="Not drawn on this plan (cut at 1.2 m): box = the element's footprint from the IFC model">projected</span>` : ""}</span><span class="w">${where}</span></li>`;
 }
 
 /** Long text answers (often "- item" lists from the model fact card): a compact list, folded after 8 lines. */
@@ -133,7 +134,7 @@ function intentHtml(a: Answer) {
   const plan = a.plan && a.plan.sub_questions?.length
     ? `<details class="plan"><summary><b>${esc(OP[a.plan.op] ?? a.plan.op)}</b> ${a.plan.parts.map((p) => `<span class="part">${esc(p)}</span>`).join(a.plan.op === "sum" ? " + " : a.plan.op === "diff" ? " − " : ", ")}
         <small>${a.plan.sub_questions.length} sub-questions, arithmetic in code</small></summary>
-        <ol>${a.plan.sub_questions.map((q) => `<li><button type="button" class="subq" data-q="${esc(q)}" title="Ask this sub-question on its own">${esc(q)}</button></li>`).join("")}</ol></details>`
+        <ol>${a.plan.sub_questions.map((q) => `<li><span role="button" tabindex="0" class="subq" data-q="${esc(q)}" title="Ask this sub-question on its own">${esc(q)}</span></li>`).join("")}</ol></details>`
     : "";
   return `<div class="intent"><span class="lbl">Understood as</span>${bits.join(" · ")}${lang}${a.cached ? `<span class="cached" title="Same question answered before; served from the API cache">cached</span>` : ""}</div>${plan}`;
 }
@@ -195,7 +196,7 @@ export function renderCard(el: HTMLElement, a: Answer, opts: CardOpts) {
     <div class="cost">
       <span title="Wall time">⏱ ${wall < 1 ? `${Math.round(wall * 1000)} ms` : `${wall.toFixed(1)} s`}</span>
       <span title="LLM tokens in / out">${tokens ? `${(c.llm_tokens_in ?? 0).toLocaleString()} / ${(c.llm_tokens_out ?? 0).toLocaleString()} tok` : "0 tokens"}</span>
-      <span title="Estimated cost with the eval's rates (stoa/eval/runner.py), shown in EUR at ${EUR_PER_USD} €/$">≈ ${fmtEur(costUsd({ ...c, wall_seconds: wall }))}</span>
+      <span title="Estimated cost of this answer with the eval's rates (stoa/eval/runner.py): €${(costUsd({ ...c, wall_seconds: wall }) * EUR_PER_USD).toPrecision(2)} per question, i.e. this much per 1,000 questions like it (EUR at ${EUR_PER_USD} €/$)">${((x) => (x.startsWith("<") ? x : `≈ ${x}`))(fmtEur(costUsd({ ...c, wall_seconds: wall })))}</span>
       <span class="solver" title="Solver">${esc(a.solver || "?")}</span>
     </div>
     <details class="sec" open><summary>Why <small>${(a.trace ?? []).length} steps</small></summary>
@@ -207,6 +208,9 @@ export function renderCard(el: HTMLElement, a: Answer, opts: CardOpts) {
       <ul class="evidence">${shown.map((g, n) => evLabel(ev, g, n + 1, opts.describeGuid)).join("")}${groups.length > shown.length ? `<li class="more">+ ${groups.length - shown.length} more</li>` : ""}</ul></details>
   `;
   el.querySelectorAll<HTMLElement>(".ev-item").forEach((li) => li.addEventListener("click", () => opts.onEvidence(Number(li.dataset.i))));
-  el.querySelectorAll<HTMLButtonElement>(".subq").forEach((b) => b.addEventListener("click", () => opts.onAsk?.(b.dataset.q!)));
+  el.querySelectorAll<HTMLElement>(".subq").forEach((b) => {
+    b.addEventListener("click", () => opts.onAsk?.(b.dataset.q!));
+    b.addEventListener("keydown", (e) => e.key === "Enter" && opts.onAsk?.(b.dataset.q!));
+  });
   el.querySelectorAll<HTMLButtonElement>(".sheet").forEach((b) => b.addEventListener("click", () => b.dataset.file !== opts.currentFile && opts.onOpenSheet(b.dataset.file!)));
 }

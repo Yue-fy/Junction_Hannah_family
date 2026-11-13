@@ -86,6 +86,86 @@ Upscale 2–3× before OCR.
 Caveats: `MH` can carry a digit (`MH1`, `MH2`). Some kitchens are a niche without a label (`K` missing),
 which is why the "always 1" prior is so strong. Saunas are sometimes only drawn as a bench symbol.
 
+## 3a. Symbol counting with the pretrained CubiCasa5K model (measured: +15 to +30 pts, leak-safe)
+
+The CubiCasa5K multi-task network (Kalervo et al., SCIA 2019; public weights `model_best_val_loss_var.pkl`,
+CC BY-NC 4.0) segments 12 room classes and 11 icon classes, including Window, Door, Toilet, Sink and
+Bathtub, exactly the symbols we lose points on. We wrote our own copy of the network
+(`experiments/r1/cc5k_model/net.py`, same parameter names) and load the checkpoint with
+`torch.load(weights_only=True)`. We don't run the upstream code. Inference takes ~0.8 s of CPU per drawing and
+no GPU or LLM.
+
+Count = number of 8-connected components of `icons == class` with area ≥ `min_frac·H·W`, after an optional
+k×k morphological opening. Evidence = one box per component.
+
+**Leak safety (D3).** The model was trained on the original CubiCasa5K *train* list, which holds 84% of
+our drawings, including most of dev, train_gate and test. So it is tuned only on drawings in the original
+**val** list (371 drawings, not in our sealed test) and reported only on the original **test** list
+(`cc5k_heldout`, 365 drawings). Numbers on dev or train_gate would be inflated by memorisation.
+
+Settings frozen on val: windows (2e-4, k=5), doors (2e-4, k=0), WC seats (2e-4, k=5), sinks (2e-5, k=5).
+
+| Template | Prior (test) | CC5K model (test) | Paired gain, cluster CI (cc5k_heldout, eval tool) |
+|---|---|---|---|
+| windows | 13.9% | **34.0%** | +14.6 [+6.2, +23.1] |
+| doors | 9.8% | **40.2%** | +29.9 [+21.3, +39.4] |
+| WC seats | 55.0% | **75.5%** | +29.1 [+18.9, +39.4] |
+| sinks | 45.7% | **60.1%** | +22.0 [+11.8, +31.5] |
+| showers + bathtubs | 73.9% | 10.1% | the model has no shower class → keep the prior |
+| all cubicasa questions in cc5k_heldout | 51.2% | **59.5%** | **+8.4 [+6.4, +10.3]** |
+
+(The left two columns count one gold per drawing; the CI column uses the eval tool's question rows. Prior
+row: `artifacts/eval/20261114-005001-prior-cc5k_heldout-14c7.jsonl`; model rows:
+`artifacts/R1/cc5k_preds/plain_over_prior.jsonl`.)
+
+By style (test, model vs prior): windows colorful 47/15, high_quality 46/29, architectural 28/10; doors 57/8,
+66/17, 29/8; WC seats 82/69, 86/68, 71/49; sinks 62/63 (no gain on colorful), 73/56, 57/39. Scanned
+architectural sheets are the hardest. Small images are not worse than large ones (windows by long side:
+<700 px 49%, ≥1500 px 35%), so upscaling is not the fix.
+
+Calibration: `confidence = P(gold == count | template, count bucket)` fit on val (Laplace-smoothed;
+`calib.py`, `calib_plain.json`). ECE on test is 0.03–0.09. A gate "prior if it is more often right in this bucket"
+never fires except for sinks with 0, 1 or ≥6, where it changes nothing on test. Within ±1 coverage on test:
+windows 57%, doors 68%, WC seats 95%, sinks 86%. These are the intervals to state when unsure.
+
+Inside the full pipeline (`pipeline` on cc5k_heldout, night cbd2fe8: 61.8%), swapping in the model's
+counts for the 4 symbol templates gives 68.8%: **+7.1 [+5.1, +9.0]**. Doors: pipeline (VLM) 23.6% → 38.6%.
+(`artifacts/eval/20261114-005010-pipeline-cc5k_heldout-5645.jsonl` vs `artifacts/R1/cc5k_preds/plain_over_pipeline.jsonl`.)
+
+Tried and not adopted:
+- 4-rotation TTA (4× CPU): test windows 35.3 (+1.3), doors 37.1 (−3.1), WC 77.9 (+2.4), sinks 63.1 (+3.0).
+  All within noise, so we keep plain inference because it is 4× cheaper.
+- An opening kernel relative to image size: no change (windows 33.4, WC 75.7, sinks 59.5).
+- Splitting long window components into several windows by a typical window length: always worse
+  (windows val 40% → ≤ 39%). The −4 tail (18% of val drawings) is missed windows, not merged ones.
+- A per-class probability threshold instead of argmax (P(window) ≥ τ, τ = 0.15–0.45; 227 val drawings):
+  never better (windows 44.1% argmax vs 43.6%). The missed windows are not near-misses in probability.
+
+**Memorisation check (D3).** On the drawings cached so far (colorful + high_quality styles), accuracy on
+drawings from the model's original *train* list is about the same as on held-out *test* drawings of the
+same styles: windows 49.3% vs 45.5%, doors 52.8% vs 60.0%, WC seats 84.6% vs 84.6%, sinks 63.2% vs 67.5%
+(n = 521 vs 123). So there is little memorisation, and dev numbers should be close to leak-safe ones.
+Check the architectural style when its cache is complete.
+
+**Room segmentation as a cross-check (Stoa point 4).** Room-type regions = components of room class
+(Bed Room 5, Bath 6, Kitchen 3, Outdoor 1) ≥ min_frac·H·W (val-chosen: 1.2e-2, 1.2e-2, 1.6e-2, 2.4e-2;
+`config.ROOMS_FROZEN`). On cc5k_heldout the pipeline's answer is right 92–96% of the time when it agrees
+with this count, and much less often when it doesn't:
+
+| Template | Agree (n) | Pipeline acc. when agree | when disagree | Segmentation alone (test) |
+|---|---|---|---|---|
+| balconies | 60/108 | 92% | 65% | 68% (val 70%) |
+| bedrooms | 63/126 | 75% | 37% | **67%** vs pipeline 56% |
+| bathrooms | 57/96 | 96% | 82% | 65% (prior ~92%) |
+| kitchens | 111/126 | 96% | 80% | 88% (prior ~94%) |
+
+`adapter.cross_check(path, concept, value)` returns the line in D4/W5 badge format, e.g.
+`cross-check: label reading 3 = CC5K room segmentation 3 ✓`.
+
+Live use: `experiments/r1/cc5k_model/predict.py IMG.png` prints `{counts: {windows|doors|wc_seats|sinks:
+{count, confidence, boxes}}}`. It needs torch (CPU is enough; `/data/User/fangy4/envs/junction-train`
+has it, but `$JUNCTION_VENV` does not).
+
 ## 3. Symbol counting on raster plans (measured: Qwen3-VL-8B pointing does NOT work)
 
 Measured with Qwen3-VL-8B (`experiments/r1/symbol_points/`), exact match vs the per-template prior:

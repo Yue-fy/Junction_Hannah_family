@@ -114,6 +114,7 @@ class FloorModel:
     raw_counts: dict[str, int]
     insunits: int | None
     warnings: list[str] = field(default_factory=list)
+    supported: frozenset | None = None  # object kinds this model can count (None = all; PDF-only models: fewer)
 
     def names(self) -> list[str]:
         return sorted({r.name for r in self.rooms if r.name} | {t.text for t in self.texts if _is_name(t.text)})
@@ -231,6 +232,16 @@ def _load_floor_cached(path: str) -> FloorModel:
         elif t == "CIRCLE" and layer == "FIXTURE":
             fx_circles.append((float(e.dxf.center[0]), float(e.dxf.center[1]), float(e.dxf.radius)))
 
+    insunits = doc.header.get("$INSUNITS")
+    if insunits not in (6, None):
+        warnings.append(f"$INSUNITS={insunits}, expected 6 (metres)")
+    return assemble(path, room_pts, unit_pts, texts, annotations, door_leaves, door_arcs, window_boxes, fx_polys,
+                    fx_circles, raw, insunits, warnings)
+
+
+def assemble(path, room_pts, unit_pts, texts, annotations, door_leaves, door_arcs, window_boxes, fx_polys, fx_circles,
+             raw, insunits, warnings, supported=None) -> FloorModel:
+    """Geometry (metres, y up) -> FloorModel. Shared by the DXF reader and the PDF-only reader (pdffloor.py)."""
     # rooms ---------------------------------------------------------------------------------------
     rooms: list[Room] = []
     for i, pts in enumerate(room_pts):
@@ -334,11 +345,8 @@ def _load_floor_cached(path: str) -> FloorModel:
         for k, it in enumerate(lst):
             it.note = f"{kind} {k + 1}"
 
-    insunits = doc.header.get("$INSUNITS")
-    if insunits not in (6, None):
-        warnings.append(f"$INSUNITS={insunits}, expected 6 (metres)")
     return FloorModel(path=path, rooms=rooms, units=units, items=items, texts=texts, annotations=annotations,
-                      raw_counts=raw, insunits=insunits, warnings=warnings)
+                      raw_counts=raw, insunits=insunits, warnings=warnings, supported=supported)
 
 
 def window_count(fm: FloorModel) -> int:

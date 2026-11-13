@@ -147,6 +147,24 @@ _FLOOR_AREA = re.compile(r"(net(to)?[- ]?)?(floor ?area|floor ?space|vloer ?oppe
                          r"powierzchni\w* (netto|uzytkow\w*)|suprafata utila|lattiapinta-ala|golvarea)")
 _GROSS = ("gross", "brutto", "bruto", "construida")
 
+# operators the dataset templates never use but unseen questions do (F's hard2): average, share, threshold
+_AVG = re.compile(r"\b(average|mean|avg|durchschnittlich\w*|durchschnitt\w*|mittlere\w*|gemiddeld\w*|promedio|media|"
+                  r"medio|moyenne?|gennemsnit\w*|keskmi\w*|keskimaar\w*|sredni\w*|medie|genomsnitt\w*)\b")
+_PER_ROOM = re.compile(r"\bper (room|space|raum|ruimte|habitacion|local|piece|pomieszczenie|huone)\b")
+_SHARE = re.compile(r"%|\b(percent(age)?|per ?cent|share|proportion|fraction|anteil\w*|prozent\w*|procent\w*|"
+                    r"porcentaje|percentuale|pourcentage|osuus|prosent\w*|udzia\w*|andel\w*|procentaj\w*)\b")
+_THRESH = re.compile(r"\b(more|greater|larger|bigger|less|smaller|fewer|over|under|above|below|at least|at most|"
+                     r"exceeding|mehr|weniger|groesser|grosser|kleiner|meer|minder|groter|mas|menos|mayor|menor|plus|"
+                     r"moins|piu|meno|yli|alle|wiecej|mniej|powyzej|ponizej|ueber|uber|unter|boven|onder|over)\b"
+                     r"(?:\s+(?:than|als|dan|que|de|di|niz|kuin))?\s*(\d+(?:[.,]\d+)?)")
+_EXCL = re.compile(r"\b(excluding|except( for)?|exclude[sd]?|without|not counting|not including|apart from|other than|"
+                   r"ohne|ausser|ausgenommen|exkl\w*|abzuglich|sauf|hors|excepto|salvo|sin contar|zonder|behalve|"
+                   r"uitgezonderd|exclusief|lukuun ottamatta|ilman|poza|oprocz|bez|bortsett fran|utom|uden|undtagen|"
+                   r"valja arvatud|cu exceptia|fara|senza|tranne|escluso|esclusi)\b(.{0,80})")
+_LOWER = ("less", "smaller", "fewer", "under", "below", "at most", "weniger", "kleiner", "minder", "menos", "menor",
+          "moins", "meno", "alle", "mniej", "ponizej", "unter", "onder")
+
+
 _QUOTED = re.compile(r"«([^»]{1,120})»|„([^“”\"]{1,120})[“”\"]|“([^”]{1,120})”|‘([^’]{1,120})’|(?<!\w)'(.{1,120}?)'(?!\w)|\"([^\"]{1,120})\"")
 
 
@@ -176,6 +194,9 @@ class Intent:
     top_n: bool = False  # "which rooms are the largest" without names -> list the top rooms
     op: str | None = None  # None | sum | max | min | argmax | argmin | diff | more
     yes_no: bool = False  # "are there more X than Y?" -> "yes"/"no"
+    mod: str | None = None  # operator on top of the atomic quantity: avg | share | threshold (see parse)
+    threshold: tuple[str, float] | None = None  # ("gt"|"ge"|"lt"|"le", value in the asked unit)
+    which: bool = False  # "which storey/room ..." -> answer with a name
     notes: list[str] = field(default_factory=list)
 
     @property
@@ -243,9 +264,8 @@ def _find_kind(text: str) -> str | None:
 
 def parse(question: str) -> Intent:
     names = quoted_names(question)
-    text = question
-    for n in names:  # don't let room/storey names trigger the lexicon ("Bathroom", "Stair hall")
-        text = text.replace(n, " ")
+    # drop the quoted spans, not every occurrence of their text: storey '1' must not eat the 1 of "13 m²"
+    text = _QUOTED.sub(" ", question)  # room/storey names must not trigger the lexicon ("Bathroom", "Stair hall")
     t = " " + fold(text) + " "
     asked_unit = None
     if re.search(r"ft2|ft²|sq\.? ?ft|square f", t):
@@ -324,6 +344,57 @@ def parse(question: str) -> Intent:
         it.op = "argmin" if which else "min"
     elif _has(t, _SUM) or len(it.kinds) > 1:
         it.op = "sum"
+    # operators on top of the atomic quantity (checked after op so they can override a mis-read "more than N")
+    mt = _THRESH.search(t)
+    if mt and (re.search(r"\b(how many|wie viele|hoeveel|cuant\w+|combien|quant\w|ile|kuinka monta|hur manga|"
+                         r"hvor mange|mitu|cate)\b", t) and (metric in ("area", "volume", "length") or
+                                                              _FLOOR_AREA.search(t) or _has(t, _AREA))):
+        w = mt.group(1)
+        it.threshold = ("lt" if w in _LOWER else "gt", float(mt.group(2).replace(",", ".")))
+        if w in ("at least",):
+            it.threshold = ("ge", it.threshold[1])
+        elif w in ("at most",):
+            it.threshold = ("le", it.threshold[1])
+        it.mod, it.op, it.yes_no = "threshold", None, False
+        it.metric = "area" if (metric in ("count", "text", "area") and (_FLOOR_AREA.search(t) or _has(t, _AREA))) else metric
+        if it.kind in (None, "slab", "storey"):
+            it.kind = "space"
+    elif _SHARE.search(t) and metric != "text" or (_SHARE.search(t) and metric == "text" and kind):
+        it.mod, it.op = "share", None
+        if metric == "text":
+            it.metric = "area" if _has(t, _AREA) else "count"
+    elif _AVG.search(t) or (metric != "count" and _PER_ROOM.search(t)):
+        it.mod = "avg"
+        if it.op in ("sum", "max", "min"):
+            it.op = None
+    it.which = bool(which)
+    mx = _EXCL.search(t)
+    if mx:  # "... excluding external walls" / "doors and windows, not counting windows"
+        clause = mx.group(mx.lastindex)
+        done = False
+        for rx, prop in ((_EXTERNAL, "IsExternal"), (_INTERNAL, "IsExternal"), (_LOADBEARING, "LoadBearing")):
+            if rx.search(clause):
+                want = (rx is _INTERNAL) if prop == "IsExternal" else False
+                it.filters[prop] = want
+                done = True
+                break
+        if not done:
+            ex_kinds = [h[2] for h in _kind_hits(clause) if h[2] in it.kinds and len(it.kinds) > 1]
+            if ex_kinds:
+                it.kinds = [k for k in it.kinds if k not in ex_kinds]
+                it.kind = it.kinds[0]
+                done = True
+        it.notes.append(("exclusion applied: " if done else "exclusion NOT applied: ") + mx.group(0).strip()[:60])
+    if which and it.kind == "storey":  # "Which storey has more doors, 'A' or 'B'?" -> compare storeys by doors
+        hs = [h[2] for h in _kind_hits(t) if h[2] != "storey"]
+        if hs:
+            it.kind, it.kinds = hs[0], [hs[0]]
+            it.attr = None
+            if it.metric in ("text", "length") and not (_has(t, _AREA) or _has(t, _VOLUME)):
+                metric = it.metric = "count"
+            it.op = "argmin" if re.search(r"\b(fewer|less|least|fewest|weniger|minder|menos|moins|meno|mniej|vahem)\b", t) \
+                else "argmax"
+            it.yes_no = False
     if it.op == "diff" and metric == "text" and len(_kind_hits(t)) >= 2:
         metric = it.metric = "count"  # "Are there more doors than windows on X?"
     if it.op == "diff" and metric == "count" and len(it.kinds) < 2:

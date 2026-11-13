@@ -38,7 +38,8 @@ def _text(rows: list[dict]) -> tuple[int, float | None]:
     return len(j), (sum(1 for r in j if r["text_judge"]) / len(j) if j else None)
 
 
-def scorecard(dev: str, hard: str | None = None, text: str | None = None, baseline: str | None = None) -> str:
+def scorecard(dev: str, hard: str | None = None, text: str | None = None, baseline: str | None = None,
+              gen: list[str] | None = None) -> str:
     rows = load(dev)
     base_path = baseline or find_baseline(rows, "prior") or find_baseline(rows, "dummy")
     base = load(str(base_path)) if base_path else None
@@ -81,7 +82,7 @@ def scorecard(dev: str, hard: str | None = None, text: str | None = None, baseli
                 r["text_judge"] = verdict[r["qid"]]
     tn, tacc = _text(rows)
     if tn:
-        out.append(f"| text answers, LLM-judged | {_pct(tacc)} of {tn} | – | free text (ifc_bench, schedules); judge is lenient ±5 pts |")
+        out.append(f"| text answers, judged | {_pct(tacc)} of {tn} | – | free text (ifc_bench, schedules); numeric check, else LLM (±5 pts) |")
     if hard:
         hm = summarize(load(hard))
         kinds = hm.get("by_kind") or {}
@@ -89,6 +90,15 @@ def scorecard(dev: str, hard: str | None = None, text: str | None = None, baseli
                    + " / ".join(_pct((kinds.get(k) or {}).get("accuracy"), 0) for k in ("translation", "paraphrase", "composition"))
                    + " | – | unseen wordings, languages, units, multi-step |")
 
+    for g in gen or []:  # extra generated generality splits (hard2 = novel operators, hard2p = reworded, held out)
+        gr = load(g)
+        gm = summarize(gr)
+        gc = gm.get("calibration") or {}
+        gn, gt = _text(gr)
+        split = resolve(g).stem.split("-pipeline-")[-1].split("-")[0] if "-pipeline-" in resolve(g).stem else resolve(g).stem
+        out.append(f"| generality ({split}): scored / judged text / AUROC / conf ≥ 0.8 acc | {_pct(gm['accuracy'])} / "
+                   f"{_pct(gt)} / " + (f"{gc['auroc']:.2f}" if gc.get("auroc") is not None else "–")
+                   + f" / {_pct(gc.get('hi_conf_acc'))} | – | n={len(gr)}; operators never seen in questions.jsonl |")
     out += ["", "| source | n | accuracy | conf ≥ 0.8 share / acc | ECE | evidence in 2D | counts verifiable | $/1k |",
             "|---|---:|---:|---:|---:|---:|---:|---:|"]
     by_src = collections.defaultdict(list)
@@ -114,9 +124,10 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--hard")
     ap.add_argument("--text")
     ap.add_argument("--baseline")
+    ap.add_argument("--gen", action="append", default=[], help="run on a generated split (hard2, hard2p); repeatable")
     ap.add_argument("--out")
     a = ap.parse_args(argv)
-    md = scorecard(a.dev, a.hard, a.text, a.baseline)
+    md = scorecard(a.dev, a.hard, a.text, a.baseline, a.gen)
     if a.out:
         with open(a.out, "w", encoding="utf-8") as f:
             f.write(md)

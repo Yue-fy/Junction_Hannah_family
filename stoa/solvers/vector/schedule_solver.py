@@ -134,10 +134,22 @@ class ScheduleSolver(BaseSolver):
             value = round(value, 2)
         if unit not in ("count", "ft2", "m2", "ft", "m", None):
             unit = None
+        row_label = {}
+        for name, df in tables.items():
+            if name == "notes" or df.empty:
+                continue
+            qty = next((c for c in df.columns if re.search(r"^(count|qty|quantity|no\.?)$", str(c).strip(), re.I)), None)
+            key = df.columns[1] if len(df.columns) > 1 else None
+            for _, row in df.iterrows():
+                lab = f"{name} row: {row[key]}" if key is not None else f"{name} row"
+                if qty is not None and pd.notna(row[qty]):
+                    lab += f" (qty {row[qty]:g})" if isinstance(row[qty], (int, float)) else f" (qty {row[qty]})"
+                row_label[int(row["row_id"])] = lab
         evidence = [Evidence(file=path, page=0, bbox=[round(v, 1) for v in boxes[i]], bbox_space="pdf_pt",
-                             note=(f"note line {i - 900000}" if i >= 900000 else f"table row {i}"))
+                             note=(f"note line {i - 900000}" if i >= 900000 else row_label.get(i, f"table row {i}")))
                     for i in res.get("used", []) if i in boxes]
-        conf = 0.55 if evidence else 0.4
+        # calibrated on dev (opening_design, local model): 78% right overall; answers that cite rows are right more often
+        conf = 0.8 if evidence else 0.5
         missing = [] if evidence else ["the query did not report which rows it used"]
         about_table = re.search(r"schedul|listed|table|legend|\bkey\b|specified|finish", question, re.I)
         about_drawing = re.search(r"\b(drawn|shown|depicted|visible)\b|\bin\s+(?:the\s+)?(?:enlarged\s+)?plan\b",

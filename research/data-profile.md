@@ -119,3 +119,27 @@ full dataset (cubicasa count 67.8%, swiss count 20.3%, swiss area 9.5%, ifc area
 Floor (dummy = mode/median of the train answers per template): dev micro 26.2%, **weighted_acc 40.4%**, macro 9.6%
 (cubicasa 54.1%, swiss count 16.0%, swiss area 4.2%, ifc area 1.9%). hard: translation 30.0%, paraphrase
 8.8%, composition 3.7%.
+
+## Historical scans (no questions; added 00:50, 14 Nov)
+
+Stoa: "historical drawings (scans) matter … the hidden set may ask about them". What is there (from each source's
+README table and the files):
+
+| source | images | licences | long side px p10/p50/p90 | what the titles say |
+|---|---:|---|---|---|
+| habs (HABS/HAER/HALS, US NPS via LoC) | 1,506 JPG, 1.1 GB | PDM (all) | 3000 / 3000 / 3000 | "HABS AK,19-FOGRE,1-A- (sheet 1 of 3) - <building>, <place>": building, place, sheet n of m |
+| finna (Helsinki City Archives, Architecture & Design Museum) | 1,800 JPG, 1.5 GB | CC BY 4.0 (all) | 3000 / 3000 / 3000 | Finnish address + kind: julkisivu (elevation) 430, leikkaus (section) 376, pohjapiirus (plan) 229, asemapiirros (site plan) 110 |
+| europeana | 1,085 JPG, 0.4 GB | PDM 487, CC BY 176, **CC BY-NC 113, BY-NC-SA 87**, CC0 93, BY-SA 50 | 781 / 1200 / 3000 | many languages (sk, pt, hr, de, it …): "Grundriss", "tlocrt", "Pôdorys" … |
+| wikimedia (WAFFLE list) | 2,175 JPG + 135 SVG (each SVG has a JPG twin), 0.8 GB | PDM 1,207, BY-SA 4.0 449, BY-SA 3.0 277, no-known-restrictions 136, CC0 75, BY 60 | 588 / 1350 / 2500 | building names in many languages; book plates ("Choix des monuments … Plans") |
+
+- **Multi-sheet sets (cross-document links for the KG):** habs 1,271 projects, 156 with ≥ 2 sheets (file prefix
+  before `_sheet`, e.g. `il0377_sheet_0000N`, up to 4); finna 919 title groups, 190 with ≥ 2 drawings (same address:
+  plan + elevation + section of one building, e.g. "Mannerheimintie 17" 36 drawings, "Meilahden Huvila-alue" 128).
+  Questions like "how tall is the facade drawn on the elevation of the building in this plan" need these links.
+- The README tables give title, licence, credit and source URL per file: the only metadata. Use them as evidence
+  for "what/where is this building" and as the credit line in the demo (COMMON rule 4). Scans are downscaled to
+  ≤ 3,000 px, so small dimension text may be unreadable: say so in `missing`.
+- No ground truth exists for these, so nothing can be scored. The `hard`/`hard2` splits do not cover them. Any
+  answer must carry assumptions (scale from a scale bar or dimension string; else "no scale found").
+- Licence trap: 200 europeana files are non-commercial (BY-NC / BY-NC-SA). Fine to show in a hackathon demo with
+  credit, but keep them out of anything commercial and never commit them (data stays outside git anyway).

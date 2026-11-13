@@ -67,6 +67,27 @@ INCLUDE_OUT = (r"(?:including|incl\.?|inklusive|inkl\.?|einschliesslich|y\s+comp
                r"ext[ée]rieur|estern)")
 GROSS = (r"\bgross\s+(?:floor\s+|internal\s+|external\s+|living\s+)?area|\bgfa\b|brutto|\bbgf\b|"
          r"surface\s+(?:de\s+plancher\s+)?brute|superficie\s+lorda")  # not "wie gross ist" (= how large)
+MEAN_W = r"\baverage\b|\bmean\b|durchschnitt\w*|\bmittlere\w*|\bmoyen(?:ne)?s?\b|\bmedi[ao]\b|im\s+mittel"
+PER_W = (r"\b(?:per|pro|je)\s+(?:residential\s+)?(?:apartment|unit|flat|dwelling|wohnung|wohneinheit)|divided\s+by|"
+         r"par\s+(?:appartement|logement)|per\s+(?:appartamento|unit[àa]\s+abitativa)")
+TIMES_W = (r"how\s+many\s+times|times\s+(?:larger|bigger|greater|as\s+(?:large|big))|give\s+the\s+ratio|\bratio\b|"
+           r"\bfa[ck]tor\b|wievielmal|verh[äa]ltnis|combien\s+de\s+fois|\bfois\s+plus|\brapport\b|quante\s+volte|"
+           r"\bvolte\s+pi[uù]|\brapporto\b")
+SHARE_W = (r"\bshare\b|\bpercent(?:age)?\b|in\s+%|\bproportion\b|\banteil\b|prozent|pourcentage|\bpart\s+de\b|"
+           r"percentuale|\bquota\b|\btake\s+up\b|\bnimmt\b.*\bein\b|\boccupe\b|\boccupa\b")
+THRESH_GT = (r"(?:more|larger|greater|bigger)\s+than|exceed(?:s|ing)?|\bover\b|\babove\b|[üu]ber|mehr\s+als|"
+             r"gr[öo](?:ss|ß)er\s+als|plus\s+de|plus\s+grande?s?\s+que|sup[ée]rieure?s?\s+[àa]|pi[uù]\s+di|"
+             r"superiore\s+a|maggiore\s+di|oltre")
+THRESH_LT = (r"(?:less|smaller|fewer)\s+than|\bunder\b|\bbelow\b|\bunter\b|weniger\s+als|kleiner\s+als|moins\s+de|"
+             r"plus\s+petite?s?\s+que|inf[ée]rieure?s?\s+[àa]|meno\s+di|inferiore\s+a|minore\s+di")
+THRESH_GE = r"at\s+least|mindestens|au\s+moins|almeno"
+THRESH_W = (r"(" + THRESH_GT + r"|" + THRESH_LT + r"|" + THRESH_GE + r")\s+(\d+(?:[.,]\d+)?)\s*(?:m²|m2|qm|mq|sq|square)")
+NEG_APT_W = (r"(?:do(?:es)?\s+not|don't|doesn't|not)\s+(?:belong|lie|part|in|inside|within)\w*|outside\s+(?:of\s+)?"
+             r"(?:the\s+)?apartment|other\s+than\s+apartment|except\s+(?:for\s+)?apartment|exclud\w*\s+apartment|"
+             r"without\s+apartment|ohne\s+(?:die\s+)?wohnung|au(?:ss|ß)er\s+(?:der\s+)?wohnung|nicht\s+zu\s+wohnung|"
+             r"sans\s+l'\s*appartement|hors\s+(?:de\s+)?l'\s*appartement|n'appartiennent\s+pas|senza\s+l'\s*appartamento|"
+             r"escluso\s+l'\s*appartamento|tranne\s+l'\s*appartamento|non\s+appartengono")
+WHICH_CMP = r"^\s*(?:which|welche[rs]?|quel(?:le)?|quale)\b.*\b(smaller|larger|bigger|greater|kleiner|gr[öo]sser|plus\s+petit|plus\s+grand|più\s+piccol|più\s+grand)"
 COUNT_WORDS = r"how\s+many|count|number\s+of|wie\s+viele|anzahl|combien|nombre\s+de|quant[ie]|quante|numero\s+di|hoeveel|hur\s+m[åa]nga"
 AREA_WORDS = (r"\barea\b|fl[äa]che|surface|superficie|oppervlak|yta\b|m²|m2\b|square\s+met|sq\.?\s*m\b|square\s+f(?:ee|oo)t|"
               r"sq\.?\s*ft|ft²|ft2\b|how\s+(?:large|big)|wie\s+gross|wie\s+groß")
@@ -105,6 +126,8 @@ class Query:
     notes: list[str] = field(default_factory=list)
     include_outdoor: bool = False  # "including balconies"
     gross: bool = False  # "gross floor area"
+    threshold: float | None = None  # for op count_gt / count_lt / count_ge
+    consumed: list[str] = field(default_factory=list)  # regexes of question parts the parse handled (for covered())
 
     def describe(self) -> str:
         parts = []
@@ -173,6 +196,9 @@ def parse(question: str, vocab: list[str] | None = None, room_numbers: set[str] 
                 apts.append((letter.strip(), m.start() + k))
     total_numbered = bool(re.search(TOTAL_NUMBERED, ql))
 
+    # "how many times / by what factor is apartment B larger than A" compares sizes even without an area word
+    if re.search(TIMES_W, ql) and (len(apts) >= 2 or len(nums) >= 2) and not is_area:
+        is_area, is_count = True, False
     op = "sum"
     if re.search(MAX_W, ql):
         op = "max"
@@ -202,9 +228,48 @@ def parse(question: str, vocab: list[str] | None = None, room_numbers: set[str] 
                 terms = [Term("area_total", None, 0, note="no room/apartment/label named; assumed whole floor")]
         inc = bool(re.search(INCLUDE_OUT, ql))
         gross = bool(re.search(GROSS, ql))
+        consumed: list[str] = []
+        thr = None
+        if apts and re.search(NEG_APT_W, ql) and (total_numbered or re.search(r"\btotal|gesamt|insgesamt|totale|tous|toutes|tutti", ql)):
+            # "numbered indoor rooms that do NOT belong to apartment A" = floor total - apartment A
+            terms = [Term("area_total", None, -1)] + [Term("area_apartment", a, p) for a, p in apts]
+            op, rev = "diff", False
+            consumed.append(NEG_APT_W)
+        elif apts and re.search(SHARE_W, ql):
+            terms = [Term("area_apartment", a, p) for a, p in apts[:1]] + [Term("area_total", None, 10**6)]
+            op = "pct"
+            consumed.append(SHARE_W)
+        elif len(terms) == 2 and re.search(TIMES_W, ql):
+            op, rev = "ratio", False
+            consumed.append(TIMES_W)
+        elif re.search(MEAN_W, ql):
+            op = "mean"
+            consumed.append(MEAN_W)
+        if (m := re.search(THRESH_W, ql)) and is_count and len(terms) >= 1 and terms[0].kind in ("area_room", "area_label"):
+            word = m.group(1).lower()
+            thr = float(m.group(2).replace(",", "."))
+            op = ("count_ge" if re.fullmatch(THRESH_GE, word) else
+                  "count_lt" if re.fullmatch(THRESH_LT, word) else "count_gt")
+            consumed += [THRESH_W, r"ha(?:ve|s)\s+(?:a|an)\b"]
+            qr = Query("count", op, terms, "count", notes, include_outdoor=inc, gross=gross, threshold=thr, consumed=consumed)
+            qr.terms.sort(key=lambda t: t.pos)
+            return qr
+        if re.search(WHICH_CMP, ql) and len(terms) >= 2:
+            op = "min" if re.search(r"smaller|kleiner|petit|piccol", ql) else "max"
+            qr = Query("text", op, terms, None, notes, include_outdoor=inc, gross=gross, consumed=consumed + [WHICH_CMP, r"\bwhich\b"])
+            qr.terms.sort(key=lambda t: t.pos)
+            return qr
         if op in ("max", "min") and len(terms) > 1 and not re.search(r"how\s+(?:large|big|much)|what\s+is\s+the\s+(?:net\s+)?(?:floor\s+)?area", ql):
             qtype = "text"
-        qr = Query(qtype, op, terms, unit if qtype != "text" else None, notes, include_outdoor=inc, gross=gross)
+        unit_out = unit if qtype != "text" else None
+        if op == "ratio":
+            unit_out = None
+        elif op == "pct":
+            unit_out = "%"
+        qr = Query(qtype, op, terms, unit_out, notes, include_outdoor=inc, gross=gross, consumed=consumed)
+        if op in ("pct",) or (op == "diff" and consumed):
+            qr.terms.sort(key=lambda t: t.pos)
+            return qr
         return _finish(qr, rev)
 
     # count questions ------------------------------------------------------------------------------
@@ -234,6 +299,12 @@ def parse(question: str, vocab: list[str] | None = None, room_numbers: set[str] 
                     terms.append(Term("count_label", list(labs), p, note=f"concept {c}"))
         if not terms and re.search(r"\brooms?\b|r[äa]ume|pi[èe]ces|locali|kamers|rum\b", ql):
             terms = [Term("count_label", "<numbered>", 0, note="all numbered rooms")]
+    if qtype == "count" and len(terms) == 2 and any(t.arg == "apartment" for t in terms) and \
+            (re.search(PER_W, ql) or re.search(MEAN_W, ql)):
+        # "on average, how many doors per apartment": doors / apartments
+        terms = sorted(terms, key=lambda t: t.arg == "apartment")
+        qr = Query("count", "ratio", terms, None, notes, consumed=[PER_W, MEAN_W, r"\beach\b"])
+        return qr
     # "windows in apartment B": the apartment word + letter is a scope, not a count of apartments
     if apts and any(not (t.kind == "count" and t.arg == "apartment") for t in terms):
         terms = [t for t in terms if not (t.kind == "count" and t.arg == "apartment")]
@@ -269,6 +340,8 @@ def covered(question: str, qr: Query) -> bool:
         return False  # an apartment letter the rules did not attach to every term
     if YESNO.match(q.strip()):
         return False  # yes/no question
+    for pat in qr.consumed:  # parts the parse turned into an operator are covered
+        q = re.sub(pat, " ", q, flags=re.I)
     m = UNCOVERED.search(q)
     if m:
         # the standard swiss templates contain none of these, except "excluding ... shafts and voids" etc.
@@ -277,3 +350,12 @@ def covered(question: str, qr: Query) -> bool:
 
 
 YESNO = re.compile(r"^(is|are|does|do|has|have|can|gibt\s+es|hat|ist|sind|y\s+a-t-il|est-ce|existe|c'è|ci\s+sono|ha)\b", re.I)
+
+
+OPERATOR_HINT = re.compile("|".join(f"(?:{p})" for p in (MEAN_W, TIMES_W, SHARE_W, THRESH_W, NEG_APT_W, PER_W)), re.I)
+
+
+def operator_unapplied(question: str, qr: Query) -> bool:
+    """The question contains an operator word (average, ratio, share, threshold, 'not in apartment', per) but the
+    parse applied none: the plain sum is probably the wrong reading -> cap the confidence."""
+    return qr.op in ("sum", "diff") and bool(OPERATOR_HINT.search(_norm(question)))
