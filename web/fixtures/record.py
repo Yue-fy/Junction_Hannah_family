@@ -28,6 +28,8 @@ QUESTIONS = [
      "How many doors (interior doors and entrance doors together) are drawn on this floor plan?"),
     ("data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
      "How many rooms labelled 'Zimmer' are there on this floor?"),
+    ("data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "Wie viele Türen und Fenster sind insgesamt auf diesem Grundriss eingezeichnet?"),
     ("data/habs/ak0003_sheet_00019.jpg",
      "What kind of drawing is this (floor plan, elevation, section, site plan)?"),
 ]

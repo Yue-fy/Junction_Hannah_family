@@ -30,8 +30,18 @@ from stoa.data import source_of
 from stoa.solvers import register
 from stoa.solvers.base import BaseSolver
 from stoa.solvers.raster import vlm
-from stoa.solvers.raster.classes import ROOM_CLASSES, SYMBOL_CLASSES, question_class, type_code
+from stoa.solvers.raster.classes import ROOM_CLASSES, SYMBOL_CLASSES, question_class, question_op, type_code
 
+CANONICAL = {  # used when a composition needs a `direct` answer for one part
+    "window": "How many windows are shown on this floor plan?",
+    "door": "How many doors are shown on this floor plan? Count doorways fitted with a door; open doorways "
+            "without a door leaf do not count.",
+    "storey": "How many floors (storeys) does this floor plan show?",
+    "wc_seat": "How many toilet bowls (WC seats) are drawn on this floor plan?",
+    "sink": "How many sinks and wash basins (kitchen and bathroom combined; a double-bowl sink counts as one) are "
+            "drawn on this floor plan?",
+    "shower_bath": "How many showers and bathtubs are drawn on this floor plan in total?",
+}
 IMG_EXT = (".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp")
 GATE_FILE = Path(__file__).with_name("gate.json")
 
@@ -89,11 +99,43 @@ class RasterSolver(BaseSolver):
             self.gate.setdefault(c, {"acc": {}})["method"] = m
 
     def can_handle(self, path: str, question: str) -> bool:
-        return Path(path).suffix.lower() in IMG_EXT and question_class(question) is not None
+        return self._raster_file(path) is not None and question_op(question)[0] != "none"
 
     # ----------------------------------------------------------------------------------------------
     def solve(self, path: str, question: str) -> Answer:
-        cls = question_class(question)
+        op, classes = question_op(question)
+        if op in ("single", "none"):
+            return self._solve_class(path, question, classes[0] if classes else None)
+        # compositions over our classes: sum ("doors and windows in total"), diff ("how many more X than Y"),
+        # exists ("does it have a sauna? yes/no"). Each part is answered by its own gated method.
+        parts = [self._solve_class(path, None, c) for c in classes]
+        trace = [f"composition op={op} over {classes}"]
+        for c, a in zip(classes, parts):
+            trace.append(f"[{c}] = {a.value} (conf {a.confidence:.2f})")
+            trace.extend(f"  [{c}] {t}" for t in a.trace)
+        ev = [e for a in parts for e in a.evidence]
+        assumptions = [x for a in parts for x in a.assumptions]
+        missing = [x for a in parts for x in a.missing]
+        conf = 1.0
+        for a in parts:
+            conf *= a.confidence
+        if any(a.value is None for a in parts):
+            return Answer(value=None, unit="count", solver=self.name, trace=trace, missing=missing or ["part"])
+        vals = [int(a.value) for a in parts]
+        if op == "sum":
+            value, unit = sum(vals), "count"
+        elif op == "diff":
+            value, unit = vals[0] - vals[1], "count"
+        else:
+            value, unit = ("yes" if vals[0] > 0 else "no"), None
+        trace.append(f"answer = {op}({vals}) = {value}")
+        return Answer(value=value, unit=unit, confidence=round(conf, 3), evidence=ev, solver=self.name,
+                      trace=trace, assumptions=assumptions, missing=missing)
+
+    def _solve_class(self, path: str, question: str | None, cls: str | None) -> Answer:
+        """One object class. `question` is only needed by the `direct` method (None inside compositions:
+        a canonical English question for the class is used)."""
+        question = question or CANONICAL.get(cls, "")
         trace = [f"class={cls}"]
         prior = class_prior().get(cls) if cls else None
         if prior:
@@ -107,8 +149,17 @@ class RasterSolver(BaseSolver):
         trace.append(f"gate[{cls}] = {method} (train acc {acc})")
         if method == "prior":
             return self._prior_answer(cls, prior, trace, acc)
-        img = vlm.llm.load_image(self.abspath(path))
-        key = path
+        src = self._raster_file(path)
+        if src is None:  # not an image and no PNG/JPG sibling: let the cascade move on (W4 pipeline)
+            ans = self._prior_answer(cls, prior, trace + ["no raster version of this drawing"], acc)
+            ans.value = None
+            ans.missing.append("no raster image of this drawing")
+            return ans
+        if src != path:
+            trace.append(f"using raster sibling {src}")
+        img = vlm.llm.load_image(self.abspath(src))
+        key = src
+        path = src  # evidence boxes are in this image's pixels
         try:
             if method in ("labels", "max1", "labels_code"):
                 return self._labels(path, img, key, cls, prior, trace, acc, method)
@@ -124,6 +175,13 @@ class RasterSolver(BaseSolver):
         except Exception as e:  # noqa: BLE001 - never refuse: fall back to the prior
             trace.append(f"{method} failed: {type(e).__name__}: {str(e)[:150]}")
         return self._prior_answer(cls, prior, trace, acc)
+
+    def _raster_file(self, path: str) -> str | None:
+        """The image to read: the path itself, or a PNG/JPG sibling of a PDF/other format (same drawing)."""
+        if Path(path).suffix.lower() in IMG_EXT:
+            return path
+        sib = self.siblings(path)
+        return next((sib[e] for e in (".png", ".jpg", ".jpeg") if e in sib), None)
 
     def _prior_answer(self, cls, prior, trace, acc) -> Answer:
         if not prior:

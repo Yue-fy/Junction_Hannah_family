@@ -1,7 +1,8 @@
 import "./style.css";
 import { ask, exampleQuestions, fileUrl, knowledgeGraph, listFiles, onBackend } from "./api";
 import { crossChecks, renderCard } from "./card";
-import type { Answer, FileInfo } from "./types";
+import { renderKg } from "./kg";
+import type { Answer, FileInfo, KgRoom } from "./types";
 import { Viewer2D } from "./viewer2d";
 import type { Viewer3D } from "./viewer3d"; // loaded lazily: web-ifc + three are ~4 MB
 
@@ -247,14 +248,14 @@ async function openFile(f: FileInfo, question = "", keep: Answer | null = null, 
   }
 }
 
-async function openSheet(path: string, focusIndex: number | null = null) {
-  const a = state.answer;
+async function openSheet(path: string, focusIndex: number | null = null, keepAnswer = true) {
+  const a = keepAnswer ? state.answer : null;
   const q = $<HTMLTextAreaElement>("question").value;
   const info = (await listFiles("", path, 5).catch(() => [])).find((x) => x.path === path)
     ?? (await listFiles(path.split("/")[1], path, 5, false).catch(() => [])).find((x) => x.path === path)
     ?? { path, source: path.split("/")[1], ext: "." + path.split(".").pop()!.toLowerCase(), siblings: siblingsGuess(path, []),
       n_questions: 0, license: state.file?.license ?? "", credit: state.file?.credit ?? "", title: "", source_url: "" };
-  await openFile(info, q, a, focusIndex);
+  await openFile(info, keepAnswer ? q : "", a, focusIndex);
 }
 
 function creditLine(f: FileInfo) {
@@ -306,26 +307,62 @@ async function loadLinked(f: FileInfo) {
   el.innerHTML = "";
   try {
     const kg = await knowledgeGraph(f.path);
-    if (state.file?.path !== f.path || !kg.nodes.length) return;
-    el.innerHTML = `<span class="lk-title">Linked sources${kg.mock ? "" : ""}</span>` + kg.nodes.map((n, i) =>
-      `<button class="lk ${esc(n.kind)}" data-i="${i}" title="${esc(n.path)}"><span class="kind">${esc(n.kind)}</span>${esc(shortName(n.label, f.path))}<small>${esc(n.relation)}</small></button>`).join("");
-    el.querySelectorAll<HTMLButtonElement>("button.lk").forEach((b) => b.addEventListener("click", () => {
-      const n = kg.nodes[Number(b.dataset.i)];
-      if (n.kind === "ifc" && state.ifc === n.path) return setMode("3d");
-      const ext = "." + n.kind;
-      if (![".pdf", ".png", ".jpg", ".ifc"].includes(ext)) return window.open(fileUrl(n.path), "_blank");
-      void openFile({ path: n.path, source: n.path.split("/")[1], ext, siblings: siblingsGuess(n.path, kg.nodes.map((x) => x.path)),
-        n_questions: 0, license: f.license, credit: f.credit, title: "", source_url: f.source_url });
-    }));
+    if (state.file?.path !== f.path) return;
+    renderKg(el, kg, {
+      current: f.path,
+      openPath: (p) => void openSheet(p, null, false),
+      show3D: () => setMode(state.mode === "2d" ? "split" : state.mode),
+      setStorey: (name) => void showStorey(name),
+      focusRoom: (r, label) => void focusKgRoom(r, label),
+      ask: (q) => {
+        $<HTMLTextAreaElement>("question").value = q;
+        void runAsk();
+      },
+    });
   } catch {
     /* no kg */
   }
 }
 
-function shortName(label: string, current: string) {
-  const stem = current.split("/").pop()!.replace(/\.[^.]+$/, "").replace(/_(plan|section|elevation)-.*$/, "");
-  return label.startsWith(stem + "_") ? "…" + label.slice(stem.length) : label;
+/** Storey row in the knowledge-graph panel → show that storey in 3D. */
+async function showStorey(name: string) {
+  if (!state.ifc) return;
+  if (state.mode === "2d") setMode("split");
+  await ensure3D();
+  const s = v3d?.storeys.find((x) => x.name === name);
+  if (!s || !v3d) return;
+  v3d.setStorey(s.id);
+  $<HTMLSelectElement>("storey").value = String(s.id);
 }
+
+/** Room row in the knowledge-graph panel → outline it on the drawing (exact polygon via the GUID layer, else its box) and frame it in 3D. */
+async function focusKgRoom(r: KgRoom, label: string) {
+  const f = state.file;
+  if (!f) return;
+  if (r.guid && v2d.hasGuid(r.guid)) {
+    v2d.markBox(null);
+    v2d.highlightGuids([r.guid], "picked");
+    v2d.focusGuid(r.guid);
+  } else if (r.bbox_pt && f.ext !== ".ifc" && (!r.plan || r.plan === f.path)) {
+    // swiss PNG = the PDF page at 150 dpi (KNOWLEDGE 00:23)
+    if (f.ext === ".pdf") v2d.markBox(r.bbox_pt, label);
+    else v2d.markBox(r.bbox_pt.map((v) => (v * 150) / 72), label, "image_px");
+  }
+  if (r.guid && state.ifc) {
+    if (state.mode === "2d") setMode("split");
+    await ensure3D();
+    if (v3d?.hasGuid(r.guid)) {
+      v3d.focusGuid(r.guid);
+      const pick = $("pick");
+      pick.hidden = false;
+      pick.innerHTML = `<b>${esc(label)}</b><div><span>GlobalId</span>${esc(r.guid)}</div>` +
+        (r.area_m2 !== undefined ? `<div><span>IFC area</span>${esc(r.area_m2.toFixed(2))} m²</div>` : "") +
+        (r.drawn_area_m2 != null ? `<div><span>drawn area</span>${esc(r.drawn_area_m2.toFixed(2))} m² (${esc(r.plan_scale ?? "")})</div>` : "");
+      followUp(r.guid);
+    }
+  }
+}
+
 function siblingsGuess(p: string, all: string[]) {
   const stem = p.replace(/\.[^.]+$/, "");
   const out: Record<string, string> = {};
@@ -377,15 +414,21 @@ async function showAnswer(a: Answer, roundTripMs: number) {
   renderCard($("card"), a, {
     roundTripMs: roundTripMs || (a.cost?.wall_seconds ?? 0) * 1000, onEvidence: focusEvidence,
     describeGuid: (g) => v3d?.describe(g) ?? g, currentFile: state.file?.path ?? "", onOpenSheet: (p) => void openSheet(p),
+    onAsk: (q) => {
+      $<HTMLTextAreaElement>("question").value = q;
+      void runAsk();
+    },
   });
   v2d.setEvidence(a.evidence);
   v2d.frameEvidence();
   const xb = $("xbanner");
-  const xc = crossChecks(a)[0];
+  const xcs = crossChecks(a);
+  const xc = xcs[0];
   xb.hidden = !xc;
   if (xc) {
-    xb.className = `xbanner ${xc.ok ? "ok" : "bad"}`;
-    xb.innerHTML = `<b>${xc.ok ? "✓" : "✗"}</b> ${esc(xc.text)}`;
+    const ok = xcs.every((x) => x.ok);
+    xb.className = `xbanner ${ok ? "ok" : "bad"}`;
+    xb.innerHTML = xcs.map((x) => `<b>${x.ok ? "✓" : "✗"}</b> ${esc(x.text)}`).join(" &nbsp;·&nbsp; ");
   }
   if (state.ifc && a.evidence.some((e) => e.ifc_guid)) {
     if (state.mode === "2d" && !v2d.hasGuid(a.evidence.find((e) => e.ifc_guid)!.ifc_guid!)) setMode("split");
@@ -445,6 +488,9 @@ const TOUR: { file: string; q: string; note: string }[] = [
   { file: "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
     q: "How many doors (interior doors and entrance doors together) are drawn on this floor plan?",
     note: "Vector drawing: doors counted on the CAD layer and mapped back onto the PDF." },
+  { file: "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+    q: "Wie viele Türen und Fenster sind insgesamt auf diesem Grundriss eingezeichnet?",
+    note: "A German question that combines two counts: it is split into two sub-questions, each answered and cross-checked, and the sum is done in code." },
   { file: "data/habs/ak0003_sheet_00019.jpg",
     q: "What kind of drawing is this (floor plan, elevation, section, site plan)?",
     note: "Historical scan with no text layer: the cascade escalates to a local vision model and says how sure it is." },

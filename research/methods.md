@@ -86,6 +86,52 @@ Upscale 2–3× before OCR.
 Caveats: `MH` can carry a digit (`MH1`, `MH2`). Some kitchens are a niche without a label (`K` missing),
 which is why the "always 1" prior is so strong. Saunas are sometimes only drawn as a bench symbol.
 
+## 3a. Symbol counting with the pretrained CubiCasa5K model (measured: +15 to +30 pts, leak-safe)
+
+The CubiCasa5K multi-task network (Kalervo et al., SCIA 2019; public weights `model_best_val_loss_var.pkl`,
+CC BY-NC 4.0) segments 12 room classes and 11 icon classes, including Window, Door, Toilet, Sink and
+Bathtub, exactly the symbols we lose points on. We wrote our own copy of the network
+(`experiments/r1/cc5k_model/net.py`, same parameter names) and load the checkpoint with
+`torch.load(weights_only=True)`. We don't run the upstream code. Inference takes ~0.8 s of CPU per drawing and
+no GPU or LLM.
+
+Count = number of 8-connected components of `icons == class` with area ≥ `min_frac·H·W`, after an optional
+k×k morphological opening. Evidence = one box per component.
+
+**Leak safety (D3).** The model was trained on the original CubiCasa5K *train* list, which holds 84% of
+our drawings, including most of dev, train_gate and test. So it is tuned only on drawings in the original
+**val** list (371 drawings, not in our sealed test) and reported only on the original **test** list
+(`cc5k_heldout`, 365 drawings). Numbers on dev or train_gate would be inflated by memorisation.
+
+Settings frozen on val: windows (2e-4, k=5), doors (2e-4, k=0), WC seats (2e-4, k=5), sinks (2e-5, k=5).
+
+| Template | Prior (test) | CC5K model (test) | Paired gain, cluster CI (cc5k_heldout, eval tool) |
+|---|---|---|---|
+| windows | 13.9% | **34.0%** | +14.6 [+6.2, +23.1] |
+| doors | 9.8% | **40.2%** | +29.9 [+21.3, +39.4] |
+| WC seats | 55.0% | **75.5%** | +29.1 [+18.9, +39.4] |
+| sinks | 45.7% | **60.1%** | +22.0 [+11.8, +31.5] |
+| showers + bathtubs | 73.9% | 10.1% | the model has no shower class → keep the prior |
+| all cubicasa questions in cc5k_heldout | 51.2% | **59.5%** | **+8.4 [+6.4, +10.3]** |
+
+(The left two columns count one gold per drawing; the CI column uses the eval tool's question rows. Prior
+row: `artifacts/eval/20261114-005001-prior-cc5k_heldout-14c7.jsonl`; model rows:
+`artifacts/R1/cc5k_preds/plain_over_prior.jsonl`.)
+
+By style (test, model vs prior): windows colorful 47/15, high_quality 46/29, architectural 28/10; doors 57/8,
+66/17, 29/8; WC seats 82/69, 86/68, 71/49; sinks 62/63 (no gain on colorful), 73/56, 57/39. Scanned
+architectural sheets are the hardest. Small images are not worse than large ones (windows by long side:
+<700 px 49%, ≥1500 px 35%), so upscaling is not the fix.
+
+Calibration: `confidence = P(gold == count | template, count bucket)` fit on val (Laplace-smoothed;
+`calib.py`, `calib_plain.json`). ECE on test is 0.03–0.09. A gate "prior if it is more often right in this bucket"
+never fires except for sinks with 0, 1 or ≥6, where it changes nothing on test. Within ±1 coverage on test:
+windows 57%, doors 68%, WC seats 95%, sinks 86%. These are the intervals to state when unsure.
+
+Live use: `experiments/r1/cc5k_model/predict.py IMG.png` prints `{counts: {windows|doors|wc_seats|sinks:
+{count, confidence, boxes}}}`. It needs torch (CPU is enough; `/data/User/fangy4/envs/junction-train`
+has it, but `$JUNCTION_VENV` does not).
+
 ## 3. Symbol counting on raster plans (measured: Qwen3-VL-8B pointing does NOT work)
 
 Measured with Qwen3-VL-8B (`experiments/r1/symbol_points/`), exact match vs the per-template prior:

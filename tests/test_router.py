@@ -82,3 +82,23 @@ def test_atomic_questions_not_decomposed():
     q = ("How many sinks and wash basins (kitchen and bathroom combined; a double-bowl sink counts as one) "
          "are drawn on this floor plan?")
     assert decompose("cubicasa5k", q) is None
+
+
+def test_modifiers_and_agent_calc():
+    from stoa.router.agent import calc
+    from stoa.router.intent import modifiers
+
+    assert modifiers("On average, how large (net m²) is a room labelled 'Bad' on this floor?") == ["avg"]
+    assert "share" in modifiers("What percentage of the total net indoor floor area is taken up by rooms labelled 'Zimmer'?")
+    assert modifiers("How many rooms in this home are meant for sleeping?") == []  # 'meant' is not 'mean'
+    assert modifiers("What are the different wall thicknesses used?") == []
+    assert "multi" in modifiers("How many wet rooms are there (bathrooms, separate WC rooms and saunas all count)?")
+    # dataset templates never carry modifiers (the sinks definition in parentheses is not an enumeration)
+    assert modifiers("How many sinks and wash basins (kitchen and bathroom combined; a double-bowl sink counts as one) "
+                     "are drawn on this floor plan?") == []
+    assert modifiers("Kuinka monta ikkunaa pohjapiirustuksessa on?") == []
+    assert abs(calc("(42.34)/3") - 14.1133) < 1e-3 and calc("abs(70.75-48.61)") == 22.14
+    import pytest
+
+    with pytest.raises(Exception):
+        calc("__import__('os').system('true')")

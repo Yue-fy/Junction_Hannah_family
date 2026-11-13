@@ -245,7 +245,8 @@ def links(path: str) -> dict:
                     "rooms": [r for r in g["rooms"] if storey is None or r["storey"] == storey],
                     "same_building": g["same_building"],
                     "crosschecks": [c for c in g["crosschecks"] if storey is None or c["plan"] == this["path"]]})
-        out["nodes"], out["edges"] = _as_graph(g, storey)
+        gn, ge = _as_graph(g, storey)
+        out["graph"] = {"nodes": gn, "edges": ge}
     elif src == "ifc_bench":
         out.update(project_graph(path))
     elif src == "swiss_dwellings" and ".dxf" in sib and ".pdf" in sib:
@@ -253,7 +254,72 @@ def links(path: str) -> dict:
         out["same_site"] = sorted({str(Path(path).parent / p.name) for p in
                                    (data_root() / Path(path).parent).glob(f"{out['group'].split('/')[-1]}_*.pdf")} - {sib[".pdf"]})
         out.update(_swiss_floor(sib[".pdf"], sib[".dxf"]))
+    out["project"] = out.get("project") or out["group"]
+    out["nodes"] = _file_nodes(path, out)
+    out["checks"] = _checks(out)
     return out
+
+
+def _kind(p: str) -> str:
+    return Path(p).suffix.lower().lstrip(".")
+
+
+def _file_nodes(path: str, out: dict) -> list[dict]:
+    """W5's 'linked sources' strip: [{path, kind, label, relation}] for every other file about this building."""
+    nodes, seen = [], {path}
+
+    def add(p: str, relation: str, label: str | None = None):
+        if p and p not in seen:
+            seen.add(p)
+            nodes.append({"path": p, "kind": _kind(p), "label": label or Path(p).stem, "relation": relation})
+
+    for ext, p in (out.get("siblings") or {}).items():
+        add(p, {".svg": "vector twin of this sheet (IFC GUIDs per element)", ".dxf": "CAD source of this drawing",
+                ".png": "raster rendering of this drawing", ".pdf": "PDF of this drawing",
+                ".ifc": "model this sheet was cut from"}.get(ext, "same drawing, other format"))
+    src = out.get("source")
+    if src == "ifc_models" and out.get("model"):
+        add(out["model"], "model this sheet was cut from" if not path.endswith(".ifc") else "model", "IFC model")
+        sto = {s["guid"]: s["name"] for s in out.get("storeys", [])}
+        for f in out.get("files", []):
+            k = f["kind"]
+            if k == "plan":
+                rel = "plan of this storey" if f.get("storey") and out.get("storey") and \
+                    f["storey"] == out["storey"]["guid"] else "other storey plan"
+                add(f["path"], rel, f"plan {sto.get(f.get('storey'), '')}".strip())
+                if f.get("svg"):
+                    add(f["svg"], f"vector twin of the {sto.get(f.get('storey'), '')} plan".replace("  ", " "))
+            elif k in ("section", "elevation"):
+                add(f["path"], f"{k} cut from the same model", Path(f["path"]).stem.split("_")[-1])
+            elif k == "discipline-model":
+                add(f["path"], "other discipline model of the same project")
+            elif k == "raster-plan":
+                add(f["path"], "raster plan of this model")
+        for p in out.get("same_building", []):
+            add(p, "same building, other dataset (ifc_bench)")
+    elif src == "ifc_bench":
+        for f in out.get("files", []):
+            if f["kind"] == "discipline-model":
+                add(f["path"], "other discipline model of the same project")
+        for p in out.get("same_building", []):
+            add(p, "same building, other dataset (ifc_models)")
+    elif src == "swiss_dwellings":
+        for p in out.get("same_site", []):
+            add(p, "other floor of the same site")
+    return nodes
+
+
+def _checks(out: dict) -> list[dict]:
+    """Cross-checks as UI badges: [{text, ok}]."""
+    res = []
+    for c in out.get("crosschecks", []) or []:
+        where = f" on '{c['storey']}'" if c.get("storey") else ""
+        if "printed" in c.get("what", ""):
+            text = f"{c['drawn']}/{c['model']} printed room areas match the DXF polygons"
+        else:
+            text = f"{c['what']}{where}: IFC model {c['model']}, drawn on the plan {c['drawn']}"
+        res.append({"text": text, "ok": bool(c.get("ok"))})
+    return res
 
 
 def _as_graph(g: dict, storey: str | None) -> tuple[list[dict], list[dict]]:

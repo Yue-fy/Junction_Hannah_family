@@ -18,8 +18,11 @@ npm run dev          # http://localhost:5173 (Vite, port 5173)
 - `/api/*` goes to W4's API (`STOA_API_URL`, default `http://127.0.0.1:8100`, see `docs/CONTRACT.md`;
   start it with `$JUNCTION_VENV/bin/python -m uvicorn stoa.api:app --port 8100` from the repo root).
   If that server is down, the dev server answers from a **mock** (`mock/stoaApi.ts`): files and example
-  questions come from the dataset, `/ask` returns the precomputed fixtures in `fixtures/answers.json`. The
-  badge in the top-left says `API live` or `API mock`.
+  questions come from the dataset, `/ask` replays `fixtures/recorded.json` (live answers recorded with
+  `fixtures/record.py`) and then `fixtures/answers.json`. The badge in the top-left says `API live` or `API mock`.
+- `/api/kg` (knowledge graph): the API's `GET /kg` if it has one; otherwise the dev server runs W1's
+  `stoa.kg.links(path)` itself with `$JUNCTION_VENV/bin/python` from the repo root (`STOA_KG_REPO=<checkout>`
+  to use another checkout); if that fails too, it links files by name only (the panel title says "files only").
 - `npm run build` type-checks and builds to `dist/`. `npm run preview` serves the build with the same
   `/api` middleware (no separate server needed).
 
@@ -36,10 +39,20 @@ Click **Demo tour ▸** (top left). Each click opens a file, asks one question a
    answered by rules only (cost ≈ €0.00001). Click an evidence row: both views zoom to that door.
 3. Model-wide doors → 211 with evidence on 5 sheets (chips; click one to open that plan, same answer).
 4. Swiss floor plan: doors counted on the DXF layer, boxed on the PDF (36).
-5. HABS historical scan (no questions in the dataset): "what kind of drawing is this?" → the cascade escalates
+5. Same floor, asked in German, doors and windows together → 64. The card shows "Understood as: count · door +
+   window · German" and the plan (sum of 2 sub-questions, each clickable); both parts are cross-checked.
+6. HABS historical scan (no questions in the dataset): "what kind of drawing is this?" → the cascade escalates
    to the local VLM (strip shows "rules › **local model**"), low confidence and what is missing.
 
 Also: click any room/door on an IFC sheet to see it in 3D; click an element in 3D to see it on the drawing.
+
+**Knowledge graph** (bottom strip, from `stoa.kg.links`): the files of the same building (IFC model, one plan
+per storey, discipline models, the same building in another dataset; swiss PDF/DXF/PNG), then the cross-checks
+for the open sheet: elements drawn on this plan vs elements of this storey in the IFC model ("doors plan 46 ·
+IFC 46 ✓", "windows plan 52 · IFC 55 ≠"). Swiss floors show the CAD-to-PDF fit, the printed-vs-DXF room areas
+and the DXF layer counts (click one to ask it). The "N storeys · M rooms ▾" button opens the room table (IFC
+area vs drawn area, or DXF vs printed area): click a row to outline the room on the drawing and frame it in 3D,
+"ask" to ask its area.
 Historical sources (HABS, Finna, Europeana, Wikimedia) are in the source menu with general example questions.
 
 ## Fixtures
@@ -67,8 +80,9 @@ $JUNCTION_VENV/bin/python web/fixtures/make_fixtures.py
 | `src/main.ts` | state, file picker, ask flow, view modes (drawing / 3D / side by side), deep links |
 | `src/viewer2d.ts` | PDF.js / image rendering, evidence overlay, GUID layer from the sheet SVG, pan/zoom |
 | `src/viewer3d.ts` | web-ifc → merged three.js meshes per storey; storey filter, highlight/frame by GlobalId, picking |
-| `src/card.ts` | answer card (value, confidence, cross-check badge, cost tier/time/tokens/€, trace, evidence) |
-| `mock/stoaApi.ts` | `/api/*` middleware: forwards to :8100, falls back to the mock |
+| `src/card.ts` | answer card (value, confidence, "understood as" intent + compound plan, cross-check badge, cost tier/time/tokens/€, trace, evidence) |
+| `src/kg.ts` | knowledge-graph strip and drawer (linked files, drawing-vs-model checks, rooms, storeys) |
+| `mock/stoaApi.ts` | `/api/*` middleware: forwards to :8100, falls back to the mock (and to `stoa.kg` for `/kg`) |
 
 ## Licences
 

@@ -29,5 +29,53 @@ Rules (measured on train floors):
   Known limit: the reference sometimes drops numbered rooms *without a name* (train: 96% within 2%); these
   are listed in `assumptions` with the total without them, and confidence drops to 0.8.
 
+Beyond the templates (all deterministic unless noted):
+- per-apartment scope: "How many windows in apartment B?" → objects inside / touching (doors, windows ±0.3 m)
+  the UNIT_OUTLINE that holds "Whg. B"; "rooms labelled X in apartment C" likewise.
+- "including balconies" → outdoor rooms included; "gross area" → apartment outline area, confidence 0.25, with
+  the missing wall data stated (the DXF has no gross area). Careful: Swiss German "wie gross" = "how large".
+- cross-checks (linked data): label/apartment counts vs. the PDF text layer (each DXF TEXT is one PDF span;
+  187/187 agree on dev), room areas vs. the printed "m²" label. ✓/✗ goes to the trace; ✗ lowers confidence.
+- **table-QA fallback** (local LLM, `tableqa.py`): when `qparse.covered()` says the rules miss part of the
+  question (which/average/yes-no/with-without/…; 0 false flags on 31k swiss questions), the floor becomes
+  three tables (rooms, objects, apartments), the LLM writes pandas, we run it in a restricted namespace and
+  the rooms it used become evidence. Typed-in numbers are rejected and retried. Derived-gold check:
+  `experiments/w2/fallback_eval.py` → 24/24 (avg area per label, which apartment is larger, is there an X).
+
 Experiments behind the rules: `experiments/w2/` (area_misses.py, unnamed_rooms.py, unnamed_inside.py,
 unnamed_rule.py) and R1's `experiments/r1/swiss_area_def/`.
+
+## `pdf_vector` (swiss-style vector PDF, NO DXF needed)
+Same rules and parser as `dxf`; the floor model comes from the PDF alone (`pdffloor.py`): room polygons = filled
+paths stroked grey 0.54 / width 0.37, apartments = red-brown dash-dot strokes, doors = grey-0.27 strokes, texts =
+spans, metres from the printed scale ("Massstab 1:200 (A3)"). Styles were mapped to DXF layers on 10 floors
+(`experiments/w2/pdf_style_layers.py`). Rooms: 796/797 within 2% of the DXF polygon (`experiments/w2/pdf_rooms.py`).
+Fixtures by path shape (black, width 0.51): 47-line chain = WC/basin ellipse, 68-line chain = bathtub, quad = shower,
+8 Béziers = circle (drain → washbasin): doors and all fixture kinds equal the DXF counts on 25/25 floors
+(`experiments/w2/pdf_symbol_shapes.py`). Windows = touching frame-rectangle + glass-line groups outside every room
+polygon, lines / 3: only 19/25 floors exact (overcounts) → confidence 0.5 + assumption.
+Dev swiss (`--solver pdf_vector --solver-arg llm=0`): **count 96.5%, area 96.5%** with no DXF (dxf: 100% / 97.5%).
+Use: PDF-only drawings, and as an independent second source to cross-check the DXF.
+
+## `schedule` (opening_design and other vector PDF sheets with tables)
+
+```bash
+AGENT_ID=W2 $JUNCTION_VENV/bin/python -m stoa.eval --solver schedule --split dev --source opening_design
+# --solver-arg backend=nvidia  -> hosted Nemotron 120B instead of local Qwen3-VL-8B
+```
+`pdftables.py` rebuilds tables from the text layer (PyMuPDF `find_tables` finds nothing on these rotated sheets
+and takes 46–75 s): words → visual space (rotation_matrix) → rows by y → cells by x-gap → tables = runs of rows
+whose key cell starts at the same x → columns by x-centre clusters → header from the rows above (data-like rows
+pulled back into the table) → fragments of one schedule merged. Legends/notes (short rows) become a `notes`
+table. `tableqa.ask` then writes pandas over them; evidence = boxes of the rows used (pdf_pt in PyMuPDF word space,
+i.e. unrotated page space).
+
+| run (dev, 61 Qs, 46 scored) | scored acc | notes |
+|---|---|---|
+| v0 | 67.4% | model types numbers it "read"; Count column is text |
+| v2 local Qwen3-VL-8B | 78.3% | literal answers rejected, quantity columns typed, retry on empty result |
+| v3 backend=nvidia | 82.6% | +2 questions, similar est. cost; not adopted as default |
+| v4 local (+notes table) | 76.1% | two-part / "what does F4 mean" text answers improve; counts within noise |
+
+Questions about symbols *drawn* on a plan (A-701 restrooms) are not schedule questions: the solver answers with
+confidence ≤ 0.15 and says what is missing, so the pipeline escalates.
