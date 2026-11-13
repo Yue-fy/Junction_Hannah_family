@@ -44,10 +44,12 @@ CANONICAL = {  # used when a composition needs a `direct` answer for one part
 }
 IMG_EXT = (".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp")
 GATE_FILE = Path(__file__).with_name("gate.json")
+COND_FILE = Path(__file__).with_name("cond_prior.json")  # experiments/w3/cv/cond_prior.py --write
 
 # Before calibration: R1's HYBRID label policy (chosen on 60 TRAIN drawings, +13.5 pts on dev, KNOWLEDGE 23:57),
 # prior for the rest. Methods: prior | labels | max1 (= max(1, labels)) | labels_code (labels, else the apartment
-# type code such as '3H+K+S') | rooms_rule (sinks from room labels) | points | direct. Sauna labels_code: 69% vs labels 62% on TRAIN (label_policy.py).
+# type code such as "3H+K+S") | rooms_rule (sinks from room labels) | cond_prior (count given room counts) |
+# points | direct. Sauna labels_code: 69% vs labels 62% on TRAIN (label_policy.py).
 DEFAULT_GATE = {"bedroom": "labels", "kitchen": "prior", "bathroom": "max1", "wc_room": "labels",
                 "sauna": "labels_code", "balcony": "labels",
                 **{c: "prior" for c in SYMBOL_CLASSES}, "storey": "prior"}
@@ -165,6 +167,8 @@ class RasterSolver(BaseSolver):
                 return self._labels(path, img, key, cls, prior, trace, acc, method)
             if method == "rooms_rule":
                 return self._rooms_rule(path, img, key, cls, prior, trace, acc)
+            if method == "cond_prior":
+                return self._cond_prior(path, img, key, cls, prior, trace, acc)
             if method == "points":
                 return self._points(path, img, key, cls, prior, trace, acc)
             if method == "direct":
@@ -274,6 +278,50 @@ class RasterSolver(BaseSolver):
                       solver=self.name, trace=trace, assumptions=assumptions,
                       missing=["sink symbols are not detected individually; extra basins (utility room, double "
                                "basins) would be missed"])
+
+    def _cond_prior(self, path, img, key, cls, prior, trace, acc) -> Answer:
+        """Best estimate when the symbols themselves cannot be counted reliably (doors, windows, WC seats): the most
+        common TRAIN count among plans with the same room counts read from the labels (e.g. 2 bedrooms, 1 WC,
+        a sauna -> 8 doors). Uses the label call shared with the room questions (no extra model call).
+        TRAIN, 2-fold held-out gain vs the prior: doors +5.8, windows +6.6, WC seats +7.9 (cond_prior.py)."""
+        spec = json.loads(COND_FILE.read_text()).get(cls) if COND_FILE.exists() else None
+        if not spec:
+            return self._prior_answer(cls, prior, trace + [f"no conditional table for {cls}"], acc)
+        items, log, hit = vlm.read_labels(img, key, self.backend)
+        trace.append(f"labels{' (shared with another question)' if hit else ''}: {len(items)} read in "
+                     f"{log.seconds:.1f}s: " + ", ".join(f"{i.text}->{i.cls or '-'}" for i in items)[:600])
+        trace.extend(log.notes)
+        if any(n.startswith("LOOP") for n in log.notes):
+            ans = self._prior_answer(cls, prior, trace, acc)
+            ans.missing.append("the label reading degenerated (repetition loop); answered with the prior")
+            return ans
+        n = collections.Counter(i.cls for i in items if i.cls)
+        codes = [type_code(i.text) for i in items if type_code(i.text)]
+        feats = {"bedroom": n["bedroom"], "wc_room": n["wc_room"], "balcony": n["balcony"],
+                 "bathroom": max(1, n["bathroom"]),
+                 "sauna": n["sauna"] or int(bool(codes and "sauna" in codes[0]["classes"]))}
+        fx = [feats[f] for f in spec["features"]]
+        cell = spec["table"].get(",".join(str(int(v)) for v in fx))
+        desc = ", ".join(f"{v} {f.replace('_', ' ')}" for f, v in zip(spec["features"], fx))
+        name = cls.replace("_", " ")
+        if not cell:
+            ans = self._prior_answer(cls, prior, trace + [f"rooms read: {desc}; too few training plans like this"], acc)
+            return ans
+        value = int(cell["mode"]) if float(cell["mode"]).is_integer() else cell["mode"]
+        trace.append(f"rooms read: {desc} -> among {cell['n']} training plans with these rooms the most common "
+                     f"{name} count is {value} ({cell['hit']:.0%} of them)")
+        if prior:
+            trace.append(f"cross-check vs plain prior {prior[0]}: {'agrees ✓' if prior[0] == value else 'differs'}")
+        basis = [i for i in items if i.cls in spec["features"]]
+        ev = [Evidence(file=path, bbox=[round(v, 1) for v in getattr(i, "box", [i.x, i.y, i.x, i.y])],
+                       bbox_space="image_px", note=f"basis of the estimate: {i.cls.replace('_', ' ')} label '{i.text}'")
+              for i in basis]
+        conf = round(max(0.05, min(0.9, 0.8 * cell["hit"])), 3)  # read labels are noisier than gold (train: x0.8)
+        return Answer(value=value, unit="count", confidence=conf, evidence=ev, solver=self.name, trace=trace,
+                      assumptions=[f"statistical estimate: plans with {desc} most often have {value} {name}s "
+                                   f"(training data, {cell['n']} plans); the {name} symbols were not counted one by one"],
+                      missing=[f"a reliable detection of each {name} symbol (8B VLM pointing and classical CV both "
+                               f"failed on TRAIN)"])
 
     def _points(self, path, img, key, cls, prior, trace, acc) -> Answer:
         items, log, hit = vlm.point_symbols(img, key, cls, self.backend, self.target_px)

@@ -77,3 +77,16 @@ def test_sink_rule_from_room_labels(monkeypatch):
     assert a.value == 3 and a.confidence == 0.7 and len(a.evidence) == 3  # kitchen + KH basin + WC basin
     items[:] = [vlm.Item(90, 90, "MH", "bedroom")]
     assert s._rooms_rule("x.png", None, "x.png", "sink", None, [], {}).value == 2  # assumed kitchen + 1 bathroom
+
+
+def test_cond_prior_uses_room_counts(monkeypatch):
+    import json
+    from stoa.solvers.raster import COND_FILE, RasterSolver, vlm
+
+    spec = json.loads(COND_FILE.read_text())["door"]
+    items = [vlm.Item(10, 10, "MH", "bedroom"), vlm.Item(50, 10, "MH", "bedroom"), vlm.Item(90, 10, "S", "sauna")]
+    monkeypatch.setattr(vlm, "read_labels", lambda img, key, backend="local": (items, vlm.CallLog(), False))
+    a = RasterSolver()._cond_prior("x.png", None, "x.png", "door", (7.0, 0.13, 100), [], {})
+    cell = spec["table"]["2,0,1"]
+    assert a.value == cell["mode"] and 0 < a.confidence <= 0.9 and len(a.evidence) == 3
+    assert a.assumptions and "statistical estimate" in a.assumptions[0]

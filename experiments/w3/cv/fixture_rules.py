@@ -5,7 +5,8 @@ from pathlib import Path
 from stoa.solvers.raster import class_prior
 from stoa.solvers.raster.classes import label_class, type_code
 SHARED = Path(os.environ.get("JUNCTION_SHARED", "/home/fangy4/work/projects/junction-shared"))
-rows = [json.loads(l) for l in open(SHARED / "artifacts/W3/calib/labels-train200.jsonl")]
+LABELS = os.environ.get("LABELS", "labels-train200.jsonl")
+rows = [json.loads(l) for l in open(SHARED / "artifacts/W3/calib" / LABELS)]
 prior = class_prior()
 
 def feats(r):
