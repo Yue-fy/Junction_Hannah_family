@@ -109,6 +109,7 @@ def main():
 
     S = collections.defaultdict(collections.Counter)
     hist = collections.defaultdict(collections.Counter)
+    dump = []
     for (p, c), g in gold.items():
         pts = []
         for (pp, cc, k, box), out in res.items():
@@ -120,6 +121,8 @@ def main():
                 if all(math.dist((x, y), q) > a.merge_px for q in pts):
                     pts.append((x, y))
         n = len(pts)
+        dump.append({"qid": hashlib.sha1(f"{p}|{c}".encode()).hexdigest()[:12], "path": p, "source": "cubicasa5k",
+                     "type": "count", "template": c, "gold": g, "tiled": n, "prior": prior[c]})
         S[c]["n"] += 1
         S[c]["tiles"] += n == g
         S[c]["prior"] += prior[c] == g
@@ -130,6 +133,11 @@ def main():
     for c in classes:
         s = S[c]
         print(f"{c:8s} {s['n']:4d} {s['tiles']/s['n']:7.1%} {s['w1']/s['n']:6.1%} {s['prior']/s['n']:7.1%} {s['ratio']/s['n']:15.2f}  {sorted(hist[c].items())}")
+    for name in ("prior", "tiled"):
+        with open(os.path.join(CACHE, f"{a.split}_{'-'.join(classes)}_{tag}_{name}.jsonl"), "w") as f:
+            for r in dump:
+                f.write(json.dumps({**r, "value": r[name], "correct": r[name] == r["gold"], "abstained": False,
+                                    "confidence": None}) + "\n")
     print(f"calls {len(res)}, tokens in {sum(v['in'] for v in res.values())}, out {sum(v['out'] for v in res.values())}, "
           f"mean {sum(v['s'] for v in res.values())/len(res):.1f}s")
 
