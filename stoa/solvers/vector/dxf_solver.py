@@ -440,6 +440,10 @@ class DxfSolver(BaseSolver):
             value, unit = ("yes" if value else "no"), None
         if isinstance(value, str):
             unit = None
+            # apartments are identified by a letter: answer "apartment B", not "B"
+            if re.fullmatch(r"[A-Z]", value.strip()) and re.search(
+                    r"apartment|wohnung|appartement|appartamento|\bunit\b|logement", question, re.I):
+                value = f"apartment {value.strip()}"
         if unit == "count" and isinstance(value, (int, float)):
             value = int(round(value))
         elif isinstance(value, float):
