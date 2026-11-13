@@ -388,3 +388,21 @@ class VlmDirect(BaseSolver):
             trace.append(f"p(answer digits) = {p:.5f} -> confidence {conf:.2f}")
         return Answer(value=value, unit=unit, confidence=round(conf, 3), evidence=evidence, trace=trace,
                       solver=self.name)
+
+
+@register("vlm_lora")
+class VlmLora(VlmDirect):
+    """Counting LoRA cc-v2 on the shared server (owner: R2): vlm_direct with model="cc-v2", for COUNT questions on
+    raster floor plans (PNG/JPEG; cubicasa-style). Trained on TRAIN cubicasa counts only (train_gate excluded):
+    dev cubicasa 73.9% vs raster 62.5 (+11.4 [+8.2, +14.4]); hard translations 75 / paraphrases 66; compositions
+    asked whole only 10% -> give it ATOMIC questions (the pipeline's compose step). Confidence = answer-digit
+    probability mapped on train_gate (AUROC 0.89-0.93). Abstains (llm error) if the server doesn't serve "cc-v2".
+    Licence: trained on CubiCasa5K images (CC BY-NC-SA 4.0) -> non-commercial."""
+
+    def __init__(self, model: str | None = "cc-v2", **kwargs):
+        super().__init__(model=model or "cc-v2", **kwargs)
+
+    def can_handle(self, path: str, question: str) -> bool:
+        if Path(path).suffix.lower() not in IMG_EXT:
+            return False
+        return infer_kind(question)[0] == "count"
