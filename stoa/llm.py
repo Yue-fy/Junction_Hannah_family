@@ -424,7 +424,11 @@ def chat(
     client = _client(backend)
     delay = 2.0
     last_err: Exception | None = None
-    for attempt in range(retries + 1):
+    restart_budget = float(os.environ.get("LLM_RESTART_WAIT", 300))  # local server restarts take ~2 min
+    waited = 0.0
+    attempt = 0
+    while attempt <= retries:
+        attempt += 1
         if backend == "nvidia":
             _nvidia_throttle()
         t0 = time.time()
@@ -460,7 +464,10 @@ def chat(
             delay = min(delay * 2, 60)
         except (APIConnectionError, APITimeoutError) as e:  # server restarting / overloaded
             last_err = e
+            if backend == "local" and isinstance(e, APIConnectionError) and waited < restart_budget:
+                attempt -= 1  # a restarting local server doesn't use up retries, only the time budget
             time.sleep(delay)
+            waited += delay
             delay = min(delay * 2, 30)
         except APIStatusError as e:
             last_err = e
@@ -469,7 +476,7 @@ def chat(
                 delay = min(delay * 2, 30)
                 continue
             raise  # 400 etc.: the request itself is wrong (e.g. prompt too long) — don't retry
-    raise RuntimeError(f"chat failed after {retries + 1} attempts on {backend}: {last_err!r}")
+    raise RuntimeError(f"chat failed after {attempt} attempts ({waited:.0f}s waiting) on {backend}: {last_err!r}")
 
 
 def chat_many(requests: Iterable[dict], workers: int = 16) -> list[ChatResult | Exception]:
