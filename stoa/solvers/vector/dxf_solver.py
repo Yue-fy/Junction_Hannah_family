@@ -307,6 +307,10 @@ class DxfSolver(BaseSolver):
         conf = 1.0
         for p in parts:
             conf *= p.conf if p.value is not None else 0.2
+        if qparse.operator_unapplied(question, qr):
+            conf = min(conf, 0.3)  # S0 D9: low enough that the pipeline's agent takes over
+            missing.append("the question mentions an operation (average/ratio/share/threshold/per/'not in') that the "
+                           "rule parser did not apply; the value may answer a simpler question")
         # combine --------------------------------------------------------------------------------
         value: float | int | str
         unit = qr.unit
@@ -436,6 +440,10 @@ class DxfSolver(BaseSolver):
             value, unit = ("yes" if value else "no"), None
         if isinstance(value, str):
             unit = None
+            # apartments are identified by a letter: answer "apartment B", not "B"
+            if re.fullmatch(r"[A-Z]", value.strip()) and re.search(
+                    r"apartment|wohnung|appartement|appartamento|\bunit\b|logement", question, re.I):
+                value = f"apartment {value.strip()}"
         if unit == "count" and isinstance(value, (int, float)):
             value = int(round(value))
         elif isinstance(value, float):
