@@ -23,7 +23,6 @@ export function costTier(c: Cost): "deterministic" | "local" | "api" {
   return "deterministic";
 }
 
-const TIER_LABEL = { deterministic: "rules only", local: "local model", api: "hosted model" };
 const UNIT_LABEL: Record<string, string> = { m2: "m²", m3: "m³", ft2: "ft²", count: "", m: "m" };
 
 const esc = (s: unknown) => String(s ?? "").replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
@@ -59,12 +58,72 @@ export function crossChecks(a: Answer): { text: string; ok: boolean }[] {
   return out.filter((x, i) => out.findIndex((y) => y.text === x.text) === i).slice(0, 2);
 }
 
-function evLabel(e: Evidence, i: number, describe: (g: string) => string) {
-  const where = e.ifc_guid && !e.bbox ? `3D · ${esc(describe(e.ifc_guid))}` : e.bbox ? (e.ifc_guid ? "2D + 3D" : "2D") : "";
-  return `<li class="ev-item" data-i="${i}"><span class="n">${i + 1}</span><span class="t">${esc(e.note || e.ifc_guid || "evidence")}</span><span class="w">${where}</span></li>`;
+/** One row per object: evidence items that share an ifc_guid (2D box + 3D element) are grouped. */
+export function groupEvidence(ev: Evidence[]): { idx: number[]; first: number }[] {
+  const groups: { idx: number[]; first: number }[] = [];
+  const byGuid = new Map<string, { idx: number[]; first: number }>();
+  ev.forEach((e, i) => {
+    const g = e.ifc_guid ? byGuid.get(e.ifc_guid) : undefined;
+    if (g) return void g.idx.push(i);
+    const ng = { idx: [i], first: i };
+    if (e.ifc_guid) byGuid.set(e.ifc_guid, ng);
+    groups.push(ng);
+  });
+  return groups;
 }
 
-export function renderCard(el: HTMLElement, a: Answer, opts: { roundTripMs: number; onEvidence: (i: number) => void; describeGuid: (g: string) => string }) {
+function evLabel(ev: Evidence[], g: { idx: number[]; first: number }, n: number, describe: (g: string) => string) {
+  const items = g.idx.map((i) => ev[i]);
+  const has2D = items.some((e) => e.bbox);
+  const has3D = items.some((e) => e.ifc_guid);
+  const e = items.find((x) => x.bbox) ?? items[0];
+  const note = items.map((x) => x.note).find((x) => x) || (e.ifc_guid ? describe(e.ifc_guid) : "evidence");
+  const where = has2D && has3D ? "2D + 3D" : has3D ? "3D" : has2D ? "2D" : "";
+  const files = new Set(items.map((x) => x.file.split("/").pop()));
+  return `<li class="ev-item" data-i="${g.idx.find((i) => ev[i].bbox) ?? g.first}" title="${esc([...files].join(" · "))}"><span class="n">${n}</span><span class="t">${esc(note)}</span><span class="w">${where}</span></li>`;
+}
+
+/** Trace lines: "[solver] text" → tag + text; long traces show the first steps and fold the rest. */
+function traceHtml(trace: string[], keep = 6) {
+  const li = (t: string) => {
+    const m = t.match(/^\[([\w:/-]+)\]\s*(.*)$/);
+    const cc = /cross-?check/i.test(t) ? " class=\"cc\"" : "";
+    return m ? `<li${cc}><span class="tag">${esc(m[1])}</span>${esc(m[2])}</li>` : `<li${cc}>${esc(t)}</li>`;
+  };
+  const head = trace.slice(0, keep).map(li).join("");
+  const rest = trace.slice(keep);
+  return `<ol class="trace">${head}</ol>` + (rest.length
+    ? `<details class="more-steps"><summary>${rest.length} more step${rest.length > 1 ? "s" : ""}</summary><ol class="trace" start="${keep + 1}">${rest.map(li).join("")}</ol></details>`
+    : "");
+}
+
+export interface CardOpts {
+  roundTripMs: number;
+  onEvidence: (i: number) => void;
+  describeGuid: (g: string) => string;
+  currentFile: string;
+  onOpenSheet: (path: string) => void;
+}
+
+/** Which files carry 2D evidence (model-wide answers box elements on several sheets). */
+function sheetsHtml(ev: Evidence[], current: string) {
+  const counts = new Map<string, number>();
+  for (const e of ev) if (e.bbox) counts.set(e.file, (counts.get(e.file) ?? 0) + 1);
+  if (counts.size === 0 || (counts.size === 1 && counts.has(current))) return "";
+  const short = (p: string) => p.split("/").pop()!.replace(/^.*?_(plan|section|elevation)-/, "$1-").replace(/\.[^.]+$/, "");
+  const chips = [...counts.entries()].sort((a, b) => (a[0] === current ? -1 : b[0] === current ? 1 : a[0].localeCompare(b[0])))
+    .map(([f, n]) => `<button class="sheet ${f === current ? "on" : ""}" data-file="${esc(f)}" title="${esc(f)}">${esc(f === current ? "this sheet" : short(f))} <b>${n}</b></button>`).join("");
+  return `<div class="sheets"><span>Evidence on ${counts.size} sheet${counts.size > 1 ? "s" : ""}:</span>${chips}</div>`;
+}
+
+const CASCADE: ["deterministic" | "local" | "api", string][] = [["deterministic", "rules / geometry"], ["local", "local model"], ["api", "hosted model"]];
+function cascadeHtml(tier: "deterministic" | "local" | "api") {
+  const reached = CASCADE.findIndex(([t]) => t === tier);
+  return `<div class="cascade" title="Cost-aware cascade: the cheapest step that is sure enough answers">${CASCADE.map(([t, label], i) =>
+    `<span class="${i < reached ? "passed" : i === reached ? `on ${t}` : ""}">${label}</span>`).join("<i>›</i>")}</div>`;
+}
+
+export function renderCard(el: HTMLElement, a: Answer, opts: CardOpts) {
   const c: Cost = a.cost ?? {};
   const tier = costTier(c);
   const wall = c.wall_seconds && c.wall_seconds > 0 ? c.wall_seconds : opts.roundTripMs / 1000;
@@ -75,7 +134,8 @@ export function renderCard(el: HTMLElement, a: Answer, opts: { roundTripMs: numb
   const unit = a.unit ? UNIT_LABEL[a.unit] ?? a.unit : "";
   const isText = typeof a.value === "string";
   const ev = a.evidence ?? [];
-  const shown = ev.slice(0, 60);
+  const groups = groupEvidence(ev);
+  const shown = groups.slice(0, 80);
 
   el.className = `card answer ${a.value === null ? "refused" : ""}`;
   el.innerHTML = `
@@ -86,19 +146,21 @@ export function renderCard(el: HTMLElement, a: Answer, opts: { roundTripMs: numb
       </div>
     </div>
     ${checks.map((x) => `<div class="xcheck ${x.ok ? "ok" : "bad"}"><b>${x.ok ? "✓ Cross-checked" : "✗ Sources disagree"}</b> ${esc(x.text)}</div>`).join("")}
+    ${cascadeHtml(tier)}
     <div class="cost">
-      <span class="tier ${tier}" title="Cheapest path that answered">${TIER_LABEL[tier]}</span>
       <span title="Wall time">⏱ ${wall < 1 ? `${Math.round(wall * 1000)} ms` : `${wall.toFixed(1)} s`}</span>
       <span title="LLM tokens in / out">${tokens ? `${(c.llm_tokens_in ?? 0).toLocaleString()} / ${(c.llm_tokens_out ?? 0).toLocaleString()} tok` : "0 tokens"}</span>
       <span title="Estimated cost with the eval's rates (stoa/eval/runner.py), shown in EUR at ${EUR_PER_USD} €/$">≈ ${fmtEur(costUsd({ ...c, wall_seconds: wall }))}</span>
       <span class="solver" title="Solver">${esc(a.solver || "?")}</span>
     </div>
     <details class="sec" open><summary>Why <small>${(a.trace ?? []).length} steps</small></summary>
-      <ol class="trace">${(a.trace ?? []).map((t) => `<li>${esc(t)}</li>`).join("")}</ol></details>
+      ${traceHtml(a.trace ?? [])}</details>
     ${(a.assumptions ?? []).length ? `<details class="sec" open><summary>Assumptions</summary><ul class="assume">${a.assumptions!.map((t) => `<li>${esc(t)}</li>`).join("")}</ul></details>` : ""}
     ${(a.missing ?? []).length ? `<details class="sec" open><summary>What would make it certain</summary><ul class="missing">${a.missing!.map((t) => `<li>${esc(t)}</li>`).join("")}</ul></details>` : ""}
-    <details class="sec" open><summary>Evidence <small>${ev.length} item${ev.length === 1 ? "" : "s"} · click to zoom</small></summary>
-      <ul class="evidence">${shown.map((e, i) => evLabel(e, i, opts.describeGuid)).join("")}${ev.length > shown.length ? `<li class="more">+ ${ev.length - shown.length} more</li>` : ""}</ul></details>
+    ${sheetsHtml(ev, opts.currentFile)}
+    <details class="sec" open><summary>Evidence <small>${groups.length} item${groups.length === 1 ? "" : "s"}${groups.length < ev.length ? ` (${ev.length} boxes/elements)` : ""} · click to zoom</small></summary>
+      <ul class="evidence">${shown.map((g, n) => evLabel(ev, g, n + 1, opts.describeGuid)).join("")}${groups.length > shown.length ? `<li class="more">+ ${groups.length - shown.length} more</li>` : ""}</ul></details>
   `;
   el.querySelectorAll<HTMLElement>(".ev-item").forEach((li) => li.addEventListener("click", () => opts.onEvidence(Number(li.dataset.i))));
+  el.querySelectorAll<HTMLButtonElement>(".sheet").forEach((b) => b.addEventListener("click", () => b.dataset.file !== opts.currentFile && opts.onOpenSheet(b.dataset.file!)));
 }

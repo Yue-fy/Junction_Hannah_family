@@ -102,6 +102,9 @@ select, input[type="search"], textarea { border: 1px solid var(--line); border-r
 .sec summary small { text-transform: none; letter-spacing: 0; font-weight: 400; margin-left: 4px; }
 .trace, .assume, .missing { margin: 6px 0 0; padding-left: 20px; font-size: 12.5px; line-height: 1.45; }
 .trace li::marker { color: var(--muted); }
+.trace .tag { font-size: 10px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; background: #eef1f5; color: var(--muted); border-radius: 3px; padding: 0 4px; margin-right: 5px; }
+.trace li.cc { color: #145f35; font-weight: 600; }
+.more-steps summary { cursor: pointer; font-size: 12px; color: #2456a6; margin: 4px 0 0 20px; }
 .missing li { color: #7a4a00; }
 .evidence { list-style: none; margin: 6px 0 0; padding: 0; max-height: 220px; overflow-y: auto; font-size: 12.5px; }
 .ev-item { display: grid; grid-template-columns: 24px 1fr auto; gap: 6px; padding: 4px 4px; border-radius: 6px; cursor: pointer; align-items: baseline; }
@@ -179,3 +182,16 @@ select, input[type="search"], textarea { border: 1px solid var(--line); border-r
   #main { height: 90vh; }
   #views[data-mode="split"] { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; }
 }
+
+.cascade { display: flex; align-items: center; gap: 4px; margin-top: 10px; font-size: 11px; color: #9aa6b5; }
+.cascade span { padding: 2px 7px; border-radius: 999px; border: 1px dashed #d3dae3; white-space: nowrap; }
+.cascade span.passed { border-style: solid; color: var(--muted); text-decoration: line-through; text-decoration-color: #c4ccd6; }
+.cascade span.on { border-style: solid; font-weight: 700; }
+.cascade span.on.deterministic { background: var(--ok-soft); color: var(--ok); border-color: #b6e0c6; }
+.cascade span.on.local { background: #e8f0fb; color: #2456a6; border-color: #b9cbe4; }
+.cascade span.on.api { background: var(--warn-soft); color: var(--warn); border-color: #f0d3a3; }
+.cascade i { font-style: normal; color: #c4ccd6; }
+.sheets { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; margin-top: 10px; font-size: 11.5px; color: var(--muted); }
+.sheet { border: 1px solid var(--line); background: #fbfcfd; border-radius: 6px; padding: 2px 7px; font-size: 11.5px; cursor: pointer; }
+.sheet.on { background: var(--accent-soft); border-color: #ffc29e; cursor: default; }
+.sheet b { color: var(--accent); }
