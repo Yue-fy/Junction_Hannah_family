@@ -265,7 +265,10 @@ def main(argv: list[str] | None = None) -> int:
     if not qs:
         print("no questions selected", file=sys.stderr)
         return 2
-    run_id = f"{datetime.now().strftime('%Y%m%d-%H%M%S')}-{a.solver}-{a.split}" + (f"-n{len(qs)}" if a.limit else "")
+    # unique even for runs started in the same second (R2 00:00): random suffix + exclusive create below
+    split_tag = Path(a.split).stem if a.split.endswith(".jsonl") else a.split
+    run_id = (f"{datetime.now().strftime('%Y%m%d-%H%M%S')}-{a.solver}-{split_tag}" + (f"-n{len(qs)}" if a.limit else "")
+              + f"-{os.urandom(2).hex()}")
     out_dir = shared_root() / "artifacts" / "eval"
     out_dir.mkdir(parents=True, exist_ok=True)
     preds_path = out_dir / f"{run_id}.jsonl"
@@ -276,7 +279,7 @@ def main(argv: list[str] | None = None) -> int:
         tqdm = None
     preds: list[dict] = []
     t0 = time.time()
-    with open(preds_path, "w", encoding="utf-8") as fout, cf.ThreadPoolExecutor(max_workers=max(1, a.workers)) as ex:
+    with open(preds_path, "x", encoding="utf-8") as fout, cf.ThreadPoolExecutor(max_workers=max(1, a.workers)) as ex:
         futs = [ex.submit(run_one, solver, q, a.handled_only) for q in qs]
         it = cf.as_completed(futs)
         if tqdm and not a.quiet:
