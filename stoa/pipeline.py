@@ -19,7 +19,11 @@ unsure: cheap = only from a deterministic solver; always = also the local VLM),
 api=0 (allow hosted API tier), margin=0.03 (gate margin over the prior), max_tries=3, vlm_args (json dict for
 vlm_direct), use_gate=1, compose=1 (split compound questions), normalise=1 (give template solvers the canonical
 English question when the asked one is a translation/paraphrase), crosscheck=1 (W1's stoa.kg.crosscheck note
-in Evidence.note + trace; agreement raises confidence, disagreement lowers it and adds to missing).
+in Evidence.note + trace; agreement raises confidence, disagreement lowers it and adds to missing),
+agent=1 (general tool-using agent, stoa.router.agent, FIRST for numeric questions whose wording is not a known
+template and that carry a meaning-changing modifier (average, share/%, difference, "other than", thresholds,
+several object classes) or name no known object class on a drawing without a deterministic solver; the agent
+asks this pipeline's atomic cascade simple sub-questions and does the arithmetic in code).
 """
 
 from __future__ import annotations
@@ -34,7 +38,7 @@ from stoa.data import siblings, source_of
 from stoa.router import gating, prior
 from stoa.router.canonical import canonical
 from stoa.router.compose import combine, decompose
-from stoa.router.intent import Intent, parse
+from stoa.router.intent import Intent, modifiers, parse
 from stoa.router.prior import known_template
 
 IMG_EXT = (".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp", ".gif")
@@ -60,7 +64,7 @@ def route(path: str, intent: Intent | None = None) -> list[str]:
         out += ["pdf_vector", "pdf_text"]
     if ext in IMG_EXT or any(e in sib for e in IMG_EXT):
         out.append("raster")
-    out += ["agent", "vlm_direct"]
+    out += ["vlm_direct"]  # the general agent is called explicitly by the pipeline (agent=1), not routed
     seen: set[str] = set()
     return [x for x in out if not (x in seen or seen.add(x))]
 
@@ -94,7 +98,8 @@ from stoa.solvers.base import BaseSolver  # noqa: E402
 class Pipeline(BaseSolver):
     def __init__(self, accept: float | str = 0.6, agree: str = "cheap", api: int | str = 0, margin: float | str = 0.03,
                  max_tries: int | str = 3, vlm_args: str | dict | None = None, use_gate: int | str = 1,
-                 compose: int | str = 1, normalise: int | str = 1, crosscheck: int | str = 1, **kwargs):
+                 compose: int | str = 1, normalise: int | str = 1, crosscheck: int | str = 1, agent: int | str = 1,
+                 **kwargs):
         super().__init__(**kwargs)
         self.accept = float(accept)
         self.agree = {"1": "cheap", "0": "never", "2": "always"}.get(str(agree), str(agree))  # cheap|never|always
@@ -105,6 +110,7 @@ class Pipeline(BaseSolver):
         self.compose = bool(int(compose))
         self.normalise = bool(int(normalise))
         self.crosscheck = bool(int(crosscheck))
+        self.use_agent = bool(int(agent))
         self.vlm_args = json.loads(vlm_args) if isinstance(vlm_args, str) else dict(vlm_args or {})
         self._solvers: dict[str, object | None] = {}
         self._lock = threading.Lock()
@@ -166,12 +172,46 @@ class Pipeline(BaseSolver):
                      solver="pipeline/compose", assumptions=assumptions, missing=missing, cost=total)
         return out
 
-    def _solve_atomic(self, path: str, question: str) -> Answer:
+    def _agent_reason(self, path: str, question: str, intent: Intent, cands: list[str]) -> str | None:
+        """Why this question should go to the general agent first (None = it should not)."""
+        if not self.use_agent or intent.task not in ("count", "area", "volume", "length") or known_template(question):
+            return None
+        if source_of(path) == "ifc_bench":  # free-text model questions: W1's fact-card path keeps the breakdown
+            return None
+        mods = modifiers(question)
+        if mods:
+            return "modifier " + "+".join(mods) + " changes what is computed; not a known template"
+        if intent.target == "unknown" and not any(TIER.get(c) == "deterministic" for c in cands):
+            return "no known object class in the question"
+        return None
+
+    def _run_agent(self, path: str, question: str, why: str, t0: float) -> Answer | None:
+        from stoa.router.agent import Agent
+
+        ag = Agent(ask_fn=lambda p, q: self._solve_atomic(p, q, allow_agent=False))
+        try:
+            ans = ag.solve(path, question)
+        except Exception as e:  # noqa: BLE001
+            return None  # the template path still runs
+        if ans.value is None:
+            return None
+        ans.trace = [f"general agent first: {why}"] + ans.trace
+        ans.solver = "pipeline/agent"
+        ans.cost.wall_seconds = round(time.perf_counter() - t0, 4)
+        return ans
+
+    def _solve_atomic(self, path: str, question: str, allow_agent: bool = True) -> Answer:
         t0 = time.perf_counter()
         intent = parse(question)
         src = source_of(path)
         trace = [f"intent: {intent.describe()} (lang {intent.lang})"]
         cands = route(path, intent)
+        why = self._agent_reason(path, question, intent, cands) if allow_agent else None
+        if why:
+            ans = self._run_agent(path, question, why, t0)
+            if ans is not None:
+                return ans
+            trace.append(f"general agent gave no answer ({why}); falling back to the template path")
         if self.api:
             cands.append("vlm_nvidia")
         if self.use_gate:
