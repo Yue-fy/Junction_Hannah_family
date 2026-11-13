@@ -304,3 +304,20 @@ select, input[type="search"], textarea { border: 1px solid var(--line); border-r
 .bn-foot { margin-top: 18px; font-size: 12.5px; color: var(--ink); display: flex; flex-direction: column; gap: 6px; }
 .bn-foot details { color: var(--muted); font-size: 11.5px; }
 .bn-foot ul { margin: 4px 0 0; padding-left: 18px; }
+
+/* knowledge graph drawing */
+.kg-col.graph { flex: 1.5 1 0; }
+.kg-graph { width: 100%; height: auto; display: block; font-size: 11.5px; }
+.kg-graph .kh { font-size: 9px; font-weight: 700; letter-spacing: .06em; fill: var(--muted); }
+.kg-graph .ke path { fill: none; stroke: #cfd7e1; stroke-width: 1; }
+.kg-graph .ke path.on { stroke: var(--accent); stroke-width: 2; }
+.kg-graph .kn text { fill: var(--ink); }
+.kg-graph .kn rect { fill: #f3f6fa; stroke: #b9cbe4; stroke-width: 1; }
+.kg-graph .kn.model rect { fill: #e7eef8; stroke: #2456a6; }
+.kg-graph .kn.on rect { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.5; }
+.kg-graph .kn.on text { font-weight: 700; }
+.kg-graph .kn.rooms circle { fill: #2456a6; stroke: #fff; stroke-width: 2; }
+.kg-graph .kn.rooms.on circle { fill: var(--accent); }
+.kg-graph .kn.other text { fill: var(--muted); }
+.kg-graph .kn[data-open], .kg-graph .kn[data-storey] { cursor: pointer; }
+.kg-graph .kn[data-open]:hover text, .kg-graph .kn[data-storey]:hover text { fill: var(--accent); }
