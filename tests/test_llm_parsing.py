@@ -59,3 +59,31 @@ def test_infer_kind():
     assert infer_kind("What is the total net volume of all walls on '1. Sal', in m³?") == ("volume", "m3")
     assert infer_kind("What is the total length of all walls on 'Erdgeschoss', in metres?") == ("length", "m")
     assert infer_kind("Which software was used?")[0] == "text"
+
+
+def test_answer_prob_digits_and_max_digits():
+    import math
+
+    from stoa.llm import ChatResult, answer_prob
+
+    toks = [{"t": "1", "lp": math.log(0.5), "top": []}, {"t": "2", "lp": math.log(0.8), "top": []},
+            {"t": ".", "lp": 0.0, "top": []}, {"t": "5", "lp": math.log(0.5), "top": []},
+            {"t": " m²", "lp": 0.0, "top": []}]
+    r = ChatResult(text="12.5 m²", logprobs=toks)
+    assert abs(answer_prob(r) - 0.2) < 1e-3  # 0.5 * 0.8 * 0.5
+    assert abs(answer_prob(r, max_digits=2) - 0.4) < 1e-3
+    assert answer_prob(ChatResult(text="x")) is None
+
+
+def test_map_conf_monotone_table():
+    from stoa.solvers import vlm_direct as vd
+
+    old = dict(vd.CONF_MAP)
+    try:
+        vd.CONF_MAP.clear()
+        vd.CONF_MAP["count"] = [(0.5, 0.2), (0.99, 0.4), (1.0, 0.9)]
+        assert vd.map_conf(0.1, "count") == 0.2 and vd.map_conf(0.995, "count") == 0.9
+        assert vd.map_conf(0.7, "area") == 0.7  # no measure table -> clipped raw probability
+    finally:
+        vd.CONF_MAP.clear()
+        vd.CONF_MAP.update(old)

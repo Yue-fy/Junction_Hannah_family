@@ -18,12 +18,22 @@ Options (`--solver-arg k=v`): accept=0.6 (confidence to stop), agree=cheap|alway
 unsure: cheap = only from a deterministic solver; always = also the local VLM),
 api=0 (allow hosted API tier), margin=0.03 (gate margin over the prior), max_tries=3, vlm_args (json dict for
 vlm_direct), use_gate=1, compose=1 (split compound questions), normalise=1 (give template solvers the canonical
-English question when the asked one is a translation/paraphrase).
+English question when the asked one is a translation/paraphrase), crosscheck=1 (W1's stoa.kg.crosscheck note
+in Evidence.note + trace; agreement raises confidence, disagreement lowers it and adds to missing),
+agent=1 (general tool-using agent, stoa.router.agent, FIRST for numeric questions whose wording is not a known
+template and that carry a meaning-changing modifier (average, share/%, difference, "other than", thresholds,
+several object classes) or name no known object class on a drawing without a deterministic solver; the agent
+asks this pipeline's atomic cascade simple sub-questions and does the arithmetic in code),
+raw_first=1 (before the agent, an operator question goes AS ASKED to the deterministic solvers (dxf, ifc, schedule,
+pdf_vector); if one answers with confidence >= accept it applied the operator itself and no LLM is called),
+cc5k=1 (D8: cubicasa window/door/WC-seat/sink counts go to R1's pretrained `raster_cc5k` when it is registered, with
+hit rates measured on `cc5k_heldout` (stoa/router/gating_cc5k.json); cc5k=0 leaves every answer as without it).
 """
 
 from __future__ import annotations
 
 import json
+import re
 import threading
 import time
 from pathlib import Path
@@ -33,14 +43,17 @@ from stoa.data import siblings, source_of
 from stoa.router import gating, prior
 from stoa.router.canonical import canonical
 from stoa.router.compose import combine, decompose
-from stoa.router.intent import Intent, parse
+from stoa.router.intent import Intent, modifiers, parse
 from stoa.router.prior import known_template
 
+# D8: symbol counts R1's pretrained CubiCasa5K model answers; its gate is measured on cc5k_heldout only
+CC5K_KEYS = {"count:window:drawing", "count:door:drawing", "count:wc:drawing", "count:sink:drawing"}
+GATING_CC5K = Path(__file__).parent / "router" / "gating_cc5k.json"
 IMG_EXT = (".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp", ".gif")
 # tier of each solver (cost order); unknown names count as "local"
 TIER = {"dxf": "deterministic", "ifc": "deterministic", "schedule": "deterministic", "pdf_vector": "deterministic",
         "pdf_text": "deterministic", "raster": "local", "vlm_direct": "local", "agent": "local",
-        "vlm_nvidia": "api", "prior": "deterministic"}
+        "vlm_nvidia": "api", "prior": "deterministic", "raster_cc5k": "local"}
 
 
 def route(path: str, intent: Intent | None = None) -> list[str]:
@@ -59,7 +72,7 @@ def route(path: str, intent: Intent | None = None) -> list[str]:
         out += ["pdf_vector", "pdf_text"]
     if ext in IMG_EXT or any(e in sib for e in IMG_EXT):
         out.append("raster")
-    out += ["agent", "vlm_direct"]
+    out += ["vlm_direct"]  # the general agent is called explicitly by the pipeline (agent=1), not routed
     seen: set[str] = set()
     return [x for x in out if not (x in seen or seen.add(x))]
 
@@ -93,7 +106,8 @@ from stoa.solvers.base import BaseSolver  # noqa: E402
 class Pipeline(BaseSolver):
     def __init__(self, accept: float | str = 0.6, agree: str = "cheap", api: int | str = 0, margin: float | str = 0.03,
                  max_tries: int | str = 3, vlm_args: str | dict | None = None, use_gate: int | str = 1,
-                 compose: int | str = 1, normalise: int | str = 1, **kwargs):
+                 compose: int | str = 1, normalise: int | str = 1, crosscheck: int | str = 1, agent: int | str = 1,
+                 raw_first: int | str = 1, cc5k: int | str = 1, **kwargs):
         super().__init__(**kwargs)
         self.accept = float(accept)
         self.agree = {"1": "cheap", "0": "never", "2": "always"}.get(str(agree), str(agree))  # cheap|never|always
@@ -103,8 +117,13 @@ class Pipeline(BaseSolver):
         self.use_gate = bool(int(use_gate))
         self.compose = bool(int(compose))
         self.normalise = bool(int(normalise))
+        self.crosscheck = bool(int(crosscheck))
+        self.use_agent = bool(int(agent))
+        self.raw_first = bool(int(raw_first))
+        self.cc5k = bool(int(cc5k))
         self.vlm_args = json.loads(vlm_args) if isinstance(vlm_args, str) else dict(vlm_args or {})
         self._solvers: dict[str, object | None] = {}
+        self._cc5k_gate: dict | None = None
         self._lock = threading.Lock()
 
     # -- registry access ------------------------------------------------------------------------
@@ -164,18 +183,70 @@ class Pipeline(BaseSolver):
                      solver="pipeline/compose", assumptions=assumptions, missing=missing, cost=total)
         return out
 
-    def _solve_atomic(self, path: str, question: str) -> Answer:
+    def _agent_reason(self, path: str, question: str, intent: Intent, cands: list[str]) -> str | None:
+        """Why this question should go to the general agent first (None = it should not)."""
+        if not self.use_agent or known_template(question):
+            return None
+        if source_of(path) == "ifc_bench":  # free-text model questions: W1's fact-card path keeps the breakdown
+            return None
+        mods = modifiers(question)
+        if intent.task not in ("count", "area", "volume", "length"):
+            # text / yes-no: only comparisons and operators over named things ("which storey has more doors, '0' or
+            # '-1'?", "which is smaller, apartment B or H?"); plain look-ups stay with the solvers
+            if mods and set(mods) & {"compare", "threshold", "multi_scope", "rest", "ratio", "avg", "share", "diff"}:
+                return "modifier " + "+".join(mods) + " (comparison/operator over named things); not a known template"
+            return None
+        if mods:
+            return "modifier " + "+".join(mods) + " changes what is computed; not a known template"
+        if intent.target == "unknown" and not any(TIER.get(c) == "deterministic" for c in cands):
+            return "no known object class in the question"
+        return None
+
+    def _run_agent(self, path: str, question: str, why: str, t0: float) -> Answer | None:
+        from stoa.router.agent import Agent
+
+        ag = Agent(ask_fn=lambda p, q: self._solve_atomic(p, q, allow_agent=False))
+        try:
+            ans = ag.solve(path, question)
+        except Exception as e:  # noqa: BLE001
+            return None  # the template path still runs
+        if ans.value is None:
+            return None
+        ans.trace = [f"general agent first: {why}"] + ans.trace
+        ans.solver = "pipeline/agent"
+        ans.cost.wall_seconds = round(time.perf_counter() - t0, 4)
+        return ans
+
+    def _solve_atomic(self, path: str, question: str, allow_agent: bool = True) -> Answer:
         t0 = time.perf_counter()
         intent = parse(question)
         src = source_of(path)
         trace = [f"intent: {intent.describe()} (lang {intent.lang})"]
         cands = route(path, intent)
+        why = self._agent_reason(path, question, intent, cands) if allow_agent else None
+        unsure = None  # a deterministic solver's own answer to the raw question that it was not sure of
+        if self.raw_first and not known_template(question) and any(TIER.get(c) == "deterministic" for c in cands):
+            # unseen wording on a file with a deterministic solver: ask it the question AS ASKED first (dxf / ifc
+            # read translations and apply operators themselves, and flag what they could not apply with a low conf)
+            if why:
+                trace.append(f"operator question ({why.split(';')[0]})")
+            pre, unsure = self._raw_deterministic(path, question, intent, cands, trace, t0)
+            if pre is not None:
+                return pre
+        if why:
+            ans = self._run_agent(path, question, why, t0)
+            if ans is not None:
+                return self._vs_unsure(ans, unsure, intent)
+            trace.append(f"general agent gave no answer ({why}); falling back to the template path")
         if self.api:
             cands.append("vlm_nvidia")
         if self.use_gate:
             order, gate = gating.plan(src, intent.key, cands, margin=self.margin)
         else:
             order, gate = cands, None
+        rates: dict[str, tuple[float, int]] = {}  # solver -> (hit rate, n) when not from the train gate
+        if self.cc5k and src == "cubicasa5k" and intent.key in CC5K_KEYS:
+            order = self._cc5k_order(intent.key, order, rates, trace)
         acc = (gate or {}).get("acc", {})
         if gate:
             skipped = [c for c in cands if c in acc and c not in order]
@@ -186,9 +257,11 @@ class Pipeline(BaseSolver):
             trace.append("no train gate for this kind of question: general path by file type")
 
         canon = None
-        if self.normalise and not known_template(question):
+        if self.normalise and not known_template(question) and not modifiers(question):
+            # the canonical template drops operators ("average", "share", "not in apartment A"): never for those
             canon = canonical(src, intent)
         total = Cost()
+        reused = False
         answers: list[tuple[str, Answer, float]] = []  # (solver, answer, calibrated confidence)
         tries = 0
         for name in order:
@@ -209,7 +282,10 @@ class Pipeline(BaseSolver):
             if ask != question:
                 trace.append(f"{name}: asked the canonical form \"{canon[:100]}\"")
             try:
-                ans = s.solve(path, ask)
+                if unsure is not None and unsure[0] == name and ask == question:
+                    ans, reused = unsure[1], True  # same solver, same question: don't pay twice
+                else:
+                    ans = s.solve(path, ask)
             except Exception as e:  # noqa: BLE001
                 trace.append(f"{name}: error {type(e).__name__}: {str(e)[:120]}")
                 continue
@@ -219,12 +295,18 @@ class Pipeline(BaseSolver):
             if ans.value is None:
                 trace.append(f"{name}: abstained ({(ans.missing or ['?'])[0][:80]})")
                 continue
-            if gate and name in acc:  # train hit rate for this key, smoothed (k+1)/(n+2): 40/40 -> 0.976, not 1.0
+            if name in rates:  # held-out hit rate (raster_cc5k on cc5k_heldout, D8), smoothed
+                conf = (rates[name][0] * rates[name][1] + 1) / (rates[name][1] + 2)
+            elif gate and name in acc:  # train hit rate for this key, smoothed (k+1)/(n+2): 40/40 -> 0.976, not 1.0
                 conf = (acc[name] * gate["n"] + 1) / (gate["n"] + 2)
+                if ask == question and not known_template(question) and TIER.get(name) == "deterministic":
+                    # an unseen wording asked as is: the template's train rate does not vouch for how the solver
+                    # read it (F hard2: "how many times larger is B than A" -> apartment count at 0.976)
+                    conf = min(conf, ans.confidence)
             else:
                 conf = ans.confidence
             trace.append(f"{name}: {ans.value} {ans.unit or ''} (conf {conf:.2f}"
-                         + (", train hit rate" if name in acc else "") + ")")
+                         + (", held-out hit rate" if name in rates else ", train hit rate" if name in acc else "") + ")")
             answers.append((name, ans, conf))
             if conf >= self.accept or self.agree == "never" or len(answers) >= 2:
                 break
@@ -234,14 +316,136 @@ class Pipeline(BaseSolver):
                 break
             trace.append(f"unsure (conf {conf:.2f} < {self.accept}): asking {rest[0]} for a cross-check")
         best = self._combine(answers, intent, trace)
+        if unsure is not None and not reused:
+            total = total.add(_cost_of(unsure[1]))
+        if unsure is not None and (best is None or best.confidence < unsure[1].confidence):
+            n_u, a_u = unsure
+            if best is not None:
+                trace.append(f"{n_u} on the question as asked ({a_u.value}, conf {a_u.confidence:.2f}) is surer than "
+                             f"{best.solver} ({best.value}, conf {best.confidence:.2f}): keeping {n_u}")
+            best = a_u.model_copy(deep=True)
+            best.solver = n_u
         if best is None:
             best = self._prior_answer(src, intent, trace, gate)
+        if self.crosscheck and best.value is not None:
+            self._kg_crosscheck(path, intent, best, trace)
+        if why and best.value is not None:  # the agent failed on an operator question: the template answer may ignore it
+            best.confidence = round(min(best.confidence, 0.3), 3)
+            best.missing = [*best.missing, f"the question has an operator the solvers may not apply ({why.split(';')[0]})"]
         best.cost = total.add(_cost_of(best)) if best.solver == "prior" else total
         best.cost.wall_seconds = round(time.perf_counter() - t0, 4)
         # keep the sub-solver's own steps after ours, short
         best.trace = trace + [f"[{best.solver}] {t}" for t in best.trace[-8:]]
         best.solver = f"pipeline/{best.solver}"
         return best
+
+    def _cc5k_order(self, key: str, order: list[str], rates: dict, trace: list[str]) -> list[str]:
+        """D8: R1's pretrained CubiCasa5K model for symbol counts, gated on cc5k_heldout (never train_gate: the
+        model's pretraining saw 84% of our cubicasa drawings, so dev/test numbers with it are inflated)."""
+        if self._get("raster_cc5k") is None:
+            return order
+        if self._cc5k_gate is None:
+            self._cc5k_gate = gating.load(GATING_CC5K) if GATING_CC5K.exists() else {"entries": {}}
+        e = self._cc5k_gate.get("entries", {}).get(f"cubicasa5k|{key}")
+        if not e or "raster_cc5k" not in e.get("acc", {}):
+            trace.append("raster_cc5k: no held-out rate for this question kind; not used")
+            return order
+        a, p, n = e["acc"]["raster_cc5k"], e["acc"].get("prior", 0.0), e.get("n", 0)
+        if a <= p + self.margin:
+            trace.append(f"raster_cc5k: held-out {100 * a:.0f}% vs prior {100 * p:.0f}% (n={n}); skipped")
+            return order
+        rates["raster_cc5k"] = (a, n)
+        trace.append(f"raster_cc5k (pretrained CubiCasa5K, CC BY-NC 4.0): held-out {100 * a:.0f}% vs prior "
+                     f"{100 * p:.0f}% (cc5k_heldout n={n}) → first")
+        return ["raster_cc5k"] + [c for c in order if c != "raster_cc5k"]
+
+    def _raw_deterministic(self, path: str, question: str, intent: Intent, cands: list[str], trace: list[str],
+                           t0: float) -> Answer | None:
+        """Operator question: the deterministic solver gets the RAW question first. dxf / ifc apply averages,
+        shares, thresholds, comparisons themselves and say so with confidence >= accept (W1/W2 cap it at 0.3-0.5 when
+        an operator word was present but no rule applied it). Sure -> done, no LLM; unsure -> the general agent."""
+        total = Cost()
+        for name in [c for c in cands if TIER.get(c) == "deterministic"]:
+            s = self._get(name)
+            if s is None:
+                continue
+            try:
+                if not s.can_handle(path, question):
+                    continue
+                a = s.solve(path, question)
+            except Exception as e:  # noqa: BLE001
+                trace.append(f"{name} (question as asked): error {type(e).__name__}")
+                continue
+            if not isinstance(a, Answer):
+                a = Answer.model_validate(a)
+            total = total.add(_cost_of(a))
+            if a.value is None:
+                continue
+            if a.confidence < self.accept:
+                trace.append(f"{name} (question as asked): {a.value} {a.unit or ''} at conf {a.confidence:.2f}, unsure"
+                             + (" → general agent" if self._agent_reason(path, question, intent, cands) else ""))
+                return None, (name, a)
+            best = a.model_copy(deep=True)
+            trace.append(f"{name} (question as asked): {a.value} {a.unit or ''} (conf {a.confidence:.2f}; the solver "
+                         "read the question itself, no LLM needed)")
+            if self.crosscheck:
+                self._kg_crosscheck(path, intent, best, trace)
+            best.cost = total
+            best.cost.wall_seconds = round(time.perf_counter() - t0, 4)
+            best.trace = trace + [f"[{name}] {t}" for t in best.trace[-8:]]
+            best.solver = f"pipeline/{name}"
+            return best, None
+        return None, None
+
+    def _vs_unsure(self, ans: Answer, unsure, intent: Intent) -> Answer:
+        """Agent answer vs a deterministic solver's unsure answer to the same question: keep the surer, log both."""
+        if unsure is None:
+            return ans
+        n_u, a_u = unsure
+        ans.cost = _cost_of(ans).add(_cost_of(a_u))
+        same = _agree(ans.value, a_u.value, intent.task)
+        note = (f"cross-check: agent {ans.value} = {n_u} {a_u.value} ✓" if same
+                else f"cross-check: agent {ans.value} ≠ {n_u} {a_u.value}")
+        ans.trace.append(note)
+        if not same:
+            ans.missing = [*ans.missing, f"agent and {n_u} disagree ({ans.value} vs {a_u.value})"]
+            if a_u.confidence > ans.confidence:
+                out = a_u.model_copy(deep=True)
+                out.trace = ans.trace + [f"keeping {n_u}: its confidence {a_u.confidence:.2f} > agent {ans.confidence:.2f}"]
+                out.solver = f"pipeline/{n_u}"
+                out.missing = ans.missing
+                out.cost = ans.cost
+                return out
+        return ans
+
+    def _kg_crosscheck(self, path: str, intent: Intent, ans: Answer, trace: list[str]) -> None:
+        """Stoa point 4: compare with another source of the same building (W1's stoa.kg, when available)."""
+        try:
+            from stoa.kg import crosscheck
+        except Exception:  # noqa: BLE001 - not merged yet
+            return
+        try:
+            note = crosscheck(path, intent, ans)
+        except Exception:  # noqa: BLE001
+            return
+        if not note:
+            return
+        if intent.scope in ("apartment", "floor_total", "storey_total", "label_total", "model") and \
+                re.search(r"polygon of room|vs (?:the )?room ", note):
+            # an aggregate (apartment / floor / all rooms labelled X) compared with ONE room's polygon is not a check:
+            # 272 correct swiss dev totals got a false ✗ this way (night 00:47)
+            trace.append("cross-check skipped: the linked source only knows single rooms for this aggregate")
+            return
+        note = note if note.startswith("cross-check") else f"cross-check: {note}"
+        trace.append(note)
+        if "✗" in note and "✓" not in note:
+            ans.confidence = round(ans.confidence * 0.7, 3)
+            ans.missing = [*ans.missing, "another source of the same building disagrees (see cross-check)"]
+        elif "✓" in note and "✗" not in note:
+            ans.confidence = round(min(0.99, ans.confidence + (1 - ans.confidence) * 0.5), 3)
+        if ans.evidence:
+            e0 = ans.evidence[0]
+            ans.evidence[0] = e0.model_copy(update={"note": (e0.note + "; " + note).strip("; ")})
 
     def _combine(self, answers, intent: Intent, trace: list[str]) -> Answer | None:
         if not answers:

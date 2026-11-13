@@ -1,7 +1,9 @@
 """LLM judge for free-text answers (text/other types), reported separately as `text_judge`.
 
 Stoa scores text answers free-form, so exact matching is meaningless (ifc_bench references are paragraphs).
-The judge asks a model whether the candidate states the same key facts as the reference. It is optional
+The judge asks a model whether the candidate states the same key facts as the reference. When the reference
+holds exactly one number, a deterministic check decides instead (the candidate must state it within 2%, units
+converted): the LLM judge was lenient on numbers (accepted 284.6 m for 267.45 m). It is optional
 (`python -m stoa.eval ... --judge local`) and its cost is NOT charged to the solver. Treat it as a noisy
 signal: compare solvers with the same judge, and spot-check its verdicts.
 """
@@ -25,9 +27,49 @@ reference, or if it is a refusal or "unknown".
 Reply with exactly one word: CORRECT or INCORRECT."""
 
 
+_NUM = re.compile(r"(?<![\w.])[-+]?\d{1,3}(?:[ ,]\d{3})+(?:\.\d+)?(?!\w|\.\d)|(?<![\w.])[-+]?\d+(?:\.\d+)?(?!\w|\.\d)")
+_UNIT_AFTER = re.compile(r"^\s*(sq\.? ?ft|sq\.? ?m|square (?:feet|foot|meters?|metres?)|cu\.? ?ft|cu\.? ?m|m²|m2|m³|m3|ft²|ft2|ft³|ft3|mm|cm|m|ft|%)", re.I)
+
+
+def _numbers(text: str) -> list[tuple[float, str | None]]:
+    out = []
+    for m in _NUM.finditer(str(text)):
+        try:
+            v = float(m.group(0).replace(",", "").replace(" ", ""))
+        except ValueError:
+            continue
+        u = _UNIT_AFTER.match(str(text)[m.end():])
+        out.append((v, u.group(1).lower().replace("sq ft", "ft2").replace("sq. ft", "ft2").replace("sq m", "m2")
+                    .replace("cu ft", "ft3").replace("cu m", "m3") if u else None))
+    return out
+
+
+def numeric_verdict(gold, pred) -> tuple[bool | None, str]:
+    """Deterministic check when the reference holds exactly ONE number: the candidate must state that number
+    within 2% (after unit conversion when both units are known). None = not applicable (use the LLM)."""
+    from stoa.eval.scoring import convert
+
+    g = _numbers(gold)
+    if len(g) != 1:
+        return None, ""
+    gv, gu = g[0]
+    p = _numbers(pred)
+    if not p:
+        return None, ""
+    exact = gu is None and float(gv).is_integer()  # counts, years, codes: exact, not within 2%
+    for pv, pu in p:
+        y = convert(pv, pu, gu) if (pu and gu) else pv
+        if y is not None and (y == gv if exact else abs(y - gv) <= 0.02 * abs(gv) + 1e-9):
+            return True, f"numeric: {pv} {pu or ''} ~ {gv} {gu or ''}"
+    return False, f"numeric: no candidate number within 2% of {gv} {gu or ''}"
+
+
 def judge_one(question: str, gold, pred, backend: str = "local") -> tuple[bool | None, str]:
     if pred is None or str(pred).strip() == "":
         return False, "empty"
+    ok, why = numeric_verdict(gold, pred)
+    if ok is not None:
+        return ok, why
     from stoa import llm
 
     try:
@@ -54,3 +96,58 @@ def judge_rows(rows: list[dict], backend: str = "local", workers: int = 8) -> No
             ok, why = f.result()
             futs[f]["text_judge"] = ok
             futs[f]["text_judge_raw"] = why
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Judge the text answers of an EXISTING predictions file (no solver re-run).
+
+    python -m stoa.eval.judge RUN [--backend local|nvidia] [--workers 16]
+    Writes <run>.judged.jsonl next to the predictions (the original file is left alone) and prints the
+    judged accuracy per bucket and per answering solver.
+    """
+    import argparse
+    import collections
+    import json
+    import sys
+    from pathlib import Path
+
+    from stoa.eval.splits import shared_root
+
+    ap = argparse.ArgumentParser(prog="python -m stoa.eval.judge", description=main.__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("run")
+    ap.add_argument("--backend", default="local", choices=("local", "nvidia"))
+    ap.add_argument("--workers", type=int, default=16)
+    a = ap.parse_args(argv)
+    p = Path(a.run)
+    if not p.exists():
+        p = shared_root() / "artifacts" / "eval" / (a.run if a.run.endswith(".jsonl") else f"{a.run}.jsonl")
+    rows = [json.loads(line) for line in open(p, encoding="utf-8") if line.strip()]
+    todo = [r for r in rows if r["type"] in ("text", "other")]
+    if not todo:
+        print("no text/other questions in this run", file=sys.stderr)
+        return 1
+    judge_rows(todo, a.backend, a.workers)
+    out = p.with_name(p.stem + ".judged.jsonl")
+    with open(out, "w", encoding="utf-8") as fh:
+        for r in rows:
+            fh.write(json.dumps(r, ensure_ascii=False, default=str) + "\n")
+
+    def show(title, key):
+        g = collections.defaultdict(list)
+        for r in todo:
+            g[key(r)].append(r)
+        print(f"\n{title:40s} {'n':>5s} {'judged':>7s} {'correct':>8s} {'unjudged':>9s}")
+        for k, v in sorted(g.items()):
+            j = [r for r in v if r.get("text_judge") is not None]
+            ok = sum(1 for r in j if r["text_judge"])
+            print(f"{k:40s} {len(v):5d} {len(j):7d} {100 * ok / max(1, len(j)):7.1f}% {len(v) - len(j):9d}")
+
+    show("bucket", lambda r: f"{r['source']}/{r['type']}")
+    show("answering solver", lambda r: r.get("solver") or "?")
+    print(f"\njudge: {a.backend}; verdicts in {out}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -27,12 +27,12 @@ const UNIT_LABEL: Record<string, string> = { m2: "m²", m3: "m³", ft2: "ft²", 
 
 const esc = (s: unknown) => String(s ?? "").replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
+/** Per-question cost as "€X per 1,000 questions like this" (µ-euros per question mean nothing to a jury). */
 function fmtEur(usd: number) {
-  const eur = usd * EUR_PER_USD;
-  if (eur === 0) return "€0";
-  if (eur < 0.0001) return `€${(eur * 1e6).toFixed(1)}µ`;
-  if (eur < 0.01) return `€${eur.toFixed(5)}`;
-  return `€${eur.toFixed(3)}`;
+  const per1k = usd * EUR_PER_USD * 1000;
+  if (per1k === 0) return "€0 / 1k Qs";
+  if (per1k < 0.01) return "< €0.01 / 1k Qs";
+  return `€${per1k < 10 ? per1k.toFixed(2) : per1k.toFixed(0)} / 1k Qs`;
 }
 
 function fmtValue(a: Answer) {
@@ -46,16 +46,19 @@ function fmtValue(a: Answer) {
 
 /** "cross-check: … ✓/✗" lines from evidence notes and trace (D4: no contract change). */
 export function crossChecks(a: Answer): { text: string; ok: boolean }[] {
+  // Compound answers prefix each evidence note with its part ("door: door 1; cross-check: answer 36 vs …").
+  const parts = new Set(a.plan?.parts ?? []);
   const parse = (lines: string[]) => lines.flatMap((l) => {
     const m = l.match(/cross-?check:?\s*(.*)$/i);
     if (!m) return [];
-    const text = m[1].trim();
+    const part = l.match(/^([^:;]+):\s/)?.[1];
+    const text = (part && parts.has(part) ? `${part}: ` : "") + m[1].trim();
     return [{ text: text.replace(/\s*[✓✗]\s*/g, " ").trim(), ok: !/✗|≠|!=|disagree|mismatch|conflict/i.test(text) }];
   });
   // Evidence notes carry the specific check; the trace usually repeats it, so use the trace only as fallback.
   const fromEv = parse(a.evidence.map((e) => e.note ?? ""));
   const out = fromEv.length ? fromEv : parse(a.trace ?? []);
-  return out.filter((x, i) => out.findIndex((y) => y.text === x.text) === i).slice(0, 2);
+  return out.filter((x, i) => out.findIndex((y) => y.text === x.text) === i).slice(0, Math.max(2, parts.size));
 }
 
 /** One row per object: evidence items that share an ifc_guid (2D box + 3D element) are grouped. */
@@ -79,13 +82,26 @@ function evLabel(ev: Evidence[], g: { idx: number[]; first: number }, n: number,
   const e = items.find((x) => x.bbox) ?? items[0];
   const note = items.map((x) => x.note).find((x) => x) || (e.ifc_guid ? describe(e.ifc_guid) : "evidence");
   const where = has2D && has3D ? "2D + 3D" : has3D ? "3D" : has2D ? "2D" : "";
+  const projected = items.some((x) => /projected: not drawn/i.test(x.note ?? ""));
   const files = new Set(items.map((x) => x.file.split("/").pop()));
-  return `<li class="ev-item" data-i="${g.idx.find((i) => ev[i].bbox) ?? g.first}" title="${esc([...files].join(" · "))}"><span class="n">${n}</span><span class="t">${esc(note)}</span><span class="w">${where}</span></li>`;
+  return `<li class="ev-item" data-i="${g.idx.find((i) => ev[i].bbox) ?? g.first}" title="${esc([...files].join(" · "))}"><span class="n">${n}</span><span class="t">${esc(note.replace(/\s*\|\s*projected: not drawn on this plan\s*$/i, ""))}${projected ? `<span class="proj" title="Not drawn on this plan (cut at 1.2 m): box = the element's footprint from the IFC model">projected</span>` : ""}</span><span class="w">${where}</span></li>`;
+}
+
+/** Long text answers (often "- item" lists from the model fact card): a compact list, folded after 8 lines. */
+function richText(v: string) {
+  const lines = v.split(/\n+/).map((l) => l.trim()).filter(Boolean);
+  const isList = lines.length > 1 && lines.filter((l) => /^[-*•]\s/.test(l)).length >= lines.length * 0.6;
+  const fmt = (l: string) => esc(l.replace(/^[-*•]\s+/, "")).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");
+  const block = (ls: string[]) => (isList ? `<ul>${ls.map((l) => `<li>${fmt(l)}</li>`).join("")}</ul>` : ls.map((l) => `<p>${fmt(l)}</p>`).join(""));
+  const KEEP = 8;
+  return block(lines.slice(0, KEEP)) + (lines.length > KEEP
+    ? `<details class="more-lines"><summary>${lines.length - KEEP} more line${lines.length - KEEP > 1 ? "s" : ""}</summary>${block(lines.slice(KEEP))}</details>` : "");
 }
 
 /** Trace lines: "[solver] text" → tag + text; long traces show the first steps and fold the rest. */
 function traceHtml(trace: string[], keep = 6) {
-  const li = (t: string) => {
+  const li = (full: string) => {
+    const t = full.length > 260 ? `${full.slice(0, 240).replace(/\s*\n\s*/g, " ")} …` : full;
     const m = t.match(/^\[([\w:/-]+)\]\s*(.*)$/);
     const cc = /cross-?check/i.test(t) ? " class=\"cc\"" : "";
     return m ? `<li${cc}><span class="tag">${esc(m[1])}</span>${esc(m[2])}</li>` : `<li${cc}>${esc(t)}</li>`;
@@ -97,7 +113,34 @@ function traceHtml(trace: string[], keep = 6) {
     : "");
 }
 
+const LANG: Record<string, string> = { de: "German", fi: "Finnish", sv: "Swedish", fr: "French", it: "Italian", nl: "Dutch", et: "Estonian", es: "Spanish", da: "Danish", pl: "Polish" };
+const OP: Record<string, string> = { sum: "sum of", diff: "difference of", argmax: "largest of", argmin: "smallest of", max: "max of", min: "min of", exists: "any of" };
+
+/** "Understood as" (W4's intent) and, for compound questions, the plan of sub-questions answered one by one. */
+function intentHtml(a: Answer) {
+  const it = a.intent;
+  if (!it && !a.plan) return "";
+  const bits: string[] = [];
+  if (it) {
+    bits.push(`<b>${esc(it.task)}</b>`);
+    const target = a.plan?.parts?.length ? a.plan.parts.join(a.plan.op === "sum" ? " + " : ", ") : it.target;
+    if (target && target !== it.task && target !== "unknown") bits.push(esc(target.replace(/_/g, " ")));
+    const f = Object.entries(it.filters ?? {}).filter(([, v]) => v !== null && v !== "" && v !== false)
+      .map(([k, v]) => `${esc(k.replace(/_/g, " "))} <i>${esc(v === true ? "yes" : v)}</i>`);
+    bits.push(...(f.length ? f : it.scope ? [`scope <i>${esc(it.scope)}</i>`] : []));
+    if (it.unit && it.unit !== "count") bits.push(`in ${esc(UNIT_LABEL[it.unit] ?? it.unit)}`);
+  }
+  const lang = it?.lang && it.lang !== "en" ? `<span class="lang" title="The question was parsed into the same language-neutral intent as its English twin">${esc(LANG[it.lang] ?? it.lang)}</span>` : "";
+  const plan = a.plan && a.plan.sub_questions?.length
+    ? `<details class="plan"><summary><b>${esc(OP[a.plan.op] ?? a.plan.op)}</b> ${a.plan.parts.map((p) => `<span class="part">${esc(p)}</span>`).join(a.plan.op === "sum" ? " + " : a.plan.op === "diff" ? " − " : ", ")}
+        <small>${a.plan.sub_questions.length} sub-questions, arithmetic in code</small></summary>
+        <ol>${a.plan.sub_questions.map((q) => `<li><span role="button" tabindex="0" class="subq" data-q="${esc(q)}" title="Ask this sub-question on its own">${esc(q)}</span></li>`).join("")}</ol></details>`
+    : "";
+  return `<div class="intent"><span class="lbl">Understood as</span>${bits.join(" · ")}${lang}${a.cached ? `<span class="cached" title="Same question answered before; served from the API cache">cached</span>` : ""}</div>${plan}`;
+}
+
 export interface CardOpts {
+  onAsk?: (question: string) => void;
   roundTripMs: number;
   onEvidence: (i: number) => void;
   describeGuid: (g: string) => string;
@@ -133,24 +176,27 @@ export function renderCard(el: HTMLElement, a: Answer, opts: CardOpts) {
   const checks = crossChecks(a);
   const unit = a.unit ? UNIT_LABEL[a.unit] ?? a.unit : "";
   const isText = typeof a.value === "string";
+  const rich = isText && (String(a.value).length > 120 || String(a.value).includes("\n"));
   const ev = a.evidence ?? [];
   const groups = groupEvidence(ev);
   const shown = groups.slice(0, 80);
 
   el.className = `card answer ${a.value === null ? "refused" : ""}`;
   el.innerHTML = `
-    <div class="value-row">
-      <div class="value ${isText ? "text" : ""} ${isText && String(a.value).length > 40 ? "long" : ""}">${esc(fmtValue(a))}${unit ? `<span class="unit">${esc(unit)}</span>` : ""}</div>
+    <div class="value-row${rich ? " rich" : ""}">
+      ${rich ? `<span class="rich-lbl">Text answer · ${String(a.value).split(/\n+/).filter((l) => l.trim()).length} line(s)</span><div class="value text rich">${richText(String(a.value))}</div>`
+        : `<div class="value ${isText ? "text" : ""} ${isText && String(a.value).length > 40 ? "long" : ""}">${esc(fmtValue(a))}${unit ? `<span class="unit">${esc(unit)}</span>` : ""}</div>`}
       <div class="conf ${confClass}" title="Calibrated confidence">
         <div class="conf-num">${conf}%</div><div class="conf-bar"><i style="width:${conf}%"></i></div><div class="conf-lbl">confidence</div>
       </div>
     </div>
+    ${intentHtml(a)}
     ${checks.map((x) => `<div class="xcheck ${x.ok ? "ok" : "bad"}"><b>${x.ok ? "✓ Cross-checked" : "✗ Sources disagree"}</b> ${esc(x.text)}</div>`).join("")}
     ${cascadeHtml(tier)}
     <div class="cost">
       <span title="Wall time">⏱ ${wall < 1 ? `${Math.round(wall * 1000)} ms` : `${wall.toFixed(1)} s`}</span>
       <span title="LLM tokens in / out">${tokens ? `${(c.llm_tokens_in ?? 0).toLocaleString()} / ${(c.llm_tokens_out ?? 0).toLocaleString()} tok` : "0 tokens"}</span>
-      <span title="Estimated cost with the eval's rates (stoa/eval/runner.py), shown in EUR at ${EUR_PER_USD} €/$">≈ ${fmtEur(costUsd({ ...c, wall_seconds: wall }))}</span>
+      <span title="Estimated cost of this answer with the eval's rates (stoa/eval/runner.py): €${(costUsd({ ...c, wall_seconds: wall }) * EUR_PER_USD).toPrecision(2)} per question, i.e. this much per 1,000 questions like it (EUR at ${EUR_PER_USD} €/$)">${((x) => (x.startsWith("<") ? x : `≈ ${x}`))(fmtEur(costUsd({ ...c, wall_seconds: wall })))}</span>
       <span class="solver" title="Solver">${esc(a.solver || "?")}</span>
     </div>
     <details class="sec" open><summary>Why <small>${(a.trace ?? []).length} steps</small></summary>
@@ -162,5 +208,9 @@ export function renderCard(el: HTMLElement, a: Answer, opts: CardOpts) {
       <ul class="evidence">${shown.map((g, n) => evLabel(ev, g, n + 1, opts.describeGuid)).join("")}${groups.length > shown.length ? `<li class="more">+ ${groups.length - shown.length} more</li>` : ""}</ul></details>
   `;
   el.querySelectorAll<HTMLElement>(".ev-item").forEach((li) => li.addEventListener("click", () => opts.onEvidence(Number(li.dataset.i))));
+  el.querySelectorAll<HTMLElement>(".subq").forEach((b) => {
+    b.addEventListener("click", () => opts.onAsk?.(b.dataset.q!));
+    b.addEventListener("keydown", (e) => e.key === "Enter" && opts.onAsk?.(b.dataset.q!));
+  });
   el.querySelectorAll<HTMLButtonElement>(".sheet").forEach((b) => b.addEventListener("click", () => b.dataset.file !== opts.currentFile && opts.onOpenSheet(b.dataset.file!)));
 }

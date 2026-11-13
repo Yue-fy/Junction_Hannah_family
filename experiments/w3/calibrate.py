@@ -37,8 +37,10 @@ def main() -> None:
     ap.add_argument("--workers", type=int, default=24)
     ap.add_argument("--write-gate", action="store_true")
     ap.add_argument("--tag", default="")
+    ap.add_argument("--classes", default="", help="comma list: only these classes for points/direct")
     a = ap.parse_args()
     methods = a.methods.split(",")
+    only = set(a.classes.split(",")) if a.classes else None
 
     gold: dict[str, dict[str, tuple]] = collections.defaultdict(dict)  # path -> cls -> (answer, EN question)
     for q in load_split("train"):
@@ -58,9 +60,9 @@ def main() -> None:
             if m == "labels":
                 tasks.append((p, "labels", None))
             elif m == "points":
-                tasks += [(p, "points", c) for c in SYMBOL_CLASSES if c in gold[p]]
+                tasks += [(p, "points", c) for c in SYMBOL_CLASSES if c in gold[p] and (not only or c in only)]
             elif m == "direct":
-                tasks += [(p, "direct", c) for c in gold[p]]
+                tasks += [(p, "direct", c) for c in gold[p] if not only or c in only]
 
     def run(t):
         p, m, c = t

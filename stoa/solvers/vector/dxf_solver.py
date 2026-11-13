@@ -79,7 +79,26 @@ def _rooms_with_name(fm: FloorModel, name) -> list[Room]:
     return [r for r in fm.rooms if (r.name or "").lower() in low]
 
 
-def _eval_term(fm: FloorModel, t: qparse.Term, qtype: str) -> _Part:
+def _in_scope(fm: FloorModel, kind: str, bbox, scope: list[str] | None) -> bool:
+    """Is an object inside one of the scoped apartments? Fixtures: centre in the UNIT_OUTLINE; doors/windows sit
+    in walls, so they count when they touch the outline buffered by 0.3 m (an entrance door counts for the flat)."""
+    if not scope:
+        return True
+    from shapely.geometry import Point
+    from shapely.geometry import box as sbox
+
+    b = sbox(*bbox)
+    for u in fm.units:
+        if u.label in scope and u.poly is not None:
+            if kind in ("door", "window"):
+                if u.poly.buffer(0.3).intersects(b):
+                    return True
+            elif u.poly.contains(Point(b.centroid.x, b.centroid.y)):
+                return True
+    return False
+
+
+def _eval_term(fm: FloorModel, t: qparse.Term, qr: qparse.Query) -> _Part:
     k = t.kind
     if k == "count":
         kind = t.arg
@@ -88,12 +107,31 @@ def _eval_term(fm: FloorModel, t: qparse.Term, qtype: str) -> _Part:
             return _Part(len(fm.units), RULE_CONF["count:apartment"], boxes,
                          [f"apartments = {len(fm.units)} labels {sorted(u.label for u in fm.units)}"],
                          [f"counted {KIND_DESC['apartment']}"])
+        if fm.supported is not None and kind not in fm.supported:
+            return _Part(None, 0.0, [], [f"{kind}s are not identified in this (PDF-only) model"],
+                         missing=[f"{kind} symbols: not separable by style in the PDF; needs the DXF or a detector"])
         items = fm.items.get(kind, [])
+        if t.scope:
+            items = [it for it in items if _in_scope(fm, kind, it.bbox, t.scope)]
+            missing = [] if all(u.poly is not None for u in fm.units if u.label in t.scope) else \
+                [f"no UNIT_OUTLINE for apartment(s) {t.scope}"]
+            how = ("objects touching the UNIT_OUTLINE (±0.3 m)" if kind in ("door", "window")
+                   else "objects whose centre lies inside the UNIT_OUTLINE")
+            asm = [f"counted {KIND_DESC[kind]}", f"restricted to apartment(s) {', '.join(t.scope)}: {how}"]
+            return _Part(len(items), 0.8 if kind in ("door", "window") else 0.9, [(it.bbox, it.note) for it in items],
+                         [f"{kind}s in apartment(s) {t.scope} = {len(items)}"], asm, missing)
         n = window_count(fm) if kind == "window" else len(items)
         tr = [f"{kind}s = {n} ({KIND_DESC[kind]})"]
         if kind == "window" and n != len(items):
             tr.append(f"window boxes grouped into {len(items)} clusters; count uses polylines/3")
-        return _Part(n, RULE_CONF[f"count:{kind}"], [(it.bbox, it.note) for it in items], tr, [f"counted {KIND_DESC[kind]}"])
+        conf, asm = RULE_CONF[f"count:{kind}"], [f"counted {KIND_DESC[kind]}"]
+        if fm.supported is not None and kind == "window":  # PDF-only model
+            conf = 0.5
+            asm = ["PDF-only: windows = touching frame-rectangle + glass-line groups outside every room polygon, "
+                   "lines / 3 (matched the DXF count on 19/25 floors; tends to overcount)"]
+        elif fm.supported is not None:
+            asm = [f"PDF-only: {kind}s identified by path shape/style (matched the DXF on 25/25 floors)"]
+        return _Part(n, conf, [(it.bbox, it.note) for it in items], tr, asm)
     if k == "count_label":
         if t.arg == "<numbered>":
             rooms = [r for r in fm.rooms if r.number]
@@ -101,6 +139,9 @@ def _eval_term(fm: FloorModel, t: qparse.Term, qtype: str) -> _Part:
                          [f"rooms with a number = {len(rooms)}"], ["'rooms' read as every numbered room polygon"])
         names = t.arg if isinstance(t.arg, list) else [t.arg]
         texts = [tx for tx in fm.texts if tx.text in names] or [tx for tx in fm.texts if tx.text.lower() in {n.lower() for n in names}]
+        if t.scope:
+            in_rooms = {id(tx): r for r in fm.rooms for tx in r.texts}
+            texts = [tx for tx in texts if (r := in_rooms.get(id(tx))) is not None and r.unit in t.scope]
         boxes = []
         for tx in texts:
             room = next((r for r in fm.rooms if tx in r.texts), None)
@@ -133,25 +174,36 @@ def _eval_term(fm: FloorModel, t: qparse.Term, qtype: str) -> _Part:
         if unit is None:
             return _Part(None, 0.0, [], [f"apartment {t.arg} not found; labels {[u.label for u in fm.units]}"],
                          missing=[f"no 'Whg./App. {t.arg}' label on this floor"])
-        rooms = [r for r in fm.rooms if r.unit == t.arg and r.number and not r.outdoor]
-        excl = [r for r in fm.rooms if r.unit == t.arg and (r.outdoor or not r.number)]
+        if qr.gross and unit.poly is not None:
+            val = unit.poly.area
+            return _Part(val, 0.25, [(unit.bbox, f"apartment {t.arg} outline {val:.2f} m²")],
+                         [f"apartment {t.arg}: UNIT_OUTLINE polygon area {val:.2f} m² (asked: gross)"],
+                         ["gross floor area is not in the DXF; returned the apartment outline area (≈ net + partitions, "
+                          "median 1.02 x the rooms' net area); exterior walls not included"],
+                         ["wall thickness / gross-area standard (e.g. SIA 416 GF) to add the walls"])
+        rooms = [r for r in fm.rooms if r.unit == t.arg and r.number and (qr.include_outdoor or not r.outdoor)]
+        excl = [r for r in fm.rooms if r.unit == t.arg and ((r.outdoor and not qr.include_outdoor) or not r.number)]
         val = sum(r.area for r in rooms)
         tr = [f"apartment {t.arg}: {len(rooms)} numbered indoor rooms inside its UNIT_OUTLINE = {val:.2f} m²"]
         if excl:
             tr.append("excluded: " + ", ".join(r.label() for r in excl))
         asm = ["apartment = rooms whose label lies inside the UNIT_OUTLINE holding 'Whg./App. X'",
-               "outdoor rooms (Balkon/Loggia/Terrasse/…) excluded"]
+               "outdoor rooms (Balkon/Loggia/Terrasse/…) " + ("INCLUDED (asked)" if qr.include_outdoor else "excluded")]
         conf, asm2, miss = _unnamed_caveat(rooms, val)
         return _Part(val, min(conf, RULE_CONF["area_apartment"]) if unit.poly is not None else 0.3,
                      [(r.bbox, _room_note(r)) for r in rooms], tr, asm + asm2, miss)
     if k == "area_total":
-        rooms = [r for r in fm.rooms if r.number and not r.outdoor and not r.shaft]
-        excl = [r for r in fm.rooms if r.number and (r.outdoor or r.shaft)]
+        rooms = [r for r in fm.rooms if r.number and (qr.include_outdoor or not r.outdoor) and not r.shaft]
+        excl = [r for r in fm.rooms if r.number and ((r.outdoor and not qr.include_outdoor) or r.shaft)]
         val = sum(r.area for r in rooms)
         tr = [f"{len(rooms)} numbered indoor rooms = {val:.2f} m²"]
         if excl:
             tr.append("excluded outdoor/shaft: " + ", ".join(r.label() for r in excl))
-        asm = ["total = numbered ROOM_OUTLINE polygons, minus outdoor rooms (Balkon/Loggia/Terrasse/…) and shafts"]
+        asm = ["total = numbered ROOM_OUTLINE polygons, minus shafts and "
+               + ("NOT minus outdoor rooms (asked to include them)" if qr.include_outdoor else
+                  "minus outdoor rooms (Balkon/Loggia/Terrasse/…)")]
+        if qr.gross:
+            asm.append("gross area asked but walls are not modelled: this is the net total (an underestimate)")
         if t.note:
             asm.append(t.note)
         conf, asm2, miss = _unnamed_caveat(rooms, val)
@@ -179,14 +231,14 @@ def _unnamed_caveat(rooms: list[Room], total: float):
 class _Mapper:
     """DXF bbox -> Evidence on the asked file (PDF points or PNG pixels); falls back to the PDF sibling."""
 
-    def __init__(self, path: str, dxf_rel: str):
+    def __init__(self, path: str, dxf_rel: str, tf=None):
         self.path = path
         sib = siblings(path)
         ext = Path(path).suffix.lower()
         self.pdf_rel = path if ext == ".pdf" else sib.get(".pdf")
-        self.tf = None
+        self.tf = tf
         self.file, self.space, self.k = None, None, 1.0
-        if self.pdf_rel:
+        if self.pdf_rel and self.tf is None and dxf_rel.lower().endswith(".dxf"):
             self.tf = fit_transform(str(abspath(self.pdf_rel)), str(abspath(dxf_rel)))
         if self.tf is not None:
             if ext == ".png":
@@ -221,11 +273,18 @@ class DxfSolver(BaseSolver):
             return False
         return Path(path).suffix.lower() == ".dxf" or abspath(str(Path(path).with_suffix(".dxf"))).exists()
 
-    def solve(self, path: str, question: str) -> Answer:
+    def _load(self, path: str):
+        """-> (FloorModel, source file it came from, Transform metres->pdf_pt or None to fit) or (None, reason, None)."""
         dxf_rel = path if path.lower().endswith(".dxf") else siblings(path).get(".dxf")
         if not dxf_rel:
-            return self.abstain("no DXF sibling")
-        fm = load_floor(str(abspath(dxf_rel)))
+            return None, "no DXF sibling", None
+        return load_floor(str(abspath(dxf_rel))), dxf_rel, None
+
+    def solve(self, path: str, question: str) -> Answer:
+        fm, dxf_rel, tf0 = self._load(path)
+        if fm is None:
+            return self.abstain(dxf_rel)
+        self._tf0 = tf0
         vocab = fm.names() + KNOWN_NAMES
         qr = qparse.parse(question, vocab, room_numbers={r.number for r in fm.rooms if r.number})
         trace = [f"parsed: {qr.describe()}", *[f"parse note: {n}" for n in qr.notes]]
@@ -235,7 +294,7 @@ class DxfSolver(BaseSolver):
                 return ans
         if not qr.terms:
             return Answer.abstain(self.name, "question not understood by the DXF parser", trace)
-        parts = [_eval_term(fm, t, qr.qtype) for t in qr.terms]
+        parts = [_eval_term(fm, t, qr) for t in qr.terms]
         for t, p in zip(qr.terms, parts):
             trace += p.trace
         assumptions = [a for p in parts for a in p.assumptions]
@@ -248,6 +307,10 @@ class DxfSolver(BaseSolver):
         conf = 1.0
         for p in parts:
             conf *= p.conf if p.value is not None else 0.2
+        if qparse.operator_unapplied(question, qr):
+            conf = min(conf, 0.3)  # S0 D9: low enough that the pipeline's agent takes over
+            missing.append("the question mentions an operation (average/ratio/share/threshold/per/'not in') that the "
+                           "rule parser did not apply; the value may answer a simpler question")
         # combine --------------------------------------------------------------------------------
         value: float | int | str
         unit = qr.unit
@@ -255,8 +318,40 @@ class DxfSolver(BaseSolver):
             pairs = [(v, t) for v, t in zip(vals, qr.terms) if v is not None]
             v, t = (max if qr.op == "max" else min)(pairs, key=lambda vt: vt[0])
             value = str(t.arg if not isinstance(t.arg, list) else t.arg[0])
-            trace.append(f"{qr.op} -> {value} ({v:.2f} m²)")
+            if t.kind == "area_apartment":
+                value = f"apartment {value}"
+            elif t.kind == "area_room":
+                r = next((r for r in fm.rooms if r.number == t.arg), None)
+                value = f"room {value}" + (f" ({r.name})" if r is not None and r.name else "")
+            trace.append(f"{qr.op}: " + ", ".join(f"{tt.arg}={vv:.2f}" for vv, tt in pairs) + f" -> {value}")
             unit = None
+        elif qr.op == "mean":
+            if len(parts) == 1 and parts[0].boxes:  # average over the rooms of one label
+                value = known[0] / len(parts[0].boxes)
+                trace.append(f"mean: {known[0]:.2f} / {len(parts[0].boxes)} rooms = {value:.2f}")
+            else:
+                value = sum(known) / len(known)
+                trace.append(f"mean of {[round(v, 2) for v in known]} = {value:.2f}")
+        elif qr.op == "ratio":
+            if len(known) < 2 or not known[1]:
+                return Answer(value=None, unit=None, confidence=0.0, solver=self.name, trace=trace + ["ratio: missing/zero divisor"],
+                              missing=missing or ["divisor not found"])
+            value = round(known[0] / known[1], 3)
+            trace.append(f"ratio: {known[0]:.2f} / {known[1]:.2f} = {value}")
+        elif qr.op == "pct":
+            if len(known) < 2 or not known[1]:
+                return Answer(value=None, unit="%", confidence=0.0, solver=self.name, trace=trace + ["share: missing total"],
+                              missing=missing or ["floor total not found"])
+            value = round(100.0 * known[0] / known[1], 2)
+            trace.append(f"share: 100 × {known[0]:.2f} / {known[1]:.2f} = {value} %")
+        elif qr.op in ("count_gt", "count_lt", "count_ge"):
+            cmp = {"count_gt": lambda v: v > qr.threshold, "count_lt": lambda v: v < qr.threshold,
+                   "count_ge": lambda v: v >= qr.threshold}[qr.op]
+            hits = [t.arg for v, t in zip(vals, qr.terms) if v is not None and cmp(v)]
+            value = len(hits)
+            trace.append(f"{qr.op} {qr.threshold}: " + ", ".join(f"{t.arg}={v:.2f}" for v, t in zip(vals, qr.terms)
+                                                              if v is not None) + f" -> {hits}")
+            unit = "count"
         elif qr.op == "diff":
             value = known[0] - sum(known[1:])
             trace.append(f"difference: {' - '.join(str(round(v, 2)) for v in known)} = {value:.2f}")
@@ -264,7 +359,11 @@ class DxfSolver(BaseSolver):
             value = sum(known)
             if len(known) > 1:
                 trace.append(f"sum: {' + '.join(str(round(v, 2)) for v in known)} = {value:.2f}")
-        if unit == "count":
+        if qr.op == "ratio":
+            unit = None
+        elif qr.op == "pct":
+            unit = "%"
+        elif unit == "count":
             value = int(round(value))
         elif unit == "ft2":
             value = round(value * M2_TO_FT2, 2)
@@ -272,8 +371,10 @@ class DxfSolver(BaseSolver):
         elif unit == "m2":
             value = round(value, 2)
         # linked data: the PDF text layer is an independent rendering of the same drawing -> cross-check
-        mapper = _Mapper(path, dxf_rel)
-        if mapper.pdf_rel:
+        mapper = _Mapper(path, dxf_rel, tf0)
+        if fm.supported is not None:
+            trace.append(f"source: {fm.warnings[0] if fm.warnings else 'PDF-only model'}")
+        if mapper.pdf_rel and fm.supported is None:  # cross-check only when the PDF is an independent source
             conf = self._cross_check(mapper.pdf_rel, fm, qr, parts, trace, conf)
         # evidence -------------------------------------------------------------------------------
         evidence = [mapper.ev(bb, note) for p in parts for bb, note in p.boxes]
@@ -294,7 +395,7 @@ class DxfSolver(BaseSolver):
         except Exception:  # noqa: BLE001
             return conf
         for t, p in zip(qr.terms, parts):
-            if p.value is None:
+            if p.value is None or t.scope:  # the PDF text layer has no apartment scope to compare with
                 continue
             if t.kind == "count_label" and t.arg != "<numbered>":
                 names = t.arg if isinstance(t.arg, list) else [t.arg]
@@ -329,7 +430,7 @@ class DxfSolver(BaseSolver):
             trace.append(f"table QA gave no answer ({res.get('error')})")
             return None
         trace += ["table QA code: " + " ; ".join(ln.strip() for ln in res["code"].splitlines() if ln.strip())[:600]]
-        mapper = _Mapper(path, dxf_rel)
+        mapper = _Mapper(path, dxf_rel, getattr(self, "_tf0", None))
         by_id = {r.idx: r for r in fm.rooms}
         evidence = [mapper.ev(by_id[i].bbox, _room_note(by_id[i])) for i in res["used"] if i in by_id]
         value, unit = res["value"], res.get("unit")
@@ -339,6 +440,10 @@ class DxfSolver(BaseSolver):
             value, unit = ("yes" if value else "no"), None
         if isinstance(value, str):
             unit = None
+            # apartments are identified by a letter: answer "apartment B", not "B"
+            if re.fullmatch(r"[A-Z]", value.strip()) and re.search(
+                    r"apartment|wohnung|appartement|appartamento|\bunit\b|logement", question, re.I):
+                value = f"apartment {value.strip()}"
         if unit == "count" and isinstance(value, (int, float)):
             value = int(round(value))
         elif isinstance(value, float):
@@ -348,3 +453,25 @@ class DxfSolver(BaseSolver):
         return Answer(value=value, unit=unit, confidence=0.6 if evidence else 0.45, evidence=evidence, trace=trace,
                       solver=self.name, assumptions=["the model wrote the query; every number comes from the DXF tables"],
                       missing=[] if evidence else ["the query did not report which rooms it used"])
+
+
+@register("pdf_vector")
+class PdfVectorSolver(DxfSolver):
+    """Same rules as `dxf`, but the floor model comes from the PDF's vector + text layer alone (pdffloor.py):
+    rooms, areas (printed scale), labels, apartments, doors. Windows/fixtures -> value None + missing."""
+
+    sources = ()
+
+    def can_handle(self, path: str, question: str) -> bool:
+        return Path(path).suffix.lower() == ".pdf" and source_of(path) not in ("ifc_models", "opening_design")
+
+    def _load(self, path: str):
+        from stoa.solvers.vector.pdffloor import load_pdf_floor
+
+        pdf_rel = path if path.lower().endswith(".pdf") else siblings(path).get(".pdf")
+        if not pdf_rel:
+            return None, "no PDF", None
+        fm, tf, note = load_pdf_floor(str(abspath(pdf_rel)))
+        if fm is None:
+            return None, note, None
+        return fm, pdf_rel, tf
