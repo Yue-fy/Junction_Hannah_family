@@ -98,8 +98,28 @@ DIFF = (r"how\s+many\s+more|more\s+\w+\s+than|by\s+how\s+(?:many|much)|differenc
 DIFF_REV = r"fewer|less\s+than|smaller\s+than|weniger|kleiner\s+als|moins\s+de|plus\s+petit\w*\s+que|meno|minder|mindre"
 MAX_W = r"largest|biggest|greatest|gr[öo]ss(?:te|ten)|größte|plus\s+grand|più\s+grande|maggiore|grootste|största"
 MIN_W = r"smallest|kleinste|plus\s+petit|più\s+piccol|minore|kleinste|minsta"
+# "except balconies, loggias, terraces …" / "(Summe aller Räume ohne Balkone …)" / "hors balcons" / "esclusi balconi"
+EXCL_CLAUSE = (r"(?:\bexcept\b|\bexcluding\b|\bexclusive\s+of\b|\bwithout\b|\bnot\s+counting\b|\bohne\b|\bau(?:ss|ß)er\b|"
+               r"\bausgenommen\b|\bexkl\.?|\bhors\b|\bsans\b|à\s+l'exclusion|\bexcept[ée]e?s?\b|\bnon\s+compris\b|"
+               r"\besclus[ioae]\b|\bsenza\b|\btranne\b|\beccett\w*|\bzonder\b|\bexklusive\b|\butom\b)[^)?;:]*")
+# true superlatives only (not comparatives "plus grand que" / "più grande di" / "grösser als")
+SUPER_MAX = (r"\b(?:largest|biggest|greatest)\b|gr[öo](?:ss|ß)te[nrs]?\b|\b(?:le|la|les|l')\s*plus\s+grand|"
+             r"\b(?:il|la|lo|i|le|l')\s*(?:\w+\s+)?pi[uù]\s+grand|\bgrootste\b|\bst[öo]rsta\b")
+SUPER_MIN = (r"\bsmallest\b|\bkleinste[nrs]?\b|\b(?:le|la|les|l')\s*plus\s+petit|\b(?:il|la|lo|i|le|l')\s*(?:\w+\s+)?pi[uù]\s+piccol|"
+             r"\bminsta\b")
 TOTAL_NUMBERED = r"numbered|nummeriert|num[ée]rot|numerat|genummerd|numrerade"
 JOIN = r"\s*(?:,|and|und|et|e|ed|&|\+|og|en|och)\s*"
+# generic "room" nouns (not a label): "the largest room", "la plus grande pièce", "das grösste Zimmer"
+ROOM_NOUN = (r"\brooms?\b|\bzimmer\b|\br[äa]ume?\b|\bpi[èe]ces?\b|\blocaux\b|\blocal\b|\bstanz[ae]\b|\blocal[ei]\b|"
+             r"\bvan[oi]\b|\bkamers?\b|\bruimtes?\b|\brum(?:men)?\b")
+APT_NOUN = r"\b(?:apartments?|flats?|units?|dwellings?|wohnung(?:en)?|wohneinheit(?:en)?|appartements?|logements?|appartament[oi]|lägenhet(?:er)?|woning(?:en)?)\b"
+SIZE_W = (r"\barea\b|fl[äa]che|surface|superficie|oppervlak|\bsize\b|gr[öo](?:ss|ß)e\b|taille|dimensione|m²|m2\b|"
+          r"square|sq\.?\s*(?:m|ft)|how\s+(?:large|big)|wie\s+gro|quanto\s+[èe]\s+grande|hoe\s+groot")
+TEXT_Q = (r"^\s*(?:which|welche[rs]?|lequel|laquelle|quale|in\s+which|welk[e]?|vilk(?:en|et))\b|"
+          r"^\s*quel(?:le)?s?\s+(?:pi[èe]ce|appartement|logement|local)|^\s*qual\s+[èe]\s+(?:la\s+stanza|l'appartamento|il\s+locale)|"
+          r"^\s*what\s+(?:is\s+)?the\s+(?:largest|biggest|smallest)\s+(?:room|apartment|flat|unit)\b(?!.*\b(?:area|size)\b)")
+WHICH_Q = (r"^\s*(?:which|what\s+(?:is\s+the\s+)?(?:name|number|label)|welche[rs]?|wie\s+heisst|quel(?:le)?s?\s+(?:est|sont)?|"
+           r"lequel|laquelle|quale|qual\s+[èe]|welk[e]?|vilk(?:en|et))\b|^\s*what\s+(?:is\s+)?the\s+(?:largest|biggest|smallest)\s+room")
 
 ROOMNUM_RE = re.compile(r"(?<![\w.])([A-Z]{0,2}\d{1,3}\.\d{1,3}(?:\.\d{1,3})?)(?![\w.]*\s*(?:m²|m2|ft|%))")
 APT_LEAD = (r"(?:apartments?|units?|flats?|wohnungen|wohnung|whg\.?|appartements?|l'appartement|appartament[oi]|"
@@ -209,21 +229,99 @@ def parse(question: str, vocab: list[str] | None = None, room_numbers: set[str] 
     rev = bool(re.search(DIFF_REV, ql)) and not re.search(r"how\s+many\s+more|larger|bigger|greater", ql)
 
     terms: list[Term] = []
+    inc0 = bool(re.search(INCLUDE_OUT, ql))
+    # superlatives over a SET ("the largest room", "the smallest apartment", "la plus grande pièce") -------------
+    # (the templates only ever compare NAMED things: "which is larger, apartment B or H")
+    sup = re.search(SUPER_MAX, ql) or re.search(SUPER_MIN, ql)
+    if sup and len(nums) < 2 and len(apts) < 2 and not re.search(DIFF, ql):
+        sop = "max" if re.search(SUPER_MAX, ql) else "min"
+        after = ql[sup.end():sup.end() + 40]
+        asks_size = bool(re.search(SIZE_W, ql)) and not re.search(TEXT_Q, ql)
+        cons = [SUPER_MAX, SUPER_MIN, ROOM_NOUN, APT_NOUN, SIZE_W, WHICH_Q]
+        any_concept = any(_find_words(w, ql) for c, (w, _) in CONCEPTS.items() if c != "room")
+        apt_sup = re.match(r"\s*(?:\w+\s+){0,2}?" + APT_NOUN, after) or (
+            re.search(APT_NOUN, ql) and not re.search(ROOM_NOUN, ql) and not labels and not any_concept)
+        if apt_sup and not apts:
+            if is_count:  # "how many rooms does the largest apartment have": a nested query
+                return Query("count", "sum", [], "count", notes + ["nested superlative (count inside the largest "
+                                                                    "apartment): left to table QA"])
+            t = [Term("area_apartment", "<all>", sup.start(), note=f"{sop} over all apartments")]
+            return Query("area" if asks_size else "text", sop, t, (unit if asks_size else None), notes,
+                         include_outdoor=inc0, gross=bool(re.search(GROSS, ql)), consumed=cons)
+        if is_count:
+            # "how many windows does the largest room have" etc.: nested, leave to table QA
+            return Query("count", "sum", [], "count", notes + ["nested superlative: left to table QA"])
+        if nums or (apts and not re.search(ROOM_NOUN, ql) and not labels):
+            pass  # "largest of room 2.04" / "the largest apartment B" -> ordinary paths below
+        else:
+            labs: list[str] | None = [lab for lab, _ in labels] or None
+            note = "any numbered indoor room"
+            if labs is None:
+                for c, (words, clabs) in CONCEPTS.items():
+                    if c == "room":
+                        continue
+                    if _find_words(words, ql):
+                        labs, note = list(clabs), f"concept {c}"
+                        break
+            t = Term("rooms", labs, sup.start(), note=note, scope=[a for a, _ in apts] or None)
+            return Query("area" if asks_size else "text", sop, [t], (unit if asks_size else None), notes,
+                         include_outdoor=inc0, consumed=cons)
+    # averages / thresholds over ALL apartments ("average apartment size", "apartments larger than 60 m²")
+    if re.search(APT_NOUN, ql) and not apts and not nums and not labels:
+        if re.search(MEAN_W, ql) and (is_area or re.search(SIZE_W, ql)) and not re.search(PER_W, ql):
+            return Query("area", "mean", [Term("area_apartment", "<all>", 0, note="mean over all apartments")], unit,
+                         notes, include_outdoor=inc0, gross=bool(re.search(GROSS, ql)), consumed=[MEAN_W, APT_NOUN, SIZE_W])
+        if (m := re.search(THRESH_W, ql)) and is_count:
+            word = m.group(1).lower()
+            op_t = ("count_ge" if re.fullmatch(THRESH_GE, word) else
+                    "count_lt" if re.fullmatch(THRESH_LT, word) else "count_gt")
+            return Query("count", op_t, [Term("area_apartment", "<all>", 0, note="threshold over all apartments")],
+                         "count", notes, include_outdoor=inc0, threshold=float(m.group(2).replace(",", ".")),
+                         consumed=[THRESH_W, APT_NOUN, r"\b(?:are|is|have|has|sind|haben|sont|ont|sono|hanno)\b"])
+    # "how many rooms are smaller than 5 m²" (no room list named): every numbered indoor room
+    if is_count and not nums and not labels and re.search(ROOM_NOUN, ql) and (m := re.search(THRESH_W, ql)):
+        word = m.group(1).lower()
+        op_t = ("count_ge" if re.fullmatch(THRESH_GE, word) else
+                "count_lt" if re.fullmatch(THRESH_LT, word) else "count_gt")
+        return Query("count", op_t, [Term("area_room", "<all>", 0, note="threshold over all numbered indoor rooms",
+                                          scope=[a for a, _ in apts] or None)],
+                     "count", notes, include_outdoor=inc0, threshold=float(m.group(2).replace(",", ".")),
+                     consumed=[THRESH_W, ROOM_NOUN, APT_RE.pattern, r"\b(?:are|is|have|has|sind|haben|sont|ont|sono|hanno)\b"])
+    # room-type concepts named in the question (not inside "except balconies, loggias…", "including balconies",
+    # "living area"): blank out exclusion/inclusion clauses first, keeping positions
+    qc = re.sub(EXCL_CLAUSE, lambda m: " " * len(m.group(0)), ql)
+    qc = re.sub(INCLUDE_OUT, lambda m: " " * len(m.group(0)), qc)
+    concept_terms: list[Term] = []
+    for c, (words, clabs) in CONCEPTS.items():
+        if c == "room":
+            continue
+        for p in _find_words(words, qc)[:1]:
+            if c == "living" and re.search(r"living\s+(?:space|area)|wohnfl[äa]che|surface\s+habitable", ql):
+                continue
+            concept_terms.append(Term("area_label", list(clabs), p, note=f"concept {c}"))
     # area questions -------------------------------------------------------------------------------
     if is_area and not (is_count and not re.search(r"m²|m2\b|square|ft|area|fl[äa]che|surface|superficie", ql)):
         qtype = "area"
+        scoped_label = apts and (labels or concept_terms) and not re.search(NEG_APT_W, ql) and \
+            not re.search(SHARE_W, ql) and not re.search(TIMES_W, ql) and len(apts) == 1
         if nums:
             terms = [Term("area_room", n, p) for n, p in nums]
+        elif scoped_label:
+            # "the kitchen in apartment A": the label's rooms inside that apartment, not the whole apartment
+            terms = [Term("area_label", lab, p, scope=[a for a, _ in apts]) for lab, p in labels] or \
+                    [Term("area_label", t.arg, t.pos, note=t.note, scope=[a for a, _ in apts]) for t in concept_terms]
         elif apts:
             terms = [Term("area_apartment", a, p) for a, p in apts]
         elif labels:
             terms = [Term("area_label", lab, p) for lab, p in labels]
+        elif concept_terms and not total_numbered:
+            terms = concept_terms  # "the total area of all bathrooms" = the bathrooms, not the floor
         elif total_numbered or re.search(r"\btotal\b|gesamt|totale?|insgesamt|whole\s+floor|entire\s+floor", ql):
             terms = [Term("area_total", None, 0)]
         else:
-            for c, (words, labs) in CONCEPTS.items():
-                for p in _find_words(words, ql)[:1]:
-                    terms.append(Term("area_label", list(labs), p, note=f"concept {c}"))
+            words, clabs = CONCEPTS["room"]
+            for p in _find_words(words, ql)[:1]:
+                terms.append(Term("area_label", list(clabs), p, note="concept room"))
             if not terms:
                 terms = [Term("area_total", None, 0, note="no room/apartment/label named; assumed whole floor")]
         inc = bool(re.search(INCLUDE_OUT, ql))
@@ -305,6 +403,17 @@ def parse(question: str, vocab: list[str] | None = None, room_numbers: set[str] 
         terms = sorted(terms, key=lambda t: t.arg == "apartment")
         qr = Query("count", "ratio", terms, None, notes, consumed=[PER_W, MEAN_W, r"\beach\b"])
         return qr
+    # "how many rooms does apartment B have": numbered indoor rooms inside the apartment (not a count of apartments)
+    if apts and terms and all(t.kind == "count" and t.arg == "apartment" for t in terms) and \
+            re.search(r"\brooms?\b|\br[äa]ume\b|\blocaux\b|\blocali\b|\bkamers\b|\bruimtes\b|\brum(?:men)?\b", ql):
+        terms = [Term("count_label", "<numbered>", 0, note="all numbered indoor rooms", scope=[a for a, _ in apts])]
+        return _finish(Query(qtype, "sum", terms, "count", notes), rev)
+    if apts and terms and all(t.kind == "count" and t.arg == "apartment" for t in terms):
+        # "How many bathrooms does apartment A have?" / "Wie viele Zimmer hat Wohnung A?": labelled rooms inside it
+        cterms = [Term("count_label", list(clabs), ps[0], note=f"concept {c}", scope=[a for a, _ in apts])
+                  for c, (words, clabs) in CONCEPTS.items() if (ps := _find_words(words, ql))]
+        if cterms:
+            return _finish(Query(qtype, "sum", cterms, "count", notes), rev)
     # "windows in apartment B": the apartment word + letter is a scope, not a count of apartments
     if apts and any(not (t.kind == "count" and t.arg == "apartment") for t in terms):
         terms = [t for t in terms if not (t.kind == "count" and t.arg == "apartment")]
@@ -342,6 +451,8 @@ def covered(question: str, qr: Query) -> bool:
         return False  # yes/no question
     for pat in qr.consumed:  # parts the parse turned into an operator are covered
         q = re.sub(pat, " ", q, flags=re.I)
+    if qr.op not in ("max", "min") and (re.search(SUPER_MAX, q, re.I) or re.search(SUPER_MIN, q, re.I)):
+        return False  # a superlative the rules did not apply ("rooms of the largest apartment")
     m = UNCOVERED.search(q)
     if m:
         # the standard swiss templates contain none of these, except "excluding ... shafts and voids" etc.
@@ -358,4 +469,7 @@ OPERATOR_HINT = re.compile("|".join(f"(?:{p})" for p in (MEAN_W, TIMES_W, SHARE_
 def operator_unapplied(question: str, qr: Query) -> bool:
     """The question contains an operator word (average, ratio, share, threshold, 'not in apartment', per) but the
     parse applied none: the plain sum is probably the wrong reading -> cap the confidence."""
-    return qr.op in ("sum", "diff") and bool(OPERATOR_HINT.search(_norm(question)))
+    q = _norm(question)
+    if qr.op in ("sum", "diff") and (re.search(SUPER_MAX, q, re.I) or re.search(SUPER_MIN, q, re.I)):
+        return True  # "largest"/"smallest" over something the rules did not pick
+    return qr.op in ("sum", "diff") and bool(OPERATOR_HINT.search(q))
