@@ -116,10 +116,16 @@ class IfcSolver(BaseSolver):
         it = parse(question)
         trace.append(f"parsed: metric={it.metric} kind={it.kind} scope={it.scope} names={it.names}"
                      + (" side-area" if it.side_area else "") + (" gross" if it.gross else ""))
+        ctx: dict = {}
         try:
-            ans = self._answer(path, model, idx, it, trace)
+            ans = self._answer(path, model, idx, it, trace, ctx)
         except Exception as ex:  # noqa: BLE001 - report as a refusal with the reason, never crash the eval
             ans = Answer.abstain(self.name, f"error: {type(ex).__name__}: {ex}", trace=trace)
+        if ans.value is not None and self.options.get("plan2d", "1") != "0":
+            try:
+                self._add_2d(path, model, it, ans, ctx.get("storey"))
+            except Exception as ex:  # noqa: BLE001 - 2D evidence is a bonus; never lose the answer over it
+                ans.trace.append(f"2D link failed: {type(ex).__name__}: {ex}")
         ans.solver = self.name
         ans.cost.wall_seconds = time.perf_counter() - t0
         return ans
@@ -181,7 +187,7 @@ class IfcSolver(BaseSolver):
                 conf *= 0.5
         return storey, rooms, conf
 
-    def _answer(self, path: str, model: str, idx: IfcIndex, it: Intent, trace: list[str]) -> Answer:
+    def _answer(self, path: str, model: str, idx: IfcIndex, it: Intent, trace: list[str], ctx: dict) -> Answer:
         assumptions: list[str] = []
         missing: list[str] = []
         if it.kind is None:
@@ -196,6 +202,7 @@ class IfcSolver(BaseSolver):
                                       missing=["a quantity question (count/area/volume/length)"])
         storey, rooms, conf = self._roles(path, idx, it, trace, assumptions)
         sname = storey.name if storey else None
+        ctx["storey"] = storey
 
         # ---- named rooms: area of one, or sum/max/min/argmax/diff over several ----------------------
         if it.metric == "area" and rooms and not it.side_area:
@@ -330,6 +337,53 @@ class IfcSolver(BaseSolver):
         return self._final(tot, unit, it, conf * 0.95, ev, trace, assumptions, missing)
 
     # ------------------------------------------------------------------------------------------------
+    def _add_2d(self, path: str, model: str, it: Intent, ans: Answer, storey: Storey | None) -> None:
+        """Add a pdf_pt box on the plan for every IFC element in the evidence (same GUID in 2D and 3D) and
+        cross-check counts against what the drawing shows."""
+        from stoa.solvers.ifc.plan2d import plan_items, plans_of_model
+
+        asked_plan = Path(path).suffix.lower() in (".pdf", ".svg") and "_plan-" in Path(path).stem
+        model_scope = it.scope == "model" or storey is None
+        plans: list[str] = []
+        if asked_plan:
+            plans.append(str(Path(path).with_suffix(".pdf")))
+        if model_scope:
+            plans += [p for p in plans_of_model(model).values() if p not in plans]
+        elif storey is not None and not asked_plan:
+            p = plans_of_model(model).get(storey.guid)
+            if p:
+                plans.append(p)
+        plans = [p for p in plans if plan_items(p)]
+        if not plans:
+            return
+        ev2d, seen = [], set()
+        for plan in plans:
+            items = plan_items(plan)
+            for ev in ans.evidence:
+                g = ev.ifc_guid or ""
+                itm = items.get(g)
+                if itm is None or g in seen:
+                    continue
+                seen.add(g)
+                note = ev.note + (f" | label '{itm.label}'" if itm.label else "")
+                ev2d.append(Evidence(file=plan, page=0, bbox=[round(v, 2) for v in itm.bbox], bbox_space="pdf_pt",
+                                     ifc_guid=g, note=note[:160]))
+        n3d = len([e for e in ans.evidence if e.ifc_guid])
+        files = sorted({e.file for e in ev2d})
+        ans.trace.append(f"2D link: {len(ev2d)}/{n3d} evidence elements drawn on "
+                         + (", ".join(Path(f).name for f in files) if files else Path(plans[0]).name)
+                         + ("" if asked_plan or model_scope else " (plan of the same storey)"))
+        if it.metric == "count" and ans.unit == "count" and it.op is None and not model_scope:
+            classes = set()
+            for k in it.kinds or [it.kind]:
+                classes |= set(KIND_CLASSES.get(k, ()))
+            drawn = [i for i in plan_items(plans[0]).values() if i.cls in classes]
+            if drawn and isinstance(ans.value, int):
+                mark = "✓" if len(drawn) == ans.value else f"(differs by {len(drawn) - ans.value:+d})"
+                ans.trace.append(f"cross-check: the plan drawing shows {len(drawn)} "
+                                 f"{'/'.join(sorted({i.cls for i in drawn}))} symbols; model count {ans.value} {mark}")
+        ans.evidence = (ev2d + ans.evidence) if asked_plan else (ans.evidence + ev2d)
+
     @staticmethod
     def _floor_area(e: Element, it: Intent, trace: list[str]) -> tuple[float | None, str]:
         geo = e.geo.footprint_area if e.geo else None
