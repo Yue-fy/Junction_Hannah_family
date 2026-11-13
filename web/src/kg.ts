@@ -58,8 +58,9 @@ const DXF_Q: Record<string, [string, string]> = {
 };
 
 function checkText(c: KgCrossCheck) {
-  if (c.storey) return { head: c.what, body: `plan ${c.drawn} · IFC ${c.model}`, sym: c.ok ? "✓" : "≠" };
-  return { head: c.what, body: `${c.drawn}/${c.model}`, sym: c.ok ? "✓" : "≠" };
+  const sym = c.ok === null ? "?" : c.ok ? "✓" : "≠";
+  if (c.storey) return { head: c.what, body: `plan ${c.drawn} · IFC ${c.model}`, sym };
+  return { head: c.what, body: `${c.drawn}/${c.model}`, sym };
 }
 
 /** Rooms that belong to what is open: the plan's storey, the whole model, or the swiss floor. */
@@ -123,12 +124,13 @@ export function renderKg(el: HTMLElement, kg: Kg, o: KgOpts) {
   const perStorey = !kg.storey && checks.some((c) => c.storey); // a model page: checks for every storey
   if (perStorey) {
     const nOk = checks.filter((c) => c.ok).length;
+    const comparable = checks.filter((c) => c.ok !== null).length;
     const storeys = new Set(checks.map((c) => c.storey)).size;
-    pills.push(`<span class="kg-pill ${nOk === checks.length ? "ok" : "bad"}" title="Element counts per storey: IFC model vs symbols drawn on that storey's plan sheet. Open the details for the table.">${nOk}/${checks.length} checks agree on ${storeys} storey plans</span>`);
+    pills.push(`<span class="kg-pill ${nOk === comparable ? "ok" : "bad"}" title="Element counts per storey: IFC model vs symbols drawn on that storey's plan sheet. Open the details for the table.">${nOk}/${comparable} checks agree on ${storeys} storey plans</span>`);
   }
   if (!perStorey) checks.forEach((c, i) => {
     const t = checkText(c);
-    pills.push(`<span class="kg-pill ${c.ok ? "ok" : "bad"}" data-check="${i}" title="${esc(c.storey
+    pills.push(`<span class="kg-pill ${c.ok === null ? "info" : c.ok ? "ok" : "bad"}" data-check="${i}" title="${esc(c.reason ? `${c.reason}. ` : "")}${esc(c.storey
       ? `Storey '${c.storey}': ${c.model} in the IFC model, ${c.drawn} drawn on the plan sheet (IfcConvert SVG twin of the PDF). A difference means some elements of this storey are not drawn on this sheet.`
       : `${c.what}: ${c.drawn} of ${c.model} agree`)}">${esc(t.head)} <b>${esc(t.body)}</b> ${t.sym}</span>`);
   });
@@ -226,7 +228,7 @@ function body(kg: Kg, rooms: KgRoom[], checks: KgCrossCheck[], files: KgFile[], 
   if (checks.length) {
     cols.push(`<div class="kg-col"><h4>Cross-checks <small>independent sources, same fact</small></h4><div class="kg-scroll"><table class="kg-table">
       <tr>${checks.some((c) => c.storey) && !kg.storey ? "<th>Storey</th>" : ""}<th>What</th><th>${checks.some((c) => c.storey) ? "Plan" : "Agree"}</th><th>${checks.some((c) => c.storey) ? "IFC" : "Of"}</th><th></th></tr>
-      ${checks.map((c) => `<tr>${c.storey && !kg.storey ? `<td>${esc(c.storey)}</td>` : ""}<td>${esc(c.what)}</td><td class="num">${c.drawn}</td><td class="num">${c.model}</td><td class="${c.ok ? "ok" : "bad"}">${c.ok ? "✓" : "≠"}</td></tr>`).join("")}
+      ${checks.map((c) => `<tr>${c.storey && !kg.storey ? `<td>${esc(c.storey)}</td>` : ""}<td>${esc(c.what)}</td><td class="num">${c.drawn}</td><td class="num">${c.model}</td><td class="${c.ok === null ? "na" : c.ok ? "ok" : "bad"}" title="${esc(c.reason ?? "")}">${c.ok === null ? "?" : c.ok ? "✓" : "≠"}</td></tr>`).join("")}
       </table>${kg.storey ? `<p class="kg-note">Plan = elements drawn on this sheet; IFC = elements of storey ${esc(kg.storey.name)} in the model. A ≠ is a real difference between the documents, so the answer card says which source it used.</p>` : ""}</div></div>`);
   }
   if (!cols.length) cols.push(`<div class="kg-col"><p class="kg-note">${esc(o.current)} has no linked rooms or storeys.</p></div>`);
