@@ -10,10 +10,13 @@
 | Fri 13 Nov 18:00 | Opening ceremony: challenge videos, Google DeepMind keynote |
 | Fri 19:30 | Hacking starts |
 | Fri 20:00 | Google DeepMind workshop |
-| Fri 20:30 | Arduino workshop "Getting started with the UNO Q" (Modulino sensors, running AI locally) and the Verda workshop (Loft) |
+| Fri 20:30 | Arduino workshop "Getting started with the UNO Q" (Hardware Lab, 5th floor; Modulino sensors, running AI locally) and the Verda workshop (Loft, 4th floor) |
+| Fri 21:00 | MLH x GitHub workshop (TBA) |
 | **Fri 23:59** | **Preliminary submission.** The app says 23:55, so aim for 23:30 |
 | Sat 14 Nov 11:00 | Cala workshop, Loft (4th floor). Cala shares its judging criteria here |
-| Sat 12:00 | Submissions open on the Junction Platform |
+| Sat 12:00 | Submissions open on the Junction Platform. Also: Intel x Ignite Next "Shaping the Future of Physical AI" (Hardware Lab; Intel Core Ultra, OpenVINO, Physical AI Studio) |
+| Sat 13:30 / 14:30 / 16:30 | Modal / Kiuas / Exa workshops (Loft, 4th floor; details TBA) |
+| Sat 18:00 | Maria 01: "How to start a venture-backable startup in Finland" |
 | **Sun 15 Nov 10:00** | **Final submission deadline** |
 | Sun 14:00 | Final ceremony and top-5 pitches |
 | Sun 15:10 / 15:50 | Challenge winners / Junction overall winner |
@@ -26,11 +29,17 @@
   Timo Ahopelto (Lifeline Ventures), Umar Noor (Google DeepMind), Hubertus van der Drift (Context.dev),
   and Arturs Polis (Verda). Verda says he looks for "prototypes with a clear path to production and scale".
 - What the grand jury says it looks for (from the official site):
-  - "Teams that start from a problem worth solving, not just a feature that's easy to build" (Kia Kanninen)
-  - "Teams that can explain exactly why an agent fails in their world, and whose reward holds when someone tries to break it"
-  - "Teams that start from a real user problem and ship something people want to come back to"
-  - "Teams that move fast, stay pragmatic, and find that one unique insight that solves a problem 10x faster or better"
-  - "Teams willing to tackle the hardest challenges and build prototypes with a clear path to production and scale" (Arturs Polis)
+  - Kia Kanninen (CEO, Founders House): "teams that start from a problem worth solving, not just a feature that's easy to build"
+  - Daksh Raghuvanshi (RL Lead, AfterQuery; lead author of StoreBench, a live-commerce agent benchmark where no frontier model
+    beat a simple scripted operator): "teams that can explain exactly why an agent fails in their world, and whose reward holds
+    when someone tries to break it"
+  - Otto Söderlund (AI Lead, Supercell; founded Speechly): "teams that start from a real user problem and ship something people
+    want to come back to"
+  - Hubertus "Beer" van der Drift (CTO, Context.dev): "teams that move fast, stay pragmatic, and find that one unique insight
+    that solves a problem 10x faster or better"
+  - Arturs Polis (CTO, Verda): "teams willing to tackle the hardest challenges and build prototypes with a clear path to
+    production and scale"
+  - Timo Ahopelto (Managing Partner, Lifeline Ventures) and Umar Noor (Developer Experience, Google DeepMind): no criteria published
 - Prizes total €100,000; the breakdown is TBD. Teams have 1–4 people. Submissions are open-sourced under the MIT licence.
 
 ## Tracks and challenges (known before the videos)
