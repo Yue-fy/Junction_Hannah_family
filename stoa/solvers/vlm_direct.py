@@ -151,9 +151,7 @@ class VlmDirect(BaseSolver):
 
         with llm.cost_meter() as cost:
             ans = self._solve(path, question)
-        ans.trace.append(str(cost))
-        if "cost" in Answer.model_fields:  # contract addition (Stoa feedback); additive
-            ans.cost = {**cost.as_dict(), **(ans.cost or {})}  # type: ignore[attr-defined]
+        ans.trace.append(str(cost))  # the eval's CostMeter gets the same numbers via stoa.llm -> record_cost
         return ans
 
     def _solve(self, path: str, question: str) -> Answer:
