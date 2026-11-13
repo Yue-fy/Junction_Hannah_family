@@ -108,3 +108,13 @@ def test_ratio_type_scored_and_threshold():
     for seed in range(20):
         t = _threshold_any([10.0, 20.0], random.Random(seed))
         assert t is None or all(abs(v - t) > 0.05 * max(v, t) for v in (10.0, 20.0))
+
+
+def test_judge_numeric_precheck():
+    from stoa.eval.judge import numeric_verdict as n
+
+    assert n("The total length of exterior walls is 267.45 m.", "284.636")[0] is False
+    assert n("The concrete volume is 273.91 cu m.", "273.9 m3")[0] is True
+    assert n("Created with Revit 2020.", "Revit 2019")[0] is False  # integers without unit: exact
+    assert n("Total: 8 doors", "There are 8 doors")[0] is True
+    assert n("10 walls, 472.018 sq ft", "472")[0] is None  # several numbers: LLM decides
