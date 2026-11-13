@@ -111,7 +111,7 @@ function intentHtml(a: Answer) {
   if (it) {
     bits.push(`<b>${esc(it.task)}</b>`);
     const target = a.plan?.parts?.length ? a.plan.parts.join(a.plan.op === "sum" ? " + " : ", ") : it.target;
-    if (target && target !== it.task) bits.push(esc(target.replace(/_/g, " ")));
+    if (target && target !== it.task && target !== "unknown") bits.push(esc(target.replace(/_/g, " ")));
     const f = Object.entries(it.filters ?? {}).filter(([, v]) => v !== null && v !== "" && v !== false)
       .map(([k, v]) => `${esc(k.replace(/_/g, " "))} <i>${esc(v === true ? "yes" : v)}</i>`);
     bits.push(...(f.length ? f : it.scope ? [`scope <i>${esc(it.scope)}</i>`] : []));

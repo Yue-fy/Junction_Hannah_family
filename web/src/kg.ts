@@ -73,7 +73,7 @@ export function renderKg(el: HTMLElement, kg: Kg, o: KgOpts) {
   const project = kg.group ?? kg.source;
   const files = (kg.files ?? []).filter((f) => f.path);
   const storeyName = new Map((kg.storeys ?? []).map((s) => [s.guid, s.name]));
-  const modelLabel = kg.graph?.nodes?.find((n) => n.type === "model")?.label;
+  const modelLabel = (kg.graph?.nodes ?? kg.nodes)?.find((n) => n.type === "model")?.label;
   const rooms = roomsInScope(kg);
   const checks = kg.crosschecks ?? [];
 
@@ -103,10 +103,11 @@ export function renderKg(el: HTMLElement, kg: Kg, o: KgOpts) {
       chips.push({ kind: "same site", label: base(p), title: p, on: false, act: () => o.openPath(p) });
     const seen = new Set([...Object.values(kg.siblings ?? {}), ...(kg.same_site ?? [])]);
     for (const n of kg.nodes ?? []) {
-      if (seen.has(n.path) || n.path === o.current) continue;
-      seen.add(n.path);
-      chips.push({ kind: n.kind, label: n.label, title: `${n.path} — ${n.relation}`, on: false,
-        act: () => (/\.(pdf|png|jpe?g|ifc)$/i.test(n.path) ? o.openPath(n.path) : window.open(`/api/file?path=${encodeURIComponent(n.path)}`, "_blank")) });
+      const p = n.path;
+      if (!p || seen.has(p) || p === o.current) continue; // older shape: graph nodes without a path
+      seen.add(p);
+      chips.push({ kind: n.kind ?? "", label: n.label, title: `${p}${n.relation ? ` — ${n.relation}` : ""}`, on: false,
+        act: () => (/\.(pdf|png|jpe?g|ifc)$/i.test(p) ? o.openPath(p) : window.open(`/api/file?path=${encodeURIComponent(p)}`, "_blank")) });
     }
     for (const f of files.filter((f: KgFile) => !seen.has(f.path)))
       chips.push({ kind: KIND_LABEL[f.kind] ?? f.kind, label: base(f.path), title: `${f.path}${f.relation ? ` — ${f.relation}` : ""}`, on: false, act: () => o.openPath(f.path) });

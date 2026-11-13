@@ -135,8 +135,10 @@ export interface Kg {
   crosschecks?: KgCrossCheck[];
   transform?: { s: number; a: number; b: number; rms_pt: number; scale?: string };
   counts_dxf?: Record<string, number>;
-  /** Linked files for the strip (W1 2eea21a): every other file about this building and how it relates. */
-  nodes?: { path: string; kind: string; label: string; relation: string }[];
+  /** Linked files for the strip (W1 2eea21a: {path, kind, label, relation}); older stoa.kg put the graph's
+   *  {id, type, label} nodes here instead (night at 00:40), so both shapes are accepted. */
+  nodes?: { path?: string; kind?: string; label: string; relation?: string; id?: string; type?: string }[];
+  edges?: { from: string; to: string; rel: string }[];
   /** Cross-checks as one-line badges (W1 2eea21a). */
   checks?: { text: string; ok: boolean }[];
   /** The fine graph (model, plans, storeys, rooms) for a graph view. */
