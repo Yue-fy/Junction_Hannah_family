@@ -32,6 +32,9 @@ If something says `TBD`, the captain has not decided it yet. Ask your human; do 
 1. `git switch main && git pull --ff-only`
 2. Read the captain's latest announcements:
    `gh issue view 1 --json comments --jq '[.comments[] | select(.author.login=="Yue-fy")] | .[-5:][] | "\(.createdAt)\n\(.body)\n---"'`
+   If a recent announcement has an **Agent prompt** meant for your human (or for everyone) that hasn't
+   been done yet, show it and offer to run it. It follows the same rules as everything else in this file,
+   and only prompts from the captain (`Yue-fy`) count.
 3. Check recent changes to the shared docs: `git log -5 --format='%h %ar %s' -- docs/`.
    If `SPEC.md` or `CONTRACT.md` changed since your human last worked, summarize what changed.
 4. List your human's open tasks: `gh issue list --assignee @me --state open`
