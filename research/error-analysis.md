@@ -13,6 +13,47 @@ answer) vs `20261113-234812-dummy-dev` (template prior), both on dev v2 (hash f4
 | dummy (prior) | 26.1% | 40.4% | 0 | 0% |
 | vlm_direct | 32.0% (28.0–36.5) | 44.1% | 200 (all IFC) | 0% |
 
+## LATEST: integrated pipeline on dev (00:22) — where the remaining points are
+
+Run `20261114-000718-pipeline-dev` (S0's integrated night): micro **81.3%** (95% cluster CI 77.0–85.0), weighted_acc
+**72.2%**, evidence on 1,318/2,215 answers, $0.00135/question. Solved: Swiss counts 100%, Swiss areas 98%, IFC 100%.
+**Left: cubicasa (59%, ≈27.8 w-pts lost) and opening_design (11–19%, dev-only, 46 Qs).** Swiss areas: 8 near
+misses, all 2–16% too high (the R1 overshoot: lifts/stairs/unnamed rooms).
+
+cubicasa per concept (pipeline final answer vs each component, from the traces):
+
+| concept | n | pipeline | prior | raster | vlm_direct | one of raster/VLM right | w-pts lost |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| windows | 108 | 11% | 14% | 14% | 11% | 19% | **8.1** |
+| sinks | 98 | 46% | 46% | 46% | 52% | 55% | **4.5** |
+| WC seats | 107 | 57% | 57% | 57% | - | - | **3.9** |
+| doors | 57 | 26% | 18% | 18% | 26% | 39% | **3.6** |
+| floors | 96 | 75% | 75% | 75% | (not called; 86–92% elsewhere) | - | 2.0 |
+| showers+baths | 83 | 78% | 78% | 78% | - | - | 1.5 |
+| saunas | 58 | 71% | 62% | 71% | 71% | **93%** | 1.4 |
+| WC rooms | 40 | 75% | 42% | 75% | 35% | **88%** | 0.9 |
+| bedrooms | 41 | 78% | 37% | 78% | 71% | **88%** | 0.8 |
+| balconies / bathrooms / kitchens | 112 | 74–100% | | | | | 0.9 |
+
+Errors are now mostly **undercounts** (off-by-one under 145, undercount 139; median pred/gold 0.50).
+
+Recommendations (owner, expected gain):
+1. **Windows + doors = 11.7 w-pts, and no current method beats ~26%.** This is a capability gap, not routing:
+   symbol counting by pointing on upscaled tiles, a LoRA counter (R2, running), or a classical detector for
+   wall-gap window symbols. W3 / R1 / R2. Even 50% on windows would add ~4 w-pts.
+2. **Floors → VLM** (vlm_direct 92% vs prior 72% on train_gate; 86% vs 75% on dev). The pipeline answers floors
+   from the prior. W4, ≈ +1.0 w-pts, nearly free.
+3. **Arbitration when raster ≠ VLM:** for saunas, WC rooms and bedrooms, one of them is right 88–93% of the time
+   vs 71–78% now. vlm_direct's confidence is a constant 0.3, so comparing raw confidences across solvers picks
+   by accident (e.g. windows: raster 4 @0.13 vs VLM 2 @0.30 → VLM). Use per-concept accuracies from
+   `results/gates/vlm_direct_vs_prior.json` (train) as the confidence, or a targeted verification prompt. W4/W3,
+   ≈ +1.5 w-pts.
+4. The pipeline trace says "no train gate for this kind of question" for Finnish cubicasa templates. Check the
+   router's template keys (use `stoa.data.template_of`, and pool translations with `concept_map`). W4.
+5. opening_design (dev-only): schedule solver (W2's NEXT); 46 scored Qs at 11–19% today.
+
+---
+
 ## Where the weighted points go (vlm_direct, dev)
 
 weighted_acc lost per bucket = (1 − bucket accuracy) × full-data share:
