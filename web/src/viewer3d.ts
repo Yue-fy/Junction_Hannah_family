@@ -417,7 +417,8 @@ export class Viewer3D {
       mat.transparent = opacity < 1;
       mat.depthWrite = opacity === 1;
       mat.needsUpdate = true;
-      b.mesh!.visible = !(other && this.activeStorey !== null && b.storey > -1 && this.storeyAbove(b.storey));
+      // with a storey filter: hide storeys above it and elements without a storey (roof proxies, annotations)
+      b.mesh!.visible = !(other && ((b.storey > -1 && this.storeyAbove(b.storey)) || b.storey === -1));
     }
     this.needsRender = true;
   }

@@ -15,7 +15,8 @@ npm run dev          # http://localhost:5173 (Vite, port 5173)
 ```
 
 - `STOA_DATA` must point at the dataset root (default: the team path in `AGENTS.md`).
-- `/api/*` goes to W4's API (`STOA_API_URL`, default `http://127.0.0.1:8100`, see `docs/CONTRACT.md`).
+- `/api/*` goes to W4's API (`STOA_API_URL`, default `http://127.0.0.1:8100`, see `docs/CONTRACT.md`;
+  start it with `$JUNCTION_VENV/bin/python -m uvicorn stoa.api:app --port 8100` from the repo root).
   If that server is down, the dev server answers from a **mock** (`mock/stoaApi.ts`): files and example
   questions come from the dataset, `/ask` returns the precomputed fixtures in `fixtures/answers.json`. The
   badge in the top-left says `API live` or `API mock`.
@@ -27,12 +28,19 @@ Deep links: `/?file=<dataset-relative path>&q=<question>` opens a file and asks 
 
 ## Demo script (30 s)
 
-1. `bsc-esplanades … plan-01-1-korrus.pdf` → "What is the net floor area of the room 'KORIDOR (119)' …?"
-   → 63.84 m², the corridor outline on the plan and its volume in 3D, cross-check against the IFC property.
-2. Same sheet → "How many doors are shown on the floor plan of '1.korrus'?" → 46 boxes on the plan, 46 doors
-   lit in 3D, "plan 46 = IFC storey 46 ✓". Click item 8 in the evidence list: both views zoom to that door.
-3. `site1000_bldg2082_floor9385.pdf` → "How many rooms labelled 'Zimmer' …?" → 12 boxes, DXF cross-check.
-4. `A-801 … Schedules.pdf` (sheet rotated 90°) → room 128 area → the schedule cell is boxed.
+Click **Demo tour ▸** (top left). Each click opens a file, asks one question and shows a one-line note:
+
+1. Esplanades plan 1.korrus: area of 'KORIDOR (119)' → 63.84 m²; the room outline on the drawing and its
+   volume in 3D (same IFC GlobalId).
+2. Same sheet: doors on the floor plan → 46 boxes + 46 doors in 3D, banner "drawing 46 = model 46 ✓",
+   answered by rules only (cost ≈ €0.00001). Click an evidence row: both views zoom to that door.
+3. Model-wide doors → 211 with evidence on 5 sheets (chips; click one to open that plan, same answer).
+4. Swiss floor plan: doors counted on the DXF layer, boxed on the PDF (36).
+5. HABS historical scan (no questions in the dataset): "what kind of drawing is this?" → the cascade escalates
+   to the local VLM (strip shows "rules › **local model**"), low confidence and what is missing.
+
+Also: click any room/door on an IFC sheet to see it in 3D; click an element in 3D to see it on the drawing.
+Historical sources (HABS, Finna, Europeana, Wikimedia) are in the source menu with general example questions.
 
 ## Fixtures
 

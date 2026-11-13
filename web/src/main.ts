@@ -405,6 +405,42 @@ function focusEvidence(i: number) {
   }
 }
 
+// --- demo tour: five steps, each one sentence for the presenter ----------------------------------------
+const TOUR: { file: string; q: string; note: string }[] = [
+  { file: "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+    q: "What is the net floor area of the room 'KORIDOR (119)' on '1.korrus', in m²?",
+    note: "Area from the IFC model, shown on the drawing and in 3D: same room, same GlobalId." },
+  { file: "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+    q: "How many doors are shown on the floor plan of '1.korrus'?",
+    note: "Count with one box per door. The drawing and the model agree (cross-check), no model call needed." },
+  { file: "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+    q: "How many doors are there in the model 'Maleva tänav 18 korterelamu (Esplanades example model)'?",
+    note: "Model-wide question: evidence on five sheets. Click a sheet chip to open it." },
+  { file: "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+    q: "How many doors (interior doors and entrance doors together) are drawn on this floor plan?",
+    note: "Vector drawing: doors counted on the CAD layer and mapped back onto the PDF." },
+  { file: "data/habs/ak0003_sheet_00019.jpg",
+    q: "What kind of drawing is this (floor plan, elevation, section, site plan)?",
+    note: "Historical scan with no text layer: the cascade escalates to a local vision model and says how sure it is." },
+];
+let tourStep = -1;
+$("tourBtn").addEventListener("click", async () => {
+  tourStep = (tourStep + 1) % TOUR.length;
+  const t = TOUR[tourStep];
+  $("tourBtn").textContent = `Demo ${tourStep + 1}/${TOUR.length} ▸`;
+  const note = $("tourNote");
+  note.hidden = false;
+  note.innerHTML = `<b>${tourStep + 1}/${TOUR.length}</b> ${esc(t.note)}`;
+  if (state.file?.path !== t.file) {
+    const src = t.file.split("/")[1];
+    const f = state.files.find((x) => x.path === t.file) ?? (await listFiles("", t.file, 5)).find((x) => x.path === t.file)
+      ?? (await listFiles(src, t.file, 5, false)).find((x) => x.path === t.file);
+    if (!f) return;
+    await openFile(f, t.q);
+  } else $<HTMLTextAreaElement>("question").value = t.q;
+  await runAsk();
+});
+
 // --- boot ---------------------------------------------------------------------------------------------------
 (async () => {
   await refreshFiles();

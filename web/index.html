@@ -15,7 +15,10 @@
             <h1>Blueprints Talk</h1>
             <p>Ask a drawing or a building model. Every answer shows where it came from.</p>
           </div>
-          <span id="backend" class="badge" title="Which backend answered the last request">API …</span>
+          <div class="brand-right">
+            <span id="backend" class="badge" title="Which backend answered the last request">API …</span>
+            <button id="tourBtn" class="tour" title="Step through the demo questions">Demo tour ▸</button>
+          </div>
         </header>
 
         <section class="panel" id="picker">
@@ -67,6 +70,7 @@
           <select id="storey" aria-label="Storey" hidden></select>
           <button id="fitBtn" class="ghost" title="Frame the evidence">Frame evidence</button>
         </div>
+        <div id="tourNote" class="tour-note"></div>
         <div id="views" data-mode="2d">
           <div id="xbanner" class="xbanner" hidden></div>
           <div id="pane2d" class="pane"><div id="v2d"></div><div class="pane-label">Drawing</div><div class="loading" id="load2d"></div></div>
