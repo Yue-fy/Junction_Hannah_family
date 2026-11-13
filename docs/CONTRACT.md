@@ -94,7 +94,7 @@ wrong dimension (m for an area question) is wrong. Counts are rounded to the nea
 
 ```bash
 $JUNCTION_VENV/bin/python -m stoa.eval --solver <name> --split smoke|dev [--limit N] \
-    [--source S] [--type T] [--workers N] [--solver-arg k=v] [--handled-only] [--note "..."]
+    [--source S] [--type T] [--grep REGEX] [--workers N] [--solver-arg k=v] [--handled-only] [--note "..."]
 $JUNCTION_VENV/bin/python -m stoa.eval --list        # registered solvers + import errors
 ```
 - Splits (v2) live in `$JUNCTION_SHARED/results/splits/{smoke,dev,test,train,unused,hard}.jsonl`. Grouped
@@ -102,16 +102,28 @@ $JUNCTION_VENV/bin/python -m stoa.eval --list        # registered solvers + impo
   models of one IFC project all stay together. Eval splits keep one language per concept (EN or the local
   language; `stoa.data.concept_map`). `test` is sealed (only S0, with `--allow-test`); opening_design is
   dev-only. `unused` = translations and capped-out questions of eval drawings: never train on them. `hard` =
-  generated generality checks on dev drawings (`stoa/eval/hard.py`). Load in code:
+  generated generality checks on dev drawings (`stoa/eval/hard.py`). `hard2` = reasoning kinds that
+  questions.jsonl never asks (averages, ratios, percentages, thresholds, complements, unit changes, argmin,
+  yes/no; `stoa/eval/hard2.py`, 256 Qs on dev drawings); it adds the scored type `ratio` (dimensionless,
+  within 2%). `hard2p` = the same questions reworded (other English phrasing, German/French/Finnish;
+  `stoa/eval/hard2p.py`). `hard2q` = a third wording (Italian/Dutch/Swedish + new English; `hard2p.py --q`):
+  the clean HELD-OUT set since 01:12 (hard2p wordings were quoted in messages, so hard2p is contaminated for
+  dxf/ifc). Develop on `hard2`; on `hard2p`/`hard2q` report aggregates only and never quote their questions. Load in code:
   `stoa.eval.splits.load_split("train")` → `list[Question]` with answers.
-- `--limit N` takes the same fixed random subset every run.
+- `--limit N` takes the same fixed random subset every run. `--grep REGEX` keeps questions matching the regex
+  (case-insensitive), e.g. `--grep 'window|ikkun|fenster|fönster'` for one concept in every language.
 - Scoring: count exact (after rounding); area/length/volume within 2% after unit conversion; text/other
   not scored (a rough `text_fuzzy` rate is reported separately). Abstain = wrong, reported as coverage.
 - Output: table per source × type (accuracy, coverage, accuracy-when-answered, evidence rate, text~),
   micro accuracy, macro accuracy, **`weighted_acc`** (bucket accuracies weighted by each bucket's share of
   scored questions in the FULL dataset; the team's headline accuracy, S0 D1), refusal rate, cost per question
   (tokens, LLM/API calls, GPU s, wall s, **est. USD/question** with the rates in `stoa/eval/runner.py:RATES`),
-  and accuracy per cost tier (`deterministic` / `local` / `api`). One line appended to `$JUNCTION_SHARED/results/leaderboard.jsonl`;
+  and accuracy per cost tier (`deterministic` / `local` / `api`).
+  **Calibration** (`metrics.calibration`; Stoa's "know what you don't know"): ECE (10 bins), Brier, AUROC
+  (does confidence rank right above wrong answers; 0.5 = noise), AURC/excess AURC (risk–coverage), and the
+  share of answers with confidence ≥ 0.8 plus their accuracy. **Evidence**: `evidence_rate` (any evidence),
+  `evidence_2d_rate` (a bbox the UI can draw), `evidence_count_match` (count answers whose located objects,
+  i.e. unique IFC GUIDs + boxes without a GUID, equal the answer). One line appended to `$JUNCTION_SHARED/results/leaderboard.jsonl`;
   per-question predictions in `$JUNCTION_SHARED/artifacts/eval/<run-id>.jsonl` (gold, prediction,
   evidence, trace, error) for error analysis.
 - Set `AGENT_ID=<your id>` in the environment so the leaderboard line records who ran it.
@@ -119,7 +131,8 @@ $JUNCTION_VENV/bin/python -m stoa.eval --list        # registered solvers + impo
   `text_judge` per bucket, never part of accuracy; the judge's cost is not charged to the solver.
 - Other tools: `python -m stoa.eval.analyze RUN [--baseline RUN]` (loss tables, examples, calibration),
   `python -m stoa.eval.leaderboard [--split dev]` (latest full run per solver on the current split version),
-  `python -m stoa.eval.gates CHEAP_RUN CHALLENGER_RUN` (per-concept gate table from `--split train_gate` runs).
+  `python -m stoa.eval.gates CHEAP_RUN CHALLENGER_RUN` (per-concept gate table from `--split train_gate` runs),
+  `python -m stoa.eval.calibration RUN [RUN ...] [--by-source]` (calibration side by side).
   Extra splits: `train_gate` (960 train Qs for choosing gates/thresholds), `cc5k_heldout` (CC5K-pretrained
   models only), `hard` (generality), or any split file path.
 
@@ -128,6 +141,12 @@ $JUNCTION_VENV/bin/python -m stoa.eval --list        # registered solvers + impo
 ### `POST /ask`
 Request: `{"path": "data/...", "question": "How many windows ...?", "solver": "pipeline"}` (`solver`
 optional, default `pipeline`). Response `200`: an `Answer` JSON (above). `404` if the file doesn't exist.
+Additive fields (D6, 00:33): `"intent"` (the router's parse of the question, `stoa.router.intent.parse(q).to_dict()`),
+`"plan"` (only for compound questions: `{"op": "sum"|..., "parts": [...], "sub_questions": [...]}`) and
+`"cached"` (bool). Clients must ignore fields they don't know.
+
+### `GET /intent?q=...`
+Returns the router's intent parse for a question (debug/demo).
 
 ### `GET /file?path=data/...`
 Returns the drawing file (PDF, PNG, JPG, SVG, IFC, DXF) with the right content type. Only paths under the
@@ -155,3 +174,6 @@ Additional endpoints (e.g. `GET /ifc-index?path=`) are W4's to add; list them he
 | `LLM_BASE_URL` | `stoa/llm.py` | local OpenAI-compatible server, default `http://127.0.0.1:8001/v1` |
 | `NVIDIA_API_KEY` | `stoa/llm.py` | NVIDIA hosted API (Nemotron); captain's account |
 | `AGENT_ID` | eval | optional; recorded in leaderboard lines |
+| `CC5K_WEIGHTS` | `raster_cc5k` (R1, D8) | pretrained CubiCasa5K weights `.pkl` (CC BY-NC 4.0, outside git) |
+| `CC5K_PYTHON` | `raster_cc5k` (R1, D8) | Python with torch for live CPU inference (default: the junction-train env); cached counts need none |
+| `CC5K_THREADS` | `raster_cc5k` (R1, D8) | optional; CPU threads for live inference (default 6) |

@@ -40,8 +40,10 @@ def plan(source: str, key: str, candidates: list[str], margin: float = 0.03, min
     """Order `candidates` (routing order, cheapest first) by the train gate.
 
     Returns (solvers to try, gate entry or None). With a gate: solvers measured on this key are kept only if
-    acc > prior + margin, sorted by accuracy (cheaper first on ties within 1 point); solvers the gate has not
-    measured (e.g. landed after calibration) keep their routing order and go first if deterministic.
+    acc > prior + margin, sorted by accuracy (the cheaper, earlier routed one first when within `margin` of the
+    best: sauna raster 65% vs vlm_direct 68% -> raster, no extra VLM call and it has label boxes); solvers the gate has not
+    measured (e.g. landed after calibration) keep their routing order and go first, after measured solvers that
+    are >= 90% right on train for this key.
     """
     e = entry(source, key)
     if not e or e.get("n", 0) < min_n:
@@ -50,6 +52,14 @@ def plan(source: str, key: str, candidates: list[str], margin: float = 0.03, min
     p = acc.get("prior", 0.0)
     measured = [c for c in candidates if c in acc]
     unmeasured = [c for c in candidates if c not in acc]
-    good = [c for c in measured if acc[c] > p + margin]
-    good.sort(key=lambda c: (-round(acc[c] * 100), candidates.index(c)))
-    return unmeasured + good, e
+    left = [c for c in measured if acc[c] > p + margin]
+    good = []
+    while left:  # best first; within `margin` of the best, the cheaper (earlier routed) solver wins the tie
+        top = max(acc[c] for c in left)
+        pick = min((c for c in left if acc[c] >= top - margin - 1e-9), key=candidates.index)
+        good.append(pick)
+        left.remove(pick)
+    # a solver that landed after calibration goes first, unless a measured one is already near-perfect on this key
+    # (pdf_vector must not jump ahead of dxf's 100% on swiss; schedule must go ahead of vlm_direct's 19%)
+    sure = [c for c in good if acc[c] >= 0.9]
+    return sure + unmeasured + [c for c in good if c not in sure], e

@@ -5,14 +5,14 @@
     "dxf": 0.0,
     "ifc": 0.0,
     "prior": 0.425,
-    "raster": 0.75,
+    "raster": 0.85,
     "vlm_direct": 0.475
    },
    "cost_usd": {
     "dxf": 0.0,
     "ifc": 0.0,
     "prior": 0.0,
-    "raster": 0.0994278,
+    "raster": 0.0524073,
     "vlm_direct": 0.0053896
    },
    "n": 40
@@ -22,14 +22,14 @@
     "dxf": 0.0,
     "ifc": 0.0,
     "prior": 0.925,
-    "raster": 0.9,
+    "raster": 0.925,
     "vlm_direct": 0.425
    },
    "cost_usd": {
     "dxf": 0.0,
     "ifc": 0.0,
     "prior": 0.0,
-    "raster": 0.0665278,
+    "raster": 0.0,
     "vlm_direct": 0.0043155
    },
    "n": 40
@@ -39,14 +39,14 @@
     "dxf": 0.0,
     "ifc": 0.0,
     "prior": 0.2,
-    "raster": 0.575,
+    "raster": 0.625,
     "vlm_direct": 0.6
    },
    "cost_usd": {
     "dxf": 0.0,
     "ifc": 0.0,
     "prior": 0.0,
-    "raster": 0.0499669,
+    "raster": 0.0272168,
     "vlm_direct": 0.0071111
    },
    "n": 40
@@ -90,14 +90,14 @@
     "dxf": 0.0,
     "ifc": 0.0,
     "prior": 0.575,
-    "raster": 0.775,
+    "raster": 0.65,
     "vlm_direct": 0.675
    },
    "cost_usd": {
     "dxf": 0.0,
     "ifc": 0.0,
     "prior": 0.0,
-    "raster": 0.0358283,
+    "raster": 0.019689,
     "vlm_direct": 0.0040163
    },
    "n": 40
@@ -141,14 +141,14 @@
     "dxf": 0.0,
     "ifc": 0.0,
     "prior": 0.75,
-    "raster": 0.75,
+    "raster": 0.9,
     "vlm_direct": 0.95
    },
    "cost_usd": {
     "dxf": 0.0,
     "ifc": 0.0,
     "prior": 0.0,
-    "raster": 0.0,
+    "raster": 0.0003985,
     "vlm_direct": 0.0029148
    },
    "n": 40
@@ -175,14 +175,14 @@
     "dxf": 0.0,
     "ifc": 0.0,
     "prior": 0.6,
-    "raster": 0.8,
+    "raster": 0.9,
     "vlm_direct": 0.275
    },
    "cost_usd": {
     "dxf": 0.0,
     "ifc": 0.0,
     "prior": 0.0,
-    "raster": 0.0537127,
+    "raster": 0.0306131,
     "vlm_direct": 0.0030274
    },
    "n": 40
@@ -767,7 +767,7 @@
   }
  },
  "meta": {
-  "built": "2026-11-14T00:27:17",
+  "built": "2026-11-14T01:00:50",
   "per_key": 40,
   "solver_args": {},
   "solvers": [
@@ -775,6 +775,7 @@
    "ifc",
    "prior",
    "raster",
+   "schedule",
    "vlm_direct"
   ],
   "split": "train"

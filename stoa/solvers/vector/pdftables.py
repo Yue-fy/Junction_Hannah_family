@@ -165,6 +165,8 @@ def _build(rows: list[Row], run: list[int], h: float, _depth: int = 0) -> Table 
     if sum(has_digit) >= 0.7 * len(run):
         while run and not has_digit[0]:
             run, has_digit = run[1:], has_digit[1:]
+    if sum(has_digit) >= 0.8 * len(run):  # header repeats / blank rows inside the table
+        run = [i for i, d in zip(run, has_digit) if d]
     if len(run) < 2:
         return None
     x_left = min(_first_cell(rows[i]).x0 for i in run)
@@ -196,6 +198,8 @@ def _build(rows: list[Row], run: list[int], h: float, _depth: int = 0) -> Table 
             if k is not None:
                 vals[k] = (vals[k] + " " + c.text).strip()
                 bs.append(c.box)
+        if len(xs) >= 4 and sum(bool(v) for v in vals) <= 1:
+            continue  # stray word / blank row inside the table, not a record
         data.append(vals)
         boxes.append(_union(bs))
     # header: rows just above the first data row, within the table's x-range
@@ -215,7 +219,7 @@ def _build(rows: list[Row], run: list[int], h: float, _depth: int = 0) -> Table 
             continue
         if hc:
             n_head += 1
-            if len(hc) == 1 and len(xs) > 3 and n_head > 1:
+            if len(hc) == 1 and len(xs) > 3 and n_head > 1 and re.search(r"schedule|legend|key|types?\b|list", hc[0].text, re.I):
                 title = hc[0].text
                 break
             for c in hc:
@@ -224,6 +228,16 @@ def _build(rows: list[Row], run: list[int], h: float, _depth: int = 0) -> Table 
         j -= 1
     if extra:
         return _build(rows, sorted(set(run) | set(extra)), h, _depth + 1)
+    if not re.search(r"schedule", title, re.I):
+        # the caption ("Door Schedule", "FINISH ROOM SCHEDULE") sits a few rows above the header
+        for j in range(first - 1, -1, -1):
+            if rows[first].y - rows[j].y > 25 * h:
+                break
+            cap = [c for c in rows[j].cells if c.x1 >= x_left - 2 * h and c.x0 <= x_right
+                   and re.search(r"schedule", c.text, re.I)]
+            if cap:
+                title = cap[0].text
+                break
     names, seen = [], {}
     for k, hname in enumerate(head):
         nm = re.sub(r"\s+", " ", hname).strip() or f"col{k}"

@@ -34,3 +34,39 @@ def test_dxf_solver_floor():
     assert abs(a.value - 16.78) < 0.02 and "✓" in a.evidence[0].note
     a = s.solve(P, "How many windows are drawn on this floor plan?")
     assert a.value == 28 and len(a.evidence) == 28
+
+
+def test_parse_scope_and_area_options():
+    q = qparse.parse("How many windows are there in apartment B?")
+    assert [(t.kind, t.arg, t.scope) for t in q.terms] == [("count", "window", ["B"])]
+    assert qparse.covered("How many windows are there in apartment B?", q)
+    # Swiss German "wie gross" means "how large", not "gross area"
+    q = qparse.parse("Wie gross ist die Nettowohnfläche von Wohnung A in m² (Summe aller Räume ohne Balkone)?")
+    assert not q.gross and not q.include_outdoor and q.terms[0].kind == "area_apartment"
+    assert qparse.parse("What is the gross floor area of apartment B?").gross
+    assert qparse.parse("Net floor area of apartment A in m² including balconies?").include_outdoor
+
+
+@needs_data
+def test_dxf_scoped_counts():
+    from stoa.solvers import get_solver
+
+    s = get_solver("dxf", llm=0)
+    a = s.solve(P, "How many windows are there in apartment B?")
+    assert 0 < a.value < 28 and len(a.evidence) == a.value
+
+
+def test_parse_reasoning_ops():
+    v = ["Bad", "Zimmer"]
+    assert qparse.parse("What is the average net floor area of rooms 2.03 ('Bad') and 2.01 ('Zimmer'), in m²?", v).op == "mean"
+    q = qparse.parse("On average, how many doors are drawn per apartment on this floor plan?")
+    assert q.op == "ratio" and [t.arg for t in q.terms] == ["door", "apartment"]
+    q = qparse.parse("What share of the total net floor area of all numbered indoor rooms on this floor does apartment C "
+                     "take up, in percent?")
+    assert q.op == "pct" and [t.kind for t in q.terms] == ["area_apartment", "area_total"]
+    q = qparse.parse("What is the total net floor area, in m², of the numbered indoor rooms on this floor that do not "
+                     "belong to apartment A?")
+    assert q.op == "diff" and [t.kind for t in q.terms] == ["area_total", "area_apartment"]
+    q = qparse.parse("How many of the rooms 3.01 ('Bad') and 3.05 ('Zimmer') have a net floor area of more than 15 m²?", v)
+    assert q.op == "count_gt" and q.threshold == 15.0 and qparse.covered("How many of the rooms 3.01 ('Bad') and 3.05 "
+                                                                         "('Zimmer') have a net floor area of more than 15 m²?", q)
