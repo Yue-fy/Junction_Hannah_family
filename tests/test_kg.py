@@ -22,7 +22,9 @@ def test_links_plan():
     assert r["drawn_area_m2"] == pytest.approx(r["area_m2"], rel=0.02)  # 2D polygon (fitted scale) = 3D footprint
     doors = next(c for c in L["crosschecks"] if c["what"] == "doors")
     assert doors["model"] == doors["drawn"] == 46
-    assert any(e["rel"] == "drawn_on" for e in L["edges"])
+    assert any(e["rel"] == "drawn_on" for e in L["graph"]["edges"])
+    assert any(n["relation"] == "model this sheet was cut from" and n["kind"] == "ifc" for n in L["nodes"])
+    assert {"text", "ok"} <= set(L["checks"][0])
 
 
 def test_crosscheck_flags_a_wrong_count_from_any_solver():

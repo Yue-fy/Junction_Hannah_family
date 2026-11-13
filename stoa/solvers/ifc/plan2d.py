@@ -186,3 +186,62 @@ def plans_of_model(model_path: str) -> dict[str, str]:
         if st is not None and st.guid not in out:
             out[st.guid] = rel
     return out
+
+
+@functools.lru_cache(maxsize=128)
+def model_to_plan(model_path: str, plan_path: str):
+    """Affine map model XY (m, world) -> plan pdf_pt, least squares on the centres of elements drawn on the plan
+    (spaces, walls, doors...). Returns (fn(x, y) -> (px, py), rms_pt, n) or None. Lets us box elements the 1.2 m
+    cut plan doesn't draw (slabs, beams) on the plan."""
+    import numpy as np
+
+    from stoa.solvers.ifc.index import load_index
+
+    idx = load_index(model_path)
+    items = plan_items(plan_path)
+    X, P = [], []
+    for g, it in items.items():
+        e = idx.elements.get(g)
+        if e is None or e.geo is None or e.geo.bbox is None:
+            continue
+        b = e.geo.bbox
+        X.append(((b[0] + b[3]) / 2, (b[1] + b[4]) / 2))
+        P.append(((it.bbox[0] + it.bbox[2]) / 2, (it.bbox[1] + it.bbox[3]) / 2))
+    if len(X) < 4:
+        return None
+    X, P = np.array(X), np.array(P)
+    A = np.c_[X, np.ones(len(X))]
+    keep = np.ones(len(X), bool)
+    for _ in range(3):
+        M, *_ = np.linalg.lstsq(A[keep], P[keep], rcond=None)
+        res = np.linalg.norm(A @ M - P, axis=1)
+        new = res < max(3.0, 3 * np.median(res[keep]))
+        if new.sum() < 4 or (new == keep).all():
+            break
+        keep = new
+    rms = float(np.sqrt(np.mean(res[keep] ** 2)))
+    if rms > 10.0:  # not a consistent projection (e.g. the plan is not of this model)
+        return None
+
+    def fn(x: float, y: float) -> tuple[float, float]:
+        v = np.array([x, y, 1.0]) @ M
+        return float(v[0]), float(v[1])
+
+    return fn, rms, int(keep.sum())
+
+
+def project_box(model_path: str, plan_path: str, element) -> tuple[float, float, float, float] | None:
+    """pdf_pt bbox of an element's footprint projected onto the plan (for elements not drawn there)."""
+    t = model_to_plan(model_path, plan_path)
+    if t is None or element.geo is None:
+        return None
+    fn = t[0]
+    pts = [p for ring in (element.geo.footprint or []) for p in ring]
+    if not pts and element.geo.bbox:
+        b = element.geo.bbox
+        pts = [(b[0], b[1]), (b[3], b[1]), (b[3], b[4]), (b[0], b[4])]
+    if not pts:
+        return None
+    q = [fn(x, y) for x, y in pts]
+    xs, ys = [a for a, _ in q], [b for _, b in q]
+    return (min(xs), min(ys), max(xs), max(ys))
