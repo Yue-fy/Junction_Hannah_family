@@ -56,6 +56,10 @@ class MySolver(BaseSolver):
            "api_tokens_in": 0, "api_tokens_out": 0, "llm_calls": 0, "wall_seconds": 0.0}
 }
 ```
+`Answer` validates on assignment too: `ans.cost = {...}` becomes a `Cost`, and `ans.confidence = 1.2` raises
+(the eval records it as an exception, i.e. a refusal; check `errors` in the eval output). `Cost` also behaves
+as a read-only mapping of its non-zero fields, so old code doing `{**d, **(ans.cost or {})}` keeps working.
+
 Stoa (13 Nov): refusing is not useful. `value: null` is allowed but counted as a **refusal**; prefer a best
 estimate with a low `confidence` plus `assumptions` and `missing`.
 
