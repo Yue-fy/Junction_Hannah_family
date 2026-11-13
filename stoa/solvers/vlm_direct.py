@@ -13,6 +13,9 @@ Options (pass via the eval tool's solver kwargs, e.g. `--solver vlm_direct -k ba
                the answer is the number of (de-duplicated) items; count_from=stated keeps the stated count
   samples      N > 1 -> self-consistency: N samples at temperature 0.7 in one request (image encoded once),
                answer = most common value, confidence = its vote share (direct style only)
+  decompose    1 -> count questions that sum several object kinds ("showers and bathtubs in total") are split
+               by a short text-only LLM call into one question per kind; the counts are summed (fixes the
+               "answers 2 to X-and-Y questions" bias); evidence/trace keep the parts
   min_pixels   upscale small images to at least this many pixels before sending (default 0 = never)
   with_text    1 -> append the PDF's text layer (words, reading order) to the prompt (PDF only)
   thinking     1 -> let hybrid-thinking models think (slower)
@@ -103,6 +106,15 @@ DIRECT = {
     "text": "Reply with only the answer, as briefly as possible.",
 }
 
+DECOMPOSE = (
+    "A user asks a counting question about a floor plan. If the question asks for a TOTAL over several "
+    "different kinds of objects (for example 'showers and bathtubs in total', 'sinks and wash basins "
+    "combined'), rewrite it as one counting question per kind, in the same language as the question and "
+    "keeping any counting rules it states. If it asks about one kind of object only, return no parts.\n"
+    'Answer with JSON only: {{"parts": ["<question 1>", "<question 2>"]}} or {{"parts": []}}.\n\n'
+    "Question: {q}"
+)
+
 GROUND = {
     "box": ("Locate every object that the question asks to count. Output a JSON list with one entry per object: "
             '[{"bbox_2d": [x1, y1, x2, y2], "label": "<object>"}] (coordinates 0-1000 relative to the image). '
@@ -120,7 +132,7 @@ class VlmDirect(BaseSolver):
     def __init__(self, backend: str = "local", model: str | None = None, max_pixels: int | str = 3_200_000,
                  dpi: int | str = 150, ground: int | str = 0, with_text: int | str = 0, thinking: int | str = 0,
                  max_tokens: int | str = 1024, style: str = "direct", count_from: str = "list",
-                 min_pixels: int | str = 0, samples: int | str = 1, **kwargs):
+                 min_pixels: int | str = 0, samples: int | str = 1, decompose: int | str = 0, **kwargs):
         super().__init__(**kwargs)
         self.backend = backend
         self.model = model
@@ -131,6 +143,7 @@ class VlmDirect(BaseSolver):
         self.count_from = count_from
         self.min_pixels = int(min_pixels)
         self.samples = int(samples)
+        self.decompose = bool(int(decompose))
         self.with_text = bool(int(with_text))
         self.thinking = bool(int(thinking))
         self.style = style
@@ -160,11 +173,36 @@ class VlmDirect(BaseSolver):
                     return i
         return 0
 
+    def _parts(self, question: str) -> list[str]:
+        """Split a compound count question into atomic sub-questions (text-only LLM call). [] = not compound."""
+        from stoa import llm
+
+        r = llm.chat(DECOMPOSE.format(q=question.strip()), backend="local", max_tokens=200)
+        data = llm.extract_json(r.text)
+        parts = data.get("parts") if isinstance(data, dict) else None
+        if not isinstance(parts, list) or len(parts) < 2 or len(parts) > 6:
+            return []
+        return [str(p).strip() for p in parts if str(p).strip()]
+
     def solve(self, path: str, question: str) -> Answer:
         from stoa import llm
 
         with llm.cost_meter() as cost:
-            ans = self._solve(path, question)
+            parts = self._parts(question) if (self.decompose and infer_kind(question)[0] == "count") else []
+            if parts:
+                subs = [self._solve(path, p) for p in parts]
+                vals = [a.value for a in subs]
+                if all(isinstance(v, (int, float)) for v in vals):
+                    ans = Answer(value=int(sum(vals)), unit="count", confidence=min(a.confidence for a in subs),
+                                 evidence=[e for a in subs for e in a.evidence], solver=self.name,
+                                 trace=[f"decomposed into {len(parts)} parts"] +
+                                       [f"part '{p}' -> {v}" for p, v in zip(parts, vals)],
+                                 assumptions=[f"compound question summed over: {', '.join(parts)}"])
+                else:
+                    ans = self._solve(path, question)
+                    ans.trace.insert(0, f"decomposition {parts} failed on a part; asked the whole question")
+            else:
+                ans = self._solve(path, question)
         ans.trace.append(str(cost))  # the eval's CostMeter gets the same numbers via stoa.llm -> record_cost
         return ans
 
