@@ -35,22 +35,22 @@ _WHICH = re.compile(r"^\s*(which|what is the (?:name|type|label|use|function)|na
 # --- targets: (target, regex), most specific first ------------------------------------------------------
 _T = [
     ("wc_room", r"separate wc rooms?|toilet rooms?|erillis\w* wc-til|wc-til|wc-r[aä]um|separate toilets?"),
-    ("shower_bathtub", r"showers? and (?:bath)?tubs?|suihku\w* ja kylpyamme|duschen und badewannen|bathtubs? and showers?"),
+    ("shower_bathtub", r"showers?\s*(?:and|plus|\+|&|,)\s*(?:bath)?tubs?|suihku\w* ja kylpyamme|duschen und badewannen|bathtubs?\s*(?:and|plus|\+|&|,)\s*showers?"),
     ("sink", r"sinks? and wash ?basins?|pesu- ja tiskial|wash ?basins? and sinks?|tiskial|sinks?\b|sp[üu]lbecken|[eé]viers?"),
     ("wc", r"toilet bowls?|wc seats?|wc-istui|toilets? \(wc\)|\btoilets?\b|\bwcs?\b|\bwc's\b|klosett|cuvettes?|wc-schalen"),
     ("washbasin", r"wash ?basins?|lavabos?|lavabi|waschbecken|handwaschbecken|lavandini|pesuallas|pesualtai"),
     ("bathtub", r"bath ?tubs?|badewannen?|baignoires?|vasche da bagno|vasca|kylpyamm|badekar"),
     ("shower", r"showers?|duschen?|douches?|docce|doccia|suihku"),
-    ("sauna", r"saunas?|saunoja|saunaa"),
+    ("sauna", r"saunas?|saunoja|saunaa|saunen|bastu\w*|badstue"),
     ("kitchen", r"kitchens?|kitchenettes?|keitti|k[üu]chen?|cuisines?|cucin[ae]|keuken|k[øo]kken|k[öo]k\b"),
     ("bedroom", r"bedrooms?|makuuhuon|schlafzimmer|chambres? [àa] coucher|camer[ae] da letto|slaapkamer|sovev[æe]relse|sovrum"),
     ("bathroom", r"bathrooms?|washrooms?|kylpy- tai pesuhuon|pesuhuon|kylpyhuon|badezimmer|salles? de bains?|bagni\b|badkamer"),
     ("balcony", r"balcon(?:y|ies|e|i)|parveke|balkon\w*|balcons?"),
-    ("storey", r"floors? \(storeys?\)|storeys?|stories|kerros|geschosse\b|stockwerke|[eé]tages\b|piani\b|verdiepingen"),
+    ("storey", r"floors? \(storeys?\)|storeys \(floors?\)|storeys\b|stories\b|number of floors|how many floors|kerrosta|kerroksia|geschosse\b|stockwerke|[eé]tages\b|piani\b|verdiepingen"),
     ("apartment", r"apartments?|residential units?|wohnungen|appartements?|logements?|appartament[io]|unit[àa] abitativ|"
                   r"asuntoj|asunto"),
     ("window", r"windows?|ikkun|fenster|fen[eê]tres?|finestr[ae]|ramen\b|vinduer|f[öo]nster|aken|akn|ventanas?|ferestre|okien|okna"),
-    ("door", r"doors?|doorways?|\bov(?:i|ea|et)\b|ovi|t[üu]r(?:en)?\b|portes?\b|port[ae]\b|deuren|d[øo]re|d[öo]rr|uks|ust\b|puertas?"),
+    ("door", r"doors?|doorways?|\bov(?:i|ea|et)\b|ovi|\bt[üu]r(?:en)?\b|portes?\b|port[ae]\b|deuren|d[øo]re|d[öo]rr|uks|ust\b|puertas?"),
     ("stair", r"stairs?|staircases?|treppen?|escaliers?|scale\b|escaleras?|trappen?|trapper|portaat|trepp|sc[ăa]ri\b|schod"),
     ("column", r"columns?|st[üu]tzen|s[øo]jler|colonnes?|pilares?|pilastri|kolommen|pylv|\bposti|\bpost\b|st[âa]lpi|słup"),
     ("beam", r"beams?|tr[äa]ger|bjælker|poutres?|vigas?|travi\b|balken|palk|\btala|grinzi|belk"),
@@ -166,6 +166,8 @@ def parse(question: str) -> Intent:
     m = _ROOM_NO.search(q_noquote)
     if m and task in ("area", "volume", "length"):
         filters["room_no"] = m.group(1)
+        if quoted:
+            filters["label"] = quoted[0]
         scope = "room"
         target = "room"
     ma = _APT.search(q_noquote)

@@ -55,3 +55,30 @@ def test_api_rejects_escape():
     c = TestClient(app)
     assert c.get("/file", params={"path": "../etc/passwd"}).status_code == 400
     assert c.get("/file", params={"path": "data/nope.png"}).status_code == 404
+
+
+@pytest.mark.parametrize("src,q,op,labels", [
+    ("cubicasa5k", "How many doors and windows are shown on this floor plan in total?", "sum", ["door", "window"]),
+    ("cubicasa5k", "How many more windows than doors are shown on this floor plan?", "diff", ["window", "door"]),
+    ("cubicasa5k", "Does this apartment have a sauna? Answer yes or no.", "exists", ["sauna"]),
+    ("swiss_dwellings", "How many toilets, washbasins, bathtubs and showers are drawn on this floor plan altogether?", "sum",
+     ["wc", "washbasin", "bathtub", "shower"]),
+    ("swiss_dwellings", "By how many m² is room 1.06 larger than room 1.04 (net floor area)?", "diff", ["room 1.06", "room 1.04"]),
+    ("ifc_models", "Which of the rooms 'A (1)', 'B (2)' and 'C (3)' on 'Level 1' has the largest net floor area?", "argmax",
+     ["A (1)", "B (2)", "C (3)"]),
+])
+def test_decompose(src, q, op, labels):
+    from stoa.router.compose import combine, decompose
+
+    p = decompose(src, q)
+    assert p is not None and p.op == op and p.labels == labels
+    if op == "sum":
+        assert combine(p, [2] * len(labels))[0] == 2 * len(labels)
+
+
+def test_atomic_questions_not_decomposed():
+    from stoa.router.compose import decompose
+
+    q = ("How many sinks and wash basins (kitchen and bathroom combined; a double-bowl sink counts as one) "
+         "are drawn on this floor plan?")
+    assert decompose("cubicasa5k", q) is None

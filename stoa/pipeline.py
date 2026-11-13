@@ -16,7 +16,8 @@
 
 Options (`--solver-arg k=v`): accept=0.6 (confidence to stop), agree=1 (cross-check when unsure),
 api=0 (allow hosted API tier), margin=0.03 (gate margin over the prior), max_tries=3, vlm_args (json dict for
-vlm_direct), use_gate=1.
+vlm_direct), use_gate=1, compose=1 (split compound questions), normalise=1 (give template solvers the canonical
+English question when the asked one is a translation/paraphrase).
 """
 
 from __future__ import annotations
@@ -29,7 +30,10 @@ from pathlib import Path
 from stoa.contract import Answer, Cost, Evidence
 from stoa.data import siblings, source_of
 from stoa.router import gating, prior
+from stoa.router.canonical import canonical
+from stoa.router.compose import combine, decompose
 from stoa.router.intent import Intent, parse
+from stoa.router.prior import known_template
 
 IMG_EXT = (".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp", ".gif")
 # tier of each solver (cost order); unknown names count as "local"
@@ -87,7 +91,8 @@ from stoa.solvers.base import BaseSolver  # noqa: E402
 @register("pipeline")
 class Pipeline(BaseSolver):
     def __init__(self, accept: float | str = 0.6, agree: int | str = 1, api: int | str = 0, margin: float | str = 0.03,
-                 max_tries: int | str = 3, vlm_args: str | dict | None = None, use_gate: int | str = 1, **kwargs):
+                 max_tries: int | str = 3, vlm_args: str | dict | None = None, use_gate: int | str = 1,
+                 compose: int | str = 1, normalise: int | str = 1, **kwargs):
         super().__init__(**kwargs)
         self.accept = float(accept)
         self.agree = bool(int(agree))
@@ -95,6 +100,8 @@ class Pipeline(BaseSolver):
         self.margin = float(margin)
         self.max_tries = int(max_tries)
         self.use_gate = bool(int(use_gate))
+        self.compose = bool(int(compose))
+        self.normalise = bool(int(normalise))
         self.vlm_args = json.loads(vlm_args) if isinstance(vlm_args, str) else dict(vlm_args or {})
         self._solvers: dict[str, object | None] = {}
         self._lock = threading.Lock()
@@ -119,6 +126,45 @@ class Pipeline(BaseSolver):
     # -- main -------------------------------------------------------------------------------------
     def solve(self, path: str, question: str) -> Answer:
         t0 = time.perf_counter()
+        plan = decompose(source_of(path), question) if self.compose else None
+        if plan is None:
+            ans = self._solve_atomic(path, question)
+        else:
+            ans = self._solve_composed(path, question, plan)
+        ans.cost.wall_seconds = round(time.perf_counter() - t0, 4)
+        return ans
+
+    def _solve_composed(self, path: str, question: str, plan) -> Answer:
+        trace = [f"compound question → {plan.op} over {len(plan.subs)} parts: " + ", ".join(plan.labels)]
+        parts = []
+        total = Cost()
+        for lab, sub in zip(plan.labels, plan.subs):
+            a = self._solve_atomic(path, sub)
+            total = total.add(_cost_of(a))
+            parts.append(a)
+            trace.append(f"part '{lab}': \"{sub[:90]}\" → {a.value} {a.unit or ''} (conf {a.confidence:.2f}, {a.solver})")
+        value, expr = combine(plan, [a.value for a in parts])
+        trace.append(f"combine: {expr}")
+        conf = 1.0
+        for a in parts:
+            conf *= max(0.0, min(1.0, a.confidence))
+        if plan.op == "exists":
+            conf = max(conf, parts[0].confidence)
+        evidence = []
+        for lab, a in zip(plan.labels, parts):
+            for e in a.evidence:
+                evidence.append(e.model_copy(update={"note": f"{lab}: {e.note}".strip(": ")}))
+        assumptions = [f"{lab}: {x}" for lab, a in zip(plan.labels, parts) for x in a.assumptions]
+        missing = [f"{lab}: {x}" for lab, a in zip(plan.labels, parts) for x in a.missing]
+        unit = plan.unit if plan.unit else None
+        if unit is None and plan.op in ("sum", "diff", "rdiff", "max", "min") and parts:
+            unit = parts[0].unit
+        out = Answer(value=value, unit=unit, confidence=round(conf, 3), evidence=evidence, trace=trace,
+                     solver="pipeline/compose", assumptions=assumptions, missing=missing, cost=total)
+        return out
+
+    def _solve_atomic(self, path: str, question: str) -> Answer:
+        t0 = time.perf_counter()
         intent = parse(question)
         src = source_of(path)
         trace = [f"intent: {intent.describe()} (lang {intent.lang})"]
@@ -138,6 +184,9 @@ class Pipeline(BaseSolver):
         else:
             trace.append("no train gate for this kind of question: general path by file type")
 
+        canon = None
+        if self.normalise and not known_template(question):
+            canon = canonical(src, intent)
         total = Cost()
         answers: list[tuple[str, Answer, float]] = []  # (solver, answer, calibrated confidence)
         tries = 0
@@ -153,8 +202,12 @@ class Pipeline(BaseSolver):
             except Exception:  # noqa: BLE001
                 continue
             tries += 1
+            ask = question
+            if name != "vlm_direct" and name != "vlm_nvidia" and canon and canon != question:
+                ask = canon
+                trace.append(f"{name}: asked the canonical form \"{canon[:100]}\"")
             try:
-                ans = s.solve(path, question)
+                ans = s.solve(path, ask)
             except Exception as e:  # noqa: BLE001
                 trace.append(f"{name}: error {type(e).__name__}: {str(e)[:120]}")
                 continue
