@@ -111,10 +111,19 @@ function fileInfo(rel: string) {
 }
 
 /** Directory-based links (fallback when stoa.kg is not available): siblings + other sheets/floors of the set. */
+/** What a historical sheet shows, from its title in data/<source>/LICENSE.md ("…, North Elevation - Creque …"). */
+function sheetLabel(rel: string) {
+  const t = licenceFor(rel).title ?? "";
+  const head = t.split(" - ")[0].trim();
+  const sheet = head.match(/\(sheet (\d+ of \d+)\)/);
+  if (sheet) return `sheet ${sheet[1]}`;
+  return head.length > 48 ? `${head.slice(0, 46)}…` : head;
+}
+
 function kgFromDisk(rel: string) {
-  const files: { path: string; kind: string; storey: string | null; relation: string }[] = [];
-  const add = (p: string, kind: string, relation: string) => {
-    if (p !== rel && !files.some((n) => n.path === p)) files.push({ path: p, kind, storey: null, relation });
+  const files: { path: string; kind: string; storey: string | null; relation: string; label?: string }[] = [];
+  const add = (p: string, kind: string, relation: string, label?: string) => {
+    if (p !== rel && !files.some((n) => n.path === p)) files.push({ path: p, kind, storey: null, relation, ...(label ? { label } : {}) });
   };
   const sib = siblings(rel);
   for (const [e, p] of Object.entries(sib)) {
@@ -134,6 +143,26 @@ function kgFromDisk(rel: string) {
     const site = path.basename(rel).split("_")[0];
     for (const f of fs.readdirSync(path.join(DATA, "data/swiss_dwellings")))
       if (f.startsWith(site + "_") && f.endsWith(".pdf")) add(`data/swiss_dwellings/${f}`, "floor", "other floor of the same site");
+  }
+  // historical scans: other sheets of the same HABS/HAER/HALS survey (file prefix = Library of Congress item), and
+  // Finna drawings filed under the same address (title). Labels name the view from the catalogue title.
+  if (rel.startsWith("data/habs/")) {
+    const item = path.basename(rel).split("_sheet_")[0];
+    const own = sheetLabel(rel).split(", ")[0] + ", "; // "Head House and Residence, " shared with the open sheet
+    for (const f of fs.readdirSync(path.join(DATA, "data/habs")).sort())
+      if (f.startsWith(item + "_sheet_")) {
+        const l = sheetLabel(`data/habs/${f}`);
+        add(`data/habs/${f}`, "sheet", "other sheet of the same survey (Library of Congress item)", l.startsWith(own) ? l.slice(own.length) : l);
+      }
+  }
+  if (rel.startsWith("data/finna/")) {
+    const title = licenceFor(rel).title;
+    if (title) {
+      licenceFor(rel); // loads the table
+      const entry = licences.get("finna");
+      const set = [...(entry?.files ?? [])].filter(([, info]) => info.title === title).map(([f]) => f).sort();
+      set.forEach((f, k) => add(`data/finna/${f}`, "sheet", `drawing filed under the same address (${title})`, `drawing ${k + 1} of ${set.length}`));
+    }
   }
   if (rel.startsWith("data/opening_design/")) {
     const dir = path.dirname(rel);
@@ -166,7 +195,7 @@ function kg(rel: string) {
           try {
             const body = JSON.parse(stdout) as Record<string, unknown>;
             // stoa.kg links only siblings for some sources: keep its data, add the directory links for those.
-            if (!body.files) body.files = disk.files;
+            if (!Array.isArray(body.files) || body.files.length === 0) body.files = disk.files;
             resolve({ body, backend: "kg" });
           } catch (e) {
             kgCache.delete(rel);
@@ -190,6 +219,7 @@ const BENCH_SNAPSHOT = path.resolve(__dirname, "../fixtures/bench.json");
 type Bucket = { n: number; scored_n?: number; correct?: number; accuracy?: number | null };
 type LbRow = {
   time: string; run_id: string; solver: string; split: string; n: number; commit?: string; agent?: string; note?: string;
+  solver_args?: Record<string, unknown> | null;
   limit?: number | null; sources?: unknown; types?: unknown; grep?: unknown; handled_only?: boolean;
   metrics: Record<string, unknown> & { by_bucket?: Record<string, Bucket>; errors?: number };
 };
@@ -234,6 +264,12 @@ function bench() {
   for (const [split, minN] of [["dev", 1500], ["hard", 500]] as const)
     out[split] = { pipeline: summary(pick("pipeline", split, minN)), vlm_direct: summary(pick("vlm_direct", split, minN)),
       prior: summary(pick("prior", split, minN)) };
+  // S0's sealed test (experiments/s0/run_test.sh): only the CLEAN run counts (cc5k=0, or the single run when the
+  // pipeline has no cc5k switch); the cc5k=1 run is labelled inflated (D8) and never shown as the headline.
+  const clean = (r: LbRow) => String(r.solver_args?.cc5k ?? "") === "0" || /test-cc5k0\b/.test(r.note ?? "")
+    || (r.solver_args?.cc5k === undefined && !/cc5k/i.test(r.note ?? ""));
+  const test = rows.filter((r) => r.solver === "pipeline" && r.split === "test" && r.agent === "S0" && r.n >= 500 && full(r) && clean(r)).at(-1);
+  out.test = { pipeline: summary(test) };
   // novel question kinds (operators no template covers): hard2 = developed on; hard2q = clean held-out rewording,
   // reported as an aggregate only (D10)
   for (const split of ["hard2", "hard2q"]) {
@@ -332,7 +368,7 @@ async function handle(req: Connect.IncomingMessage, res: http.ServerResponse, ne
       try {
         const body = JSON.parse(live.body.toString()) as Record<string, unknown>;
         const hasPaths = Array.isArray(body.nodes) && (body.nodes as { path?: string }[]).some((n) => n.path);
-        if (!body.files && !hasPaths) body.files = kgFromDisk(url.searchParams.get("path") ?? "").files;
+        if ((!Array.isArray(body.files) || body.files.length === 0) && !hasPaths) body.files = kgFromDisk(url.searchParams.get("path") ?? "").files;
         return send(res, 200, body, "live");
       } catch {
         /* fall through: pass the body on unchanged */

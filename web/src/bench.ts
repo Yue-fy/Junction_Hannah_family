@@ -54,18 +54,22 @@ export function renderBench(el: HTMLElement, b: Bench) {
   const det = p.by_tier?.deterministic;
   const hp = hard.pipeline;
   const kinds = hp?.by_kind ? Object.entries(hp.by_kind) : [];
+  const t = b.runs.test?.pipeline;
   const h2 = b.runs.hard2?.pipeline;
   const h2q = b.runs.hard2q?.pipeline;
-  const runs = [...Object.values(dev), ...Object.values(hard), h2, h2q].filter((r): r is Run => !!r);
+  const runs = [t, ...Object.values(dev), ...Object.values(hard), h2, h2q].filter((r): r is Run => !!r);
 
   el.innerHTML = `
     <div class="bn-head"><h2>How well it works</h2>
       <p>Measured by <code>stoa.eval</code> on held-out drawings (split by drawing, never seen while building). ${b.from === "snapshot" ? "Snapshot." : "Latest full runs from the team leaderboard."}</p>
       <button class="bn-close" aria-label="Close">✕</button></div>
     <div class="bn-tiles">
-      <div class="bn-tile"><div class="k">Accuracy · dev, ${p.n.toLocaleString("en")} questions</div>
+      ${t ? `<div class="bn-tile"><div class="k">Accuracy · sealed test, ${t.n.toLocaleString("en")} questions</div>
+        <div class="v">${pct(t.accuracy)}</div>
+        <div class="s">${pct(t.weighted_acc)} weighted · run once on a frozen commit (${esc(t.commit ?? "")}) · dev ${pct(p.accuracy)}; on dev the VLM alone gets ${pct(dev.vlm_direct?.accuracy)}, the prior ${pct(dev.prior?.accuracy)}</div></div>`
+      : `<div class="bn-tile"><div class="k">Accuracy · dev, ${p.n.toLocaleString("en")} questions</div>
         <div class="v">${pct(p.accuracy)}</div>
-        <div class="s">${pct(p.weighted_acc)} weighted by each source's share of the full dataset · VLM alone ${pct(dev.vlm_direct?.accuracy)}, prior ${pct(dev.prior?.accuracy)}</div></div>
+        <div class="s">${pct(p.weighted_acc)} weighted by each source's share of the full dataset · VLM alone ${pct(dev.vlm_direct?.accuracy)}, prior ${pct(dev.prior?.accuracy)}</div></div>`}
       <div class="bn-tile"><div class="k">Generality · hard split${hp ? `, ${hp.n} questions` : ""}</div>
         <div class="v">${pct(hp?.accuracy)}</div>
         <div class="s">${kinds.length ? kinds.map(([k, v]) => `${esc(k)}s ${pct(v.accuracy, 0)}`).join(" · ") : "translations, paraphrases, compositions"}${h2 ? `<br><b>New question kinds</b> (average, share, threshold, which-is-larger…) ${pct(h2.accuracy, 0)}${h2q ? ` · same kinds reworded, never seen while building: ${pct(h2q.accuracy, 0)}` : ""}` : ""}</div></div>

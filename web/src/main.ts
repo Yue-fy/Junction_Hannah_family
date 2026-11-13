@@ -528,9 +528,9 @@ const TOUR: { file: string; q: string; note: string; bench?: boolean; second?: b
   { file: "data/cubicasa5k/colorful-4539.png",
     q: "Kuinka monta makuuhuonetta (MH) pohjapiirustuksessa on?",
     note: "A scanned Finnish apartment plan, asked in Finnish: the room labels are read once per drawing by the local vision model, and each counted bedroom label ('MH') is marked on the image." },
-  { file: "data/habs/ak0003_sheet_00019.jpg",
+  { file: "data/habs/vi0026_sheet_00003.jpg",
     q: "What kind of drawing is this (floor plan, elevation, section, site plan)?", second: true,
-    note: "Historical scan with no text layer: a local vision model answers but is unsure, so we ask NVIDIA Nemotron (hosted) for a second opinion: one paid call, only when needed." },
+    note: "Historical scan (HAER, 1977) with no text layer: a local vision model answers but is unsure, so we ask NVIDIA Nemotron (hosted) for a second opinion, one paid call. Below: the other sheets of the same survey, linked." },
   { file: "", q: "", bench: true,
     note: "Measured on held-out drawings: accuracy per source against two baselines, generality, and cost per 1,000 questions." },
 ];

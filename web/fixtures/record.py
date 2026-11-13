@@ -36,7 +36,7 @@ QUESTIONS = [
      "Wie viele Türen und Fenster sind insgesamt auf diesem Grundriss eingezeichnet?"),
     ("data/cubicasa5k/colorful-4539.png",
      "Kuinka monta makuuhuonetta (MH) pohjapiirustuksessa on?"),
-    ("data/habs/ak0003_sheet_00019.jpg",
+    ("data/habs/vi0026_sheet_00003.jpg",
      "What kind of drawing is this (floor plan, elevation, section, site plan)?"),
 ]
 
@@ -44,7 +44,7 @@ QUESTIONS = [
 # On-demand second opinions (hosted NVIDIA Nemotron) the tour may click: (path, question).
 SECOND = [
     ("data/cubicasa5k/colorful-4539.png", "Kuinka monta makuuhuonetta (MH) pohjapiirustuksessa on?"),
-    ("data/habs/ak0003_sheet_00019.jpg",
+    ("data/habs/vi0026_sheet_00003.jpg",
      "What kind of drawing is this (floor plan, elevation, section, site plan)?"),
 ]
 SECOND_SOLVER = ("vlm_direct", {"backend": "nvidia"})
