@@ -36,3 +36,6 @@ playwright-report/
 # Challenge datasets stay outside git (licences, size)
 junction-dataset*
 *.zip
+
+# Python packaging
+*.egg-info/
