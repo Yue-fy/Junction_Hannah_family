@@ -1,0 +1,17 @@
+numpy
+pydantic>=2
+tqdm
+pillow
+shapely
+ezdxf
+pymupdf
+ifcopenshell
+opencv-python-headless
+openai
+fastapi
+uvicorn
+rapidfuzz
+pandas
+
+[dev]
+pytest

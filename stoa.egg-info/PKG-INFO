@@ -1,0 +1,22 @@
+Metadata-Version: 2.4
+Name: stoa
+Version: 0.1.0
+Summary: Junction 2026 / Stoa 'Make Blueprints Talk': verifiable QA over construction drawings
+License: MIT
+Requires-Python: >=3.12
+Requires-Dist: numpy
+Requires-Dist: pydantic>=2
+Requires-Dist: tqdm
+Requires-Dist: pillow
+Requires-Dist: shapely
+Requires-Dist: ezdxf
+Requires-Dist: pymupdf
+Requires-Dist: ifcopenshell
+Requires-Dist: opencv-python-headless
+Requires-Dist: openai
+Requires-Dist: fastapi
+Requires-Dist: uvicorn
+Requires-Dist: rapidfuzz
+Requires-Dist: pandas
+Provides-Extra: dev
+Requires-Dist: pytest; extra == "dev"
