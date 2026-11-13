@@ -96,10 +96,12 @@ _MODEL = ("in the model", "the model", "modell", "modelo", "modellen", "het mode
 _PLAN = ("floor plan", "plan of", "grundriss", "plano", "plantegning", "plattegrond", "plaan", "rzuc",
          "planul", "plan de", "pianta", "pohjapiirro", "on the level", "on level", "storey", "geschoss",
          "planta", "etage", "verdieping", "korrus", "kondygnac", "nivel")
-_MAX = ("largest", "biggest", "greatest", "maximum", "max ", "most ", "grosste", "groesste", "grosster", "groesster",
+_MAX = ("largest", "biggest", "greatest", "maximum", "max ", "most ", "bigger", "larger", "greater", "grosser",
+        "groesser", "groter", "storre", "suurem", "wiekszy", "wieksze", "mai mare", "mas grande", "piu grand", "grosste", "groesste", "grosster", "groesster",
         "grootste", "mayor ", "mas grande", "storste", "suurim", "najwieksz", "cel mai mare", "plus grand",
         "piu grande", "suurin", "storsta")
-_MIN = ("smallest", "least", "minimum", "min ", "kleinste", "menor ", "mas pequen", "mindste", "vaikseim",
+_MIN = ("smallest", "least", "minimum", "min ", "smaller", "kleiner", "kleiner", "mindre", "vaiksem", "mniejsz",
+        "mai mic", "mas pequeno", "plus petit", "kleinste", "menor ", "mas pequen", "mindste", "vaikseim",
         "najmniejsz", "cel mai mic", "plus petit", "piu piccol", "pienin", "minsta")
 _WHICH = ("which", "what room", "welche", "welcher", "welches", "welke", "cual ", "hvilk", "milline", "ktory",
           "ktora", "care ", "quel", "quale", "mika", "vilk")
@@ -262,7 +264,11 @@ def parse(question: str) -> Intent:
                 total=_has(t, _TOTAL) or (metric != "count" and len(names) <= 1),
                 net=not gross, gross=gross, asked_unit=asked_unit, kinds=kinds or ([kind] if kind else []))
     which = _has(t, _WHICH)
-    if _has(t, _DIFF) or re.search(r"\b(more|fewer|less|mehr|weniger|meer|minder|mas|menos|flere|faerre|wiecej|mniej|"
+    comparative_which = which and re.search(r"\b(bigger|larger|greater|smaller|grosser|groesser|kleiner|groter|"
+                                            r"kleiner|storre|mindre|mayor|menor)\b", t)
+    if comparative_which:
+        it.op = "argmin" if re.search(r"\b(smaller|kleiner|mindre|menor)\b", t) else "argmax"
+    elif _has(t, _DIFF) or re.search(r"\b(more|fewer|less|mehr|weniger|meer|minder|mas|menos|flere|faerre|wiecej|mniej|"
                                    r"mai multe|plus|moins|piu|meno)\b.{1,40}\b(than|als|dan|que|end|niz|decat|di)\b", t):
         it.op = "diff"
         it.yes_no = bool(re.match(r"\s*(are|is|do|does|gibt|sind|hay|er|zijn|kas|czy|sunt|y a)\b", t))
@@ -272,6 +278,8 @@ def parse(question: str) -> Intent:
         it.op = "argmin" if which else "min"
     elif _has(t, _SUM) or len(it.kinds) > 1:
         it.op = "sum"
+    if it.op == "diff" and metric == "text" and len(_kind_hits(t)) >= 2:
+        metric = it.metric = "count"  # "Are there more doors than windows on X?"
     if it.op == "diff" and metric == "count" and len(it.kinds) < 2:
         hs = [h[2] for h in _kind_hits(_FLOOR_AREA.sub(" ", t) if floor_area else t) if h[2] != "storey"]
         if len(hs) >= 2:
