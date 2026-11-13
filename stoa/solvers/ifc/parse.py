@@ -41,8 +41,67 @@ KIND_CLASSES: dict[str, tuple[str, ...]] = {
     "pipe": ("IfcPipeSegment",), "air_terminal": ("IfcAirTerminal",), "outlet": ("IfcOutlet",),
     "switch": ("IfcSwitchingDevice",), "valve": ("IfcValve",), "damper": ("IfcDamper",), "pump": ("IfcPump",),
     "cable": ("IfcCableSegment", "IfcCableCarrierSegment"), "fire_terminal": ("IfcFireSuppressionTerminal",),
+    "pipe_accessory": ("IfcPipeAccessory",), "duct_accessory": ("IfcDuctAccessory",),
+    "meter": ("IfcFlowMeter", "IfcFlowInstrument", "IfcSensor"), "junction_box": ("IfcJunctionBox",),
+    "alarm": ("IfcAlarm",), "appliance": ("IfcElectricAppliance",),
+    "cable_fitting": ("IfcCableCarrierFitting", "IfcCableFitting"),
     "storey": ("IfcBuildingStorey",),
 }
+
+# When a kind's own classes are empty in a model: IFC2X3 has no IfcPipeAccessory/IfcDuctAccessory (Revit exports
+# them as flow controllers typed as valves / dampers / terminal boxes), roofs are often slabs typed ROOF.
+FALLBACK_CLASSES: dict[str, tuple[str, ...]] = {
+    "pipe_accessory": ("IfcValve",), "duct_accessory": ("IfcDamper", "IfcAirTerminalBox"),
+}
+# Words to look for in proxy/generic element names when a kind has no elements of its classes at all
+# ("Lighting Switches:Three Way" is an IfcBuildingElementProxy in Revit exports without an MEP mapping).
+NAME_FALLBACK: dict[str, tuple[str, ...]] = {
+    "switch": ("switch", "schalter", "schakelaar"), "outlet": ("receptacle", "outlet", "socket", "steckdose"),
+    "sanitary": ("toilet", "urinal", "sink", "lavatory", "basin", "wc"), "light": ("light", "lamp", "luminaire"),
+    "window": ("window", "fenster", "raam"), "door": ("door", "tuer", "deur"), "meter": ("meter", "sensor"),
+    "alarm": ("alarm", "detector", "melder"), "pump": ("pump",), "valve": ("valve",),
+}
+
+# material filter ("concrete used in slabs", "steel beams"): family -> stems matched in material/type/element names
+MATERIALS: dict[str, tuple[str, ...]] = {
+    "concrete": ("concrete", "beton", "betong", "hormigon", "calcestruzzo", "betoni", "reinforced c", "c20/", "c25/",
+                 "c30/", "c35/", "c40/", "c45/"),
+    "steel": ("steel", "staal", "stalen", "stahl", "acier", "acero", "acciaio", "teras", "s235", "s275", "s355"),
+    "timber": ("timber", "wood", "hout", "holz", "bois", "madera", "legno", "naaldhout", "multiplex", "glulam"),
+    "insulation": ("insulation", "isolatie", "isolier", "daemm", "dammung", "isolation", "aislamiento", "isolamento",
+                   "eriste", "mineral wool", "rigid insulation"),
+    "brick": ("brick", "baksteen", "ziegel", "brique", "ladrillo", "mattone", "tiili", "kalkzandsteen",
+              "kalksandstein", "masonry", "metselwerk", "mauerwerk", "cmu"),
+    "gypsum": ("gypsum", "gips", "gyproc", "plaster", "platre", "yeso", "drywall"),
+    "glass": ("glass", "glas", "verre", "vidrio", "vetro", "lasi"),
+    "aluminium": ("aluminium", "aluminum"),
+}
+_STEEL_PROFILE = re.compile(r"(?<![a-z])(hea|heb|hem|ipe|upn|unp|shs|rhs|chs)[ _-]?\d")
+
+
+def material_match(family: str, texts: list[str]) -> bool:
+    """Does any of the element's material / type / name strings belong to the material family (word-start match)?"""
+    t = " ".join(fold(x) for x in texts if x)
+    if family == "steel" and _STEEL_PROFILE.search(t):
+        return True
+    return any(re.search(r"(?<![a-z])" + re.escape(st), t) for st in MATERIALS.get(family, ()))
+
+
+# the question words that ask for the material filter (subset of the stems: short codes like 'hea' are not words)
+_MATERIAL_Q = re.compile(r"\b(concrete|beton\w*|hormigon|calcestruzzo|steel|staal|stahl|acier|acero|acciaio|teras|"
+                         r"timber|wood(en)?|hout|holz|bois|madera|legno|insulation|insulated|isolatie|isolier\w*|"
+                         r"daemm\w*|dammung|brick|baksteen|ziegel|masonry|metselwerk|mauerwerk|gypsum|gips|"
+                         r"plasterboard|drywall|glass|glazed|glas|aluminium|aluminum)\b")
+_MATERIAL_OF = {w: fam for fam, ws in {
+    "concrete": ("concrete", "beton", "hormigon", "calcestruzzo"), "steel": ("steel", "staal", "stahl", "acier",
+    "acero", "acciaio", "teras"), "timber": ("timber", "wood", "hout", "holz", "bois", "madera", "legno"),
+    "insulation": ("insulat", "isolatie", "isolier", "daemm", "dammung"), "brick": ("brick", "baksteen", "ziegel",
+    "masonry", "metselwerk", "mauerwerk"), "gypsum": ("gypsum", "gips", "plasterboard", "drywall"),
+    "glass": ("glass", "glazed", "glas"), "aluminium": ("alumin",)}.items() for w in ws}
+
+
+def material_family(word: str) -> str | None:
+    return next((fam for stem, fam in _MATERIAL_OF.items() if word.startswith(stem)), None)
 
 # multilingual stems (matched at word starts on accent-folded lowercase text)
 _LEX: list[tuple[str, tuple[str, ...]]] = [
@@ -50,6 +109,14 @@ _LEX: list[tuple[str, tuple[str, ...]]] = [
                   "aparato sanitario", "sanitair", "sanitet", "sanitar", "toilets and", "wc and")),
     ("light", ("light fixture", "lighting fixture", "luminaire", "leuchte", "luminaria", "lamp", "armatur",
                "verlichtingsarmatu", "valgusti", "oprawy oswietl", "corpuri de iluminat")),
+    ("pipe_accessory", ("pipe accessor", "plumbing accessor", "leidingtoebehoren", "rohrzubehor")),
+    ("duct_accessory", ("duct accessor", "kanaaltoebehoren", "luftkanalzubehor")),
+    ("meter", ("measuring equipment", "measuring device", "measurement device", "measuring instrument", "flow meter",
+               "energy meter", "water meter", "heat meter", "flowmeter", "sensor", "messgerat", "meetapparat")),
+    ("junction_box", ("junction box", "aansluitdoos", "abzweigdose", "lasdoos")),
+    ("cable_fitting", ("cable carrier fitting", "cable tray fitting", "conduit fitting", "cable fitting")),
+    ("alarm", ("alarm", "smoke detector", "rookmelder", "brandmelder")),
+    ("appliance", ("electric appliance", "electrical appliance", "appliance")),
     ("duct_fitting", ("duct fitting", "luftkanalformteil", "formstuck", "kanaalhulpstuk")),
     ("pipe_fitting", ("pipe fitting", "rohrformteil", "fitting")),
     ("air_terminal", ("air terminal", "diffuser", "grille", "luftauslass", "luchtrooster")),
@@ -138,6 +205,8 @@ _INTERNAL = re.compile(r"\b(internal|interior|inner|inside|innen\w*|inneren|binn
                        r"sise\w*|wewnetrzn\w*|interieur\w*|intern\w*|sisa\w*|inre)\b")
 _LOADBEARING = re.compile(r"\b(load[- ]?bearing|structural|tragend\w*|dragend\w*|portant\w*|baerende|kandev\w*|nosn\w*|"
                           r"kantav\w*|barande)\b")
+_NONLOADBEARING = re.compile(r"\b(non|not|nicht|niet|no|non ?-)[- ]?(load[- ]?bearing|structural|tragend\w*|dragend\w*|"
+                             r"portant\w*)|\bnichttragend\w*|\bniet-?dragend\w*|\bnonstructural\b")
 _ELEVATION = re.compile(r"\b(elevation|hohenkote|hoehenkote|hohe uber|peil|cota|kote|niveau|altitude|absolute height)\b")
 _HEIGHT = re.compile(r"\b(height|high|hohe|hoehe|hoch|hoogte|altura|hojde|korgus|wysokosc|inaltime|hauteur|altezza|"
                      r"korkeus|hojd)\b")
@@ -191,6 +260,7 @@ class Intent:
     asked_unit: str | None = None  # unit the question asks for (m2, ft2, m3, m, ft, ...)
     kinds: list[str] = field(default_factory=list)  # coordinated kinds ("doors and windows") -> summed
     filters: dict[str, bool] = field(default_factory=dict)  # {"IsExternal": True, "LoadBearing": True}
+    material: str | None = None  # material family filter ("concrete", "steel", ...; see MATERIALS)
     attr: str | None = None  # storey attribute asked: "elevation" | "height"
     group_by: str | None = None  # "type" | "storey": answer with a breakdown (text) besides the total
     top_n: bool = False  # "which rooms are the largest" without names -> list the top rooms
@@ -383,8 +453,13 @@ def parse(question: str) -> Intent:
         it.filters["IsExternal"] = True
     elif _INTERNAL.search(t):
         it.filters["IsExternal"] = False
-    if _LOADBEARING.search(t):
+    if _NONLOADBEARING.search(t):
+        it.filters["LoadBearing"] = False
+    elif _LOADBEARING.search(t):
         it.filters["LoadBearing"] = True
+    mm = _MATERIAL_Q.search(t)
+    if mm and kind not in (None, "space", "storey") and metric in ("count", "area", "volume", "length"):
+        it.material = material_family(mm.group(1))
     if kind == "storey" or (kind is None and names and (_ELEVATION.search(t) or _HEIGHT.search(t))):
         if _ELEVATION.search(t):
             it.metric, it.kind, it.attr = "length", "storey", "elevation"

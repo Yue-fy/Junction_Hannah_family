@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import re
 import time
+from collections import Counter
 from pathlib import Path
 
 from stoa.contract import Answer, Evidence
@@ -26,7 +27,9 @@ from stoa.data import abspath, siblings, source_of
 from stoa.solvers import register
 from stoa.solvers.base import BaseSolver
 from stoa.solvers.ifc.index import Element, IfcIndex, Storey, load_index
-from stoa.solvers.ifc.parse import KIND_CLASSES, Intent, fold, parse, storey_mention, wants_list
+from stoa.solvers.ifc.index import strip_id, type_key_fn as _type_key_fn
+from stoa.solvers.ifc.parse import (_MATERIAL_Q, FALLBACK_CLASSES, KIND_CLASSES, NAME_FALLBACK, Intent, fold,
+                                   material_family, material_match, parse, storey_mention, wants_list)
 from stoa.solvers.ifc.resolve import match_model, match_space, match_storey, norm
 
 # share of storey totals within 2% when computed from geometry only (no Qto), measured on train+dev
@@ -43,6 +46,21 @@ _OPERATOR_WORD = re.compile(r"\b(exceed\w*|surpass\w*|average|mean|median|ratio|
                             r"porcentaje|pourcentage|anteil)\b|%")
 
 # quantity key suffixes, in order of preference, per (metric, kind)
+_DIM_WORD = re.compile(r"\b(widths?|wide|wider|widest|narrower|narrowest|broader|taller|thicker|thinner|breite\w*|breedte\w*|largeur\w*|ancho\w*|larghezza|"
+                       r"heights?|tall\w*|hoehe|hohe|hoogte\w*|hauteur\w*|altura\w*|altezza|"
+                       r"thickness\w*|thick|thickest|thinnest|dicke\w*|dikte\w*|epaisseur\w*|espesor\w*|spessore\w*)\b")
+_DIM_THRESHOLD = re.compile(
+    r"(?P<cmp>wider|broader|taller|higher|thicker|longer|larger|bigger|greater|more|over|above|exceed\w*|at least|"
+    r"minimum|narrower|smaller|thinner|shorter|lower|less|under|below|at most|breiter|hoher|hoeher|dicker|grosser|"
+    r"groesser|mehr|uber|ueber|mindestens|schmaler|kleiner|dunner|duenner|weniger|breder|hoger|dikker|groter|meer|"
+    r"minstens|smaller|lager|dunner|minder|plus|moins)\b[^0-9]{0,25}?(?P<num>\d+(?:[.,]\d+)?)\s*(?P<unit>mm|cm|m)?\b")
+_FOUNDATION_NAME = re.compile(r"(?<![a-z])(foundation|footing|fundament|fundering|fundbalk|fundatie|pad[: ]|pile|"
+                              r"strip footing|grondbalk|poer)")
+_GENERIC_CLASSES = {"IfcBuildingElementProxy", "IfcFlowTerminal", "IfcFlowController", "IfcFlowFitting",
+                    "IfcFlowSegment", "IfcDistributionControlElement", "IfcDistributionFlowElement",
+                    "IfcEnergyConversionDevice", "IfcFlowMovingDevice", "IfcFlowStorageDevice",
+                    "IfcFlowTreatmentDevice", "IfcFurnishingElement", "IfcDistributionElement"}
+
 QTO_KEYS = {
     ("volume", "net"): ("Quantities.NetVolume", ".NetVolume"),
     ("volume", "gross"): ("Quantities.GrossVolume", ".GrossVolume"),
@@ -216,6 +234,10 @@ class IfcSolver(BaseSolver):
                     ans.confidence = min(ans.confidence, 0.3)
                     ans.missing.append(f"the question excludes something the rules can't apply ({note[23:]}); "
                                        "the value ignores the exclusion")
+        if ctx.get("material_unknown") and ans.value is not None:
+            ans.confidence = min(ans.confidence, 0.3)
+        if ans.value is not None and any("proxy/generic elements named like" in x for x in ans.trace):
+            ans.confidence = min(ans.confidence, 0.6)  # counted by name, not by class: names can over/under-match
         llm_on = str(self.options.get("llm", "1")) != "0"
         if ans.value is None and llm_on and not any("error:" in t for t in ans.trace):
             ans = self._llm_fallback(model, idx, question, it, ans, storey=ctx.get("storey"))
@@ -321,6 +343,10 @@ class IfcSolver(BaseSolver):
     def _answer(self, path: str, model: str, idx: IfcIndex, it: Intent, trace: list[str], ctx: dict) -> Answer:
         assumptions: list[str] = []
         missing: list[str] = []
+        if ctx.get("compose", True) and not it.names:
+            dim = self._dims_answer(model, idx, it, trace, ctx)
+            if dim is not None:
+                return dim
         if it.metric == "text":
             if it.kind is not None and it.names:
                 it.metric = "count"  # "Count the walls on storey X." style imperatives without a count word
@@ -441,11 +467,59 @@ class IfcSolver(BaseSolver):
                                   missing=[f"IfcSpaces named {it.names}"])
 
         where = "whole model" if (it.scope == "model" or storey is None) else f"storey '{sname}'"
+        if (it.kind == "space" or "space" in it.kinds) and not idx.by_class("IfcSpace"):
+            # rooms are not modelled (e.g. ResBIM: walls/doors/windows only): 0 rooms / 0 m² is never a sensible
+            # estimate; let the cascade read the drawing instead
+            return Answer.abstain(self.name, "the model has no IfcSpace (rooms are not modelled)", trace=trace,
+                                  missing=["rooms (IfcSpace) in the IFC model; read them from the drawing"])
 
         def elements_of(kind: str) -> list[Element]:
             classes = KIND_CLASSES.get(kind, ())
             els = idx.by_class(*classes) if where == "whole model" else idx.in_storey(storey.guid, *classes)
             trace.append(f"{len(els)} elements of {'/'.join(classes)} in {where}")
+            if not els and not idx.by_class(*classes):  # the model has none of this class at all
+                els = self._kind_fallback(idx, kind, storey if where != "whole model" else None, trace, assumptions)
+            if kind == "slab" and re.search(r"\bfloor[- ]?slabs?\b|\bfloors? (slab|plate)", fold(ctx.get("question", ""))):
+                keep = [e for e in els if (e.predefined_type or "").upper() not in ("ROOF", "LANDING", "BASESLAB")
+                        and not _FOUNDATION_NAME.search(fold(f"{e.name or ''} {e.type_name or ''} {e.object_type or ''}"))]
+                if len(keep) < len(els):
+                    trace.append(f"floor slabs: dropped {len(els) - len(keep)} roof/landing/foundation slabs "
+                                 "(PredefinedType or 'pad/foundation' in the name)")
+                    assumptions.append("floor slabs exclude roof slabs, stair landings and foundation pads")
+                    els = keep
+            if it.material == "concrete" and kind == "footing" and els:
+                assumptions.append("foundations taken as concrete (the usual case; their material is not checked)")
+            elif it.material and els:
+                def names_of(e: Element) -> list[str]:
+                    return [e.type_name or "", e.object_type or "", e.name or ""]
+                by_name = [e for e in els if material_match(it.material, names_of(e))]
+                by_layer = [e for e in els if material_match(it.material, list(e.materials or []))]
+                if by_name:
+                    trace.append(f"material '{it.material}': {len(by_name)} of {len(els)} elements name it in their "
+                                 f"type/name ({len(by_layer)} have a layer of it)")
+                    assumptions.append(f"{it.material} {kind}s = elements whose type or name says {it.material} "
+                                       "(a layer of it inside a composite element is not counted)")
+                    els = by_name
+                elif by_layer:
+                    fr = {}
+                    for e in by_layer:
+                        tot_t = sum(th for _, th in (e.layers or []))
+                        if tot_t > 0:
+                            fr[e.guid] = sum(th for nm, th in e.layers if material_match(it.material, [nm])) / tot_t
+                    trace.append(f"material '{it.material}': {len(by_layer)} of {len(els)} elements have a layer of it"
+                                 + (f"; {len(fr)} with layer thicknesses" if fr else ""))
+                    if fr and it.metric == "volume":
+                        ctx["layer_frac"] = fr
+                        assumptions.append(f"{it.material} volume = element volume x ({it.material} layer thickness / "
+                                           "total layer thickness), per element")
+                    else:
+                        assumptions.append(f"{it.material} {kind}s = elements with a {it.material} material layer; "
+                                           "the whole element quantity is counted, not just that layer")
+                    els = by_layer
+                else:
+                    trace.append(f"material '{it.material}': no {kind} names it in a material, type or name; kept all")
+                    missing.append(f"which {kind}s are {it.material}: no material, type or name says so")
+                    ctx["material_unknown"] = True
             for prop, want in it.filters.items():
                 vals = [(e, next((v for k, v in e.props.items() if k.endswith("." + prop)), None)) for e in els]
                 unknown = sum(1 for _, v in vals if v is None)
@@ -483,6 +557,9 @@ class IfcSolver(BaseSolver):
             if len(kinds) > 1:
                 trace.append("sum: " + " + ".join(f"{k} {len(per[k])}" for k in kinds))
             conf_c = conf * (0.97 if n else 0.6)
+            if n == 0 and not any(idx.by_class(*KIND_CLASSES.get(k, ())) for k in kinds):
+                conf_c = min(conf_c, 0.3)  # the model has none of this class at all: maybe not modelled
+                missing.append("the model has no element of this class anywhere; it may not be modelled")
             return self._final(n, "count", it, conf_c, ev, trace, assumptions, missing)
 
         els = elements_of(it.kind)
@@ -541,6 +618,8 @@ class IfcSolver(BaseSolver):
             else:
                 n_none += 1
                 continue
+            if ctx.get("layer_frac") and e.guid in ctx["layer_frac"]:
+                v *= ctx["layer_frac"][e.guid]
             tot += v
             ev.append(self._ev(model, e, f"{e.eff_cls} {e.name or ''} {label} {v:.3f}"))
         src = f"Qto {keys[0].split('.')[-1]}"
@@ -738,41 +817,242 @@ class IfcSolver(BaseSolver):
                       missing=list(refusal.missing))
 
     # ------------------------------------------------------------------------------------------------
+    def _dims_answer(self, model: str, idx: IfcIndex, it: Intent, trace: list[str], ctx: dict) -> Answer | None:
+        """Door/window width or height (IfcDoor/IfcWindow OverallWidth/OverallHeight) and wall/slab thickness
+        (sum of the material layer thicknesses): largest / smallest (+ which type) / average / distribution."""
+        q = fold(ctx.get("question", ""))
+        m = _DIM_WORD.search(q)
+        if not m or it.kind not in ("door", "window", "wall", "slab", "roof", "covering"):
+            return None
+        word = m.group(1)
+        attr = ("thickness" if re.match(r"thick|thin|dick|dikte|epaisseur|espesor|spessore|paksuus|tjock", word)
+                else "OverallHeight" if re.match(r"heigh|tall|hoh|hoeh|hoogte|haut|alt|korkeus|hojd", word)
+                else "OverallWidth")
+        if attr == "thickness" and it.kind in ("door", "window"):
+            return None
+        if attr != "thickness" and it.kind not in ("door", "window"):
+            return None
+        assumptions: list[str] = []
+        missing: list[str] = []
+        i, _ = storey_mention(ctx.get("question", ""), [s.name for s in idx.storeys])
+        storey = idx.storeys[i] if i is not None else None
+        els = idx.by_class(*KIND_CLASSES[it.kind])
+        if storey is not None:
+            els = [e for e in els if e.storey == storey.guid]
+        where = f"on '{storey.name}'" if storey is not None else "in the model"
+        for prop, want in it.filters.items():
+            els = [e for e in els if next((v for k, v in e.props.items() if k.endswith("." + prop)), None) is not None
+                   and bool(next(v for k, v in e.props.items() if k.endswith("." + prop))) == want]
+            assumptions.append(f"{prop}={want} from Pset_*Common.{prop}")
+        tk = _type_key_fn(els)
+        layer_fam = None
+        if attr == "thickness":
+            mq = _MATERIAL_Q.search(q)
+            layer_fam = it.material or (material_family(mq.group(1)) if mq else None)
+
+        def value(e: Element) -> float | None:
+            if attr == "thickness":
+                if not e.layers:
+                    w = next((v for k, v in e.qto.items() if k.endswith(".Width")), None)
+                    return w if (w and not layer_fam) else None
+                if layer_fam:
+                    t = sum(th for nm, th in e.layers if material_match(layer_fam, [nm]))
+                    return t or None
+                return sum(th for _, th in e.layers) or None
+            return (e.dims or {}).get(attr)
+
+        vals = [(value(e), e) for e in els]
+        vals = [(v, e) for v, e in vals if v is not None and v > 0]
+        what = {"OverallWidth": "width", "OverallHeight": "height", "thickness": "thickness"}[attr]
+        whats = what + ("es" if what.endswith("s") else "s")
+
+        def label(e: Element) -> str:  # type key, plus the shared element name when it says something else
+            t, nm = tk(e), strip_id(e.name)
+            return f"{t} / {nm}" if nm and nm != t and nm not in t and t not in nm else t
+        noun = it.kind.replace("_", " ")
+        src = ("IfcDoor/IfcWindow Overall" + ("Width" if attr == "OverallWidth" else "Height")) if attr != "thickness" \
+            else ("thickness of the " + layer_fam + " layer(s)" if layer_fam else "sum of the material layer thicknesses")
+        trace.append(f"dimension question: {noun} {what} from {src}; {len(vals)} of {len(els)} {noun}s {where} have it")
+        assumptions.append(f"{what} = {src}")
+        if not vals:
+            return Answer.abstain(self.name, f"no {noun} {what} in the model", trace=trace,
+                                  missing=[f"{noun} {what} ({src})"])
+        conf = 0.9 * (0.7 if len(vals) < 0.8 * len(els) else 1.0)
+        if len(vals) < len(els):
+            missing.append(f"{len(els) - len(vals)} {noun}s have no {what}")
+        ev_all = [self._ev(model, e, f"{tk(e)} {what} {v * 1000:.0f} mm") for v, e in vals][:MAX_EVIDENCE]
+        mm = lambda v: f"{v * 1000:.0f} mm"  # noqa: E731
+        asks_type = bool(re.search(r"\b(type|types|which|what kind|family)\b", q))
+        thr = _DIM_THRESHOLD.search(q)
+        if thr and (it.metric == "count" or re.search(r"\b(how many|number of|count|wie viele|hoeveel|combien)\b", q)):
+            num = float(thr.group("num").replace(",", "."))
+            u = thr.group("unit") or ""
+            lim = num / 1000 if u == "mm" or (not u and num > 20) else num / 100 if u == "cm" else num
+            gt = not re.match(r"(narrow|small|less|under|below|thinn|short|lower|schmal|klein|wenig|minder|smal|"
+                              r"moins|meno|menos|at most|no more)", thr.group("cmp"))
+            ge = bool(re.match(r"(at least|minimum|min\.?|mindestens|minstens|au moins|no less)", thr.group("cmp")))
+            hit = [(v, e) for v, e in vals if ((v > lim + 5e-4) or (ge and abs(v - lim) <= 5e-4))] if gt else \
+                [(v, e) for v, e in vals if (v < lim - 5e-4)]
+            trace.append(f"threshold: {what} {'>=' if ge else '>' if gt else '<'} {lim:.3f} m -> {len(hit)} of "
+                         f"{len(vals)} {noun}s")
+            ev = [self._ev(model, e, f"{label(e)} {what} {mm(v)}") for v, e in hit][:MAX_EVIDENCE]
+            return self._final(len(hit), "count", it, conf * 0.95, ev, trace, assumptions, missing)
+        if re.search(r"\b(average|mean|typical|durchschnitt\w*|gemiddeld\w*|moyenne|media|promedio)\b", q):
+            avg = sum(v for v, _ in vals) / len(vals)
+            trace.append(f"average over {len(vals)}: {avg:.4f} m")
+            return self._final(avg, "m", it, conf * 0.95, ev_all, trace, assumptions, missing)
+        op = ("max" if re.search(r"\b(largest|widest|biggest|maximum|max|tallest|highest|thickest|greatest|largest)\b", q)
+              else "min" if re.search(r"\b(smallest|narrowest|minimum|min|lowest|shortest|thinnest|least)\b", q)
+              else None)
+        if op:
+            v0 = (max if op == "max" else min)(v for v, _ in vals)
+            hit = [e for v, e in vals if abs(v - v0) < 5e-4]
+            types = Counter(label(e) for e in hit)
+            trace.append(f"{op} {what}: {v0:.4f} m on {len(hit)} {noun}s; types {dict(types.most_common(4))}")
+            ev = [self._ev(model, e, f"{tk(e)} {what} {mm(v0)}") for e in hit][:200]
+            if not asks_type:
+                return self._final(v0, "m", it, conf, ev, trace, assumptions, missing)
+            label = {"max": "Largest", "min": "Smallest"}[op]
+            lines = [f"{label} {noun} {what} {where}: {mm(v0)} ({v0:.3f} m)",
+                     f"{noun.capitalize()} type{'s' if len(types) > 1 else ''} with this {what}: "
+                     + "; ".join(f"{t} ({n} {noun}{'s' if n > 1 else ''})" for t, n in types.most_common(5))]
+            return Answer(value="\n".join(lines), unit=None, confidence=conf, evidence=ev, trace=trace,
+                          solver=self.name, assumptions=assumptions, missing=missing)
+        if re.search(r"\btypes?\b", q):  # "wall types and their thicknesses": one line per type
+            per: dict[str, list[float]] = {}
+            for v, e in vals:
+                per.setdefault(label(e), []).append(v)
+            lines = [f"{noun.capitalize()} types {where} with their {what} ({len(per)} types, {len(vals)} {noun}s; {src}):"]
+            for t, vs in sorted(per.items(), key=lambda x: (-max(x[1]), x[0]))[:60]:
+                lo, hi = min(vs), max(vs)
+                rng = mm(lo) if abs(hi - lo) < 5e-4 else f"{lo * 1000:.0f}-{hi * 1000:.0f} mm"
+                lines.append(f"- {t}: {rng} ({len(vs)} {noun}{'s' if len(vs) > 1 else ''})")
+            if len(per) > 60:
+                lines.append(f"- ... {len(per) - 60} more types")
+            return Answer(value="\n".join(lines), unit=None, confidence=conf * 0.85, evidence=ev_all, trace=trace,
+                          solver=self.name, assumptions=assumptions, missing=missing)
+        # distribution: "different wall thicknesses and how many walls have each"
+        dist = Counter(round(v * 1000) for v, _ in vals)
+        by_t: dict[int, Counter] = {}
+        for v, e in vals:
+            by_t.setdefault(round(v * 1000), Counter())[tk(e)] += 1
+        lines = [f"{noun.capitalize()} {whats} {where} ({len(vals)} {noun}s, {len(dist)} distinct values; {src}):"]
+        for t_mm, n in sorted(dist.items(), key=lambda x: -x[0])[:30]:
+            tps = by_t[t_mm]
+            lines.append(f"- {t_mm} mm: {n} {noun}{'s' if n > 1 else ''}"
+                         + (f" ({'; '.join(f'{t} x{c}' for t, c in tps.most_common(3))})" if asks_type or len(tps) <= 3 else ""))
+        if len(dist) > 30:
+            lines.append(f"- ... {len(dist) - 30} more values")
+        return Answer(value="\n".join(lines), unit=None, confidence=conf * 0.85, evidence=ev_all, trace=trace,
+                      solver=self.name, assumptions=assumptions, missing=missing)
+
+    # ------------------------------------------------------------------------------------------------
+    @staticmethod
+    def _kind_fallback(idx: IfcIndex, kind: str, storey: Storey | None, trace: list[str],
+                       assumptions: list[str]) -> list[Element]:
+        """The model has no element of the kind's classes: try where exporters usually put them instead."""
+        def scoped(els: list[Element]) -> list[Element]:
+            return [e for e in els if storey is None or e.storey == storey.guid]
+
+        fb = FALLBACK_CLASSES.get(kind)
+        if fb and idx.by_class(*fb):
+            els = scoped(idx.by_class(*fb))
+            trace.append(f"no {'/'.join(KIND_CLASSES.get(kind, ()))} in the model; {kind} -> {'/'.join(fb)}: {len(els)}")
+            assumptions.append(f"{kind.replace('_', ' ')}s = {'/'.join(fb)} (the model has no "
+                               f"{'/'.join(KIND_CLASSES.get(kind, ()))}; IFC2X3 exports them so)")
+            return els
+        if kind == "roof":
+            els = scoped([e for e in idx.by_class("IfcSlab", "IfcCovering")
+                          if (e.predefined_type or "").upper() in ("ROOF", "ROOFING")])
+            if els:
+                trace.append(f"no IfcRoof; slabs/coverings typed ROOF/ROOFING: {len(els)}")
+                assumptions.append("roof = IfcSlab ROOF / IfcCovering ROOFING (the model has no IfcRoof)")
+                return els
+        if kind == "footing":
+            els = scoped([e for e in idx.by_class("IfcSlab", "IfcWall", "IfcWallStandardCase", "IfcBeam", "IfcPile",
+                                                   "IfcBuildingElementProxy")
+                          if (e.predefined_type or "").upper() == "BASESLAB" or _FOUNDATION_NAME.search(
+                              fold(f"{e.name or ''} {e.type_name or ''} {e.object_type or ''}"))])
+            if els:
+                trace.append(f"no IfcFooting; elements named/typed as foundation: {len(els)}")
+                assumptions.append("foundation = elements typed BASESLAB or named foundation/footing/pad (no IfcFooting)")
+                return els
+        words = NAME_FALLBACK.get(kind)
+        if words:
+            pat = re.compile(r"(?<![a-z])(" + "|".join(re.escape(w) for w in words) + ")")
+            pool = [e for e in idx.elements.values() if e.cls in _GENERIC_CLASSES]
+            els = scoped([e for e in pool if pat.search(fold(f"{e.name or ''} {e.type_name or ''} {e.object_type or ''}"))])
+            if els:
+                trace.append(f"no {'/'.join(KIND_CLASSES.get(kind, ()))} in the model; {len(els)} proxy/generic "
+                             f"elements named like '{words[0]}'")
+                assumptions.append(f"{kind}s = proxy/generic elements whose name says '{words[0]}' (the model has no "
+                                   f"{'/'.join(KIND_CLASSES.get(kind, ()))})")
+            return els
+        return []
+
+    # ------------------------------------------------------------------------------------------------
     def _breakdown(self, idx: IfcIndex, it: Intent, els: list[Element], value_of, ev, trace, assumptions, missing,
                    conf: float, where: str, unit: str | None = None) -> Answer:
         """Text answer: total + breakdown by type name or by storey (IFC-Bench style)."""
         groups: dict[str, list[float]] = {}
+        members: dict[str, list[Element]] = {}
+        type_key = _type_key_fn(els)
         for e in els:
             if it.group_by == "storey":
                 key = idx.storey(e.storey).name if e.storey and idx.storey(e.storey) else "(no storey)"
             else:
-                key = e.type_name or e.object_type or e.name or "(untyped)"
+                key = type_key(e)
             v = 1.0 if value_of is None else (value_of(e) or 0.0)
             groups.setdefault(key, []).append(v)
+            members.setdefault(key, []).append(e)
         if it.group_by == "type" and len(groups) > 3 and sum(len(v) == 1 for v in groups.values()) > len(groups) / 2:
             merged: dict[str, list[float]] = {}
+            merged_m: dict[str, list[Element]] = {}
             for k, v in groups.items():  # per-instance names 'EG-Treppe-01'..'-10' -> 'EG-Treppe'
-                merged.setdefault(re.sub(r"[\s\-_.:]*\d+$", "", k) or k, []).extend(v)
+                k2 = re.sub(r"[\s\-_.:]*\d+$", "", k) or k
+                merged.setdefault(k2, []).extend(v)
+                merged_m.setdefault(k2, []).extend(members[k])
             trace.append(f"type names look per-instance ({len(groups)} groups); merged numbering -> {len(merged)}")
-            groups = merged
+            groups, members = merged, merged_m
         total = sum(sum(v) for v in groups.values())
         noun = (it.kinds[0] if it.kinds else it.kind or "element").replace("_", " ")
+        plural = (noun[:-1] + "ies" if noun.endswith("y") and noun[-2:-1] not in "aeiou"
+                  else noun + "es" if noun.endswith(("s", "x", "ch", "sh")) else noun + "s")
         fmt = (lambda x: f"{int(round(x))}") if value_of is None else (lambda x: f"{x:.2f} {unit or ''}".strip())
         if it.group_by == "storey":
             order = [s.name for s in idx.storeys if s.name in groups] + [k for k in groups if k not in
                                                                         {s.name for s in idx.storeys}]
         else:
             order = sorted(groups, key=lambda k: -sum(groups[k]))
-        lines = [f"Total {noun}s ({where}): {fmt(total)}", f"By {'storey' if it.group_by == 'storey' else 'type'}:"]
+        lines = [f"Total {plural} ({where}): {fmt(total)}", f"By {'storey' if it.group_by == 'storey' else 'type'}:"]
+        q = fold(it.question or "")
+        want_mat = bool(re.search(r"\bmaterials?\b|made of|composition|composed|layers?\b|build[- ]?up|materia\w*|"
+                                  r"werkstoff|baustoff", q))
+        list_rooms = (it.kind == "space" and value_of is not None and len(els) <= 60)
         for k in order[:25]:
             sub = sum(groups[k])
             share = f" ({sub / total * 100:.1f}%)" if total else ""
             cnt = f", {len(groups[k])} elements" if value_of is not None else ""
             lines.append(f"- {k}: {fmt(sub)}{share}{cnt}")
+            if want_mat:
+                combos = Counter(tuple(m for m in (e.materials or []) if m and m.strip() and "<unnamed>" not in m.lower())
+                                 for e in members[k])
+                best = next((c for c, _ in combos.most_common() if c), None)
+                if best:
+                    lines.append("    materials: " + ", ".join(best))
+            if list_rooms:
+                for e in sorted(members[k], key=lambda e: -(value_of(e) or 0.0)):
+                    nm = e.long_name or e.name or "(unnamed)"
+                    lab = f"{nm} ({e.name})" if e.long_name and e.name and e.name != e.long_name else nm
+                    lines.append(f"    - {lab}: {fmt(value_of(e) or 0.0)}")
         if len(order) > 25:
             lines.append(f"- ... {len(order) - 25} more groups")
+        if want_mat:
+            uniq = sorted({m for e in els for m in (e.materials or []) if m and m.strip() and "<unnamed>" not in m.lower()})
+            if uniq:
+                lines.append(f"Unique materials ({len(uniq)}): " + ", ".join(uniq[:40]) + (" ..." if len(uniq) > 40 else ""))
         trace.append(f"breakdown by {it.group_by}: {len(groups)} groups")
-        assumptions.append("type = the element's IfcTypeObject name (else ObjectType/Name)" if it.group_by == "type"
+        assumptions.append(f"type = {getattr(type_key, 'how', 'type name')}" if it.group_by == "type"
                            else "storey = the element's spatial container")
         return Answer(value="\n".join(lines), unit=None, confidence=conf * 0.85, evidence=ev, trace=trace,
                       solver=self.name, assumptions=assumptions, missing=missing)

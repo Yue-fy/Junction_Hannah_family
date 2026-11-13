@@ -121,3 +121,46 @@ def test_operators_compose_atomic_answers(solver, q, gold):
     else:
         assert a.value == pytest.approx(gold, rel=0.02)
     assert a.evidence and a.confidence >= 0.8
+
+
+ARC4351 = "data/ifc_bench/4351_arc.ifc"
+
+
+@pytest.mark.skipif(not abspath(ARC4351).exists(), reason="4351 not available")
+def test_material_filter_dimensions_and_fallbacks():
+    """IFC-Bench style (own wording): material filters by type name, else by layer share; foundations without
+    IfcFooting; door widths from OverallWidth; switches modelled as proxies; Revit ids stripped from type names."""
+    from stoa.solvers import get_solver
+
+    s = get_solver("ifc", llm="0", plan2d="0")
+    # 4 walls are typed '... Concrete' (name beats the 'Concrete Masonry Units' layer of the brick walls)
+    a = s.solve(ARC4351, "How many cubic metres of concrete are in the walls?")
+    assert a.value == pytest.approx(31.484, rel=0.01)
+    # insulation is one layer of the brick walls: volume x layer share
+    a = s.solve(ARC4351, "Total volume of insulation in the walls?")
+    assert a.value == pytest.approx(81.70, rel=0.01)
+    # no IfcFooting: the pad slab + the foundation walls
+    a = s.solve(ARC4351, "What volume of concrete do the foundations need?")
+    assert a.value == pytest.approx(153.754, rel=0.01)
+    # floor slabs exclude the pad
+    a = s.solve(ARC4351, "Concrete volume of the floor slabs?")
+    assert a.value == pytest.approx(273.91, rel=0.01)
+    a = s.solve(ARC4351, "What is the mean width of the doors?")
+    assert a.value == pytest.approx(0.992, abs=0.002) and a.unit == "m"
+    assert s.solve(ARC4351, "How many doors are narrower than 1 m?").value == 14  # 14 x 914 mm, 3 wider
+    assert s.solve(ARC4351, "How many walls are thicker than 200 mm?").value == 14
+    a = s.solve(ARC4351, "How many light switches does the building have?")
+    assert a.value == 16 and a.confidence <= 0.6  # counted by name: capped
+    a = s.solve(ARC4351, "Which wall types are used, with their quantities and materials?")
+    assert "Basic Wall:Exterior - Brick on CMU: 8" in a.value and ":250" not in a.value
+    assert "Masonry - Brick" in a.value
+    a = s.solve(ARC4351, "Give me the space breakdown of the first floor with the areas of each room")
+    assert "Kitchen" in a.value
+
+
+def test_parse_material_and_negated_loadbearing():
+    assert parse("Volume of steel beams?").material == "steel"
+    assert parse("Volume of beams?").material is None
+    assert parse("How many non-load-bearing walls are there?").filters == {"LoadBearing": False}
+    assert parse("How many load-bearing walls are there?").filters == {"LoadBearing": True}
+    assert parse("What pipe accessories are installed?").kind == "pipe_accessory"
