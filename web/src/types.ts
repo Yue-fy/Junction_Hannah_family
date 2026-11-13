@@ -33,6 +33,21 @@ export interface Answer {
   assumptions?: string[];
   missing?: string[];
   cost?: Cost;
+  // Additive fields from stoa.api /ask (W4, CONTRACT D6): how the question was parsed, the sub-question plan
+  // for compound questions, and whether the answer came from the API's cache.
+  intent?: Intent | null;
+  plan?: { op: string; parts: string[]; sub_questions: string[] } | null;
+  cached?: boolean;
+}
+
+export interface Intent {
+  task: string; // count | area | length | volume | text | …
+  target: string;
+  scope: string; // drawing | storey | model | room | apartment | …
+  unit?: string | null;
+  filters?: Record<string, string | number | boolean | null>;
+  lang?: string;
+  key?: string;
 }
 
 export interface FileInfo {

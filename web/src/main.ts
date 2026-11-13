@@ -414,15 +414,21 @@ async function showAnswer(a: Answer, roundTripMs: number) {
   renderCard($("card"), a, {
     roundTripMs: roundTripMs || (a.cost?.wall_seconds ?? 0) * 1000, onEvidence: focusEvidence,
     describeGuid: (g) => v3d?.describe(g) ?? g, currentFile: state.file?.path ?? "", onOpenSheet: (p) => void openSheet(p),
+    onAsk: (q) => {
+      $<HTMLTextAreaElement>("question").value = q;
+      void runAsk();
+    },
   });
   v2d.setEvidence(a.evidence);
   v2d.frameEvidence();
   const xb = $("xbanner");
-  const xc = crossChecks(a)[0];
+  const xcs = crossChecks(a);
+  const xc = xcs[0];
   xb.hidden = !xc;
   if (xc) {
-    xb.className = `xbanner ${xc.ok ? "ok" : "bad"}`;
-    xb.innerHTML = `<b>${xc.ok ? "✓" : "✗"}</b> ${esc(xc.text)}`;
+    const ok = xcs.every((x) => x.ok);
+    xb.className = `xbanner ${ok ? "ok" : "bad"}`;
+    xb.innerHTML = xcs.map((x) => `<b>${x.ok ? "✓" : "✗"}</b> ${esc(x.text)}`).join(" &nbsp;·&nbsp; ");
   }
   if (state.ifc && a.evidence.some((e) => e.ifc_guid)) {
     if (state.mode === "2d" && !v2d.hasGuid(a.evidence.find((e) => e.ifc_guid)!.ifc_guid!)) setMode("split");
