@@ -86,6 +86,20 @@ def table() -> dict:
     return _TABLE
 
 
+_TEMPLATES: set | None = None
+
+
+def known_template(question: str) -> bool:
+    """True if this question's template (stoa.data.template_of) occurs in the train split."""
+    global _TEMPLATES
+    with _LOCK:
+        if _TEMPLATES is None:
+            from stoa.eval.splits import load_split
+
+            _TEMPLATES = {template_of(q.question) for q in load_split("train")}
+    return template_of(question) in _TEMPLATES
+
+
 def lookup(source: str, intent: Intent, min_n: int = 20) -> PriorAnswer | None:
     t = table()
     for k in (("source+key", source, intent.key), ("key", "", intent.key),
