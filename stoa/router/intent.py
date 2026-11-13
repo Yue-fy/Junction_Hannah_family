@@ -34,6 +34,7 @@ _WHICH = re.compile(r"^\s*(which|what is the (?:name|type|label|use|function)|na
 
 # --- targets: (target, regex), most specific first ------------------------------------------------------
 _T = [
+    ("wc_room", r"separate wc rooms?|toilet rooms?|erillis\w* wc-til|wc-til|wc-r[aä]um|separate toilets?"),
     ("shower_bathtub", r"showers? and (?:bath)?tubs?|suihku\w* ja kylpyamme|duschen und badewannen|bathtubs? and showers?"),
     ("sink", r"sinks? and wash ?basins?|pesu- ja tiskial|wash ?basins? and sinks?|tiskial|sinks?\b|sp[üu]lbecken|[eé]viers?"),
     ("wc", r"toilet bowls?|wc seats?|wc-istui|toilets? \(wc\)|\btoilets?\b|\bwcs?\b|\bwc's\b|klosett|cuvettes?|wc-schalen"),
@@ -44,7 +45,6 @@ _T = [
     ("kitchen", r"kitchens?|kitchenettes?|keitti|k[üu]chen?|cuisines?|cucin[ae]|keuken|k[øo]kken|k[öo]k\b"),
     ("bedroom", r"bedrooms?|makuuhuon|schlafzimmer|chambres? [àa] coucher|camer[ae] da letto|slaapkamer|sovev[æe]relse|sovrum"),
     ("bathroom", r"bathrooms?|washrooms?|kylpy- tai pesuhuon|pesuhuon|kylpyhuon|badezimmer|salles? de bains?|bagni\b|badkamer"),
-    ("wc_room", r"separate wc rooms?|toilet rooms?|erillis\w* wc-til|wc-til|wc-r[aä]um|separate toilets?"),
     ("balcony", r"balcon(?:y|ies|e|i)|parveke|balkon\w*|balcons?"),
     ("storey", r"floors? \(storeys?\)|storeys?|stories|kerros|geschosse\b|stockwerke|[eé]tages\b|piani\b|verdiepingen"),
     ("apartment", r"apartments?|residential units?|wohnungen|appartements?|logements?|appartament[io]|unit[àa] abitativ|"
@@ -176,7 +176,7 @@ def parse(question: str) -> Intent:
         filters["label"] = quoted[0]
         scope = "label_total" if task in ("area", "volume", "length") else "label"
         target = "room"
-    elif quoted:
+    elif quoted and scope == "drawing":
         # ifc_models: "the room 'X' on 'Level 1'" / "on 'Level 1'" / "in the model 'X'"
         if _MODEL.search(q_noquote) and task == "count":
             filters["model"] = quoted[-1]

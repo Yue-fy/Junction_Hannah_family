@@ -32,7 +32,6 @@ SCORED = ("count", "area", "length", "volume")
 
 
 def sample(per_key: int, seed: int = 7, sources: set[str] | None = None):
-    rng = random.Random(seed)
     by_key = collections.defaultdict(list)
     intents = {}
     for q in load_split("train"):
@@ -43,6 +42,8 @@ def sample(per_key: int, seed: int = 7, sources: set[str] | None = None):
         by_key[(q.source, it.key)].append(q)
     out = []
     for k, qs in sorted(by_key.items()):
+        rng = random.Random(f"{seed}|{k[0]}|{k[1]}")  # per-key seed: a parser change elsewhere keeps this sample
+        qs.sort(key=lambda q: q.qid)
         rng.shuffle(qs)
         seen, first, rest = set(), [], []
         for q in qs:
