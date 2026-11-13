@@ -55,10 +55,10 @@ def _init(threads):
 
 
 def _run(args):
-    stem, tta, scale = args
+    stem, tta, scale, probs = args
     import torch
     import torch.nn.functional as F
-    tag = ("tta_" if tta else "") + (f"s{scale:g}_" if scale != 1 else "")
+    tag = ("p_" if probs else "") + ("tta_" if tta else "") + (f"s{scale:g}_" if scale != 1 else "")
     dst = os.path.join(OUT, tag + stem + ".npz")
     if os.path.exists(dst):
         return stem, 0.0
@@ -80,27 +80,35 @@ def _run(args):
     ip = p[12:]
     icons = ip.argmax(0).numpy().astype(np.uint8)
     iprob = (ip.max(0).values.numpy() * 255).astype(np.uint8)
-    np.savez_compressed(dst, icons=icons, rooms=rooms, iprob=iprob)
+    extra = {}
+    if probs:  # per-class icon probabilities (uint8) for Window, Door, Toilet, Sink
+        extra = {f"p{c}": (ip[c].numpy() * 255).astype(np.uint8) for c in (1, 2, 5, 6)}
+        extra["pwall"] = (p[2].numpy() * 255).astype(np.uint8)
+    np.savez_compressed(dst, icons=icons, rooms=rooms, iprob=iprob, **extra)
     return stem, time.time() - t0
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--lists", default="val,test")
-    ap.add_argument("--stems", default="", help="comma list overrides --lists")
+    ap.add_argument("--stems", default="", help="comma list, or @file with one stem per line; overrides --lists")
     ap.add_argument("--tta", action="store_true")
     ap.add_argument("--procs", type=int, default=4)
     ap.add_argument("--threads", type=int, default=6)
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--scale", type=float, default=1.0, help="upscale the input; maps are saved at original size")
+    ap.add_argument("--probs", action="store_true", help="also save per-class icon probabilities (prefix p_)")
     a = ap.parse_args()
     os.makedirs(OUT, exist_ok=True)
-    todo = a.stems.split(",") if a.stems else stems(a.lists.split(","))
+    if a.stems.startswith("@"):
+        todo = [l.strip() for l in open(a.stems[1:]) if l.strip()]
+    else:
+        todo = a.stems.split(",") if a.stems else stems(a.lists.split(","))
     if a.limit:
         todo = todo[: a.limit]
     t0, n, secs = time.time(), 0, []
     with mp.get_context("spawn").Pool(a.procs, initializer=_init, initargs=(a.threads,)) as pool:
-        for stem, s in pool.imap_unordered(_run, [(s, a.tta, a.scale) for s in todo]):
+        for stem, s in pool.imap_unordered(_run, [(s, a.tta, a.scale, a.probs) for s in todo]):
             n += 1
             if s:
                 secs.append(s)

@@ -15,8 +15,9 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import count as C  # noqa: E402
 
-# frozen on CC5K val (count.py --tune val), plain inference, scale 1
-FROZEN = {"windows": (2e-4, 5), "doors": (2e-4, 0), "wc_seats": (2e-4, 5), "sinks": (2e-5, 5)}
+from config import FROZEN as _F  # noqa: E402
+
+FROZEN = {t: (mf, k) for t, (_, mf, k) in _F.items()}  # frozen on CC5K val (count.py --tune val), plain, scale 1
 NAMES = {"windows": "window", "doors": "door", "wc_seats": "toilet", "sinks": "sink"}
 
 

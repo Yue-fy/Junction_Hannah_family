@@ -128,6 +128,40 @@ Calibration: `confidence = P(gold == count | template, count bucket)` fit on val
 never fires except for sinks with 0, 1 or ≥6, where it changes nothing on test. Within ±1 coverage on test:
 windows 57%, doors 68%, WC seats 95%, sinks 86%. These are the intervals to state when unsure.
 
+Inside the full pipeline (`pipeline` on cc5k_heldout, night cbd2fe8: 61.8%), swapping in the model's
+counts for the 4 symbol templates gives 68.8%: **+7.1 [+5.1, +9.0]**. Doors: pipeline (VLM) 23.6% → 38.6%.
+(`artifacts/eval/20261114-005010-pipeline-cc5k_heldout-5645.jsonl` vs `artifacts/R1/cc5k_preds/plain_over_pipeline.jsonl`.)
+
+Tried and not adopted:
+- 4-rotation TTA (4× CPU): test windows 35.3 (+1.3), doors 37.1 (−3.1), WC 77.9 (+2.4), sinks 63.1 (+3.0).
+  All within noise, so we keep plain inference because it is 4× cheaper.
+- An opening kernel relative to image size: no change (windows 33.4, WC 75.7, sinks 59.5).
+- Splitting long window components into several windows by a typical window length: always worse
+  (windows val 40% → ≤ 39%). The −4 tail (18% of val drawings) is missed windows, not merged ones.
+- A per-class probability threshold instead of argmax (P(window) ≥ τ, τ = 0.15–0.45; 227 val drawings):
+  never better (windows 44.1% argmax vs 43.6%). The missed windows are not near-misses in probability.
+
+**Memorisation check (D3).** On the drawings cached so far (colorful + high_quality styles), accuracy on
+drawings from the model's original *train* list is about the same as on held-out *test* drawings of the
+same styles: windows 49.3% vs 45.5%, doors 52.8% vs 60.0%, WC seats 84.6% vs 84.6%, sinks 63.2% vs 67.5%
+(n = 521 vs 123). So there is little memorisation, and dev numbers should be close to leak-safe ones.
+Check the architectural style when its cache is complete.
+
+**Room segmentation as a cross-check (Stoa point 4).** Room-type regions = components of room class
+(Bed Room 5, Bath 6, Kitchen 3, Outdoor 1) ≥ min_frac·H·W (val-chosen: 1.2e-2, 1.2e-2, 1.6e-2, 2.4e-2;
+`config.ROOMS_FROZEN`). On cc5k_heldout the pipeline's answer is right 92–96% of the time when it agrees
+with this count, and much less often when it doesn't:
+
+| Template | Agree (n) | Pipeline acc. when agree | when disagree | Segmentation alone (test) |
+|---|---|---|---|---|
+| balconies | 60/108 | 92% | 65% | 68% (val 70%) |
+| bedrooms | 63/126 | 75% | 37% | **67%** vs pipeline 56% |
+| bathrooms | 57/96 | 96% | 82% | 65% (prior ~92%) |
+| kitchens | 111/126 | 96% | 80% | 88% (prior ~94%) |
+
+`adapter.cross_check(path, concept, value)` returns the line in D4/W5 badge format, e.g.
+`cross-check: label reading 3 = CC5K room segmentation 3 ✓`.
+
 Live use: `experiments/r1/cc5k_model/predict.py IMG.png` prints `{counts: {windows|doors|wc_seats|sinks:
 {count, confidence, boxes}}}`. It needs torch (CPU is enough; `/data/User/fangy4/envs/junction-train`
 has it, but `$JUNCTION_VENV` does not).

@@ -26,9 +26,7 @@ sys.path.insert(0, HERE)
 import net  # noqa: E402
 
 WEIGHTS = os.environ.get("CC5K_WEIGHTS", "/data/User/fangy4/r1_cc5k/model_best_val_loss_var.pkl")
-# template -> (icon class ids, min component area as a fraction of H*W, opening kernel); frozen on CC5K val
-FROZEN = {"windows": ([1], 2e-4, 5), "doors": ([2], 2e-4, 0), "wc_seats": ([5], 2e-4, 5), "sinks": ([6], 2e-5, 5)}
-CALIB = json.load(open(os.path.join(HERE, "calib_plain.json")))
+from config import FROZEN, ROOMS_FROZEN, confidence  # noqa: E402
 _M = None
 
 
@@ -40,13 +38,14 @@ def model():
     return _M
 
 
-def icon_map(path):
+def maps(path):
+    """(icons, rooms) argmax maps at the image's own size."""
     im = np.asarray(Image.open(path).convert("RGB"), np.float32)
     x = torch.from_numpy(2 * (im / 255.0) - 1).permute(2, 0, 1)[None]
     with torch.no_grad():
-        y = model()(x)[:, 33:]
-        y = F.interpolate(y, size=im.shape[:2], mode="bilinear", align_corners=True)
-    return y[0].argmax(0).numpy().astype(np.uint8)
+        y = model()(x)[:, 21:]
+        y = F.interpolate(y, size=im.shape[:2], mode="bilinear", align_corners=True)[0]
+    return y[12:].argmax(0).numpy().astype(np.uint8), y[:12].argmax(0).numpy().astype(np.uint8)
 
 
 def boxes(mask, min_area, k):
@@ -60,16 +59,16 @@ def boxes(mask, min_area, k):
 
 def predict(path):
     t0 = time.process_time()
-    icons = icon_map(path)
+    icons, rooms = maps(path)
     H, W = icons.shape
     out = {}
     for t, (cls, mf, k) in FROZEN.items():
         bx = [b for c in cls for b in boxes(icons == c, max(1, mf * H * W), k)]
-        tab = CALIB[t]["buckets"]
-        row = tab[str(min(len(bx), max(int(b) for b in tab)))]
-        out[t] = {"count": len(bx), "confidence": row["conf_model"], "boxes": bx}
+        out[t] = {"count": len(bx), "confidence": confidence(t, len(bx)), "boxes": bx}
+    room_counts = {t: {"count": len(b), "boxes": b} for t, (c, mf) in ROOMS_FROZEN.items()
+                   for b in [boxes(rooms == c, mf * H * W, 0)]}
     return {"path": path, "cpu_seconds": round(time.process_time() - t0, 2),
-            "model": "CubiCasa5K multi-task (Kalervo et al. 2019), CC BY-NC 4.0 weights", "counts": out}
+            "model": "CubiCasa5K multi-task (Kalervo et al. 2019), CC BY-NC 4.0 weights", "counts": out, "rooms": room_counts}
 
 
 if __name__ == "__main__":
