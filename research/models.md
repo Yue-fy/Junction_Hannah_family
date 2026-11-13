@@ -67,6 +67,20 @@ vlm_direct maps it through `CONF_MAP` (fit on 1,500 TRAIN Qs with `experiments/r
 | count accuracy (train) | 12% | 34% | 41% | 48% | 49% | 89% |
 Count AUROC 0.78 (cubicasa 0.74, swiss 0.89); ECE 0.02 mapped vs 0.20 for the old constant 0.3. Areas (swiss, 8B reads
 them badly: 5% right) AUROC 0.87. The map is model-specific: refit it for a LoRA or another model.
+Held-out check: full dev (2,215) ECE 0.024, AUROC 0.869, conf ≥ 0.8 on 14% at 89% right; full hard (711; paraphrases,
+translations) ECE 0.054, AUROC 0.868. Accuracy unchanged (dev micro 32.6, hard 25.3); $0.08–0.16 per 1k.
+
+Gate "8B if p ≥ T else baseline" (`experiments/r2/conf_gate.py`), cubicasa: beats the prior (train 55.5 → 58.1 at
+T=0.9999, dev 54.1 → 57.4 at T=0.999) but not W3's per-class `raster` (dev 62.5 → 61.6). WC seats are the one concept
+where it may add (dev 69 vs 59 EN, 64 vs 55 FI; to be confirmed on TRAIN by W3).
+
+Escalation to hosted Nemotron (`experiments/r2/escalate.py`): on TRAIN cubicasa Qs where the 8B is unsure (raw p < 0.88,
+36% of them; 60 sampled) Nemotron 36.7 vs prior 31.7 vs 8B 23.3; $1.57/1k, 11 s. Not worth it for bulk counting.
+
+## Historical scans (no questions in the data)
+View-type recognition on finna scans (`experiments/r2/scan_views.py`, weak gold from Finnish title keywords):
+8B 68% exact view set on 100 (P 0.79–0.97, R 0.84–1.00 per view), 3.2k tokens/scan; Nemotron 50% on 40 (59% parsed)
+vs the 8B's 62.5% on the same 40. The local 8B is enough to type untitled scans for the KG.
 
 ## Leak-free symbol comparison (cycle 2)
 `$JUNCTION_SHARED/artifacts/R2/cc5k_heldout_notLoRA.jsonl` = R1's cc5k_heldout (original CC5K test list, so the
