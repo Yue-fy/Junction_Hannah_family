@@ -36,8 +36,14 @@ def main() -> None:
     a = ap.parse_args()
     runs = []
     for r in a.runs:
-        p = Path(r) if r.endswith(".jsonl") else resolve(r)
-        rows = {x["qid"]: x for x in load(p) if not a.source or x["source"] == a.source}
+        p = Path(r) if Path(r).exists() else resolve(r)
+        if not p.exists():  # run_id prefix (run ids end in a random suffix)
+            hits = sorted(p.parent.glob(Path(r).name.removesuffix(".jsonl") + "*.jsonl"))
+            hits = [h for h in hits if not h.name.endswith(".judged.jsonl")]
+            if not hits:
+                sys.exit(f"no predictions file for {r}")
+            p = hits[-1]
+        rows = {x["qid"]: x for x in load(str(p)) if not a.source or x["source"] == a.source}
         runs.append((Path(p).stem[-40:], rows))
     common = set.intersection(*(set(r) for _, r in runs))
     print(f"{len(common)} shared questions")

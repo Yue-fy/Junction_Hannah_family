@@ -13,7 +13,23 @@ answer) vs `20261113-234812-dummy-dev` (template prior), both on dev v2 (hash f4
 | dummy (prior) | 26.1% | 40.4% | 0 | 0% |
 | vlm_direct | 32.0% (28.0–36.5) | 44.1% | 200 (all IFC) | 0% |
 
-## LATEST (00:47): `hard2`: novel reasoning kinds expose confidently wrong answers
+## LATEST (01:05): held-out rewording (hard2p), cost billing, format swap
+
+- **hard2p** = hard2 reworded (other English phrasing, German/French/Finnish; same drawings and answers; HELD OUT, D9).
+  Integrated pipeline night 971b985: hard2 69.9% → hard2p **56.2%** (scored + judged text). Answers at conf ≥ 0.8
+  are 95.8% right on hard2 but **69.5%** on hard2p. By source: cubicasa 61→51, ifc 89→64, swiss 72→58 (de/fr 47%).
+  W2's dxf v5 (built while looking at hard2 failures): hard2 97.1% vs hard2p 63.8%. Threshold counts fail on
+  "exceed"/"über", German ratios ("Um welchen Faktor") and "ohne Wohnung". Operators are keyword-matched.
+  → An operator-word detector over synonym families in all dataset languages. If an operator word is present
+  and no rule consumed it: defer to the agent and cap the confidence.
+- **Cost billing:** raster timed local VLM calls by HTTP latency (queueing behind LoRA training: 30.9 s for a ~0.27 s
+  call), which was 95% of the pipeline's cost. The eval now bills local-LLM GPU time as min(reported, token estimate):
+  pipeline dev $0.41 → $0.04–0.05 per 1k questions. stoa.llm still bills cache hits as free (asked R2).
+- **Format swap** (same dev questions on the sibling PNG/DXF/SVG): 99.6% of 250; evidence follows the asked file.
+- **hard2 text answers** (night 971b985): "Which is smaller, apartment B or H?" is still canonicalised to an area
+  question and answered with a number (swiss text 0/15 judged; dxf alone 15/15).
+
+## Earlier (00:47): `hard2`: novel reasoning kinds expose confidently wrong answers
 
 Stoa says the hidden test is "harder and different". `hard2` (256 Qs on dev drawings, answers from ground truth
 only) asks what questions.jsonl never asks: averages, ratios, percentages, thresholds, complements ("not in

@@ -105,7 +105,10 @@ $JUNCTION_VENV/bin/python -m stoa.eval --list        # registered solvers + impo
   generated generality checks on dev drawings (`stoa/eval/hard.py`). `hard2` = reasoning kinds that
   questions.jsonl never asks (averages, ratios, percentages, thresholds, complements, unit changes, argmin,
   yes/no; `stoa/eval/hard2.py`, 256 Qs on dev drawings); it adds the scored type `ratio` (dimensionless,
-  within 2%). Load in code:
+  within 2%). `hard2p` = the same questions reworded (other English phrasing, German/French/Finnish;
+  `stoa/eval/hard2p.py`). `hard2q` = a third wording (Italian/Dutch/Swedish + new English; `hard2p.py --q`):
+  the clean HELD-OUT set since 01:12 (hard2p wordings were quoted in messages, so hard2p is contaminated for
+  dxf/ifc). Develop on `hard2`; on `hard2p`/`hard2q` report aggregates only and never quote their questions. Load in code:
   `stoa.eval.splits.load_split("train")` → `list[Question]` with answers.
 - `--limit N` takes the same fixed random subset every run. `--grep REGEX` keeps questions matching the regex
   (case-insensitive), e.g. `--grep 'window|ikkun|fenster|fönster'` for one concept in every language.
@@ -171,3 +174,6 @@ Additional endpoints (e.g. `GET /ifc-index?path=`) are W4's to add; list them he
 | `LLM_BASE_URL` | `stoa/llm.py` | local OpenAI-compatible server, default `http://127.0.0.1:8001/v1` |
 | `NVIDIA_API_KEY` | `stoa/llm.py` | NVIDIA hosted API (Nemotron); captain's account |
 | `AGENT_ID` | eval | optional; recorded in leaderboard lines |
+| `CC5K_WEIGHTS` | `raster_cc5k` (R1, D8) | pretrained CubiCasa5K weights `.pkl` (CC BY-NC 4.0, outside git) |
+| `CC5K_PYTHON` | `raster_cc5k` (R1, D8) | Python with torch for live CPU inference (default: the junction-train env); cached counts need none |
+| `CC5K_THREADS` | `raster_cc5k` (R1, D8) | optional; CPU threads for live inference (default 6) |
