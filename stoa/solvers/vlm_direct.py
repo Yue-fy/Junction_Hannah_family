@@ -44,9 +44,18 @@ CONF_MAP: dict[str, list[tuple[float, float]]] = {
     "measure": [(0.071, 0.053), (0.677, 0.053), (1.0, 0.318)],
 }
 
+# Per served model (vlm_direct `model=` option). cc-v2 = counting LoRA, fit on train_gate cubicasa (480 Qs it never saw):
+# raw p is already calibrated (ECE 0.040), AUROC 0.895. Non-count kinds fall back to CONF_MAP.
+CONF_MAPS: dict[str, dict[str, list[tuple[float, float]]]] = {
+    "cc-v2": {"count": [(0.44214, 0.22), (0.68038, 0.659), (0.86552, 0.817), (0.95507, 0.915), (0.98891, 0.963),
+                        (1.0, 0.988)]},
+}
 
-def map_conf(p: float, kind: str) -> float:
-    table = CONF_MAP.get(kind) or CONF_MAP.get("count" if kind == "count" else "measure")
+
+def map_conf(p: float, kind: str, model: str | None = None) -> float:
+    cmap = CONF_MAPS.get(model or "", {})
+    table = cmap.get(kind) or (cmap.get("count") if kind == "count" else None) \
+        or CONF_MAP.get(kind) or CONF_MAP.get("count" if kind == "count" else "measure")
     if not table:
         return round(min(0.9, max(0.05, p)), 3)
     for edge, acc in table:
@@ -375,7 +384,57 @@ class VlmDirect(BaseSolver):
         conf = 0.3
         p = llm.answer_prob(r, max_digits=0 if kind == "count" else 2) if r.logprobs else None
         if p is not None:
-            conf = p if self.conf_mode == "raw" else map_conf(p, kind)
+            conf = p if self.conf_mode == "raw" else map_conf(p, kind, self.model)
             trace.append(f"p(answer digits) = {p:.5f} -> confidence {conf:.2f}")
         return Answer(value=value, unit=unit, confidence=round(conf, 3), evidence=evidence, trace=trace,
                       solver=self.name)
+
+
+@register("vlm_lora")
+class VlmLora(VlmDirect):
+    """Counting LoRA cc-v2 on the shared server (owner: R2): vlm_direct with model="cc-v2", for COUNT questions on
+    raster floor plans (PNG/JPEG; cubicasa-style). Trained on TRAIN cubicasa counts only (train_gate excluded):
+    dev cubicasa 73.9% vs raster 62.5 (+11.4 [+8.2, +14.4]); hard translations 75 / paraphrases 66; compositions
+    asked whole only 10% -> give it ATOMIC questions (the pipeline's compose step). Confidence = answer-digit
+    probability mapped on train_gate (AUROC 0.89-0.93). Abstains (llm error) if the server doesn't serve "cc-v2".
+    Licence: trained on CubiCasa5K images (CC BY-NC-SA 4.0) -> non-commercial."""
+
+    # Concepts it was trained on (stoa.router.intent targets of the cubicasa templates). On anything else its
+    # confidence is not trustworthy (F 01:28: on novel-operator questions conf >= 0.8 was right 16% of the time).
+    TRAINED = {"window", "wc", "sink", "storey", "shower_bathtub", "sauna", "door", "kitchen", "bedroom", "wc_room",
+               "bathroom", "balcony"}
+    UNTRAINED_CONF = 0.3
+
+    def __init__(self, model: str | None = "cc-v2", **kwargs):
+        super().__init__(model=model or "cc-v2", **kwargs)
+
+    @staticmethod
+    def _intent(question: str):
+        try:
+            from stoa.router.intent import modifiers, parse
+
+            return parse(question), modifiers(question)
+        except Exception:  # noqa: BLE001 - router not available: be conservative
+            return None, ["unknown"]
+
+    def can_handle(self, path: str, question: str) -> bool:
+        """Raster image + a plain count question: no operators (sum, difference, average, share, threshold,
+        several classes) -- those must be decomposed by the pipeline first."""
+        if Path(path).suffix.lower() not in IMG_EXT or infer_kind(question)[0] != "count":
+            return False
+        intent, mods = self._intent(question)
+        return intent is not None and intent.task == "count" and not mods
+
+    def solve(self, path: str, question: str) -> Answer:
+        intent, mods = self._intent(question)
+        if mods:
+            return self.abstain(f"question has operators {mods}: decompose it into atomic counts first")
+        ans = super().solve(path, question)
+        target = getattr(intent, "target", "unknown")
+        if ans.value is not None and target not in self.TRAINED and ans.confidence > self.UNTRAINED_CONF:
+            ans.trace.append(f"target '{target}' not among the LoRA's trained concepts: confidence capped at "
+                             f"{self.UNTRAINED_CONF}")
+            ans.confidence = self.UNTRAINED_CONF
+            ans.assumptions = list(ans.assumptions or []) + [
+                f"counting LoRA was not trained on '{target}'; answer is a best guess"]
+        return ans

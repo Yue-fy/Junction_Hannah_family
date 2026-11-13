@@ -189,3 +189,25 @@ def test_cc5k_switch(monkeypatch, tmp_path):
     on = pl.Pipeline(cc5k=1, crosscheck=0)._solve_atomic(path, q)
     assert calls and on.value == 7 and on.solver == "pipeline/raster_cc5k"
     assert abs(on.confidence - (0.40 * 100 + 1) / 102) < 1e-3
+
+
+def test_unit_fit_and_multilingual_threshold():
+    from stoa.contract import Answer
+    from stoa.pipeline import _fits
+    from stoa.router.intent import modifiers
+
+    assert not _fits("count", Answer(value=275.05, unit="m2", confidence=0.3))
+    assert _fits("count", Answer(value=12, unit="count", confidence=0.9)) and _fits("text", Answer(value="B", confidence=0.5))
+    for q in ("Wie viele Räume sind größer als 10 m²?", "Combien de pièces font plus de 12 m² ?",
+              "Hoeveel ruimtes zijn groter dan 10 m²?", "Hur många rum är större än 10 m²?"):
+        assert "threshold" in modifiers(q), q
+
+
+def test_agent_rows_condition_is_restricted():
+    from stoa.router.agent import Agent
+
+    ok = Agent._COND_OK
+    assert ok.fullmatch("area_m2 > 10 and numbered and not outdoor")
+    ag = Agent()
+    for bad in ('__import__("os")', "name.str.len() > 3", "open('x')"):
+        assert ag._rows("data/swiss_dwellings/none.pdf", bad, []).startswith("error")
