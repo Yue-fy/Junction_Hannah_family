@@ -34,3 +34,23 @@ def test_dxf_solver_floor():
     assert abs(a.value - 16.78) < 0.02 and "✓" in a.evidence[0].note
     a = s.solve(P, "How many windows are drawn on this floor plan?")
     assert a.value == 28 and len(a.evidence) == 28
+
+
+def test_parse_scope_and_area_options():
+    q = qparse.parse("How many windows are there in apartment B?")
+    assert [(t.kind, t.arg, t.scope) for t in q.terms] == [("count", "window", ["B"])]
+    assert qparse.covered("How many windows are there in apartment B?", q)
+    # Swiss German "wie gross" means "how large", not "gross area"
+    q = qparse.parse("Wie gross ist die Nettowohnfläche von Wohnung A in m² (Summe aller Räume ohne Balkone)?")
+    assert not q.gross and not q.include_outdoor and q.terms[0].kind == "area_apartment"
+    assert qparse.parse("What is the gross floor area of apartment B?").gross
+    assert qparse.parse("Net floor area of apartment A in m² including balconies?").include_outdoor
+
+
+@needs_data
+def test_dxf_scoped_counts():
+    from stoa.solvers import get_solver
+
+    s = get_solver("dxf", llm=0)
+    a = s.solve(P, "How many windows are there in apartment B?")
+    assert 0 < a.value < 28 and len(a.evidence) == a.value

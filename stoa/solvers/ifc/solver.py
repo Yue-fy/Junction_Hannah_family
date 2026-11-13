@@ -609,8 +609,28 @@ class IfcSolver(BaseSolver):
                 note = ev.note + (f" | label '{itm.label}'" if itm.label else "")
                 ev2d.append(Evidence(file=plan, page=0, bbox=[round(v, 2) for v in itm.bbox], bbox_space="pdf_pt",
                                      ifc_guid=g, note=note[:160]))
+        n_proj = 0
+        if not model_scope:  # same-storey elements the cut plan doesn't draw (slabs, beams): projected box
+            from stoa.solvers.ifc.index import load_index
+            from stoa.solvers.ifc.plan2d import project_box
+
+            idx = load_index(model)
+            for ev in ans.evidence:
+                g = ev.ifc_guid or ""
+                if not g or g in seen or g not in idx.elements:
+                    continue
+                b = project_box(model, plans[0], idx.elements[g])
+                if b is None:
+                    continue
+                seen.add(g)
+                n_proj += 1
+                ev2d.append(Evidence(file=plans[0], page=0, bbox=[round(v, 2) for v in b], bbox_space="pdf_pt",
+                                     ifc_guid=g, note=(ev.note + " | projected: not drawn on this plan")[:160]))
         n3d = len([e for e in ans.evidence if e.ifc_guid])
         files = sorted({e.file for e in ev2d})
+        if n_proj:
+            ans.trace.append(f"{n_proj} elements not drawn on the cut plan: boxed by projecting the model footprint "
+                             "with a model->plan transform fitted on the drawn elements")
         ans.trace.append(f"2D link: {len(ev2d)}/{n3d} evidence elements drawn on "
                          + (", ".join(Path(f).name for f in files) if files else Path(plans[0]).name)
                          + ("" if asked_plan or model_scope else " (plan of the same storey)"))

@@ -13,7 +13,93 @@ answer) vs `20261113-234812-dummy-dev` (template prior), both on dev v2 (hash f4
 | dummy (prior) | 26.1% | 40.4% | 0 | 0% |
 | vlm_direct | 32.0% (28.0–36.5) | 44.1% | 200 (all IFC) | 0% |
 
-## LATEST: integrated pipeline on dev (00:22) — where the remaining points are
+## LATEST (00:47): `hard2`: novel reasoning kinds expose confidently wrong answers
+
+Stoa says the hidden test is "harder and different". `hard2` (256 Qs on dev drawings, answers from ground truth
+only) asks what questions.jsonl never asks: averages, ratios, percentages, thresholds, complements ("not in
+apartment A"), ft/ft², argmin and yes/no. Runs: pipeline `20261114-004439-pipeline-hard2-945f` (night cbd2fe8),
+`dxf` alone `20261114-004625-dxf-hard2-eb26`, `ifc` alone `20261114-004657-ifc-hard2-8ead`.
+
+| | pipeline | dxf alone (swiss) | ifc alone (ifc) |
+|---|---:|---:|---:|
+| scored accuracy | 35.4% (swiss 29.5%, ifc 26%, cubicasa 54%) | **47.6%** | 26.5% |
+| text, LLM-judged | swiss 0%, ifc 0%, cubicasa 64% | **86.7%** | 0% |
+| AUROC (confidence ranks right above wrong) | **0.32** (worse than chance) | 0.50 | 0.22 |
+| conf ≥ 0.8: share / accuracy | 66% / **24%** | 31% / 49% | 94% / 28% |
+
+**Mechanism 1 (pipeline, W4): canonicalisation rewrites a novel question into the nearest template, then the
+train hit rate of that template (0.976) replaces the solver's confidence.**
+"How many times larger is apartment B than apartment A?" → canonical "How many apartments …?" → 2 at 0.976
+(dxf alone: 1.07 ✓ at 0.45). "What share of the floor … does apartment C take up, in percent?" → apartment C
+area 43.71 m² at 0.976. "Average net floor area of rooms 1.77 and 1.78" → 0.0 m² at 0.976 (dxf alone 14.7 ✓).
+dxf alone per recipe: apartment ratio 93%, smaller apartment 87% (judged), room sum in ft² 100%, threshold
+60%, average 33%, doors per apartment 33%, share in % 7%, floor minus apartment 7% (conf 0.91: ignores "not").
+→ Fix: ask the solver the ORIGINAL question first; canonicalise only for languages/wordings it can't parse
+(or when it abstains); and use conf = min(train hit rate, solver's own confidence). The solver knows when it
+fell back to table QA (0.45–0.6).
+
+**Mechanism 2 (ifc, W1): the parser maps unknown operators onto a known quantity at full confidence.**
+"Average net floor area per room on 'Attic'" → the storey total (212.4 vs 26.5) at 0.95; "What percentage of
+the floor area of '0' does room X take up?" → the room's m² at 0.97; "How many of rooms A, B, C, D are larger
+than 5 m²?" → wrong at 0.97. Unit conversion works (walls in feet 100%).
+→ Fix: an operator guard. If the question contains average/mean/per, percent/percentage/share, ratio/"times",
+"more/less than N", "excluding/not", and the parser has no rule for it, cap the confidence (≤ 0.3) and
+put the operator in `missing`, or hand the question to the LLM fact-card path with the operator spelled out.
+
+**What works:** unit changes (ft², ft) 100% via dxf/ifc; cubicasa compositions decompose correctly (wet rooms,
+toilets + showers; accuracy limited by the counts); "more bedrooms than bathrooms?" 96% judged.
+Caveat: share-in-% golds use the dataset's "total net floor area of all numbered indoor rooms" as the
+denominator; dxf gave 100.8% once, so the apartment and floor-total definitions may not nest. Check before
+treating that recipe as solver error.
+
+## Earlier (00:32): pipeline gate v1, calibration, hard compositions, label→fixture
+
+Runs: `20261114-002746-pipeline-dev` (W4 gate v1, night-W4 279b5ec) vs `20261114-000718-pipeline-dev`;
+`20261114-003003-pipeline-hard`. Paired with `experiments/r1/stats/compare.py` (cluster CI).
+
+**1. Gate v1 = +0.5 points (n.s.).** micro 81.3 → 81.8 [−0.2, +1.2]; weighted 72.2 → 73.1; cubicasa
+59.4 → 60.8 [−0.2, +3.1]; cost $1.35 → $0.54 per 1k questions. The loss table is unchanged in shape:
+windows (EN 17%, FI 10%; 7.9 w-pts), doors (EN 12%, FI 44%; 3.6 w-pts; the EN/FI gap is drawing mix, both
+go to vlm_direct), WC seats (55–58%; 3.9 w-pts, prior answers 1 where gold is 2), sinks (44–48%; 4.5 w-pts,
+prior 2 where gold is 3). Errors are undercounts (median pred/gold 0.5).
+
+**2. Calibration is good and now measured on every run.** `python -m stoa.eval.calibration RUN...` and
+a `calibration: ...` line in every eval report (also in the leaderboard JSON and viewer).
+
+| run | ECE | Brier | AUROC | answers with conf ≥ 0.8 | their accuracy |
+|---|---:|---:|---:|---:|---:|
+| pipeline dev 00:07 | 0.043 | 0.083 | 0.93 | 61% | 99.1% |
+| pipeline dev gate v1 | **0.015** | **0.078** | 0.92 | 67% | 97.9% |
+| pipeline hard gate v1 | 0.032 | 0.071 | 0.95 | 65% | 98.9% |
+| raster v2 dev (cubicasa only, 00:30) | 0.038 | 0.169 | 0.81 | 23% | 88.1% |
+| vlm_direct dev (constant 0.3) | 0.021 | 0.218 | **0.50** | 0% | – |
+
+Gate v1 moved storeys (vlm_direct) and bathrooms (prior) into the 0.8–0.9 band, where they are ~85–90%
+right: honest, so high-confidence accuracy dips a little while ECE improves 3×. Cubicasa reliability bins
+are on the diagonal (conf 0.13/0.21/0.54/0.60/0.76/0.88/0.94 → acc 0.14/0.26/0.53/0.57/0.75/0.88/0.91).
+For the demo/judges: "when the pipeline says ≥ 0.8 (two thirds of answers), it is right 98% of the time."
+Confidently wrong (conf ≥ 0.8) on dev: 28 of 1,339: storeys via vlm_direct 13, Swiss area totals via dxf 10
+(all 2–16% too high, see W2), bathrooms via prior 4, and **1 IFC regression**: Polish "Ile schodów … w
+modelu «…»" was canonicalised to "on the floor plan of …", so `ifc` counted stairs on the plan's storey
+(0) instead of the model (3) at conf 0.975 (W1 had reported the "w modelu" scope bug to W4).
+
+**3. Routing gaps.** opening_design: all 61 dev questions go to vlm_direct (18.9%) although W2's `schedule`
+solver scores 78.3% on them (00:30, 2d39b54) → route opening_design to `schedule`. The ifc regression above.
+
+**4. Hard compositions on cubicasa fail for one reason: their parts.** "Windows − doors", "doors + windows"
+are 0–18% because the sub-answers are vlm_direct's typical guesses (window 10, door 10 → "0 more"). The
+decomposition itself works (swiss and ifc compositions 99–100%). Bedrooms + bathrooms 47% (bathroom
+over by 1). Nothing to fix in the composer; it inherits the symbol counting gap.
+
+**5. Experiment F-label2fixture (negative/weak).** Can room-label counts (R1's one VLM call per drawing)
+predict fixtures? On TRAIN gold (4,366 drawings) the relations are strong: sinks = kitchens + bathrooms +
+WC rooms 81% (mode 60%), showers+baths = bathrooms 85% (81%), WC seats = WC rooms + bathrooms 72% (69%).
+With PREDICTED labels (R1 cache; kitchens fixed at 1 because the reader over-counts kitchens 12/51 on
+train): dev sinks 64.3% vs prior 57.1% (+7.1, CI [−1.4, +15.7], 25 wins / 15 losses, 140 drawings; train
++3.3 on 60), WC seats −5.7, showers+baths −3.1. So: only sinks, positive but not significant; nearly free
+when the label call is already made for room questions. Code: `experiments/F/label2fixture/`.
+
+## Previous: integrated pipeline on dev (00:22) — where the remaining points are
 
 Run `20261114-000718-pipeline-dev` (S0's integrated night): micro **81.3%** (95% cluster CI 77.0–85.0), weighted_acc
 **72.2%**, evidence on 1,318/2,215 answers, $0.00135/question. Solved: Swiss counts 100%, Swiss areas 98%, IFC 100%.
