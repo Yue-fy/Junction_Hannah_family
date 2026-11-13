@@ -16,6 +16,7 @@ import os
 import re
 import subprocess
 import sys
+import threading
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -33,14 +34,20 @@ NOUN = {"windows": "window", "doors": "door", "wc_seats": "toilet", "sinks": "si
 _cache = None
 
 
+_cache_lock = threading.Lock()
+
+
 def _load():
     global _cache
     if _cache is None:
-        _cache = {}
-        if os.path.exists(CACHE):
-            for line in open(CACHE):
-                d = json.loads(line)
-                _cache[d["path"]] = d
+        with _cache_lock:  # thread-safe: publish the dict only when fully loaded
+            if _cache is None:
+                c = {}
+                if os.path.exists(CACHE):
+                    for line in open(CACHE):
+                        d = json.loads(line)
+                        c[d["path"]] = d
+                _cache = c
     return _cache
 
 
