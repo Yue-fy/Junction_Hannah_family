@@ -13,7 +13,26 @@ answer) vs `20261113-234812-dummy-dev` (template prior), both on dev v2 (hash f4
 | dummy (prior) | 26.1% | 40.4% | 0 | 0% |
 | vlm_direct | 32.0% (28.0–36.5) | 44.1% | 200 (all IFC) | 0% |
 
-## LATEST (01:15): clean held-out `hard2q`, judge numeric check
+## LATEST (01:29): LoRA cc-v2 overfitting watch: the biggest cubicasa gain, with routing rules
+
+R2's LoRA cc-v2 (Qwen3-VL-8B, trained on TRAIN cubicasa counts; train_gate drawings excluded), served on a private
+:8002 and asked via `vlm_direct model=cc-v2`:
+
+| split (cubicasa) | LoRA cc-v2 | integrated pipeline | note |
+|---|---:|---:|---|
+| dev (800) | **73.9%** | 61.8% (2b7935a) | +12.1 [+9.0, +15.2] cluster CI; ≈ +8 weighted pts |
+| train_gate (480, unseen drawings) | 76.7% | – | no memorisation gap |
+| hard: translation / paraphrase / composition | 75.0 / 65.0 / 9.6% | 66 / 58 / 23% (cbd2fe8) | compositions asked directly |
+| hard2q (clean held-out) | 26% scored, 68% text | 52% (scored + text) | LoRA conf ≥ 0.8 → 15.8% right (inverted) |
+
+Per concept on dev (LoRA / pipeline): windows 21/14, doors 35/26, WC seats 76/57, sinks 71/46, storeys 99/88,
+saunas 93/71, bedrooms 90/71, WC rooms 100/88, balconies 91/83, bathrooms 91/88, kitchens 100/100, showers+baths
+77/78.
+**Rules:** route only atomic, known concepts (after compose/canonical; not showers+baths) to the LoRA; take the
+confidence from the per-concept train_gate hit rate, never from the LoRA; paraphrases cost ~9 points, so canonicalise
+for this VLM path (but ask dxf/ifc the original question).
+
+## Earlier (01:15): clean held-out `hard2q`, judge numeric check
 
 - **hard2p is contaminated for dxf/ifc**: my messages quoted its wordings, and dxf v6 then reached 97% on it.
   `hard2q` (third wording: Italian/Dutch/Swedish + new English; same drawings and answers) is the clean held-out
