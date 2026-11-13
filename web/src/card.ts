@@ -86,9 +86,21 @@ function evLabel(ev: Evidence[], g: { idx: number[]; first: number }, n: number,
   return `<li class="ev-item" data-i="${g.idx.find((i) => ev[i].bbox) ?? g.first}" title="${esc([...files].join(" · "))}"><span class="n">${n}</span><span class="t">${esc(note)}</span><span class="w">${where}</span></li>`;
 }
 
+/** Long text answers (often "- item" lists from the model fact card): a compact list, folded after 8 lines. */
+function richText(v: string) {
+  const lines = v.split(/\n+/).map((l) => l.trim()).filter(Boolean);
+  const isList = lines.length > 1 && lines.filter((l) => /^[-*•]\s/.test(l)).length >= lines.length * 0.6;
+  const fmt = (l: string) => esc(l.replace(/^[-*•]\s+/, "")).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");
+  const block = (ls: string[]) => (isList ? `<ul>${ls.map((l) => `<li>${fmt(l)}</li>`).join("")}</ul>` : ls.map((l) => `<p>${fmt(l)}</p>`).join(""));
+  const KEEP = 8;
+  return block(lines.slice(0, KEEP)) + (lines.length > KEEP
+    ? `<details class="more-lines"><summary>${lines.length - KEEP} more line${lines.length - KEEP > 1 ? "s" : ""}</summary>${block(lines.slice(KEEP))}</details>` : "");
+}
+
 /** Trace lines: "[solver] text" → tag + text; long traces show the first steps and fold the rest. */
 function traceHtml(trace: string[], keep = 6) {
-  const li = (t: string) => {
+  const li = (full: string) => {
+    const t = full.length > 260 ? `${full.slice(0, 240).replace(/\s*\n\s*/g, " ")} …` : full;
     const m = t.match(/^\[([\w:/-]+)\]\s*(.*)$/);
     const cc = /cross-?check/i.test(t) ? " class=\"cc\"" : "";
     return m ? `<li${cc}><span class="tag">${esc(m[1])}</span>${esc(m[2])}</li>` : `<li${cc}>${esc(t)}</li>`;
@@ -163,14 +175,16 @@ export function renderCard(el: HTMLElement, a: Answer, opts: CardOpts) {
   const checks = crossChecks(a);
   const unit = a.unit ? UNIT_LABEL[a.unit] ?? a.unit : "";
   const isText = typeof a.value === "string";
+  const rich = isText && (String(a.value).length > 120 || String(a.value).includes("\n"));
   const ev = a.evidence ?? [];
   const groups = groupEvidence(ev);
   const shown = groups.slice(0, 80);
 
   el.className = `card answer ${a.value === null ? "refused" : ""}`;
   el.innerHTML = `
-    <div class="value-row">
-      <div class="value ${isText ? "text" : ""} ${isText && String(a.value).length > 40 ? "long" : ""}">${esc(fmtValue(a))}${unit ? `<span class="unit">${esc(unit)}</span>` : ""}</div>
+    <div class="value-row${rich ? " rich" : ""}">
+      ${rich ? `<span class="rich-lbl">Text answer · ${String(a.value).split(/\n+/).filter((l) => l.trim()).length} line(s)</span><div class="value text rich">${richText(String(a.value))}</div>`
+        : `<div class="value ${isText ? "text" : ""} ${isText && String(a.value).length > 40 ? "long" : ""}">${esc(fmtValue(a))}${unit ? `<span class="unit">${esc(unit)}</span>` : ""}</div>`}
       <div class="conf ${confClass}" title="Calibrated confidence">
         <div class="conf-num">${conf}%</div><div class="conf-bar"><i style="width:${conf}%"></i></div><div class="conf-lbl">confidence</div>
       </div>

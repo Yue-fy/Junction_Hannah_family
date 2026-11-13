@@ -235,6 +235,14 @@ select, input[type="search"], textarea { border: 1px solid var(--line); border-r
 .sheet b { color: var(--accent); }
 
 .value.text.long { font-size: 16px; font-weight: 650; }
+.value-row.rich { display: grid; grid-template-columns: 1fr auto; align-items: end; }
+.value-row.rich .value { grid-column: 1 / -1; grid-row: 2; margin-top: 8px; }
+.rich-lbl { grid-row: 1; font-size: 10.5px; font-weight: 650; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.value.text.rich { font-size: 13.5px; font-weight: 500; letter-spacing: 0; line-height: 1.4; color: var(--ink); max-height: 340px; overflow-y: auto; }
+.value.rich ul { margin: 0; padding-left: 18px; }
+.value.rich p { margin: 0 0 4px; }
+.value.rich li { margin: 1px 0; }
+.more-lines summary { cursor: pointer; color: var(--muted); font-size: 12px; margin-top: 2px; }
 .chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
 .chips:empty { display: none; }
 .chip { border: 1px solid #c9d6e8; background: #f3f7fc; color: #1d3557; border-radius: 999px; padding: 3px 9px; font-size: 11.5px; cursor: pointer; text-align: left; }
