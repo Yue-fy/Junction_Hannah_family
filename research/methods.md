@@ -86,7 +86,23 @@ Upscale 2–3× before OCR.
 Caveats: `MH` can carry a digit (`MH1`, `MH2`). Some kitchens are a niche without a label (`K` missing),
 which is why the "always 1" prior is so strong. Saunas are sometimes only drawn as a bench symbol.
 
-## 3. Symbol counting on raster plans (method, to be measured by W3)
+## 3. Symbol counting on raster plans (measured: Qwen3-VL-8B pointing does NOT work)
+
+Measured with Qwen3-VL-8B (`experiments/r1/symbol_points/`), exact match vs the per-template prior:
+
+| Setting | Split | Windows | Doors | WC seats | Sinks | Showers+tubs |
+|---|---|---|---|---|---|---|
+| prior | train (40 drawings) | 12.5% | 6.7% | 70.0% | 47.5% | 54.1% |
+| full image 2×, one class per prompt | train | 5.0% | 10.0% (loops) | **87.5%** | 15.0% | 43.2% |
+| same, frozen | dev (107) | – | – | 65.4% vs 57.0% (+8.4, CI [−2.8, +19.6]) | – | – |
+| 2×2 tiles, 1280 px each | train_gate (14/16) | 0.0% (0.63×) | 25.0% vs 6.2% | – | – | – |
+| 3×3 tiles, 1024 px each | train_gate | 7.1% (1.74×) | 25.0% (0.72×) | – | – | – |
+| 2×2 tiles, frozen | dev (57) | – | 10.5% vs 17.5% | – | – | – |
+
+The door gain on train_gate (n=16) did not replicate on dev. Tiled counts are unbiased on average
+(pred/gold 0.97) but much too noisy for exact match. This is consistent with AECV-Bench: frontier VLMs
+score ≤ 0.39 on doors. What's left to try: exemplar counters (GeCo2/CountGD), classical CV for door arcs
+and window symbols, or a bigger VLM. The original recipe below is kept for reference.
 
 Recommended order (cheapest first):
 1. VLM pointing: ask for one point per instance (Molmo / Qwen-VL grounding), then count the points.
