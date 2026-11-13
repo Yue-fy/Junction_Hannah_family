@@ -25,6 +25,12 @@
   Kia Kanninen (Founders House), Daksh Raghuvanshi (AfterQuery), Otto Söderlund (Supercell),
   Timo Ahopelto (Lifeline Ventures), Umar Noor (Google DeepMind), Hubertus van der Drift (Context.dev),
   and Arturs Polis (Verda). Verda says he looks for "prototypes with a clear path to production and scale".
+- What the grand jury says it looks for (from the official site):
+  - "Teams that start from a problem worth solving, not just a feature that's easy to build" (Kia Kanninen)
+  - "Teams that can explain exactly why an agent fails in their world, and whose reward holds when someone tries to break it"
+  - "Teams that start from a real user problem and ship something people want to come back to"
+  - "Teams that move fast, stay pragmatic, and find that one unique insight that solves a problem 10x faster or better"
+  - "Teams willing to tackle the hardest challenges and build prototypes with a clear path to production and scale" (Arturs Polis)
 - Prizes total €100,000; the breakdown is TBD. Teams have 1–4 people. Submissions are open-sourced under the MIT licence.
 
 ## Tracks and challenges (known before the videos)
