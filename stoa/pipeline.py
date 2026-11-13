@@ -26,6 +26,7 @@ several object classes) or name no known object class on a drawing without a det
 asks this pipeline's atomic cascade simple sub-questions and does the arithmetic in code),
 raw_first=1 (before the agent, an operator question goes AS ASKED to the deterministic solvers (dxf, ifc, schedule,
 pdf_vector); if one answers with confidence >= raw_accept=0.45 it applied the operator itself and no LLM is called),
+lora=1 (cubicasa counts may go to R2's counting LoRA `vlm_lora` where the train_gate gate prefers it; 0 = never),
 cc5k=1 (D8: cubicasa window/door/WC-seat/sink counts go to R1's pretrained `raster_cc5k` when it is registered, with
 hit rates measured on `cc5k_heldout` (stoa/router/gating_cc5k.json); cc5k=0 leaves every answer as without it).
 """
@@ -121,7 +122,8 @@ class Pipeline(BaseSolver):
     def __init__(self, accept: float | str = 0.6, agree: str = "cheap", api: int | str = 0, margin: float | str = 0.03,
                  max_tries: int | str = 3, vlm_args: str | dict | None = None, use_gate: int | str = 1,
                  compose: int | str = 1, normalise: int | str = 1, crosscheck: int | str = 1, agent: int | str = 1,
-                 raw_first: int | str = 1, raw_accept: float | str = 0.45, cc5k: int | str = 1, **kwargs):
+                 raw_first: int | str = 1, raw_accept: float | str = 0.45, cc5k: int | str = 1, lora: int | str = 1,
+                 **kwargs):
         super().__init__(**kwargs)
         self.accept = float(accept)
         self.agree = {"1": "cheap", "0": "never", "2": "always"}.get(str(agree), str(agree))  # cheap|never|always
@@ -138,6 +140,7 @@ class Pipeline(BaseSolver):
         # (W2: hard2q swiss dxf alone 85% vs pipeline 72.5%); "operator not applied" is capped at 0.3 by dxf and ifc
         self.raw_accept = float(raw_accept)
         self.cc5k = bool(int(cc5k))
+        self.lora = bool(int(lora))  # R2's counting LoRA (vlm_lora) on cubicasa; 0 = never call it
         self.vlm_args = json.loads(vlm_args) if isinstance(vlm_args, str) else dict(vlm_args or {})
         self._solvers: dict[str, object | None] = {}
         self._cc5k_gate: dict | None = None
@@ -240,6 +243,8 @@ class Pipeline(BaseSolver):
         src = source_of(path)
         trace = [f"intent: {intent.describe()} (lang {intent.lang})"]
         cands = route(path, intent)
+        if not self.lora:
+            cands = [c for c in cands if c != "vlm_lora"]
         why = self._agent_reason(path, question, intent, cands) if allow_agent else None
         unsure = None  # a deterministic solver's own answer to the raw question that it was not sure of
         if self.raw_first and not known_template(question) and any(TIER.get(c) == "deterministic" for c in cands):
