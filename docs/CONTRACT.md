@@ -128,6 +128,12 @@ $JUNCTION_VENV/bin/python -m stoa.eval --list        # registered solvers + impo
 ### `POST /ask`
 Request: `{"path": "data/...", "question": "How many windows ...?", "solver": "pipeline"}` (`solver`
 optional, default `pipeline`). Response `200`: an `Answer` JSON (above). `404` if the file doesn't exist.
+Additive fields (D6, 00:35): `"intent"` (the router's parse of the question, `stoa.router.intent.parse(q).to_dict()`),
+`"plan"` (only for compound questions: `{"op": "sum"|..., "parts": [...], "sub_questions": [...]}`) and
+`"cached"` (bool). Clients must ignore fields they don't know.
+
+### `GET /intent?q=...`
+Returns the router's intent parse for a question (debug/demo).
 
 ### `GET /file?path=data/...`
 Returns the drawing file (PDF, PNG, JPG, SVG, IFC, DXF) with the right content type. Only paths under the
