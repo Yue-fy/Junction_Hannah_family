@@ -59,6 +59,25 @@ at saturation), not HTTP wall time (which includes queueing behind other agents)
 | InternVL3.5-8B/30B-A3B | 17 / 60 GB | ✅ | good docs | not newer than Qwen3.6 |
 | GroundingDINO / OWLv2 / Florence-2 | <2 GB | – | open-vocab detectors | symbols on plans are out-of-domain for them |
 
+## Confidence from logprobs (cycle 2, 01:10)
+`llm.chat(logprobs=5)` + `llm.answer_prob()` = probability the model gave to its answer's digits (free on vLLM).
+vlm_direct maps it through `CONF_MAP` (fit on 1,500 TRAIN Qs with `experiments/r2/fit_conf.py`):
+| raw p(digits) | ≤0.49 | ≤0.88 | ≤0.96 | ≤0.991 | ≤0.999 | >0.999 |
+|---|---|---|---|---|---|---|
+| count accuracy (train) | 12% | 34% | 41% | 48% | 49% | 89% |
+Count AUROC 0.78 (cubicasa 0.74, swiss 0.89); ECE 0.02 mapped vs 0.20 for the old constant 0.3. Areas (swiss, 8B reads
+them badly: 5% right) AUROC 0.87. The map is model-specific: refit it for a LoRA or another model.
+
+## Leak-free symbol comparison (cycle 2)
+`$JUNCTION_SHARED/artifacts/R2/cc5k_heldout_notLoRA.jsonl` = R1's cc5k_heldout (original CC5K test list, so the
+pretrained CC5K net never saw them) minus drawings in the LoRA's training data minus sealed-test drawings:
+200 Qs on 50 drawings (56 dev, 132 train_gate, 12 smoke). ~15 Qs per concept: small, read per-concept numbers as ±12 pts.
+| solver | all | windows | doors | WC seats | sinks | showers+baths |
+|---|---|---|---|---|---|---|
+| prior | 54.0 | 26.7 | 11.1 | 47.1 | 42.9 | 57.1 |
+| Qwen3-VL-8B direct | 51.5 | 13.3 | 44.4 | 82.4 | 57.1 | 28.6 |
+| R1 CC5K net (plain_over_prior) | 60.5 | 40.0 | 22.2 | 88.2 | 57.1 | 57.1 (prior) |
+
 ## Cascade recommendation (from the numbers so far)
 1. Deterministic parsers first (DXF 99%, IFC 100%, PDF text layer): free, exact, verifiable. The VLM must never
    override them.
