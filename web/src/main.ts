@@ -230,10 +230,27 @@ function creditLine(f: FileInfo) {
 async function loadExamples(f: FileInfo) {
   const sel = $<HTMLSelectElement>("examples");
   sel.innerHTML = `<option value="">Example questions…</option>`;
+  $("chips").innerHTML = "";
   try {
     const qs = await exampleQuestions(f.path);
     if (state.file?.path !== f.path) return;
-    sel.innerHTML = `<option value="">Example questions (${qs.length})…</option>` + qs.map((q) =>
+    const chips = $("chips");
+    const english = qs.filter((q) => /\b(how many|what|which|is there|are there)\b/i.test(q.question));
+    // one question per template ('…' and numbers blanked), interleaved across answer types, fixtures first
+    const tpl = (q: string) => q.replace(/'[^']*'/g, "''").replace(/\d+(\.\d+)?/g, "#");
+    const uniq = english.filter((q, i, arr) => arr.findIndex((x) => tpl(x.question) === tpl(q.question)) === i);
+    const byType = new Map<string, typeof uniq>();
+    for (const q of uniq) byType.set(q.type || String(q.unit), [...(byType.get(q.type || String(q.unit)) ?? []), q]);
+    const interleaved: typeof uniq = [];
+    for (let k = 0; interleaved.length < uniq.length; k++)
+      for (const l of byType.values()) if (l[k]) interleaved.push(l[k]);
+    const pick = [...english.filter((q) => q.has_fixture), ...interleaved.filter((q) => !q.has_fixture)].slice(0, 4);
+    chips.innerHTML = pick.map((q) => `<button type="button" class="chip" title="${esc(q.question)}">${esc(q.question.length > 64 ? q.question.slice(0, 61) + "…" : q.question)}</button>`).join("");
+    chips.querySelectorAll<HTMLButtonElement>(".chip").forEach((b, i) => b.addEventListener("click", () => {
+      $<HTMLTextAreaElement>("question").value = pick[i].question;
+      void runAsk();
+    }));
+    sel.innerHTML = `<option value="">More example questions (${qs.length})…</option>` + qs.map((q) =>
       `<option value="${esc(q.question)}">${q.has_fixture ? "★ " : ""}${esc(q.question.length > 110 ? q.question.slice(0, 107) + "…" : q.question)}</option>`).join("");
   } catch {
     /* keep empty */
@@ -330,6 +347,8 @@ async function showAnswer(a: Answer, roundTripMs: number) {
     if (state.mode === "2d" && !v2d.hasGuid(a.evidence.find((e) => e.ifc_guid)!.ifc_guid!)) setMode("split");
     await ensure3D();
     applyEvidence3D(a);
+  } else if (v3d && v3d.file === state.ifc) {
+    applyEvidence3D(a); // clears the previous answer's highlight
   }
 }
 

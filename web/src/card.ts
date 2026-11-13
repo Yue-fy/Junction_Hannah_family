@@ -50,7 +50,7 @@ export function crossChecks(a: Answer): { text: string; ok: boolean }[] {
     const m = l.match(/cross-?check:?\s*(.*)$/i);
     if (!m) return [];
     const text = m[1].trim();
-    return [{ text: text.replace(/\s*[✓✗]\s*/g, " ").trim(), ok: !/✗|disagree|mismatch/i.test(text) }];
+    return [{ text: text.replace(/\s*[✓✗]\s*/g, " ").trim(), ok: !/✗|≠|!=|disagree|mismatch|conflict/i.test(text) }];
   });
   // Evidence notes carry the specific check; the trace usually repeats it, so use the trace only as fallback.
   const fromEv = parse(a.evidence.map((e) => e.note ?? ""));
@@ -140,7 +140,7 @@ export function renderCard(el: HTMLElement, a: Answer, opts: CardOpts) {
   el.className = `card answer ${a.value === null ? "refused" : ""}`;
   el.innerHTML = `
     <div class="value-row">
-      <div class="value ${isText ? "text" : ""}">${esc(fmtValue(a))}${unit ? `<span class="unit">${esc(unit)}</span>` : ""}</div>
+      <div class="value ${isText ? "text" : ""} ${isText && String(a.value).length > 40 ? "long" : ""}">${esc(fmtValue(a))}${unit ? `<span class="unit">${esc(unit)}</span>` : ""}</div>
       <div class="conf ${confClass}" title="Calibrated confidence">
         <div class="conf-num">${conf}%</div><div class="conf-bar"><i style="width:${conf}%"></i></div><div class="conf-lbl">confidence</div>
       </div>

@@ -436,7 +436,7 @@ export class Viewer3D {
     const size = box.getSize(new THREE.Vector3()).length();
     const dist = Math.max(size, 4) * 0.9 / Math.tan((this.camera.fov * Math.PI) / 360);
     const dir = new THREE.Vector3(0.6, 0.75, 0.9).normalize();
-    this.camera.position.copy(c).addScaledVector(dir, dist * (obj === this.root ? 0.6 : 1.1));
+    this.camera.position.copy(c).addScaledVector(dir, dist * (obj === this.root ? 0.6 : 0.85));
     this.camera.near = Math.max(dist / 1000, 0.01);
     this.camera.far = dist * 20;
     this.camera.updateProjectionMatrix();
