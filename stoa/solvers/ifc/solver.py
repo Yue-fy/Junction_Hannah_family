@@ -467,6 +467,11 @@ class IfcSolver(BaseSolver):
                                   missing=[f"IfcSpaces named {it.names}"])
 
         where = "whole model" if (it.scope == "model" or storey is None) else f"storey '{sname}'"
+        if (it.kind == "space" or "space" in it.kinds) and not idx.by_class("IfcSpace"):
+            # rooms are not modelled (e.g. ResBIM: walls/doors/windows only): 0 rooms / 0 m² is never a sensible
+            # estimate; let the cascade read the drawing instead
+            return Answer.abstain(self.name, "the model has no IfcSpace (rooms are not modelled)", trace=trace,
+                                  missing=["rooms (IfcSpace) in the IFC model; read them from the drawing"])
 
         def elements_of(kind: str) -> list[Element]:
             classes = KIND_CLASSES.get(kind, ())
@@ -552,6 +557,9 @@ class IfcSolver(BaseSolver):
             if len(kinds) > 1:
                 trace.append("sum: " + " + ".join(f"{k} {len(per[k])}" for k in kinds))
             conf_c = conf * (0.97 if n else 0.6)
+            if n == 0 and not any(idx.by_class(*KIND_CLASSES.get(k, ())) for k in kinds):
+                conf_c = min(conf_c, 0.3)  # the model has none of this class at all: maybe not modelled
+                missing.append("the model has no element of this class anywhere; it may not be modelled")
             return self._final(n, "count", it, conf_c, ev, trace, assumptions, missing)
 
         els = elements_of(it.kind)
@@ -909,6 +917,19 @@ class IfcSolver(BaseSolver):
                      f"{noun.capitalize()} type{'s' if len(types) > 1 else ''} with this {what}: "
                      + "; ".join(f"{t} ({n} {noun}{'s' if n > 1 else ''})" for t, n in types.most_common(5))]
             return Answer(value="\n".join(lines), unit=None, confidence=conf, evidence=ev, trace=trace,
+                          solver=self.name, assumptions=assumptions, missing=missing)
+        if re.search(r"\btypes?\b", q):  # "wall types and their thicknesses": one line per type
+            per: dict[str, list[float]] = {}
+            for v, e in vals:
+                per.setdefault(label(e), []).append(v)
+            lines = [f"{noun.capitalize()} types {where} with their {what} ({len(per)} types, {len(vals)} {noun}s; {src}):"]
+            for t, vs in sorted(per.items(), key=lambda x: (-max(x[1]), x[0]))[:60]:
+                lo, hi = min(vs), max(vs)
+                rng = mm(lo) if abs(hi - lo) < 5e-4 else f"{lo * 1000:.0f}-{hi * 1000:.0f} mm"
+                lines.append(f"- {t}: {rng} ({len(vs)} {noun}{'s' if len(vs) > 1 else ''})")
+            if len(per) > 60:
+                lines.append(f"- ... {len(per) - 60} more types")
+            return Answer(value="\n".join(lines), unit=None, confidence=conf * 0.85, evidence=ev_all, trace=trace,
                           solver=self.name, assumptions=assumptions, missing=missing)
         # distribution: "different wall thicknesses and how many walls have each"
         dist = Counter(round(v * 1000) for v, _ in vals)
