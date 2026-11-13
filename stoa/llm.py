@@ -22,6 +22,8 @@ see `tile_image`). Never print or log API keys.
 from __future__ import annotations
 
 import base64
+import contextlib
+import contextvars
 import fcntl
 import hashlib
 import io
@@ -193,6 +195,70 @@ def prepare_image(src: Any, max_pixels: int = DEFAULT_MAX_PIXELS, max_side: int 
     return {"type": "image_url", "image_url": {"url": _encode(small, fmt)}}, info
 
 
+# --------------------------------------------------------------------------------------------- cost
+@dataclass
+class Cost:
+    """Cost of the LLM calls made inside a `cost_meter()` block (Stoa scores cost: lower is better).
+
+    gpu_seconds = wall time of local-server calls (upper bound: the server batches requests);
+    api_calls counts hosted (nvidia) calls only.
+    """
+
+    llm_tokens_in: int = 0
+    llm_tokens_out: int = 0
+    gpu_seconds: float = 0.0
+    api_calls: int = 0
+    calls: int = 0
+    _lock: threading.Lock = field(default_factory=threading.Lock, repr=False, compare=False)
+
+    def add(self, res: "ChatResult") -> None:
+        with self._lock:
+            self.calls += 1
+            self.llm_tokens_in += res.prompt_tokens or 0
+            self.llm_tokens_out += res.completion_tokens or 0
+            if res.backend == "local":
+                self.gpu_seconds += 0.0 if res.cached else res.latency_s
+            elif not res.cached:
+                self.api_calls += 1
+
+    def as_dict(self) -> dict:
+        return {"llm_tokens_in": self.llm_tokens_in, "llm_tokens_out": self.llm_tokens_out,
+                "gpu_seconds": round(self.gpu_seconds, 3), "api_calls": self.api_calls}
+
+    def __str__(self) -> str:
+        return (f"cost: calls={self.calls} tok_in={self.llm_tokens_in} tok_out={self.llm_tokens_out} "
+                f"gpu_s={self.gpu_seconds:.2f} api_calls={self.api_calls}")
+
+
+_METER: contextvars.ContextVar[Cost | None] = contextvars.ContextVar("stoa_llm_cost", default=None)
+
+
+@contextlib.contextmanager
+def cost_meter():
+    """`with cost_meter() as c: ...chat(...)...` -> c.as_dict(). Nested meters all get charged."""
+    parent = _METER.get()
+    c = Cost()
+    tok = _METER.set(c)
+    try:
+        yield c
+    finally:
+        _METER.reset(tok)
+        if parent is not None:  # roll up into the enclosing meter
+            with parent._lock:
+                parent.calls += c.calls
+                parent.llm_tokens_in += c.llm_tokens_in
+                parent.llm_tokens_out += c.llm_tokens_out
+                parent.gpu_seconds += c.gpu_seconds
+                parent.api_calls += c.api_calls
+
+
+def _charge(res: "ChatResult") -> "ChatResult":
+    m = _METER.get()
+    if m is not None:
+        m.add(res)
+    return res
+
+
 # --------------------------------------------------------------------------------------------- client
 @dataclass
 class ChatResult:
@@ -320,8 +386,6 @@ def chat(
             body["structured_outputs"] = {"json": json_schema}
         else:
             body["guided_json"] = json_schema
-    if top_p is not None:
-        pass
     kwargs: dict[str, Any] = dict(model=model, messages=msgs, max_tokens=max_tokens, temperature=temperature)
     if top_p is not None:
         kwargs["top_p"] = top_p
@@ -338,7 +402,7 @@ def chat(
         cpath = _cache_path({"b": backend, "m": concrete, "k": {**kwargs, "model": concrete}})
         if cpath.exists():
             d = json.loads(cpath.read_text())
-            return ChatResult(images=infos, cached=True, **d)
+            return _charge(ChatResult(images=infos, cached=True, **d))
 
     from openai import APIConnectionError, APIStatusError, APITimeoutError, RateLimitError
 
@@ -368,7 +432,7 @@ def chat(
                 cpath.parent.mkdir(parents=True, exist_ok=True)
                 d = {k: v for k, v in res.__dict__.items() if k not in ("images", "cached")}
                 cpath.write_text(json.dumps(d))
-            return res
+            return _charge(res)
         except RateLimitError as e:  # 429: back off, honour Retry-After when given
             last_err = e
             ra = None
@@ -402,8 +466,10 @@ def chat_many(requests: Iterable[dict], workers: int = 16) -> list[ChatResult | 
         except Exception as e:  # noqa: BLE001
             return e
 
+    ctx = contextvars.copy_context()  # so cost_meter() around chat_many still sees every call
+
     with ThreadPoolExecutor(max_workers=workers) as ex:
-        return list(ex.map(one, reqs))
+        return list(ex.map(lambda r: ctx.copy().run(one, r), reqs))
 
 
 # --------------------------------------------------------------------------------------------- parsing

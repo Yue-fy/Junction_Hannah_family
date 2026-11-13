@@ -138,6 +138,16 @@ class VlmDirect(BaseSolver):
     def solve(self, path: str, question: str) -> Answer:
         from stoa import llm
 
+        with llm.cost_meter() as cost:
+            ans = self._solve(path, question)
+        ans.trace.append(str(cost))
+        if "cost" in Answer.model_fields:  # contract addition (Stoa feedback); additive
+            ans.cost = {**cost.as_dict(), **(ans.cost or {})}  # type: ignore[attr-defined]
+        return ans
+
+    def _solve(self, path: str, question: str) -> Answer:
+        from stoa import llm
+
         trace: list[str] = []
         use = self._pick_file(path)
         if use is None:
