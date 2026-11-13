@@ -134,7 +134,7 @@ function intentHtml(a: Answer) {
   const plan = a.plan && a.plan.sub_questions?.length
     ? `<details class="plan"><summary><b>${esc(OP[a.plan.op] ?? a.plan.op)}</b> ${a.plan.parts.map((p) => `<span class="part">${esc(p)}</span>`).join(a.plan.op === "sum" ? " + " : a.plan.op === "diff" ? " − " : ", ")}
         <small>${a.plan.sub_questions.length} sub-questions, arithmetic in code</small></summary>
-        <ol>${a.plan.sub_questions.map((q) => `<li><button type="button" class="subq" data-q="${esc(q)}" title="Ask this sub-question on its own">${esc(q)}</button></li>`).join("")}</ol></details>`
+        <ol>${a.plan.sub_questions.map((q) => `<li><span role="button" tabindex="0" class="subq" data-q="${esc(q)}" title="Ask this sub-question on its own">${esc(q)}</span></li>`).join("")}</ol></details>`
     : "";
   return `<div class="intent"><span class="lbl">Understood as</span>${bits.join(" · ")}${lang}${a.cached ? `<span class="cached" title="Same question answered before; served from the API cache">cached</span>` : ""}</div>${plan}`;
 }
@@ -208,6 +208,9 @@ export function renderCard(el: HTMLElement, a: Answer, opts: CardOpts) {
       <ul class="evidence">${shown.map((g, n) => evLabel(ev, g, n + 1, opts.describeGuid)).join("")}${groups.length > shown.length ? `<li class="more">+ ${groups.length - shown.length} more</li>` : ""}</ul></details>
   `;
   el.querySelectorAll<HTMLElement>(".ev-item").forEach((li) => li.addEventListener("click", () => opts.onEvidence(Number(li.dataset.i))));
-  el.querySelectorAll<HTMLButtonElement>(".subq").forEach((b) => b.addEventListener("click", () => opts.onAsk?.(b.dataset.q!)));
+  el.querySelectorAll<HTMLElement>(".subq").forEach((b) => {
+    b.addEventListener("click", () => opts.onAsk?.(b.dataset.q!));
+    b.addEventListener("keydown", (e) => e.key === "Enter" && opts.onAsk?.(b.dataset.q!));
+  });
   el.querySelectorAll<HTMLButtonElement>(".sheet").forEach((b) => b.addEventListener("click", () => b.dataset.file !== opts.currentFile && opts.onOpenSheet(b.dataset.file!)));
 }
