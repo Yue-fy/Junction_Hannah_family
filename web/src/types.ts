@@ -117,6 +117,11 @@ export interface KgCrossCheck {
   drawn: number;
   ok: boolean | null; // null = not comparable (reason says why)
   reason?: string;
+  // W1 843beaa: sheets are cuts at floor + 1.2 m; compare with the elements crossing that plane
+  model_cut?: number;
+  drawn_all?: number;
+  drawn_other?: Record<string, number>;
+  cut_z?: number;
   plan?: string;
 }
 
