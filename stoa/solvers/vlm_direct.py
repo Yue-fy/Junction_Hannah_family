@@ -12,6 +12,8 @@ Options (pass via the eval tool's solver kwargs, e.g. `--solver vlm_direct -k ba
                (and the count is the number of boxes when the model gives both and they disagree: see `trust`)
   with_text    1 -> append the PDF's text layer (words, reading order) to the prompt (PDF only)
   thinking     1 -> let hybrid-thinking models think (slower)
+  style        "direct" (default: answer only, ~10 output tokens, cheapest) or "cot" (reason step by step,
+               then `ANSWER: x`; up to max_tokens; if it runs out of tokens a short follow-up asks for the answer)
 """
 
 from __future__ import annotations
@@ -89,6 +91,14 @@ FORMAT = {
     "text": "Answer briefly and precisely on the last line, like `ANSWER: <your answer>`.",
 }
 
+DIRECT = {
+    "count": "Reply with only the final count as a single integer, nothing else.",
+    "area": "Reply with only the final value in {unit} as a number, nothing else.",
+    "volume": "Reply with only the final value in m³ as a number, nothing else.",
+    "length": "Reply with only the final value in metres as a number, nothing else.",
+    "text": "Reply with only the answer, as briefly as possible.",
+}
+
 GROUND = ("First list every object you count as JSON, one entry per object: "
           '[{"bbox_2d": [x1, y1, x2, y2], "label": "<object>"}] (coordinates 0-1000 relative to the image). '
           "Then give the final count on the last line like `ANSWER: 7`.")
@@ -100,7 +110,7 @@ class VlmDirect(BaseSolver):
 
     def __init__(self, backend: str = "local", model: str | None = None, max_pixels: int | str = 3_200_000,
                  dpi: int | str = 150, ground: int | str = 0, with_text: int | str = 0, thinking: int | str = 0,
-                 max_tokens: int | str = 1024, **kwargs):
+                 max_tokens: int | str = 1024, style: str = "direct", **kwargs):
         super().__init__(**kwargs)
         self.backend = backend
         self.model = model
@@ -109,6 +119,7 @@ class VlmDirect(BaseSolver):
         self.ground = bool(int(ground))
         self.with_text = bool(int(with_text))
         self.thinking = bool(int(thinking))
+        self.style = style
         self.max_tokens = int(max_tokens) if not self.thinking else max(int(max_tokens), 4096)
 
     # -- input --------------------------------------------------------------------------------
@@ -173,7 +184,8 @@ class VlmDirect(BaseSolver):
         else:
             img = llm.load_image(ap)
 
-        fmt = FORMAT[kind].format(unit="ft²" if unit == "ft2" else "m²")
+        direct = self.style == "direct" and not self.ground and not self.thinking
+        fmt = (DIRECT if direct else FORMAT)[kind].format(unit="ft²" if unit == "ft2" else "m²")
         prompt = question.strip()
         if text_layer:
             prompt += "\n\nText found on the drawing (PDF text layer, reading order):\n" + text_layer
@@ -181,7 +193,17 @@ class VlmDirect(BaseSolver):
 
         try:
             r = llm.chat(prompt, images=[img], system=SYSTEM, backend=self.backend, model=self.model,
-                         max_tokens=self.max_tokens, thinking=self.thinking, max_pixels=self.max_pixels)
+                         max_tokens=(64 if direct and kind != "text" else 256 if direct else self.max_tokens),
+                         thinking=self.thinking, max_pixels=self.max_pixels)
+            if r.finish_reason == "length" and not direct and "ANSWER:" not in r.text:
+                # rambling/looping CoT: ask for the answer only, keeping what it saw so far
+                trace.append("cot hit max_tokens; asking for the final answer")
+                msgs = [{"role": "user", "content": prompt},
+                        {"role": "assistant", "content": r.text[-3000:]},
+                        {"role": "user", "content": DIRECT[kind].format(unit="ft²" if unit == "ft2" else "m²")}]
+                r2 = llm.chat(msgs, images=[img], system=SYSTEM, backend=self.backend, model=self.model,
+                              max_tokens=64, thinking=False, max_pixels=self.max_pixels)
+                r = r2
         except Exception as e:  # noqa: BLE001
             return self.abstain(f"llm error: {type(e).__name__}: {str(e)[:200]}", trace)
         trace.append(f"{r.backend}:{r.model} {r.latency_s:.1f}s tok {r.prompt_tokens}->{r.completion_tokens}")
@@ -204,7 +226,7 @@ class VlmDirect(BaseSolver):
         last = out.splitlines()[-1] if out else ""
         if kind == "text":
             m = re.search(r"ANSWER:\s*(.+)", out, re.S)
-            value = (m.group(1).strip() if m else out).strip("` ")
+            value = (m.group(1).strip() if m else out).strip("` ")[:500]
             return Answer(value=value or None, unit=None, confidence=0.2, evidence=evidence, trace=trace,
                           solver=self.name)
 
