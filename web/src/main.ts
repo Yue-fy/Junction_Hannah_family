@@ -2,7 +2,7 @@ import "./style.css";
 import { ask, benchmark, exampleQuestions, fileUrl, knowledgeGraph, listFiles, onBackend } from "./api";
 import { renderBench } from "./bench";
 import { crossChecks, renderCard } from "./card";
-import { renderKg } from "./kg";
+import { markAnswerCheck, renderKg } from "./kg";
 import type { Answer, FileInfo, KgRoom } from "./types";
 import { Viewer2D } from "./viewer2d";
 import type { Viewer3D } from "./viewer3d"; // loaded lazily: web-ifc + three are ~4 MB
@@ -220,6 +220,7 @@ async function openFile(f: FileInfo, question = "", keep: Answer | null = null, 
   $("fileMeta").textContent = `${f.source} · ${f.n_questions} questions`;
   $("credit").innerHTML = creditLine(f);
   if (!keep) {
+    markAnswerCheck($("linked"), undefined, undefined);
     $("xbanner").hidden = true;
     $("card").className = "card empty";
     $("card").innerHTML = `<p class="hint">Ask a question about this ${f.ext === ".ifc" ? "model" : "drawing"}.</p>`;
@@ -435,6 +436,8 @@ async function showAnswer(a: Answer, roundTripMs: number) {
   });
   v2d.setEvidence(a.evidence);
   v2d.frameEvidence();
+  if (a.intent?.task === "count") markAnswerCheck($("linked"), a.intent.target, String(a.intent.filters?.storey ?? "") || undefined);
+  else markAnswerCheck($("linked"), undefined, undefined);
   const xb = $("xbanner");
   const xcs = crossChecks(a);
   const xc = xcs[0];
