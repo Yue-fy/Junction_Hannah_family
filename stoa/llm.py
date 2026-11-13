@@ -281,6 +281,7 @@ class ChatResult:
     prompt_tokens: int | None = None
     completion_tokens: int | None = None
     reasoning: str | None = None  # thinking text if the server returned it separately
+    texts: list[str] = field(default_factory=list)  # all n samples when n > 1 (texts[0] == text)
     finish_reason: str | None = None
     cached: bool = False
 
@@ -351,6 +352,7 @@ def chat(
     temperature: float = 0.0,
     top_p: float | None = None,
     seed: int | None = None,
+    n: int = 1,
     thinking: bool | None = False,
     json_schema: dict | None = None,
     max_pixels: int = DEFAULT_MAX_PIXELS,
@@ -402,6 +404,8 @@ def chat(
         kwargs["top_p"] = top_p
     if seed is not None:
         kwargs["seed"] = seed
+    if n > 1:  # one prefill (image encoded once), n decodes: cheap self-consistency on vLLM
+        kwargs["n"] = n
     if body:
         kwargs["extra_body"] = body
 
@@ -438,6 +442,7 @@ def chat(
                 prompt_tokens=getattr(resp.usage, "prompt_tokens", None) if resp.usage else None,
                 completion_tokens=getattr(resp.usage, "completion_tokens", None) if resp.usage else None,
                 reasoning=reasoning, finish_reason=ch.finish_reason,
+                texts=[c.message.content or "" for c in resp.choices],
             )
             if cpath is not None:
                 cpath.parent.mkdir(parents=True, exist_ok=True)

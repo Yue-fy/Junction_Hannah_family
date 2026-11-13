@@ -11,6 +11,8 @@ Options (pass via the eval tool's solver kwargs, e.g. `--solver vlm_direct -k ba
   ground       count questions only: "box" (or 1) -> ask for one box per counted object, "point" -> one point
                per object (cheaper); the boxes/points become evidence and, with count_from=list (default),
                the answer is the number of (de-duplicated) items; count_from=stated keeps the stated count
+  samples      N > 1 -> self-consistency: N samples at temperature 0.7 in one request (image encoded once),
+               answer = most common value, confidence = its vote share (direct style only)
   min_pixels   upscale small images to at least this many pixels before sending (default 0 = never)
   with_text    1 -> append the PDF's text layer (words, reading order) to the prompt (PDF only)
   thinking     1 -> let hybrid-thinking models think (slower)
@@ -118,7 +120,7 @@ class VlmDirect(BaseSolver):
     def __init__(self, backend: str = "local", model: str | None = None, max_pixels: int | str = 3_200_000,
                  dpi: int | str = 150, ground: int | str = 0, with_text: int | str = 0, thinking: int | str = 0,
                  max_tokens: int | str = 1024, style: str = "direct", count_from: str = "list",
-                 min_pixels: int | str = 0, **kwargs):
+                 min_pixels: int | str = 0, samples: int | str = 1, **kwargs):
         super().__init__(**kwargs)
         self.backend = backend
         self.model = model
@@ -128,6 +130,7 @@ class VlmDirect(BaseSolver):
         self.ground = {"0": "", "": "", "false": "", "1": "box", "box": "box", "point": "point"}[g]
         self.count_from = count_from
         self.min_pixels = int(min_pixels)
+        self.samples = int(samples)
         self.with_text = bool(int(with_text))
         self.thinking = bool(int(thinking))
         self.style = style
@@ -211,7 +214,8 @@ class VlmDirect(BaseSolver):
             r = llm.chat(prompt, images=[img], system=SYSTEM, backend=self.backend, model=self.model,
                          max_tokens=(64 if direct and kind != "text" else 256 if direct else
                                      max(self.max_tokens, 2048) if grounded else self.max_tokens),
-                         thinking=self.thinking, max_pixels=self.max_pixels)
+                         thinking=self.thinking, max_pixels=self.max_pixels,
+                         **({"n": self.samples, "temperature": 0.7} if (direct and self.samples > 1) else {}))
             if r.finish_reason == "length" and not direct and "ANSWER:" not in r.text:
                 # rambling/looping CoT: ask for the answer only, keeping what it saw so far
                 trace.append("cot hit max_tokens; asking for the final answer")
@@ -257,6 +261,22 @@ class VlmDirect(BaseSolver):
             return Answer(value=value or None, unit=None, confidence=0.2, evidence=evidence, trace=trace,
                           solver=self.name)
 
+        conf = 0.3
+        if direct and self.samples > 1 and len(r.texts) > 1:
+            import collections
+
+            vals = [parse_number(t, integer=(kind == "count")) for t in r.texts]
+            vals = [v for v in vals if v is not None]
+            if vals:
+                if kind == "count":
+                    best, votes = collections.Counter(vals).most_common(1)[0]
+                else:  # continuous: median is the robust vote
+                    best = sorted(vals)[len(vals) // 2]
+                    votes = sum(1 for v in vals if abs(v - best) <= 0.02 * max(abs(best), 1e-9))
+                conf = votes / len(r.texts)
+                trace.append(f"samples {vals} -> {best} ({votes}/{len(r.texts)})")
+                return Answer(value=best, unit=unit, confidence=round(conf, 3), evidence=evidence, trace=trace,
+                              solver=self.name)
         m = re.search(r"ANSWER:\s*([^\n]+)", out)
         value = parse_number(m.group(1) if m else (last or out), integer=(kind == "count"))
         if value is None:
