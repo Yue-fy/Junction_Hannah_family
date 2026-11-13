@@ -1,8 +1,8 @@
 # Scorecard (E = agent F, 01:05, 14 Nov)
 
 Integrated `night` on dev v2 (hash f43c5369): dev/hard = S0 runs on night 2b7935a (00:47–00:52); hard2/hard2p =
-night 971b985 (00:58–01:04); ifc_bench text judged on night cbd2fe8 (00:38). Regenerate:
-`python -m stoa.eval.scorecard 20261114-004756-pipeline-dev-fbaf --hard 20261114-005205-pipeline-hard-de9c --text 20261114-003818-pipeline-dev-79b6 --gen 20261114-005759-pipeline-hard2-5737 --gen 20261114-010003-pipeline-hard2p-3d40`
+night 971b985 (00:58–01:04); ifc_bench text judged on night cbd2fe8 (00:38; re-judged 01:10 with the numeric pre-check). Regenerate:
+`python -m stoa.eval.scorecard 20261114-004756-pipeline-dev-fbaf --hard 20261114-005205-pipeline-hard-de9c --text artifacts/eval/20261114-003818-pipeline-dev-79b6.judged.jsonl --gen 20261114-005759-pipeline-hard2-5737 --gen 20261114-010003-pipeline-hard2p-3d40`
 
 - Cost: local-LLM GPU time is billed from tokens (min(reported, estimate)); queueing-inflated latency had made
   it look 10x higher. LLM-cache hits are still billed as free by stoa.llm, so a cold run may cost a bit more.
@@ -32,7 +32,7 @@ Baseline: `20261113-235744-prior-dev`. CI = 95% cluster bootstrap over drawings.
 | LLM calls per question | 0.23 | 0.00 |  |
 | deterministic tier (share / accuracy) | 80% / 86.1% | 100% / 26.9% | no model call at all |
 | latency p50 / p95 | 0.284 s / 3.564 s | 0.0 s / 0.001 s |  |
-| text answers, LLM-judged | 42.5% of 200 | – | free text (ifc_bench, schedules); judge is lenient ±5 pts |
+| text answers, LLM-judged | 40.5% of 200 | – | free text (ifc_bench, schedules); judge is lenient ±5 pts |
 | generality (hard): translation / paraphrase / composition | 86% / 84% / 65% | – | unseen wordings, languages, units, multi-step |
 | generality (hard2): scored / judged text / AUROC / conf ≥ 0.8 acc | 77.8% / 47.8% / 0.51 / 95.8% | – | n=256; operators never seen in questions.jsonl |
 | generality (hard2p): scored / judged text / AUROC / conf ≥ 0.8 acc | 56.1% / 56.7% / 0.53 / 69.5% | – | n=256; operators never seen in questions.jsonl |
@@ -40,7 +40,7 @@ Baseline: `20261113-235744-prior-dev`. CI = 95% cluster bootstrap over drawings.
 | source | n | accuracy | conf ≥ 0.8 share / acc | ECE | evidence in 2D | counts verifiable | $/1k |
 |---|---:|---:|---:|---:|---:|---:|---:|
 | cubicasa5k | 800 | 61.8% | 23% / 91.3% | 0.018 | 6% | 100% | 0.07 |
-| ifc_bench | 200 | text 42.5% | – | – | 0% | – | 0.10 |
+| ifc_bench | 200 | text 40.5% | – | – | 0% | – | 0.10 |
 | ifc_models | 354 | 100.0% | 100% / 100.0% | 0.017 | 98% | 100% | 0.00 |
 | opening_design | 61 | 73.9% | 0% / – | 0.267 | 84% | 41% | 0.44 |
 | swiss_dwellings | 800 | 98.8% | 66% / 100.0% | 0.105 | 100% | 100% | 0.01 |
