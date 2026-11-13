@@ -25,7 +25,7 @@ body { background: var(--bg); overflow: hidden; }
 button, select, input, textarea { font: inherit; color: inherit; }
 [hidden] { display: none !important; }
 
-#app { display: grid; grid-template-columns: var(--side) 1fr; height: 100vh; }
+#app { display: grid; grid-template-columns: var(--side) minmax(0, 1fr); height: 100vh; }
 
 /* ---------- sidebar ---------- */
 #side { display: flex; flex-direction: column; gap: 12px; padding: 14px; overflow-y: auto; border-right: 1px solid var(--line); background: #fbfcfd; }
@@ -120,7 +120,9 @@ select, input[type="search"], textarea { border: 1px solid var(--line); border-r
 
 /* ---------- main ---------- */
 #main { display: grid; grid-template-rows: auto auto 1fr auto auto; min-width: 0; min-height: 0; }
-#toolbar { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-bottom: 1px solid var(--line); background: #fff; }
+#toolbar { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--line); background: #fff; min-width: 0; }
+#toolbar > button, #toolbar > select, #toolbar > .seg { flex: 0 0 auto; }
+@media (max-width: 1400px) { :root { --side: 350px; } .bn-row { grid-template-columns: 170px 1fr; } #toolbar .ghost { padding-left: 8px; padding-right: 8px; font-size: 12.5px; } .file-title small { display: none; } }
 .file-title { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .file-title span { font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .file-title small { color: var(--muted); font-size: 12px; }
@@ -282,7 +284,7 @@ select, input[type="search"], textarea { border: 1px solid var(--line); border-r
 .bn-head h2 { margin: 0; font-size: 20px; color: var(--navy); }
 .bn-head p { grid-column: 1; margin: 0; font-size: 12.5px; color: var(--muted); }
 .bn-close { grid-row: 1 / span 2; grid-column: 2; border: 1px solid var(--line); background: #fff; border-radius: 7px; width: 30px; height: 30px; cursor: pointer; }
-.bn-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; margin-bottom: 18px; }
+.bn-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-bottom: 18px; }
 .bn-tile { border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; background: #fbfcfd; }
 .bn-tile .k { font-size: 11px; font-weight: 650; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
 .bn-tile .v { font-size: 32px; font-weight: 750; color: var(--ink); letter-spacing: -0.02em; margin: 4px 0 2px; font-variant-numeric: tabular-nums; }
@@ -321,3 +323,11 @@ select, input[type="search"], textarea { border: 1px solid var(--line); border-r
 .kg-graph .kn.other text { fill: var(--muted); }
 .kg-graph .kn[data-open], .kg-graph .kn[data-storey] { cursor: pointer; }
 .kg-graph .kn[data-open]:hover text, .kg-graph .kn[data-storey]:hover text { fill: var(--accent); }
+
+/* short screens (projectors at 1280×720): keep the answer card above the fold */
+@media (max-height: 820px) {
+  .files { max-height: 108px; }
+  #chips .chip:nth-child(n+3) { display: none; }
+  .brand p { display: none; }
+  #side { gap: 8px; padding: 10px; }
+}
