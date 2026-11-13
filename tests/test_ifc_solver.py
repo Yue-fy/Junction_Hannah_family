@@ -78,3 +78,23 @@ def test_plan_pdf_storey(solver):
     assert st.name == "-1", why  # slug '1' is ambiguous between '-1' and '1': plan number decides
     st, _ = plan_storey("data/ifc_models/bimspeed-gdynia_ruchu-oporu-18_plan-04-1.pdf", idx)
     assert st.name == "1"
+
+
+def test_storeys_filters_and_room_types(solver):
+    assert _val(solver, "How many storeys does the building have?").value == 4
+    assert _val(solver, "What is the elevation of storey 'Level 2'?").value == pytest.approx(3.1, abs=0.01)
+    ext = _val(solver, "How many external walls are on 'Level 1'?")
+    allw = _val(solver, "How many walls are shown on the floor plan of 'Level 1'?")
+    assert 0 < ext.value < allw.value
+    assert _val(solver, "How many bathrooms are there on 'Level 2'?").value == 2  # bare noun vs the model's labels
+    a = _val(solver, "What is the total floor area of all 'Bedroom' rooms on 'Level 2'?")
+    assert a.unit == "m2" and len(a.evidence) == 4
+
+
+def test_geometry_fallback_lowers_confidence():
+    from stoa.solvers import get_solver
+
+    s = get_solver("ifc", qto="0")
+    q = "What is the total length of all walls on 'Level 1', in metres?"
+    a = s.solve(DUPLEX, q)
+    assert a.value and a.confidence < 0.7 and any("geometry" in x for x in a.assumptions)

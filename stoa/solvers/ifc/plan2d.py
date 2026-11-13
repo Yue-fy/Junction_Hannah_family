@@ -35,6 +35,7 @@ class PlanItem:
     polygon: list[tuple[float, float]] | None = None  # pdf_pt, first closed ring (spaces)
     label: str | None = None  # room label text found inside the polygon ("KORIDOR 119")
     label_bbox: tuple[float, float, float, float] | None = None  # pdf_pt
+    cut: bool = False  # drawn as cut by the plan's section plane (class="cut IfcWall") vs seen in projection
 
 
 def _path_points(d: str) -> list[list[tuple[float, float]]]:
@@ -117,14 +118,17 @@ def plan_items(plan_path: str) -> dict[str, PlanItem]:
             continue
         xs, ys = [p[0] for p in pts], [p[1] for p in pts]
         bbox = (min(xs), min(ys), max(xs), max(ys))
-        cls = (g.get("class") or "").split()[0] if g.get("class") else ""
+        toks = (g.get("class") or "").split()
+        cls = next((t for t in toks if t.startswith("Ifc")), toks[0] if toks else "")  # "cut IfcColumn" -> IfcColumn
+        cut = "cut" in toks
         poly = [to_pt(x, y) for x, y in max(rings, key=len)] if cls == "IfcSpace" and rings else None
         if guid in items:  # same product drawn twice (cut + projection): merge boxes
+            items[guid].cut = items[guid].cut or ("cut" in (g.get("class") or "").split())
             b = items[guid].bbox
             bbox = (min(b[0], bbox[0]), min(b[1], bbox[1]), max(b[2], bbox[2]), max(b[3], bbox[3]))
             items[guid].bbox = bbox
             continue
-        items[guid] = PlanItem(guid=guid, cls=cls, name=g.get("data-name"), bbox=bbox, polygon=poly)
+        items[guid] = PlanItem(guid=guid, cls=cls, name=g.get("data-name"), bbox=bbox, polygon=poly, cut=cut)
     _attach_labels(root, ns, items, to_pt)
     return items
 
