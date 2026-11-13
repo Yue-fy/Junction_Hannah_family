@@ -57,7 +57,7 @@ for p, (items, log) in out.items():
         if c not in g:
             continue
         k = n[c]
-        implied = (max(0, tc["rooms"] - 1) if c == "bedroom" else int(c in tc["classes"])) if tc else 0
+        implied = (max(0, (tc["rooms"] or 1) - 1) if c == "bedroom" else int(c in tc["classes"])) if tc else 0
         preds = {"prior": P(c), "labels": k, "max1": max(1, k), "labels|prior0": k or P(c),
                  "labels_code": k or implied}
         if looped:

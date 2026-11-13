@@ -238,7 +238,9 @@ def summarize(preds: list[dict]) -> dict:
             r["cost"] = {**r["cost"], "usd": round(cost_usd(r["cost"]), 7)}
         keys = ("llm_tokens_in", "llm_tokens_out", "api_tokens_in", "api_tokens_out", "llm_calls", "api_calls",
                 "gpu_seconds", "wall_seconds", "usd")
-        out["cost_mean"] = {k: round(statistics.fmean(r["cost"].get(k, 0) for r in preds), 6) for k in keys}
+        out["cost_mean"] = {k: round(statistics.fmean(r["cost"].get(k, 0) or 0 for r in preds), 6) for k in keys}
+        # what we charge (local LLM GPU time from tokens, not HTTP latency incl. queueing); gpu_seconds stays raw
+        out["cost_mean"]["gpu_seconds_billed"] = round(statistics.fmean(gpu_seconds_billed(r["cost"]) for r in preds), 6)
         out["usd_per_1k_q"] = round(1000 * out["cost_mean"]["usd"], 4)
         tiers = collections.defaultdict(list)
         for r in preds:
@@ -283,7 +285,7 @@ def print_report(m: dict, file=sys.stdout) -> None:
     cm = m.get("cost_mean") or {}
     print(f"cost/question: ${cm.get('usd', 0):.6f} (${m.get('usd_per_1k_q', 0):.3f} per 1k)  tokens in/out "
           f"{cm.get('llm_tokens_in', 0):.0f}/{cm.get('llm_tokens_out', 0):.0f}  llm calls {cm.get('llm_calls', 0):.2f}  "
-          f"api calls {cm.get('api_calls', 0):.2f}  gpu s {cm.get('gpu_seconds', 0):.2f}  wall s mean/p50/p95 "
+          f"api calls {cm.get('api_calls', 0):.2f}  gpu s billed {cm.get('gpu_seconds_billed', cm.get('gpu_seconds', 0)):.2f} (raw {cm.get('gpu_seconds', 0):.2f})  wall s mean/p50/p95 "
           f"{m.get('latency_mean_s')}/{m.get('latency_p50_s')}/{m.get('latency_p95_s')}", file=file)
     cal = m.get("calibration")
     if cal:

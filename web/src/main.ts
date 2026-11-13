@@ -1,7 +1,7 @@
 import "./style.css";
-import { ask, benchmark, exampleQuestions, fileUrl, knowledgeGraph, listFiles, onBackend } from "./api";
+import { ask, benchmark, exampleQuestions, fileUrl, knowledgeGraph, listFiles, onBackend, secondOpinion } from "./api";
 import { renderBench } from "./bench";
-import { crossChecks, renderCard } from "./card";
+import { agentAsks, crossChecks, renderCard } from "./card";
 import { markAnswerCheck, renderKg } from "./kg";
 import type { Answer, FileInfo, KgRoom } from "./types";
 import { Viewer2D } from "./viewer2d";
@@ -426,12 +426,19 @@ async function runAsk() {
 
 async function showAnswer(a: Answer, roundTripMs: number) {
   state.answer = a;
+  const askedPath = state.file?.path ?? "";
+  const askedQ = $<HTMLTextAreaElement>("question").value.trim();
   renderCard($("card"), a, {
     roundTripMs: roundTripMs || (a.cost?.wall_seconds ?? 0) * 1000, onEvidence: focusEvidence,
     describeGuid: (g) => v3d?.describe(g) ?? g, currentFile: state.file?.path ?? "", onOpenSheet: (p) => void openSheet(p),
     onAsk: (q) => {
       $<HTMLTextAreaElement>("question").value = q;
       void runAsk();
+    },
+    onSecondOpinion: async () => {
+      const t0 = performance.now();
+      const answer = await secondOpinion(askedPath, askedQ);
+      return { answer, ms: performance.now() - t0 };
     },
   });
   v2d.setEvidence(a.evidence);
@@ -440,7 +447,7 @@ async function showAnswer(a: Answer, roundTripMs: number) {
   const st = a.intent?.filters?.storey ? String(a.intent.filters.storey) : undefined;
   markAnswerCheck($("linked"), a.intent?.task === "count" && st ? a.intent.target : undefined, st);
   const xb = $("xbanner");
-  const xcs = crossChecks(a);
+  const xcs = crossChecks(a, agentAsks(a));
   const xc = xcs[0];
   xb.hidden = !xc;
   if (xc) {
@@ -496,7 +503,7 @@ function focusEvidence(i: number) {
 }
 
 // --- demo tour: five steps, each one sentence for the presenter ----------------------------------------
-const TOUR: { file: string; q: string; note: string; bench?: boolean }[] = [
+const TOUR: { file: string; q: string; note: string; bench?: boolean; second?: boolean }[] = [
   { file: "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
     q: "What is the net floor area of the room 'KORIDOR (119)' on '1.korrus', in m²?",
     note: "Area from the IFC model, shown on the drawing and in 3D: same room, same GlobalId." },
@@ -505,19 +512,25 @@ const TOUR: { file: string; q: string; note: string; bench?: boolean }[] = [
     note: "Count with one box per door. The drawing and the model agree (cross-check), no model call needed." },
   { file: "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
     q: "How many windows are shown on the floor plan of '1.korrus'?",
-    note: "Windows: the model has 55 on this storey, the drawing shows 52. The answer says the sources disagree instead of hiding it (see the highlighted check below)." },
+    note: "Windows: the model has 55 on this storey, the drawing shows 52. The cross-check explains the gap instead of hiding it: the plan is a cut at floor + 1.2 m, and 3 windows lie entirely above or below it (see the highlighted check below)." },
   { file: "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
     q: "How many doors are there in the model 'Maleva tänav 18 korterelamu (Esplanades example model)'?",
     note: "Model-wide question: evidence on five sheets. Click a sheet chip to open it." },
+  { file: "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+    q: "What share of the total room area on '1.korrus' does the room 'KORIDOR (119)' take, in percent?",
+    note: "A question no template covers: a small local model plans the steps (ask, ask, calc), the numbers come from the solvers with their evidence, and the arithmetic is done in code." },
   { file: "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
     q: "How many doors (interior doors and entrance doors together) are drawn on this floor plan?",
     note: "Vector drawing: doors counted on the CAD layer and mapped back onto the PDF." },
   { file: "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
     q: "Wie viele Türen und Fenster sind insgesamt auf diesem Grundriss eingezeichnet?",
     note: "A German question that combines two counts: it is split into two sub-questions, each answered and cross-checked, and the sum is done in code." },
+  { file: "data/cubicasa5k/colorful-4539.png",
+    q: "Kuinka monta makuuhuonetta (MH) pohjapiirustuksessa on?",
+    note: "A scanned Finnish apartment plan, asked in Finnish: the room labels are read once per drawing by the local vision model, and each counted bedroom label ('MH') is marked on the image." },
   { file: "data/habs/ak0003_sheet_00019.jpg",
-    q: "What kind of drawing is this (floor plan, elevation, section, site plan)?",
-    note: "Historical scan with no text layer: the cascade escalates to a local vision model and says how sure it is." },
+    q: "What kind of drawing is this (floor plan, elevation, section, site plan)?", second: true,
+    note: "Historical scan with no text layer: a local vision model answers but is unsure, so we ask NVIDIA Nemotron (hosted) for a second opinion: one paid call, only when needed." },
   { file: "", q: "", bench: true,
     note: "Measured on held-out drawings: accuracy per source against two baselines, generality, and cost per 1,000 questions." },
 ];
@@ -551,6 +564,7 @@ $("tourBtn").addEventListener("click", async () => {
     await openFile(f, t.q);
   } else $<HTMLTextAreaElement>("question").value = t.q;
   await runAsk();
+  if (t.second) document.querySelector<HTMLButtonElement>("#card .second-btn")?.click();
 });
 
 // --- boot ---------------------------------------------------------------------------------------------------
