@@ -463,6 +463,9 @@ function applyEvidence3D(a: Answer) {
     const s = [...storeyIds][0];
     v.setStorey(s);
     $<HTMLSelectElement>("storey").value = String(s);
+  } else if (storeyIds.size > 1) {
+    v.setStorey(null); // model-wide evidence: show every storey it touches
+    $<HTMLSelectElement>("storey").value = "";
   }
   const pane = $("pane3d");
   pane.dataset.found = String(n);
