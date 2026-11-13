@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Start the shared OpenAI-compatible model server (vLLM) on port 8001.
 # Usage: serving/start.sh [preset]      presets: qwen3vl8b (default), qwen35-9b, qwen36-35b-a3b
-# Env overrides: MODEL, SERVED_NAME, PORT, GPU_UTIL, MAX_LEN, EXTRA_ARGS
+# Env overrides: MODEL, SERVED_NAME, PORT, GPU_UTIL, MAX_LEN, EXTRA_ARGS, LORA (name=path[,name=path])
+# A second, private instance (e.g. to test a LoRA) must use another PORT and hold the GPU lock:
+#   PORT=8002 GPU_UTIL=0.30 LORA=cc-v1=$JUNCTION_SHARED/artifacts/R2/lora/cc-v1 flock $JUNCTION_SHARED/locks/gpu.lock serving/start.sh
 # Survives the calling shell (setsid+nohup). Log: $JUNCTION_SHARED/logs/model-server.log
 set -euo pipefail
 SHARED=${JUNCTION_SHARED:-/home/fangy4/work/projects/junction-shared}
@@ -24,8 +26,14 @@ esac
 PORT=${PORT:-8001}
 GPU_UTIL=${GPU_UTIL:-0.45}
 MAX_LEN=${MAX_LEN:-32768}
-LOG=$SHARED/logs/model-server.log
-PIDF=$SHARED/logs/model-server.pid
+if [[ $PORT == 8001 ]]; then SUFFIX=""; else SUFFIX="-$PORT"; fi
+LOG=$SHARED/logs/model-server$SUFFIX.log
+PIDF=$SHARED/logs/model-server$SUFFIX.pid
+LORA_ARGS=()
+if [[ -n ${LORA:-} ]]; then
+  LORA_ARGS=(--enable-lora --max-lora-rank 64 --max-loras 4 --lora-modules)
+  IFS=',' read -ra L <<< "$LORA"; LORA_ARGS+=("${L[@]}")
+fi
 
 if curl -s -m 2 "http://127.0.0.1:$PORT/v1/models" >/dev/null 2>&1; then
   echo "Something already serves on :$PORT. Run serving/stop.sh first."; exit 1
@@ -40,6 +48,7 @@ setsid nohup "$VENV/bin/vllm" serve "$MODEL" \
   --max-num-seqs 32 \
   --limit-mm-per-prompt '{"image": 8, "video": 0}' \
   --trust-remote-code \
+  "${LORA_ARGS[@]}" \
   ${EXTRA_ARGS:-} >> "$LOG" 2>&1 < /dev/null &
 echo $! > "$PIDF"
 echo "pid $(cat "$PIDF"); waiting for /v1/models ..."

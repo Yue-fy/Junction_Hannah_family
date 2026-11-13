@@ -212,18 +212,20 @@ class VlmDirect(BaseSolver):
 
         try:
             r = llm.chat(prompt, images=[img], system=SYSTEM, backend=self.backend, model=self.model,
-                         max_tokens=(64 if direct and kind != "text" else 256 if direct else
+                         max_tokens=(self.max_tokens if self.backend == "nvidia"  # Nemotron reasons in the answer anyway
+                                     else 64 if direct and kind != "text" else 256 if direct else
                                      max(self.max_tokens, 2048) if grounded else self.max_tokens),
                          thinking=self.thinking, max_pixels=self.max_pixels,
                          **({"n": self.samples, "temperature": 0.7} if (direct and self.samples > 1) else {}))
-            if r.finish_reason == "length" and not direct and "ANSWER:" not in r.text:
+            if r.finish_reason == "length" and (not direct or self.backend == "nvidia") and "ANSWER:" not in r.text:
                 # rambling/looping CoT: ask for the answer only, keeping what it saw so far
                 trace.append("cot hit max_tokens; asking for the final answer")
                 msgs = [{"role": "user", "content": prompt},
                         {"role": "assistant", "content": r.text[-3000:]},
                         {"role": "user", "content": DIRECT[kind].format(unit="ft²" if unit == "ft2" else "m²")}]
                 r2 = llm.chat(msgs, images=[img], system=SYSTEM, backend=self.backend, model=self.model,
-                              max_tokens=64, thinking=False, max_pixels=self.max_pixels)
+                              max_tokens=(1024 if self.backend == "nvidia" else 64), thinking=False,
+                              max_pixels=self.max_pixels)
                 r = r2
         except Exception as e:  # noqa: BLE001
             return self.abstain(f"llm error: {type(e).__name__}: {str(e)[:200]}", trace)
