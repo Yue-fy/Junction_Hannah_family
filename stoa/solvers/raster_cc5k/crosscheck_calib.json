@@ -1,0 +1,65 @@
+{
+ "fitted_on": "20261114-012403-vlm_direct-train_gate-ee1b.jsonl",
+ "rule": "(k+1)/(n+2) capped at 0.95",
+ "applies_to_solvers": [
+  "vlm_lora"
+ ],
+ "arbitrate": [
+  "wc",
+  "window"
+ ],
+ "targets": {
+  "balcony": {
+   "agree": 0.923,
+   "n_agree": 24,
+   "kept": 0.722,
+   "n_kept": 16
+  },
+  "bathroom": {
+   "agree": 0.9,
+   "n_agree": 28,
+   "kept": 0.857,
+   "n_kept": 12
+  },
+  "bedroom": {
+   "agree": 0.897,
+   "n_agree": 27,
+   "kept": 0.667,
+   "n_kept": 13
+  },
+  "door": {
+   "agree": 0.769,
+   "n_agree": 11,
+   "kept": 0.226,
+   "n_kept": 29
+  },
+  "kitchen": {
+   "agree": 0.946,
+   "n_agree": 35,
+   "kept": 0.857,
+   "n_kept": 5
+  },
+  "sink": {
+   "agree": 0.81,
+   "n_agree": 19,
+   "kept": 0.609,
+   "n_kept": 21
+  },
+  "wc": {
+   "agree": 0.95,
+   "n_agree": 29,
+   "kept": 0.667,
+   "n_kept": 4,
+   "switched": 0.556,
+   "n_switched": 7
+  },
+  "window": {
+   "agree": 0.625,
+   "n_agree": 6,
+   "kept": 0.4,
+   "n_kept": 3,
+   "switched": 0.273,
+   "n_switched": 31
+  }
+ }
+}
