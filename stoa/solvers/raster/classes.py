@@ -76,8 +76,19 @@ _MORE = re.compile(r"how many more (.+?) than (.+?)(?: are| is| does| do|\?|$)",
 _YESNO = re.compile(r"^\s*(does|do|is|are|has|have|onko|gibt es|finns det)\b.*\b(yes|no|kyllä|ei|ja|nein|nej)\b", re.I)
 
 
+_COUNT_CUE = re.compile(
+    r"\b(how many|number of|count|kuinka monta|montako|wie viele|anzahl|combien|nombre de|quant[ie]|hur många|"
+    r"hvor mange|hoeveel|cuánt[oa]s|ile)\b", re.I)
+_MEASURE = re.compile(r"\b(area|m²|m2|ft²|sq\.? ?ft|square|volume|m³|length|long|width|wide|height|fläche|"
+                      r"pinta-ala|surface|superficie|meters|metres)\b", re.I)
+
+
 def question_op(question: str) -> tuple[str, list[str]]:
-    """-> (op, classes): op is "single", "sum", "diff" (first minus second) or "exists" (yes/no)."""
+    """-> (op, classes): op is "single", "sum", "diff" (first minus second), "exists" (yes/no), or "none"
+    (not a count/yes-no question about our object classes, e.g. an area question that names a kitchen)."""
+    is_yesno = bool(_YESNO.search(question))
+    if not is_yesno and (not _COUNT_CUE.search(question) or _MEASURE.search(question)):
+        return "none", []
     m = _MORE.search(question)
     if m:
         a, b = question_classes(m.group(1)), question_classes(m.group(2))
