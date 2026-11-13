@@ -25,7 +25,7 @@ template and that carry a meaning-changing modifier (average, share/%, differenc
 several object classes) or name no known object class on a drawing without a deterministic solver; the agent
 asks this pipeline's atomic cascade simple sub-questions and does the arithmetic in code),
 raw_first=1 (before the agent, an operator question goes AS ASKED to the deterministic solvers (dxf, ifc, schedule,
-pdf_vector); if one answers with confidence >= accept it applied the operator itself and no LLM is called),
+pdf_vector); if one answers with confidence >= raw_accept=0.45 it applied the operator itself and no LLM is called),
 cc5k=1 (D8: cubicasa window/door/WC-seat/sink counts go to R1's pretrained `raster_cc5k` when it is registered, with
 hit rates measured on `cc5k_heldout` (stoa/router/gating_cc5k.json); cc5k=0 leaves every answer as without it).
 """
@@ -121,7 +121,7 @@ class Pipeline(BaseSolver):
     def __init__(self, accept: float | str = 0.6, agree: str = "cheap", api: int | str = 0, margin: float | str = 0.03,
                  max_tries: int | str = 3, vlm_args: str | dict | None = None, use_gate: int | str = 1,
                  compose: int | str = 1, normalise: int | str = 1, crosscheck: int | str = 1, agent: int | str = 1,
-                 raw_first: int | str = 1, cc5k: int | str = 1, **kwargs):
+                 raw_first: int | str = 1, raw_accept: float | str = 0.45, cc5k: int | str = 1, **kwargs):
         super().__init__(**kwargs)
         self.accept = float(accept)
         self.agree = {"1": "cheap", "0": "never", "2": "always"}.get(str(agree), str(agree))  # cheap|never|always
@@ -134,6 +134,9 @@ class Pipeline(BaseSolver):
         self.crosscheck = bool(int(crosscheck))
         self.use_agent = bool(int(agent))
         self.raw_first = bool(int(raw_first))
+        # dxf's own table-QA answers carry 0.45-0.6 and are right far more often than the agent on held-out wordings
+        # (W2: hard2q swiss dxf alone 85% vs pipeline 72.5%); "operator not applied" is capped at 0.3 by dxf and ifc
+        self.raw_accept = float(raw_accept)
         self.cc5k = bool(int(cc5k))
         self.vlm_args = json.loads(vlm_args) if isinstance(vlm_args, str) else dict(vlm_args or {})
         self._solvers: dict[str, object | None] = {}
@@ -404,7 +407,7 @@ class Pipeline(BaseSolver):
             total = total.add(_cost_of(a))
             if a.value is None:
                 continue
-            if a.confidence < self.accept or not _fits(intent.task, a):
+            if a.confidence < self.raw_accept or not _fits(intent.task, a):
                 trace.append(f"{name} (question as asked): {a.value} {a.unit or ''} at conf {a.confidence:.2f}, unsure"
                              + ("" if _fits(intent.task, a) else f" (a {a.unit} answer to a {intent.task} question)")
                              + (" → general agent" if self._agent_reason(path, question, intent, cands) else ""))
@@ -468,7 +471,9 @@ class Pipeline(BaseSolver):
         if "✗" in note and "✓" not in note:
             ans.confidence = round(ans.confidence * 0.7, 3)
             ans.missing = [*ans.missing, "another source of the same building disagrees (see cross-check)"]
-        elif "✓" in note and "✗" not in note:
+        elif "✓" in note and "✗" not in note and ans.confidence >= self.accept:
+            # only when the solver was sure what was asked: the check confirms the value, not the reading
+            # (W2: "area of the largest room" with a 2% tie at 0.50 must stay unsure)
             ans.confidence = round(min(0.99, ans.confidence + (1 - ans.confidence) * 0.5), 3)
         if ans.evidence:
             e0 = ans.evidence[0]
