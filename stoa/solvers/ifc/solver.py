@@ -343,37 +343,45 @@ class IfcSolver(BaseSolver):
         from stoa.solvers.ifc.plan2d import plan_items, plans_of_model
 
         asked_plan = Path(path).suffix.lower() in (".pdf", ".svg") and "_plan-" in Path(path).stem
+        model_scope = it.scope == "model" or storey is None
+        plans: list[str] = []
         if asked_plan:
-            plan = str(Path(path).with_suffix(".pdf"))
-        elif storey is not None:
-            plan = plans_of_model(model).get(storey.guid)
-        else:
-            plan = None
-        if not plan:
+            plans.append(str(Path(path).with_suffix(".pdf")))
+        if model_scope:
+            plans += [p for p in plans_of_model(model).values() if p not in plans]
+        elif storey is not None and not asked_plan:
+            p = plans_of_model(model).get(storey.guid)
+            if p:
+                plans.append(p)
+        plans = [p for p in plans if plan_items(p)]
+        if not plans:
             return
-        items = plan_items(plan)
-        if not items:
-            return
-        ev2d = []
-        for ev in ans.evidence:
-            itm = items.get(ev.ifc_guid or "")
-            if itm is None:
-                continue
-            note = ev.note + (f" | label '{itm.label}'" if itm.label else "")
-            ev2d.append(Evidence(file=plan, page=0, bbox=[round(v, 2) for v in itm.bbox], bbox_space="pdf_pt",
-                                 ifc_guid=ev.ifc_guid, note=note[:160]))
+        ev2d, seen = [], set()
+        for plan in plans:
+            items = plan_items(plan)
+            for ev in ans.evidence:
+                g = ev.ifc_guid or ""
+                itm = items.get(g)
+                if itm is None or g in seen:
+                    continue
+                seen.add(g)
+                note = ev.note + (f" | label '{itm.label}'" if itm.label else "")
+                ev2d.append(Evidence(file=plan, page=0, bbox=[round(v, 2) for v in itm.bbox], bbox_space="pdf_pt",
+                                     ifc_guid=g, note=note[:160]))
         n3d = len([e for e in ans.evidence if e.ifc_guid])
-        ans.trace.append(f"2D link: {len(ev2d)}/{n3d} evidence elements drawn on {Path(plan).name}"
-                         + ("" if asked_plan else " (plan of the same storey)"))
-        if it.metric == "count" and ans.unit == "count" and it.op is None:
+        files = sorted({e.file for e in ev2d})
+        ans.trace.append(f"2D link: {len(ev2d)}/{n3d} evidence elements drawn on "
+                         + (", ".join(Path(f).name for f in files) if files else Path(plans[0]).name)
+                         + ("" if asked_plan or model_scope else " (plan of the same storey)"))
+        if it.metric == "count" and ans.unit == "count" and it.op is None and not model_scope:
             classes = set()
             for k in it.kinds or [it.kind]:
                 classes |= set(KIND_CLASSES.get(k, ()))
-            drawn = [i for i in items.values() if i.cls in classes]
+            drawn = [i for i in plan_items(plans[0]).values() if i.cls in classes]
             if drawn and isinstance(ans.value, int):
                 mark = "✓" if len(drawn) == ans.value else f"(differs by {len(drawn) - ans.value:+d})"
-                ans.trace.append(f"cross-check: the plan drawing shows {len(drawn)} {'/'.join(sorted(classes & {i.cls for i in drawn}))}"
-                                 f" symbols; model count {ans.value} {mark}")
+                ans.trace.append(f"cross-check: the plan drawing shows {len(drawn)} "
+                                 f"{'/'.join(sorted({i.cls for i in drawn}))} symbols; model count {ans.value} {mark}")
         ans.evidence = (ev2d + ans.evidence) if asked_plan else (ans.evidence + ev2d)
 
     @staticmethod
