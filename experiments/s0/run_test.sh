@@ -13,8 +13,8 @@ C=$(git rev-parse --short HEAD)
 STAMP=$(date +%H%M)
 export AGENT_ID=S0
 if [ -n "$(git status --porcelain --untracked-files=no)" ]; then echo "worktree not clean; commit first" >&2; exit 1; fi
-# cc5k=0/1 only differ when raster_cc5k is registered (D8); otherwise the second run is the lora=0 ablation.
-HAS_CC5K=$("$P" -m stoa.eval --list 2>/dev/null | grep -c "raster_cc5k" || true)
+# cc5k=0/1 only differ when raster_cc5k is registered AND the pipeline finds its cc5k_heldout gate (D8).
+HAS_CC5K=$("$P" -c "from stoa.pipeline import GATING_CC5K; from stoa.solvers import available; print(int(GATING_CC5K.exists() and 'raster_cc5k' in available()))" 2>/dev/null || echo 0)
 HAS_LORA=$(grep -c "lora: int" stoa/pipeline.py || true)
 
 run() {  # name split extra-args...
@@ -25,15 +25,14 @@ run() {  # name split extra-args...
   tr '\r' '\n' < "$L/test-$STAMP-$name.log" | grep -E "OVERALL|weighted_acc|calibration|cost/question|predictions:|Traceback"
 }
 
-if [ "$HAS_CC5K" -gt 0 ]; then
-  run test-cc5k0 test --allow-test --solver-arg cc5k=0 --judge local
-  run test-cc5k1 test --allow-test --judge local
+run test-cc5k0 test --allow-test --solver-arg cc5k=0 --judge local   # clean headline (D8, D11)
+if [ "$HAS_LORA" -gt 0 ]; then
+  run test-lora0 test --allow-test --solver-arg cc5k=0 --solver-arg lora=0   # ablation: without R2's counting LoRA
+fi
+if [ "$HAS_CC5K" = "1" ]; then
+  run test-cc5k1 test --allow-test --solver-arg cc5k=1   # labelled INFLATED (CC5K pretraining saw these images)
 else
-  echo "raster_cc5k not registered at $C: cc5k=0 == cc5k=1, one clean test run"
-  run test-cc5k0 test --allow-test --judge local
-  if [ "$HAS_LORA" -gt 0 ]; then
-    run test-lora0 test --allow-test --solver-arg lora=0   # ablation: without R2's counting LoRA
-  fi
+  echo "cc5k=1 is a no-op at $C (raster_cc5k gate not found by the pipeline): skipped"
 fi
 run dev dev
 run hard hard
