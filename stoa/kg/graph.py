@@ -86,6 +86,8 @@ def _ifc_project(model: str) -> dict:
             files.append({"path": rel, "kind": "discipline-model", "storey": None})
 
     storeys, rooms, checks = [], [], []
+    zoff = floor_offset(idx)
+    sname = {s.guid: s.name for s in idx.storeys}
     for s in idx.storeys:
         on = idx.in_storey(s.guid)
         counts: dict[str, int] = {}
@@ -96,16 +98,17 @@ def _ifc_project(model: str) -> dict:
         items = plan_items(plan) if plan else {}
         for it in items.values():
             drawn[it.cls] = drawn.get(it.cls, 0) + 1
-        storeys.append({"guid": s.guid, "name": s.name, "elevation": s.elevation, "plan": plan,
-                        "model_counts": counts, "drawn_counts": drawn})
+        cut_z = (s.elevation or 0.0) + zoff + CUT_HEIGHT
+        sg = {"guid": s.guid, "name": s.name, "elevation": s.elevation, "plan": plan,
+              "model_counts": counts, "drawn_counts": drawn, "cut_z": round(cut_z, 3)}
+        storeys.append(sg)
         if plan:
-            for label, classes in (("doors", ("IfcDoor",)), ("windows", ("IfcWindow",)), ("rooms", ("IfcSpace",)),
-                                   ("walls", ("IfcWall", "IfcWallStandardCase")), ("columns", ("IfcColumn",))):
-                mc = sum(counts.get(c, 0) for c in classes)
-                dc = sum(drawn.get(c, 0) for c in classes)
-                if mc or dc:
-                    checks.append({"storey": s.name, "what": label, "model": mc, "drawn": dc, "ok": mc == dc,
-                                   "plan": plan})
+            sg["cut"] = {}
+            for label, classes in _CHECK_KINDS:
+                c = _cut_compare(idx, s.guid, items, classes, cut_z, sname)
+                sg["cut"][label] = c
+                if c["model"] or c["drawn_all"]:
+                    checks.append({"storey": s.name, "what": label, "plan": plan, **c})
         for e in on:
             if e.cls != "IfcSpace":
                 continue
@@ -157,6 +160,68 @@ def _ifc_project(model: str) -> dict:
 
 class _NoIntent:  # stand-in for IfcSolver._floor_area(e, it, ...) which only reads `gross`
     gross = False
+
+
+# The ifc_models plans are horizontal cuts at storey floor + 1.2 m; they draw every element (of ANY storey) whose
+# z-range crosses that plane. Measured on all 268 plan x class rows (experiments/w1/cut_check.py): the crossing
+# set equals the drawn same-storey set in 244 rows at 1.2 m (1.0 m: 234, 1.5 m: 215; "all elements of the
+# storey": 181). Elements entirely above or below the plane (Revit lintel 'walls', clerestory windows,
+# foundations) are in the storey but not drawn, and a plan cut just below the next floor draws that floor.
+CUT_HEIGHT = 1.2
+_CHECK_KINDS = (("doors", ("IfcDoor",)), ("windows", ("IfcWindow",)), ("rooms", ("IfcSpace",)),
+                ("walls", ("IfcWall", "IfcWallStandardCase")), ("columns", ("IfcColumn",)))
+_FLOOR_CLASSES = ("IfcWall", "IfcWallStandardCase", "IfcColumn", "IfcDoor")
+
+
+def floor_offset(idx) -> float:
+    """World z of a storey's floor minus its Elevation attribute (0 for most models; esplanades: +14.3 m).
+    Median over storeys of (median bottom z of its walls/columns/doors - elevation)."""
+    import statistics
+
+    offs = []
+    for s in idx.storeys:
+        if s.elevation is None:
+            continue
+        zs = [e.geo.bbox[2] for e in idx.in_storey(s.guid, *_FLOOR_CLASSES) if e.geo and e.geo.bbox]
+        if len(zs) >= 5:
+            offs.append(statistics.median(zs) - s.elevation)
+    return round(statistics.median(offs), 3) if offs else 0.0
+
+
+def _crosses(e, z: float) -> bool | None:
+    b = e.geo.bbox if e.geo else None
+    if not b:
+        return None
+    return b[2] - 1e-6 <= z <= b[5] + 1e-6
+
+
+def _cut_compare(idx, storey_guid: str, items: dict, classes: tuple[str, ...], cut_z: float, sname: dict) -> dict:
+    """Model vs drawing for one storey plan and one kind, aware of the cut plane.
+    model: all elements of the kind contained in the storey; model_cut: those crossing the cut plane;
+    drawn: drawn elements of this storey (by GUID); drawn_all: everything of the kind on the sheet;
+    drawn_other: {storey name: n} drawn from other storeys; ok: drawn == model_cut, None when the SVG tags
+    no element of this kind at all (no data, e.g. sheets that tag only rooms)."""
+    on = [e for e in idx.in_storey(storey_guid) if e.cls in classes or e.eff_cls in classes]
+    model_cut = sum(1 for e in on if _crosses(e, cut_z) is not False)
+    drawn, drawn_all, other = 0, 0, {}
+    for g, it in items.items():
+        if it.cls not in classes:
+            continue
+        drawn_all += 1
+        e = idx.elements.get(g)
+        if e is not None and e.storey == storey_guid:
+            drawn += 1
+        else:
+            k = sname.get(e.storey, "?") if e is not None else "not in model"
+            other[k] = other.get(k, 0) + 1
+    if drawn_all == 0:
+        ok = None if model_cut else True  # sheet tags none of this kind: no data (some sheets tag rooms only)
+    elif drawn == 0 and model_cut == 0:
+        ok = None  # only other storeys' elements are drawn here: informational
+    else:
+        ok = drawn == model_cut
+    return {"model": len(on), "model_cut": model_cut, "drawn": drawn, "drawn_all": drawn_all,
+            "drawn_other": other, "ok": ok, "cut_z": round(cut_z, 3)}
 
 
 def project_graph(path: str) -> dict:
@@ -310,16 +375,36 @@ def _file_nodes(path: str, out: dict) -> list[dict]:
 
 
 def _checks(out: dict) -> list[dict]:
-    """Cross-checks as UI badges: [{text, ok}]."""
+    """Cross-checks as UI badges: [{text, ok}] (ok None = no data / informational)."""
     res = []
     for c in out.get("crosschecks", []) or []:
         where = f" on '{c['storey']}'" if c.get("storey") else ""
         if "printed" in c.get("what", ""):
-            text = f"{c['drawn']}/{c['model']} printed room areas match the DXF polygons"
-        else:
-            text = f"{c['what']}{where}: IFC model {c['model']}, drawn on the plan {c['drawn']}"
-        res.append({"text": text, "ok": bool(c.get("ok"))})
+            res.append({"text": f"{c['drawn']}/{c['model']} printed room areas match the DXF polygons",
+                        "ok": bool(c.get("ok"))})
+            continue
+        res.append({"text": cut_text(c, where), "ok": c.get("ok")})
     return res
+
+
+def cut_text(c: dict, where: str = "") -> str:
+    """One readable line for a _cut_compare row."""
+    what = c["what"]
+    if c["ok"] is None and c["drawn_all"] == 0:
+        return (f"{what}{where}: IFC model {c['model']}, but this sheet tags no {what} (no 2D data to compare)")
+    head = f"{what}{where}: IFC model {c['model']}"
+    if c["model_cut"] != c["model"]:
+        head += f" ({c['model_cut']} cut by the plan plane at floor +{CUT_HEIGHT:g} m, " \
+                f"{c['model'] - c['model_cut']} entirely above/below it)"
+    s = f"{head}, drawn {c['drawn']}"
+    if c["ok"] is True:
+        s += " ✓"
+    elif c["ok"] is False:
+        s += f" ≠ {c['model_cut']}"
+    if c.get("drawn_other"):
+        s += "; the sheet also shows " + ", ".join(f"{n} of '{k}'" for k, n in c["drawn_other"].items()) \
+             + " (crossing this cut plane)"
+    return s
 
 
 def _as_graph(g: dict, storey: str | None) -> tuple[list[dict], list[dict]]:
@@ -416,12 +501,25 @@ def _crosscheck(path: str, intent, answer) -> str | None:
             # only evidence if this plan's SVG tags this kind of element at all (some tag rooms only)
             has_drawing = bool(sgraph and sgraph["plan"] and (drawn_cls & set(classes) or drawn_cls - {"IfcSpace"}))
             dc = sum(sgraph["drawn_counts"].get(c, 0) for c in classes) if has_drawing else None
-            if target == "stair" and dc is not None:
-                # a stair is drawn as its flights; count distinct drawn stairs via the flights' parent
-                drawn_guids = {gd for gd, it in plan_items(sgraph["plan"]).items() if it.cls in classes}
-                dc = len({(idx.elements[gd].parent or gd) if gd in idx.elements else gd for gd in drawn_guids})
             parts = [f"IFC model: {mc} {'/'.join(model_classes)} on storey '{st.name}' {_mark(val, mc)}"]
-            if dc is not None:
+            cut = (sgraph or {}).get("cut", {}).get(next((k for k, cl in _CHECK_KINDS if set(cl) == set(classes)), ""))
+            if cut is not None and dc is not None:
+                # the sheet draws only what its cut plane (floor + 1.2 m) crosses: compare like with like
+                if cut["drawn_all"] == 0 and cut["model_cut"]:
+                    parts.append(f"plan drawing: the sheet tags no {'/'.join(classes)} (no 2D data to compare)")
+                elif cut["model_cut"] == cut["model"]:
+                    parts.append(f"plan drawing: {cut['drawn']} symbols {_mark(val, cut['drawn'])}")
+                else:
+                    m = "✓" if cut["drawn"] == cut["model_cut"] else "≠"
+                    parts.append(f"plan drawing: {cut['drawn']} symbols = the {cut['model_cut']} the cut plane at "
+                                 f"floor +{CUT_HEIGHT:g} m crosses {m} ({cut['model'] - cut['model_cut']} lie "
+                                 f"entirely above/below it, so they are not drawn)")
+            elif dc is not None:
+                if target == "stair":
+                    # a stair is drawn as its flights; count distinct drawn stairs via the flights' parent
+                    drawn_guids = {gd for gd, it in plan_items(sgraph["plan"]).items() if it.cls in classes
+                                   and gd in idx.elements and idx.elements[gd].storey == st.guid}
+                    dc = len({idx.elements[gd].parent or gd for gd in drawn_guids})
                 parts.append(f"plan drawing: {dc} symbols {_mark(val, dc)}")
             return f"answer {int(round(val))} vs " + "; ".join(parts)
         if task == "count" and target in _TARGET_CLASSES and scope == "model":
