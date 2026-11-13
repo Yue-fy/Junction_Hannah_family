@@ -1,0 +1,112 @@
+{
+ "_about": "Per-class method for the raster solver, chosen on TRAIN only (never dev). Switch away from the prior only with >= 5 pts margin (cost counts). Symbols/storey: experiments/w3/calibrate.py (points on 60 train drawings, direct on 260). Room classes and fixtures-from-rooms: experiments/w3/labels_train.py on 200 train drawings (artifacts/W3/calib/labels-train200.jsonl).",
+ "window": {
+  "method": "prior",
+  "acc": {
+   "prior": 0.15,
+   "direct": 0.11
+  },
+  "n_train": 260,
+  "note": "n60 said direct 23% vs 12%: noise; n260 reverses it"
+ },
+ "door": {
+  "method": "prior",
+  "acc": {
+   "prior": 0.12,
+   "direct": 0.15,
+   "points": 0.067
+  },
+  "n_train": 203
+ },
+ "wc_seat": {
+  "method": "prior",
+  "acc": {
+   "prior": 0.65,
+   "direct": 0.53,
+   "points": 0.717,
+   "max(1,wc_room labels)": 0.7
+  },
+  "n_train": 260,
+  "note": "points only measured on 60"
+ },
+ "sink": {
+  "method": "prior",
+  "acc": {
+   "prior": 0.57,
+   "direct": 0.6,
+   "points": 0.233
+  },
+  "n_train": 258
+ },
+ "shower_bath": {
+  "method": "prior",
+  "acc": {
+   "prior": 0.81,
+   "direct": 0.31,
+   "points": 0.679
+  },
+  "n_train": 242
+ },
+ "storey": {
+  "method": "direct",
+  "acc": {
+   "prior": 0.82,
+   "direct": 0.94
+  },
+  "n_train": 260
+ },
+ "bedroom": {
+  "method": "labels",
+  "acc": {
+   "prior": 0.26,
+   "labels": 0.64,
+   "labels_code": 0.64,
+   "max1": 0.54
+  },
+  "n_train": 169
+ },
+ "kitchen": {
+  "method": "prior",
+  "acc": {
+   "prior": 0.95,
+   "labels": 0.62,
+   "max1": 0.73
+  },
+  "n_train": 186
+ },
+ "bathroom": {
+  "method": "prior",
+  "acc": {
+   "prior": 0.87,
+   "max1": 0.85,
+   "labels": 0.72
+  },
+  "n_train": 138,
+  "note": "R1's max1 won on 47 drawings; on 138 the prior is as good and cheaper"
+ },
+ "sauna": {
+  "method": "labels_code",
+  "acc": {
+   "prior": 0.53,
+   "labels": 0.7,
+   "labels_code": 0.72
+  },
+  "n_train": 182
+ },
+ "wc_room": {
+  "method": "labels",
+  "acc": {
+   "prior": 0.56,
+   "labels": 0.78
+  },
+  "n_train": 137
+ },
+ "balcony": {
+  "method": "labels",
+  "acc": {
+   "prior": 0.54,
+   "labels": 0.76
+  },
+  "n_train": 91
+ }
+}

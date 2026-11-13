@@ -41,3 +41,19 @@ def test_parse_labels_dedupes_and_flags_loops():
     assert [i.text for i in items] == ["MH", "MH"] and not looped
     loop = ", ".join(f'{{"bbox_2d": [{i}, 0, {i + 5}, 5], "text": "X"}}' for i in range(0, 80, 10))
     assert parse_labels(f"[{loop}]", 1000, 1000)[1]
+
+
+def test_question_op_compositions():
+    from stoa.solvers.raster.classes import question_op
+
+    assert question_op("How many doors and windows are shown on this floor plan in total?") == \
+        ("sum", ["door", "window"])
+    assert question_op("How many more windows than doors are shown on this floor plan?") == \
+        ("diff", ["window", "door"])
+    assert question_op("Does this apartment have a sauna? Answer yes or no.") == ("exists", ["sauna"])
+    # dataset questions stay single-class (hints in parentheses / negations are not extra classes)
+    assert question_op("How many bathrooms or washrooms (e.g. KH, KPH, PH, PESUH, SH) are on this floor plan, "
+                       "not counting separate WC rooms?") == ("single", ["bathroom"])
+    assert question_op("Kuinka monta kylpy- tai pesuhuonetta (esim. KH, KPH, PH, PESUH, SH) pohjapiirustuksessa "
+                       "on, erillisiä WC-tiloja lukuun ottamatta?") == ("single", ["bathroom"])
+    assert question_op("Hur många fönster finns på planritningen?") == ("single", ["window"])
