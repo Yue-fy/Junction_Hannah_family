@@ -14,7 +14,7 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import count as C  # noqa: E402
-from config import FROZEN, confidence  # noqa: E402
+from config import FROZEN, ROOMS_FROZEN, confidence  # noqa: E402
 
 
 def main():
@@ -29,14 +29,17 @@ def main():
             if not f.endswith(".npz") or not f.startswith(("colorful", "high")):
                 continue  # skip tta_/s2_ variants
             st = f[:-4]
-            icons = np.load(os.path.join(C.SEG, f))["icons"]
+            z = np.load(os.path.join(C.SEG, f))
+            icons, rooms = z["icons"], z["rooms"]
             H, W = icons.shape
             counts = {}
             for t, (cls, mf, k) in FROZEN.items():
                 bx = [[x, y, x + w, y + h] for c in cls for (x, y, w, h), _ in C.components(icons == c, max(1, mf * H * W), k)]
                 counts[t] = {"count": len(bx), "confidence": confidence(t, len(bx)), "boxes": bx}
+            room_counts = {t: {"count": len(b), "boxes": b} for t, (c, mf) in ROOMS_FROZEN.items()
+                           for b in [[[x, y, x + w, y + h] for (x, y, w, h), _ in C.components(rooms == c, mf * H * W, 0)]]}
             fo.write(json.dumps({"path": f"data/cubicasa5k/{st}.png", "cc5k_list": lists.get(st, "unknown"),
-                                 "size": [W, H], "counts": counts}) + "\n")
+                                 "size": [W, H], "counts": counts, "rooms": room_counts}) + "\n")
             n += 1
     print(f"wrote {n} drawings -> {out}")
 

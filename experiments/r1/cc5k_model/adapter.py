@@ -68,6 +68,29 @@ def counts_for(path):
     return d
 
 
+ROOM_KEYS = {"bedroom": "bedrooms", "balcony": "balconies", "bathroom": "bathrooms", "kitchen": "kitchens",
+             "window": "windows", "door": "doors", "wc": "wc_seats", "toilet": "wc_seats", "sink": "sinks"}
+# P(the other answer is right | agrees / disagrees with the segmentation), cc5k_heldout, pipeline night cbd2fe8
+AGREE_ACC = {"bedrooms": (0.75, 0.37), "balconies": (0.92, 0.65), "bathrooms": (0.96, 0.82), "kitchens": (0.96, 0.80)}
+
+
+def cross_check(path, concept, value, source="label reading"):
+    """Independent check of another solver's count with the CC5K segmentation. concept: bedroom|balcony|
+    bathroom|kitchen|window|door|wc|sink. Returns (agrees: bool|None, line) with a line in the D4/W5 format
+    ("cross-check: label reading 3 = CC5K room segmentation 3 ✓" or "... ≠ ... ✗")."""
+    key = ROOM_KEYS.get(concept)
+    if key is None:
+        return None, ""
+    d = counts_for(path)
+    rec = (d.get("rooms") or {}).get(key) or d["counts"].get(key)
+    if rec is None:
+        return None, ""
+    seg = rec["count"]
+    what = "CC5K room segmentation" if key in AGREE_ACC else "CC5K symbol segmentation"
+    ok = int(value) == seg if value is not None else None
+    return ok, f"cross-check: {source} {value} {'=' if ok else '≠'} {what} {seg} {'✓' if ok else '✗'}"
+
+
 class RasterCC5K:
     name = "raster_cc5k"
 
