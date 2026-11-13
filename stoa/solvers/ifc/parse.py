@@ -198,10 +198,68 @@ class Intent:
     threshold: tuple[str, float] | None = None  # ("gt"|"ge"|"lt"|"le", value in the asked unit)
     which: bool = False  # "which storey/room ..." -> answer with a name
     notes: list[str] = field(default_factory=list)
+    question: str = ""  # the raw question (for unquoted storey mentions)
 
     @property
     def classes(self) -> tuple[str, ...]:
         return KIND_CLASSES.get(self.kind or "", ())
+
+
+_LISTQ = re.compile(r"^\s*(what|which|list|could you|can you|please|provide|give|show|describe|summari[sz]e|break ?down|"
+                    r"welche|was sind|wat zijn|welke|cuales|quels?|quelles?)\b")
+_LISTW = re.compile(r"\b(are|were|with (their|the)|including|and their|breakdown|distribution|types?|list|composition|"
+                    r"each|by (type|floor|level|storey|material|room|space)|describe|description|overview|summary|"
+                    r"which)\b")
+_SCALARQ = re.compile(r"^\s*(what is the (total|number|net|gross|sum|overall|combined|average)|how (many|much|long|large|big|"
+                      r"high|tall)|what('s| is) the (area|volume|length|height|elevation|count)|"
+                      r"what (is the )?(percentage|percent|share|proportion|fraction|ratio))\b")
+
+
+def wants_list(question: str) -> bool:
+    """A request for a listing/description ("What are the spaces on level 4, with their areas?"), whose
+    answer is text, not one number. Scalar questions ("What is the total ...", "How many ...") are not."""
+    t = fold(question)
+    return bool(_LISTQ.search(t) and _LISTW.search(t) and not _SCALARQ.search(t))
+
+
+_ORD = {"basement": -1, "ground": 0, "first": 1, "second": 2, "third": 3, "fourth": 4, "fifth": 5, "sixth": 6,
+        "seventh": 7, "eighth": 8, "ninth": 9, "tenth": 10, "eleventh": 11, "twelfth": 12}
+
+
+def storey_mention(question: str, storey_names: list[str]) -> tuple[int | None, str]:
+    """Index into storey_names of an UNQUOTED storey mention ("on the 1.OG floor", "level 4", "second floor"),
+    or (None, why). Names are matched as whole words (folded), numbers via the storey name's own number."""
+    t = " " + fold(_QUOTED.sub(" ", question)) + " "
+    hits = []
+    for i, n in enumerate(storey_names):
+        f = fold(n or "")
+        if len(f) >= 2 and re.search(r"(?<![\w.])" + re.escape(f) + r"(?![\w])", t):
+            hits.append((len(f), i))
+    if hits:
+        i = max(hits)[1]
+        return i, f"storey '{storey_names[i]}' named in the question"
+    num = None
+    m = re.search(r"\b(?:level|floor|storey|story|etage|verdieping|geschoss|niveau|planta)\s*(-?\d+)\b", t) or \
+        re.search(r"\b(-?\d+)(?:st|nd|rd|th|\.)?\s*(?:floor|level|storey|story|etage|verdieping)\b", t)
+    if m:
+        num = int(m.group(1))
+    else:
+        m = re.search(r"\b(" + "|".join(_ORD) + r")\s+(?:floor|level|storey|story)\b", t)
+        if m:
+            num = _ORD[m.group(1)]
+    if num is None:
+        return None, "no storey mentioned"
+    lead = [i for i, n in enumerate(storey_names) if (mm := re.match(r"\s*(-?\d+)", n or "")) and int(mm.group(1)) == num]
+    if len(lead) == 1:
+        return lead[0], f"'{m.group(0).strip()}' -> storey '{storey_names[lead[0]]}' (its number)"
+    word = {v: k for k, v in _ORD.items()}.get(num)
+    named = [i for i, n in enumerate(storey_names) if word and re.search(r"\b" + word + r"\b", fold(n or ""))]
+    if len(named) == 1:
+        return named[0], f"'{m.group(0).strip()}' -> storey '{storey_names[named[0]]}' (ordinal word)"
+    anyn = [i for i, n in enumerate(storey_names) if re.search(r"(?<![\d.])0*" + str(abs(num)) + r"(?![\d])", n or "")]
+    if len(anyn) == 1:
+        return anyn[0], f"'{m.group(0).strip()}' -> storey '{storey_names[anyn[0]]}' (number in its name)"
+    return None, f"'{m.group(0).strip()}' matches no single storey"
 
 
 def quoted_names(question: str) -> list[str]:

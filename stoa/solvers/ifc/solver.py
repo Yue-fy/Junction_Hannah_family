@@ -26,7 +26,7 @@ from stoa.data import abspath, siblings, source_of
 from stoa.solvers import register
 from stoa.solvers.base import BaseSolver
 from stoa.solvers.ifc.index import Element, IfcIndex, Storey, load_index
-from stoa.solvers.ifc.parse import KIND_CLASSES, Intent, fold, parse
+from stoa.solvers.ifc.parse import KIND_CLASSES, Intent, fold, parse, storey_mention, wants_list
 from stoa.solvers.ifc.resolve import match_model, match_space, match_storey, norm
 
 # share of storey totals within 2% when computed from geometry only (no Qto), measured on train+dev
@@ -181,6 +181,7 @@ class IfcSolver(BaseSolver):
         trace.append(f"model {Path(model).name}: {idx.schema}, {len(idx.storeys)} storeys, {len(idx.elements)} elements"
                      f" (index {idx.build_seconds:.1f}s, cached)")
         it = parse(question)
+        it.question = question
         trace.append(f"parsed: metric={it.metric} kind={it.kind} scope={it.scope} names={it.names}"
                      + (" side-area" if it.side_area else "") + (" gross" if it.gross else ""))
         ctx: dict = {"question": question}
@@ -188,6 +189,13 @@ class IfcSolver(BaseSolver):
             ans = self._answer(path, model, idx, it, trace, ctx)
         except Exception as ex:  # noqa: BLE001 - report as a refusal with the reason, never crash the eval
             ans = Answer.abstain(self.name, f"error: {type(ex).__name__}: {ex}", trace=trace)
+        if ans.value is not None and it.kind == "space" and it.metric == "area" and isinstance(ans.value, (int, float)):
+            from stoa.solvers.ifc.factcard import placeholder_spaces
+
+            if placeholder_spaces(idx):
+                ans.confidence = min(ans.confidence, 0.15)
+                ans.missing.append("real room areas: this model's IfcSpaces are ~1 m² placeholders (geometry and "
+                                   "quantity sets), so the value is not a floor area")
         for note in it.notes:
             if note.startswith("exclusion"):
                 ans.trace.append(note)
@@ -195,9 +203,22 @@ class IfcSolver(BaseSolver):
                     ans.confidence = min(ans.confidence, 0.3)
                     ans.missing.append(f"the question excludes something the rules can't apply ({note[23:]}); "
                                        "the value ignores the exclusion")
-        if ans.value is None and str(self.options.get("llm", "1")) != "0" and not any(
-                "error:" in t for t in ans.trace):
-            ans = self._llm_fallback(model, idx, question, it, ans)
+        llm_on = str(self.options.get("llm", "1")) != "0"
+        if ans.value is None and llm_on and not any("error:" in t for t in ans.trace):
+            ans = self._llm_fallback(model, idx, question, it, ans, storey=ctx.get("storey"))
+        elif llm_on and isinstance(ans.value, (int, float)) and wants_list(question):
+            # a listing/description was asked; one number is not an answer. Give the LLM the rule's value as a
+            # verified fact (with its scope) plus the fact card, and keep the rule's evidence.
+            rule = ans
+            fact = (f"{rule.value} {rule.unit or ''} -- " + "; ".join(rule.assumptions[:3]))[:400]
+            ans = self._llm_fallback(model, idx, question, it, rule, storey=ctx.get("storey"),
+                                     extra=f"Computed exactly by a rule for this question: {fact}")
+            if ans.value is None:
+                ans = rule
+            else:
+                ans.evidence = rule.evidence or ans.evidence
+                ans.confidence = 0.4
+                ans.trace.insert(0, f"list request: rule value {rule.value} {rule.unit or ''} passed to the LLM as a fact")
         if ans.value is not None and self.options.get("plan2d", "1") != "0":
             try:
                 self._add_2d(path, model, it, ans, ctx.get("storey"))
@@ -255,6 +276,11 @@ class IfcSolver(BaseSolver):
                 trace.append(f"'{n}': no storey, room or model of that name")
                 assumptions.append(f"could not resolve '{n}'")
                 conf *= 0.6
+        if storey is None and not it.names and it.scope != "model" and getattr(it, "question", ""):
+            i, why = storey_mention(it.question, [s.name for s in idx.storeys])
+            if i is not None:
+                storey = idx.storeys[i]
+                trace.append(f"{why} (unquoted)")
         if it.scope == "model" or (model_named and storey is None):
             it.scope = "model"
         elif storey is None and it.metric != "text":
@@ -554,9 +580,10 @@ class IfcSolver(BaseSolver):
             return None
 
         def sub(names: list[str], **kw) -> tuple[Answer, list[str]]:
-            sit = dataclasses.replace(it, names=list(names), op=None, mod=None, threshold=None, which=False,
-                                      yes_no=False, notes=[], filters=dict(it.filters), kinds=list(it.kinds),
-                                      group_by=None, top_n=False, **kw)
+            args = dict(names=list(names), op=None, mod=None, threshold=None, which=False, yes_no=False, notes=[],
+                        filters=dict(it.filters), kinds=list(it.kinds), group_by=None, top_n=False)
+            args.update(kw)
+            sit = dataclasses.replace(it, **args)
             st: list[str] = []
             a = self._answer(path, model, idx, sit, st, {"question": ctx.get("question", ""), "compose": False})
             return a, st
@@ -615,6 +642,10 @@ class IfcSolver(BaseSolver):
                 part, t1 = sub(others + [n for n, _ in storeys])
                 whole, t2 = sub([n for n, _ in storeys], total=True, kind="space" if it.metric == "area" else it.kind)
                 wdesc = f"all {it.kind or 'rooms'} on '{storeys[0][0]}'"
+            elif it.filters and not others:  # "percentage of wall volume that is load-bearing"
+                part, t1 = sub([n for n, _ in storeys])
+                whole, t2 = sub([n for n, _ in storeys], filters={})
+                wdesc = f"all {it.kind}s" + (f" on '{storeys[0][0]}'" if storeys else "")
             elif storeys:  # "share of the model's doors on storey S"
                 part, t1 = sub([n for n, _ in storeys])
                 whole, t2 = sub([], scope="model")
@@ -664,11 +695,15 @@ class IfcSolver(BaseSolver):
         return None
 
     # ------------------------------------------------------------------------------------------------
-    def _llm_fallback(self, model: str, idx: IfcIndex, question: str, it: Intent, refusal: Answer) -> Answer:
+    def _llm_fallback(self, model: str, idx: IfcIndex, question: str, it: Intent, refusal: Answer,
+                      storey: Storey | None = None, extra: str | None = None) -> Answer:
         """Free-text questions the rules can't answer: local LLM over a deterministic fact card of the model."""
         from stoa.solvers.ifc.factcard import answer_free_text
 
-        text, card, info = answer_free_text(idx, question, it)
+        if storey is None:
+            i, _ = storey_mention(question, [s.name for s in idx.storeys])
+            storey = idx.storeys[i] if i is not None else None
+        text, card, info = answer_free_text(idx, question, it, storey=storey, extra=extra)
         trace = list(refusal.trace) + ["rules could not answer; asking the local LLM with a fact card of the model "
                                        f"({len(card.splitlines())} lines, {len(card)} chars)"]
         if text is None:
