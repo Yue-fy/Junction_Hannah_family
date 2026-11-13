@@ -409,6 +409,9 @@ class IfcSolver(BaseSolver):
                                   trace=trace, solver=self.name, assumptions=assumptions, missing=missing)
                 return self._final(abs(a - b), "count", it, conf * 0.95, ev, trace, assumptions, missing)
             n = sum(len(v) for v in per.values())
+            if it.group_by:
+                return self._breakdown(idx, it, [e for k in kinds for e in per[k]], None, ev, trace, assumptions,
+                                       missing, conf, where)
             if len(kinds) > 1:
                 trace.append("sum: " + " + ".join(f"{k} {len(per[k])}" for k in kinds))
             conf_c = conf * (0.97 if n else 0.6)
@@ -421,6 +424,22 @@ class IfcSolver(BaseSolver):
                                trace, assumptions, missing)
 
         # ---- aggregated quantities ------------------------------------------------------------------
+        if it.top_n and it.kind == "space":
+            vals = sorted(((self._floor_area(e, it, [])[0] or 0.0, e) for e in els), key=lambda x: -x[0])
+            if it.op == "argmin":
+                vals = vals[::-1]
+            top = vals[:5]
+            lines = [f"{'Largest' if it.op != 'argmin' else 'Smallest'} rooms ({where}, net floor area from geometry):"]
+            lines += [f"- {e.long_name or e.name} ({e.name}) on {idx.storey(e.storey).name if e.storey else '?'}: "
+                      f"{v:.2f} m²" for v, e in top]
+            ev = [self._ev(model, e, f"{e.long_name or e.name} {v:.2f} m²") for v, e in top]
+            assumptions.append("room size = net floor area (IfcSpace footprint)")
+            return Answer(value="\n".join(lines), unit=None, confidence=conf * 0.8, evidence=ev, trace=trace,
+                          solver=self.name, assumptions=assumptions, missing=missing)
+        if it.metric == "area" and it.kind == "space" and it.group_by:
+            ev = [self._ev(model, e, e.long_name or e.name or "") for e in els]
+            return self._breakdown(idx, it, els, lambda e: self._floor_area(e, it, [])[0], ev, trace, assumptions,
+                                   missing, conf, where, unit="m²")
         if it.metric == "area" and it.kind == "space":
             tot, ev = 0.0, []
             for e in els:
@@ -470,7 +489,52 @@ class IfcSolver(BaseSolver):
             missing.append(f"{n_none} elements have neither quantities nor geometry")
             conf *= 0.7
         assumptions.append(f"{label} = sum of {src} over {it.kind}s of {where}")
+        if it.group_by:
+            vals = {e.guid: (_qto(e, keys) if use_qto else None) for e in els}
+            return self._breakdown(idx, it, els, lambda e: vals[e.guid] if vals[e.guid] is not None
+                                   else self._geo_value(e, qkey), ev, trace, assumptions, missing, conf, where,
+                                   unit={"m2": "m²", "m3": "m³", "m": "m"}[unit])
         return self._final(tot, unit, it, conf * 0.95, ev, trace, assumptions, missing)
+
+    # ------------------------------------------------------------------------------------------------
+    def _breakdown(self, idx: IfcIndex, it: Intent, els: list[Element], value_of, ev, trace, assumptions, missing,
+                   conf: float, where: str, unit: str | None = None) -> Answer:
+        """Text answer: total + breakdown by type name or by storey (IFC-Bench style)."""
+        groups: dict[str, list[float]] = {}
+        for e in els:
+            if it.group_by == "storey":
+                key = idx.storey(e.storey).name if e.storey and idx.storey(e.storey) else "(no storey)"
+            else:
+                key = e.type_name or e.object_type or e.name or "(untyped)"
+            v = 1.0 if value_of is None else (value_of(e) or 0.0)
+            groups.setdefault(key, []).append(v)
+        if it.group_by == "type" and len(groups) > 3 and sum(len(v) == 1 for v in groups.values()) > len(groups) / 2:
+            merged: dict[str, list[float]] = {}
+            for k, v in groups.items():  # per-instance names 'EG-Treppe-01'..'-10' -> 'EG-Treppe'
+                merged.setdefault(re.sub(r"[\s\-_.:]*\d+$", "", k) or k, []).extend(v)
+            trace.append(f"type names look per-instance ({len(groups)} groups); merged numbering -> {len(merged)}")
+            groups = merged
+        total = sum(sum(v) for v in groups.values())
+        noun = (it.kinds[0] if it.kinds else it.kind or "element").replace("_", " ")
+        fmt = (lambda x: f"{int(round(x))}") if value_of is None else (lambda x: f"{x:.2f} {unit or ''}".strip())
+        if it.group_by == "storey":
+            order = [s.name for s in idx.storeys if s.name in groups] + [k for k in groups if k not in
+                                                                        {s.name for s in idx.storeys}]
+        else:
+            order = sorted(groups, key=lambda k: -sum(groups[k]))
+        lines = [f"Total {noun}s ({where}): {fmt(total)}", f"By {'storey' if it.group_by == 'storey' else 'type'}:"]
+        for k in order[:25]:
+            sub = sum(groups[k])
+            share = f" ({sub / total * 100:.1f}%)" if total else ""
+            cnt = f", {len(groups[k])} elements" if value_of is not None else ""
+            lines.append(f"- {k}: {fmt(sub)}{share}{cnt}")
+        if len(order) > 25:
+            lines.append(f"- ... {len(order) - 25} more groups")
+        trace.append(f"breakdown by {it.group_by}: {len(groups)} groups")
+        assumptions.append("type = the element's IfcTypeObject name (else ObjectType/Name)" if it.group_by == "type"
+                           else "storey = the element's spatial container")
+        return Answer(value="\n".join(lines), unit=None, confidence=conf * 0.85, evidence=ev, trace=trace,
+                      solver=self.name, assumptions=assumptions, missing=missing)
 
     # ------------------------------------------------------------------------------------------------
     def _add_2d(self, path: str, model: str, it: Intent, ans: Answer, storey: Storey | None) -> None:

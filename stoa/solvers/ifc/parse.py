@@ -155,6 +155,8 @@ class Intent:
     kinds: list[str] = field(default_factory=list)  # coordinated kinds ("doors and windows") -> summed
     filters: dict[str, bool] = field(default_factory=dict)  # {"IsExternal": True, "LoadBearing": True}
     attr: str | None = None  # storey attribute asked: "elevation" | "height"
+    group_by: str | None = None  # "type" | "storey": answer with a breakdown (text) besides the total
+    top_n: bool = False  # "which rooms are the largest" without names -> list the top rooms
     op: str | None = None  # None | sum | max | min | argmax | argmin | diff | more
     yes_no: bool = False  # "are there more X than Y?" -> "yes"/"no"
     notes: list[str] = field(default_factory=list)
@@ -285,6 +287,11 @@ def parse(question: str) -> Intent:
             it.metric, it.kind, it.attr = "length", "storey", "elevation"
         elif _HEIGHT.search(t) and metric != "count":
             it.metric, it.kind, it.attr = "length", "storey", "height"
+    if re.search(r"\b(types?|typen|tipos?|typer|tuubid|typy|tipuri)\b", t) and not names:
+        it.group_by = "type"
+    if re.search(r"\b(by|per|for each|each|on each|across( all)?)\b.{0,12}\b(level|floor|storey|story|geschoss|etage)s?\b"
+                 r"|\b(level|floor|storey)[- ]by[- ](level|floor|storey)\b|\bbreakdown\b.{0,20}\b(level|floor|storey)", t):
+        it.group_by = "storey"
     which = _has(t, _WHICH)
     comparative_which = which and re.search(r"\b(bigger|larger|greater|smaller|grosser|groesser|kleiner|groter|"
                                             r"kleiner|storre|mindre|mayor|menor)\b", t)
@@ -309,6 +316,8 @@ def parse(question: str) -> Intent:
             it.kind = hs[0]
     if it.op in ("argmax", "argmin"):
         it.metric = "area" if metric in ("text", "area") else metric
+        if not names and (kind in (None, "space")):
+            it.top_n, it.kind = True, "space"
     if _has(t, _MODEL) and not _has(t, ("floor plan", "grundriss", "plattegrond", "plantegning", "plaan")):
         it.scope = "model"
     elif metric == "area" and kind == "space" and len(names) >= 2 and not it.total:
