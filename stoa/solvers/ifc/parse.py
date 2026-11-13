@@ -122,7 +122,8 @@ _MIN = ("smallest", "least", "minimum", "min ", "smaller", "kleiner", "kleiner",
         "najmniejsz", "cel mai mic", "plus petit", "piu piccol", "pienin", "minsta")
 _WHICH = ("which", "what room", "welche", "welcher", "welches", "welke", "cual ", "hvilk", "milline", "ktory",
           "ktora", "care ", "quel", "quale", "mika", "vilk")
-_SUM = ("combined", "together", "in total", "sum of", "zusammen", "insgesamt", "samen", "totaal", "en total",
+_SUM = ("combined", "together", "in total", "sum of", " sum the ", " sum all ", "add up", "added up", "summiere",
+        "addiere", "tel op", "suma ", "sumar", "additionne", "zusammen", "insgesamt", "samen", "totaal", "en total",
         "juntas", "juntos", "tilsammen", "i alt", "kokku", "lacznie", "razem", "in total", "au total", "in totale",
         "yhteensa", "sammanlagt", " plus ", " + ")
 _DIFF = ("difference", "minus", "larger than", "bigger than", "smaller than", "more than", "fewer than",
@@ -154,7 +155,8 @@ _PER_ROOM = re.compile(r"\bper (room|space|raum|ruimte|habitacion|local|piece|po
 _SHARE = re.compile(r"%|\b(percent(age)?|per ?cent|share|proportion|fraction|anteil\w*|prozent\w*|procent\w*|"
                     r"porcentaje|percentuale|pourcentage|osuus|prosent\w*|udzia\w*|andel\w*|procentaj\w*)\b")
 _THRESH = re.compile(r"\b(more|greater|larger|bigger|less|smaller|fewer|over|under|above|below|at least|at most|"
-                     r"exceeding|mehr|weniger|groesser|grosser|kleiner|meer|minder|groter|mas|menos|mayor|menor|plus|"
+                     r"exceed\w*|surpass\w*|ueberschreit\w*|uberschreit\w*|overschrijd\w*|exced\w*|depass\w*|"
+                     r"mehr|weniger|groesser|grosser|kleiner|meer|minder|groter|mas|menos|mayor|menor|plus|"
                      r"moins|piu|meno|yli|alle|wiecej|mniej|powyzej|ponizej|ueber|uber|unter|boven|onder|over)\b"
                      r"(?:\s+(?:than|als|dan|que|de|di|niz|kuin))?\s*(\d+(?:[.,]\d+)?)")
 _EXCL = re.compile(r"\b(excluding|except( for)?|exclude[sd]?|without|not counting|not including|apart from|other than|"
@@ -349,6 +351,12 @@ def parse(question: str) -> Intent:
         metric = "length"
     else:
         metric = "text"
+    # "How many feet of wall ...", "how many square metres ..." ask for a quantity in that unit, not a count
+    if metric == "count" and re.search(r"\b(how many|wie viele|hoeveel|cuant\w+|combien|ile|kuinka monta)\s+"
+                                       r"(square |cubic |sq\.? |running |linear |lineal )?(feet|foot|ft|metres|meters|"
+                                       r"meter|metern|metros|m|m2|m3|yards)\b", t):
+        u = re.search(r"(square|cubic|sq)", t)
+        metric = "area" if (u and u.group(1) != "cubic") else "volume" if u else "length"
     # "how long are all walls" style length questions also contain count-ish words; length wins when no count
     if metric == "count" and _has(t, ("length", "how long", "wie lang", "longitud", "laengde", "lengte")):
         metric = "length"

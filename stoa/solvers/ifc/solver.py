@@ -35,6 +35,12 @@ GEO_HIT_RATE = {"volume": 0.75, "length": 0.62, "side": 0.43, "floor": 0.95}
 FT2_PER_M2 = 10.763910416709722
 FT_PER_M = 3.280839895013123
 MAX_EVIDENCE = 2000
+# words that signal an aggregation/comparison; if the parse found no operator, the plain value is suspect
+_OPERATOR_WORD = re.compile(r"\b(exceed\w*|surpass\w*|average|mean|median|ratio|times as|percent\w*|proportion|share of|"
+                            r"per (room|space|storey|floor|level|unit|apartment)|at least|at most|more than \d|"
+                            r"less than \d|fewer than \d|greater than \d|smaller than \d|over \d|under \d|"
+                            r"durchschnitt\w*|gemiddeld\w*|promedio|moyenne|keskimaar\w*|sredni\w*|prozent\w*|procent\w*|"
+                            r"porcentaje|pourcentage|anteil)\b|%")
 
 # quantity key suffixes, in order of preference, per (metric, kind)
 QTO_KEYS = {
@@ -196,6 +202,13 @@ class IfcSolver(BaseSolver):
                 ans.confidence = min(ans.confidence, 0.15)
                 ans.missing.append("real room areas: this model's IfcSpaces are ~1 m² placeholders (geometry and "
                                    "quantity sets), so the value is not a floor area")
+        if ans.value is not None and not it.mod and not it.which and it.op is None:
+            # an operator word the parse did not turn into an operator: the atomic value may not be what was asked
+            w = _OPERATOR_WORD.search(fold(question))
+            if w and ans.confidence > 0.5:
+                ans.confidence = 0.5
+                ans.missing.append(f"the question has an operator word ('{w.group(0)}') the rules did not apply")
+                ans.trace.append(f"guard: operator word '{w.group(0)}' not modelled -> confidence capped at 0.5")
         for note in it.notes:
             if note.startswith("exclusion"):
                 ans.trace.append(note)
@@ -612,8 +625,11 @@ class IfcSolver(BaseSolver):
             steps = [f"{n}: {a.value} {a.unit or ''} ({'; '.join(t[-1:])})" for n, a, t in parts]
             vals = [(n, float(a.value)) for n, a, _ in parts]
             unit = parts[0][1].unit
-            if it.op in ("argmax", "argmin", "max", "min") and it.which or it.op in ("argmax", "argmin"):
-                pick = (max if it.op in ("argmax", "max") else min)(vals, key=lambda x: x[1])
+            if it.which or it.op in ("argmax", "argmin"):
+                low = it.op in ("argmin", "min") or bool(re.search(
+                    r"\b(fewer|less|least|fewest|smaller|smallest|lower|weniger|kleiner|minder|kleiner|menos|menor|moins|"
+                    r"meno|mniej|vahem|mindre)\b", fold(getattr(it, "question", ""))))
+                pick = (min if low else max)(vals, key=lambda x: x[1])
                 tie = sum(1 for _, v in vals if v == pick[1]) > 1
                 return done(pick[0] if not tie else "equal (" + ", ".join(f"{n} {v:g}" for n, v in vals) + ")",
                             None, [a for _, a, _ in parts], steps + [f"{it.op} over storeys -> {pick[0]}"],
