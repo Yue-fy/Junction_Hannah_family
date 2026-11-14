@@ -112,3 +112,41 @@ def test_tiled_labels_merge_overlap_and_charge_cost(monkeypatch):
 
 def test_tk_is_a_vestibule_not_a_kitchen():
     assert label_class("TK") is None and label_class("K") == "kitchen" and label_class("TUPAKEITTIÖ") == "kitchen"
+
+
+def test_textlayer_parsers_and_merge():
+    from stoa.solvers.raster import textlayer as T
+
+    assert T.parse_scales('SCALE: 1/4" = 1\'-0"')[0]["ratio"] == 48
+    assert T.parse_scales("MITTAKAAVA 1:50")[0]["ratio"] == 50
+    assert T.parse_scales("SCALE: 1:125,000")[0]["ratio"] == 125000
+    assert T.parse_scales("drawn 12:30") == []
+    # Qwen bbox_2d JSON (0..1000) -> pixels of a 2000x1000 tile; loops (> 6 repeats) dropped
+    items = T.parse_items('[{"bbox_2d": [100, 100, 200, 150], "text": "SAUNA"}, '
+                          '{"bbox_2d": [500, 500, 600, 550], "text": "12\'-6\\""}]', 2000, 1000)
+    assert [i.text for i in items] == ["SAUNA", "12'-6\""] and items[0].box == [200, 100, 400, 150]
+    # a text read twice in a tile overlap (once cut) is kept once, the longer reading wins
+    a = T.TextItem("HISTORIC AMERICAN BUILDINGS SURVEY", [100, 100, 500, 120])
+    b = T.TextItem("BUILDINGS SURVEY", [300, 101, 500, 119])
+    assert [i.text for i in T.merge_items([b, a])] == ["HISTORIC AMERICAN BUILDINGS SURVEY"]
+    tl = T.TextLayer("x.png", (1000, 1000), [a, T.TextItem("LIVING 14'-6\" x 12'", [0, 0, 10, 10]),
+                                            T.TextItem("Olohuone 21,5 m2", [0, 0, 10, 10])])
+    assert [d["feet"] for d in T.dimensions(tl)] == [14.5, 12]
+    assert T.areas(tl)[0]["value"] == 21.5
+    assert T.find_text("x.png", "buildings survey", layer=tl)[0]["score"] == 1.0
+    assert T.match_score("SAUNA", "SAUNNA") >= 0.8 and T.match_score("kitchen", "SAUNA") < 0.5
+    # tiles cover the image, 1x1 for small images
+    assert T.tile_boxes(768, 695) == [(0, 0, 768, 695)]
+    bx = T.tile_boxes(3000, 2000)
+    assert len(bx) == 6 and bx[-1][2] == 3000 and bx[-1][3] == 2000
+
+
+def test_off_domain_symbol_counts_abstain_and_scans_go_to_text_mode():
+    from stoa.solvers.raster import RasterSolver
+
+    s = RasterSolver()
+    a = s._off_domain("data/swiss_dwellings/x.png", "window", [])
+    assert a.value is None and "detector" in a.missing[0]  # no Finnish prior on a Swiss/scan drawing
+    assert s._text_mode("data/habs/x_sheet_00001.jpg", "What is the scale of this drawing?")
+    assert not s._text_mode("data/cubicasa5k/x.png", "What is the scale of this drawing?")
+    assert not RasterSolver(text=0)._text_mode("data/habs/x.jpg", "What is the scale of this drawing?")

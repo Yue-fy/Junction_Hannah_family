@@ -43,6 +43,8 @@ CANONICAL = {  # used when a composition needs a `direct` answer for one part
     "shower_bath": "How many showers and bathtubs are drawn on this floor plan in total?",
 }
 IMG_EXT = (".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp")
+# sources whose non-template questions keep going to their own solvers / vlm_direct (no text-grounded raster answer)
+TEXT_OFF = {"cubicasa5k", "swiss_dwellings", "ifc_models", "ifc_bench", "opening_design"}
 GATE_FILE = Path(__file__).with_name("gate.json")
 COND_FILE = Path(__file__).with_name("cond_prior.json")  # experiments/w3/cv/cond_prior.py --write
 
@@ -91,21 +93,36 @@ def class_prior() -> dict:
 class RasterSolver(BaseSolver):
     extensions = IMG_EXT
 
-    def __init__(self, gate: str = "", backend: str = "local", target_px: int | str = 2_000_000, **kwargs):
+    def __init__(self, gate: str = "", backend: str = "local", target_px: int | str = 2_000_000,
+                 text: int | str = 1, offdomain: int | str = 1, **kwargs):
         super().__init__(**kwargs)
         self.backend = backend
         self.target_px = int(target_px)
+        self.text = bool(int(text))  # text-grounded answers on scans (textqa.py); `--solver-arg text=0` = off
+        self.offdomain = bool(int(offdomain))  # non-CubiCasa images: labels for rooms, abstain on symbols
         self.gate = load_gate()
         for part in filter(None, (gate or "").split(",")):
             c, m = part.split(":")
             self.gate.setdefault(c, {"acc": {}})["method"] = m
 
     def can_handle(self, path: str, question: str) -> bool:
-        return self._raster_file(path) is not None and question_op(question)[0] != "none"
+        if self._raster_file(path) is None:
+            return False
+        return question_op(question)[0] != "none" or self._text_mode(path, question)
+
+    def _text_mode(self, path: str, question: str) -> bool:
+        """Questions no template covers, on scans and unseen raster sources only (cubicasa/swiss/ifc keep their
+        own solvers; there vlm_direct stays the fallback): answered from the text layer + image (textqa.py)."""
+        return self.text and source_of(path) not in TEXT_OFF and question_op(question)[0] == "none"
 
     # ----------------------------------------------------------------------------------------------
     def solve(self, path: str, question: str) -> Answer:
         op, classes = question_op(question)
+        if op == "none" and self._text_mode(path, question):
+            from stoa.solvers.raster import textqa
+
+            return textqa.answer(path, question, image_path=self._raster_file(path), backend=self.backend,
+                                 solver=self.name)
         if op in ("single", "none"):
             return self._solve_class(path, question, classes[0] if classes else None)
         # compositions over our classes: sum ("doors and windows in total"), diff ("how many more X than Y"),
@@ -145,6 +162,8 @@ class RasterSolver(BaseSolver):
         if cls is None:
             return Answer(value=None, unit="count", solver=self.name, trace=trace + ["unknown object class"],
                           missing=["question not recognised as a count of a known object class"])
+        if source_of(path) != "cubicasa5k" and self.offdomain:
+            return self._off_domain(path, cls, trace)
         g = self.gate.get(cls, {"method": "prior", "acc": {}})
         method = g["method"]
         acc = g.get("acc", {})
@@ -181,6 +200,29 @@ class RasterSolver(BaseSolver):
         except Exception as e:  # noqa: BLE001 - never refuse: fall back to the prior
             trace.append(f"{method} failed: {type(e).__name__}: {str(e)[:150]}")
         return self._prior_answer(cls, prior, trace, acc)
+
+    def _off_domain(self, path: str, cls: str, trace: list[str]) -> Answer:
+        """Not a CubiCasa plan: the gate, the priors and the rules (sinks from rooms, WC seats from bedrooms) were all
+        fitted on Finnish CubiCasa apartments and mean nothing here (a Swiss floor or a 1900 scan is not a 3-room flat).
+        Room classes: count the printed room labels (the label reader is generic, EN/FI/SV/DE/FR/IT names), at a
+        capped confidence. Symbols: abstain, so the cascade asks the VLM instead of taking a Finnish prior."""
+        src = source_of(path)
+        trace.append(f"source '{src}' is not CubiCasa: raster's gate/priors/rules do not apply")
+        img_path = self._raster_file(path)
+        if cls not in ROOM_CLASSES or img_path is None:
+            return Answer(value=None, unit="count", solver=self.name, trace=trace + ["abstain (off-domain symbol class)"],
+                          missing=[f"a {cls.replace('_', ' ')} detector for this drawing style (raster's are fitted on "
+                                   f"CubiCasa plans only)"])
+        img = vlm.llm.load_image(self.abspath(img_path))
+        ans = self._labels(img_path, img, img_path, cls, None, trace, {"labels": 0.5}, "labels")
+        if any(n.startswith("LOOP") for n in ans.trace) or ans.value is None:
+            return Answer(value=None, unit="count", solver=self.name, trace=ans.trace + ["abstain: label reading failed"],
+                          missing=["a readable list of room labels"])
+        name = cls.replace("_", " ")
+        ans.assumptions = [f"counted the printed room labels that name a {name}; one label = one room"]
+        if not ans.evidence:  # no label read: an unlabelled room would be missed -> weak
+            ans.confidence = 0.3
+        return ans
 
     def _raster_file(self, path: str) -> str | None:
         """The image to read: the path itself, or a PNG/JPG sibling of a PDF/other format (same drawing)."""
