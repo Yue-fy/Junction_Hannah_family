@@ -125,6 +125,54 @@ def _opcheck(question: str, backend: str = "local") -> str | None:
     return m.group(1) if m else None
 
 
+WHICH_APT = (r"^\s*(?:which|what|in\s+which|welche[rs]?|in\s+welcher|quel(?:le)?|dans\s+quel|quale|in\s+quale|welk(?:e)?)\s+"
+             r"(?:apartment|flat|unit|dwelling|wohnung|wohneinheit|appartement|logement|appartamento|woning)\b")
+
+
+def _echo(question: str, value) -> str | None:
+    """The table-QA answer is just an entity (or number) the question itself names, and the only one of its kind
+    there (so 'which is larger, apartment A or B' -> 'apartment A' is not an echo)."""
+    q = qparse._norm(question)
+    if isinstance(value, str):
+        v = value.strip().lower()
+        apts = {f"apartment {a}".lower() for m in qparse.APT_RE.finditer(q) for a in re.split(qparse.JOIN, m.group(1)) if a}
+        if v in apts and len(apts) == 1:
+            return "the apartment"
+        rooms = {m.group(1) for m in qparse.ROOMNUM_RE.finditer(q)}
+        if len(rooms) == 1 and any(v == rn or v.startswith(f"room {rn}".lower()) or v == f"room {rn}" for rn in rooms):
+            return "the room"
+        return None
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        nums = {float(n.replace(",", ".")) for n in re.findall(r"(?<![\w.])\d+(?:[.,]\d+)?(?![\w])", q)
+                if not qparse.ROOMNUM_RE.fullmatch(n)}
+        if float(value) in nums and float(value) != 0:
+            return "a number"
+    return None
+
+
+def _in_tables(value: str, tables: dict) -> bool:
+    """A text answer is grounded when it is yes/no, an apartment/room reference, or occurs in some table cell."""
+    v = value.strip().lower()
+    if v in ("yes", "no") or re.fullmatch(r"(?:apartment|room)\s+\S+(?:\s*\(.*\))?", v):
+        return True
+    for df in tables.values():
+        for col in df.columns:
+            if df[col].dtype == object and df[col].astype(str).str.lower().str.contains(re.escape(v), regex=True).any():
+                return True
+    return False
+
+
+def _translate(question: str, backend: str = "local"):
+    """stoa.llm.to_english for languages outside en/fi/de/fr/it (one local LLM call; names and numbers are masked
+    and restored byte-identical). None when nothing was translated or a name/number was lost."""
+    try:
+        from stoa.llm import to_english
+        tr = to_english(question, backend=backend)
+    except Exception:  # noqa: BLE001 - server down: answer on the original
+        return None
+    return tr if tr.translated and tr.ok else None
+
+
 BEDROOM_FALLBACK = ["Zimmer", "Pièce", "Stanza"]
 
 
@@ -396,6 +444,31 @@ class DxfSolver(BaseSolver):
         return load_floor(str(abspath(dxf_rel))), dxf_rel, None
 
     def solve(self, path: str, question: str) -> Answer:
+        """Translate-first for languages the rules were never written for (S0/F 04:05: the sealed hard2r drop is
+        language), then the rule/table-QA answer, then guards that check the answer fits what was asked."""
+        tr = _translate(question, self.backend) if self.llm else None
+        q = tr.text if tr is not None else question
+        ans = self._solve(path, q)
+        if tr is not None:
+            ans.trace.insert(0, tr.note)
+            ans.assumptions = [tr.note, *ans.assumptions]
+            ans.confidence = round(min(ans.confidence, 0.85), 3)  # a translated wording is never a known template
+        if ans.value is None:
+            return ans
+        if (m := qparse.ATTR_W.search(q)) is not None:
+            ans.confidence = round(min(ans.confidence, 0.2), 3)
+            ans.missing = [*ans.missing, f"the question asks about '{m.group(0)}', which a 2D floor-plan DXF does not "
+                                         "record (only room outlines, labels, doors, windows, fixtures); the value "
+                                         "answers something else"]
+            ans.trace.append(f"guard: property word '{m.group(0)}' not in the drawing -> confidence <= 0.2")
+        elif ans.unit == "count" and not re.search(qparse.COUNT_WORDS, q.lower()):
+            ans.confidence = round(min(ans.confidence, 0.3), 3)
+            ans.missing = [*ans.missing, "the answer is a count, but the question has no counting word (how many / "
+                                         "number of …); it may ask for something else"]
+            ans.trace.append("guard: count answer without a counting cue -> confidence <= 0.3")
+        return ans
+
+    def _solve(self, path: str, question: str) -> Answer:
         fm, dxf_rel, tf0 = self._load(path)
         if fm is None:
             return self.abstain(dxf_rel)
@@ -445,6 +518,21 @@ class DxfSolver(BaseSolver):
                 return Answer(value=None, unit=qr.unit, confidence=0.0, solver=self.name,
                               trace=trace + ["no 'Whg./App.' apartment labels on this floor"],
                               missing=["no apartments identified on this floor"])
+        if qr.op in ("count_gt", "count_lt", "count_ge") and any(t.kind == "area_label" for t in qr.terms):
+            # "how many of the kitchens are larger than 7.5 m²": each labelled room against the threshold, not their sum
+            new_terms = []
+            for t in qr.terms:
+                if t.kind != "area_label":
+                    new_terms.append(t)
+                    continue
+                rs = [r for r in _rooms_with_name(fm, t.arg) if r.number and (qr.include_outdoor or not r.outdoor)
+                      and (not t.scope or r.unit in t.scope)]
+                new_terms += [qparse.Term("area_room", r.number, t.pos + k, note=t.note) for k, r in enumerate(rs)]
+            trace.append(f"threshold over each labelled room: {[t.arg for t in new_terms]}")
+            qr.terms = new_terms
+            if not qr.terms:
+                return Answer(value=0, unit="count", confidence=0.35, solver=self.name, trace=trace,
+                              missing=["no room with that label on this floor"])
         parts = [_eval_term(fm, t, qr) for t in qr.terms]
         for t, p in zip(qr.terms, parts):
             trace += p.trace
@@ -455,6 +543,14 @@ class DxfSolver(BaseSolver):
         if not known:
             return Answer(value=None, unit=qr.unit, confidence=0.0, solver=self.name, trace=trace + ["abstain: no term resolved"],
                           missing=missing or ["nothing matched on this floor"])
+        if qr.qtype == "area" and qr.op == "sum" and qr.terms and all(t.kind == "area_label" for t in qr.terms) and \
+                not any(p.boxes for p in parts):
+            # "How big is the Ripostiglio?" on a floor without one was 0 m² at 0.98: a false premise, not an area
+            names = sorted({r.name for r in fm.rooms if r.name})
+            asked = qr.terms[0].arg if isinstance(qr.terms[0].arg, str) else qr.terms[0].note
+            return Answer(value=None, unit=qr.unit, confidence=0.0, solver=self.name,
+                          trace=trace + [f"no room labelled {asked!r} on this floor"],
+                          missing=[f"no room labelled '{asked}' on this floor (labels here: {', '.join(names[:15])})"])
         conf = 1.0
         for p in parts:
             conf *= p.conf if p.value is not None else 0.2
@@ -472,13 +568,18 @@ class DxfSolver(BaseSolver):
         if qr.qtype == "text" and len(parts) == 1 and qr.terms[0].kind == "rooms":
             r = parts[0].room
             value = f"room {r.number}" + (f" ({r.name})" if r.name else "") if r.number else (r.name or r.label())
+            if r.unit and re.search(WHICH_APT, question, re.I):  # "which apartment has the largest balcony"
+                value = f"apartment {r.unit}"
+                trace.append(f"the question asks for the apartment: room {r.number} is in apartment {r.unit}")
             trace.append(f"{qr.op}: {r.label()} with {r.area:.2f} m²")
             unit = None
         elif qr.qtype == "text" and qr.op in ("max", "min"):
             pairs = [(v, t) for v, t in zip(vals, qr.terms) if v is not None]
             v, t = (max if qr.op == "max" else min)(pairs, key=lambda vt: vt[0])
             value = str(t.arg if not isinstance(t.arg, list) else t.arg[0])
-            if t.kind == "area_apartment":
+            if t.kind == "area_label" and t.scope and len(t.scope) == 1:  # "which apartment has the bigger kitchen"
+                value = f"apartment {t.scope[0]}"
+            elif t.kind == "area_apartment":
                 value = f"apartment {value}"
             elif t.kind in ("area_room", "rooms"):
                 r = getattr(p, "room", None) if t.kind == "rooms" else next((r for r in fm.rooms if r.number == t.arg), None)
@@ -510,6 +611,14 @@ class DxfSolver(BaseSolver):
                               missing=missing or ["floor total not found"])
             value = round(100.0 * known[0] / known[1], 2)
             trace.append(f"share: 100 × {known[0]:.2f} / {known[1]:.2f} = {value} %")
+        elif qr.op in ("pctdiff", "pctdiff_less"):
+            if len(known) < 2 or not known[1]:
+                return Answer(value=None, unit="%", confidence=0.0, solver=self.name,
+                              trace=trace + ["relative difference: missing reference"], missing=missing or ["reference not found"])
+            a, b = known[0], known[1]  # subject, reference ("A larger than B": (A − B) / B)
+            value = round(100.0 * ((a - b) if qr.op == "pctdiff" else (b - a)) / b, 2)
+            trace.append(f"relative difference: 100 × ({a:.2f} − {b:.2f}) / {b:.2f} = {value} %" if qr.op == "pctdiff" else
+                         f"relative difference: 100 × ({b:.2f} − {a:.2f}) / {b:.2f} = {value} %")
         elif qr.op in ("count_gt", "count_lt", "count_ge"):
             cmp = {"count_gt": lambda v: v > qr.threshold, "count_lt": lambda v: v < qr.threshold,
                    "count_ge": lambda v: v >= qr.threshold}[qr.op]
@@ -521,13 +630,16 @@ class DxfSolver(BaseSolver):
         elif qr.op == "diff":
             value = known[0] - sum(known[1:])
             trace.append(f"difference: {' - '.join(str(round(v, 2)) for v in known)} = {value:.2f}")
+            if qr.absolute and value < 0:
+                value = -value
+                trace.append("'difference between' is symmetric: reported as a positive number")
         else:
             value = sum(known)
             if len(known) > 1:
                 trace.append(f"sum: {' + '.join(str(round(v, 2)) for v in known)} = {value:.2f}")
         if qr.op == "ratio":
             unit = None
-        elif qr.op == "pct":
+        elif qr.op in ("pct", "pctdiff", "pctdiff_less"):
             unit = "%"
         elif unit == "count":
             value = int(round(value))
@@ -551,6 +663,29 @@ class DxfSolver(BaseSolver):
             missing.append("could not map DXF to the PDF page (no matching text); evidence in DXF metres")
         if fm.warnings:
             trace += [f"warning: {w}" for w in fm.warnings[:3]]
+        if qr.op == "sum" and len(qr.terms) == 1 and qr.terms[0].kind == "area_label" and len(parts[0].boxes) > 1 \
+                and qparse.singular_label(question):
+            conf = min(conf, 0.5)  # Q 04:50: "How big is the Küche?" with 8 kitchens -> their sum at 0.98
+            rs = [(note.split(":")[0].replace("room ", ""), note) for _, note in parts[0].boxes]
+            missing.append(f"{len(parts[0].boxes)} rooms match '{qr.terms[0].arg if isinstance(qr.terms[0].arg, str) else qr.terms[0].note}'"
+                           f" on this floor; the value is their total. Name the room number or the apartment for one room")
+            assumptions.append("several rooms match the singular name; answered their total: "
+                               + "; ".join(n for _, n in parts[0].boxes[:8]))
+            trace.append(f"singular name matches {len(parts[0].boxes)} rooms -> confidence <= 0.5")
+        if (lost := qparse.unparsed_conjunct(question, qr)) is not None:
+            conf = min(conf, 0.3)  # Q 04:48: "toilets and sinks" counted toilets only at 0.95
+            missing.append(f"parsed only {qr.terms[0].kind} {qr.terms[0].arg!s}; could not read '{lost}'")
+            trace.append(f"conjunction check: '{lost}' not parsed -> confidence <= 0.3")
+        for n, asked in qparse.asked_room_names(question, qr, vocab).items():
+            r = next((r for r in fm.rooms if r.number == n), None)
+            if r is not None and not qparse.name_fits(r.name, asked):
+                conf = min(conf, 0.3)  # Q red team: "room 2.23 ('Sauna')" where 2.23 is a Korridor was 0.99
+                missing.append(f"room {n} on this plan is labelled '{r.name or 'without a name'}', not '{asked}'; "
+                               "check the room number or the name")
+                trace.append(f"name check: question calls room {n} '{asked}', the plan labels it "
+                             f"'{r.name or '-'}' ✗ -> confidence <= 0.3")
+            elif r is not None:
+                trace.append(f"name check: room {n} '{asked}' fits the plan label '{r.name}' ✓")
         extra = qparse.unused_numbers(question, qr)
         if extra:
             conf = min(conf, 0.3)  # F/S0: a stated price/rate/constant the rules did not apply -> the agent does it
@@ -622,9 +757,21 @@ class DxfSolver(BaseSolver):
             value = round(value, 2)
         if unit not in ("count", "m2", None):
             unit = None
-        return Answer(value=value, unit=unit, confidence=0.6 if evidence else 0.45, evidence=evidence, trace=trace,
+        conf = 0.6 if evidence else 0.45
+        missing = [] if evidence else ["the query did not report which rooms it used"]
+        echo = _echo(question, value)
+        if isinstance(value, str) and not echo and not _in_tables(value, tables):
+            conf = min(conf, 0.15)  # e.g. "floor finish of the Bagno" -> "tile": typed by the model, in no table
+            missing.append(f"the answer {value!r} does not occur in the drawing's tables (typed by the model)")
+            trace.append("guard: text answer not found in any table -> confidence <= 0.15")
+        if echo:
+            conf = min(conf, 0.15)  # Q red team: "fire rating of the entrance door of apartment A" -> "apartment A"
+            missing.append(f"the answer {value!r} only repeats {echo} named in the question; the tables do not hold "
+                           "what was asked")
+            trace.append(f"guard: answer repeats {echo} from the question -> confidence <= 0.15")
+        return Answer(value=value, unit=unit, confidence=conf, evidence=evidence, trace=trace,
                       solver=self.name, assumptions=["the model wrote the query; every number comes from the DXF tables"],
-                      missing=[] if evidence else ["the query did not report which rooms it used"])
+                      missing=missing)
 
 
 @register("pdf_vector")

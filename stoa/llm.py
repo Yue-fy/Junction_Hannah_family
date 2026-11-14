@@ -817,7 +817,8 @@ _LANG_WORDS: dict[str, set[str]] = {
     "no": set("hvor mange hvilke hva er og på det den finnes rom etasje".split()),
     "pl": set("ile jaka jaki jakie który która jest są na w i czy pomieszczeń pokoi powierzchnia tym tego "
               "kondygnacji piętrze".split()),
-    "cs": set("kolik jaká jaký jaké který která je jsou na v a se místností plocha tomto podlaží patře".split()),
+    "cs": set("kolik kolika jaká jaký jaké který která je jsou na v a se místností plocha tomto podlaží patře více "
+              "než má oken dveří stěn počet celková celkový celkem".split()),
     "sk": set("koľko aká aký ktorý je sú na v a miestností plocha tomto podlaží".split()),
     "hu": set("hány hány mennyi van vannak a az és milyen melyik alaprajzon terület szint szinten helyiség "
               "teljes".split()),
@@ -829,7 +830,7 @@ _LANG_WORDS: dict[str, set[str]] = {
 }
 _LANG_CHARS: dict[str, str] = {  # letters that (almost) only one language family uses
     "pl": "ąęłńśźż", "cs": "ěřůť", "sk": "ľĺŕô", "hu": "őű", "tr": "ğşı", "ro": "ășțâî", "et": "õ",
-    "es": "ñ¿¡", "pt": "ãõ", "fi": "", "lv": "āēīūķļņģ", "lt": "ąčęėįšųūž", "da": "æø", "no": "æø", "sv": "å",
+    "es": "ñ¿¡", "pt": "ãõ", "fi": "", "lv": "āēīķļņģ", "lt": "ėįų", "da": "æø", "no": "æø", "sv": "å",
 }
 COVERED_LANGS = ("en", "fi", "de", "fr", "it")  # languages the dataset (and therefore our rules) use
 _QUOTED = re.compile(r"(?<![^\W\d_])'[^']{1,80}'(?![^\W\d_])|\"[^\"]{1,80}\"|‘[^’]{1,80}’|“[^”]{1,80}”|„[^“”]{1,80}[“”]|«[^»]{1,80}»")
@@ -870,7 +871,7 @@ class Translation:
     note: str = ""            # for Answer.assumptions: "translated from Polish: '...'"
 
 
-_TR_SYSTEM = (
+_TR_SYSTEM_BASE = (
     "You translate questions about construction drawings and building models into English. Rules: keep every "
     "placeholder such as [[1]] exactly as written, once each (a placeholder in quotes is a name or label: keep it "
     "in quotes); keep apartment, room and grid letters or codes; do not answer the question; do not add, drop or "
@@ -878,6 +879,52 @@ _TR_SYSTEM = (
     "toilet, sink, door, window, net floor area, wall, slab). Reply as JSON {\"lang\": \"<ISO 639-1 code of the "
     "source>\", \"english\": \"<the English question>\"}."
 )
+# + a fixed domain glossary and "never add / drop qualifiers" (F 04:36/04:38: the remaining losses were concept-noun
+# slips, e.g. Polish 'belek' (beams) -> balconies, and one ADDED 'external'). experiments/r2/probes/concept_match.py:
+# translation parses to the same (task, target) as its English base on hardL_open 139/158 vs 129/158 without it,
+# lang4 47 vs 46/48, 'belek' fixed, 0 vs 2 lost placeholders. (Two noun hints, washbasin vs kitchen sink and bathtub
+# vs bathroom, were added after seeing hardL_open misses: F's held-out hardL is the honest check.)
+_TR_SYSTEM = _TR_SYSTEM_BASE + (
+    " Never add a qualifier or condition the source does not state (e.g. external, internal, load-bearing, net, "
+    "gross) and never drop one it states; translate every noun. Translate building nouns with these English terms: "
+    "toilet bowl / WC seat (a fixture), separate WC room (a room), washbasin (a bathroom wash basin, lavabo), kitchen "
+    "sink, shower, bathtub (the tub itself, not the room), sauna, bedroom, bathroom / washroom (a room), kitchen, "
+    "living room, balcony, terrace, storey / floor (a level of the building), apartment, room / space, door, window, "
+    "wall, slab, beam, column, stair, roof, railing.")
+# Source-language hints for building nouns the 8B does not know (S0 04:51: pl 'belek' -> balconies). General domain
+# vocabulary (pl, et, cs, hu, ro, es, sv, fi, de, nl, da/no), not taken from any probe or sealed split. Used by
+# to_english since 05:00: concept match hardL_open 141/158 (v2 without it 139, none 129), lang4 47/48, F's 11
+# pl/ro ifc trigger questions 11/11 in the pipeline (v2: 10/11, 'belek' -> balconies).
+_TR_GLOSSARY = (
+    " Source-language hints: beam = belka/belki/belek (pl), tala (et), trám (cs), gerenda (hu), grindă/grinzi (ro), "
+    "viga (es), balk/balkar (sv), palkki (fi), Balken (de), balk (nl), bjælke/bjelke (da/no); column = słup (pl), "
+    "post/sammas (et), sloup (cs), oszlop (hu), stâlp/stâlpi (ro), columna/pilar (es), pelare (sv), pilari (fi), "
+    "Stütze/Säule (de), kolom (nl), søjle/søyle (da/no); slab = płyta/strop (pl), plaat/vahelagi (et), deska/strop "
+    "(cs), födém/lemez (hu), placă/plăci/planșeu (ro), losa/forjado (es), bjälklag/platta (sv), laatta (fi), "
+    "Decke/Platte (de), vloerplaat (nl), dæk (da); stair = schody (pl), trepp (et), schodiště (cs), lépcső (hu), "
+    "scară/scări (ro), escalera (es), trappa (sv), porras (fi); wall = ściana (pl), sein (et), stěna (cs), fal (hu), "
+    "perete (ro), muro/pared (es), vägg (sv), seinä (fi); balcony = balkon (pl, cs), rõdu (et), erkély (hu), balcon "
+    "(ro), balcón (es), balkong (sv), parveke (fi); washbasin = umywalka (pl), kraanikauss (et), umyvadlo (cs), mosdó "
+    "(hu), lavoar (ro), lavabo (es), handfat (sv); kitchen sink = zlew (pl), valamu (et), dřez (cs), mosogató (hu), "
+    "chiuvetă (ro), fregadero (es), diskbänk (sv); toilet bowl = sedes/miska WC (pl), WC-pott (et), mísa (cs), "
+    "WC-csésze (hu), vas WC (ro), inodoro (es), toalettstol (sv); bathtub = wanna (pl), vann (et), vana (cs), kád "
+    "(hu), cadă/căzi (ro), bañera (es), badkar (sv), kylpyamme (fi); shower = prysznic (pl), dušš (et), sprcha (cs), "
+    "zuhany (hu), duș (ro), ducha (es), dusch (sv); sauna = bastu (sv), szauna (hu); bathroom = łazienka (pl), "
+    "vannituba (et), koupelna (cs), fürdőszoba (hu), baie (ro), baño (es), badrum (sv); bedroom = sypialnia (pl), "
+    "magamistuba (et), ložnice (cs), hálószoba (hu), dormitor (ro), dormitorio (es), sovrum (sv); storey = kondygnacja/"
+    "piętro (pl), korrus (et), podlaží/patro (cs), szint/emelet (hu), nivel/etaj (ro), planta (es), våning (sv).")
+# Quantity and unit words (W1 04:56: et 'kogumaht' total volume -> 'total area', hu 'lábban' in feet -> 'at ground
+# level'). NOT used (05:10): with the one-letter fix v3 already matches W1's c5 cs/hu/sv rows 54/54, and adding these
+# was slightly worse elsewhere (hardL_open concept match 208 vs 210/232, lang4 46 vs 47/48; noise-level).
+_TR_GLOSSARY_Q = (
+    " Quantity and unit hints: volume = objętość (pl), maht/ruumala (et), objem (cs), térfogat (hu), volum (ro), "
+    "volumen (es), volym (sv), tilavuus (fi); area = powierzchnia (pl), pindala (et), plocha (cs), terület/alapterület "
+    "(hu), suprafață/arie (ro), superficie/área (es), yta/area (sv), pinta-ala (fi); length = długość (pl), pikkus (et), "
+    "délka (cs), hossz (hu), lungime (ro), longitud (es), längd (sv), pituus (fi); feet = stopa/stopy/stóp/stopach (pl), "
+    "jalg/jalgades (et), stopa/stopách (cs), láb/lábban (hu), picior/picioare (ro), pie/pies (es), fot/fötter (sv), "
+    "jalka/jalkaa (fi); metres = metr/metrach (pl), meeter/meetrites (et), metr/metrech (cs), méter/méterben (hu), "
+    "metru/metri (ro), metro/metros (es), meter (sv); total = łączny/całkowity (pl), kogu-/kokku (et), celkový (cs), "
+    "teljes/összes (hu), total (ro, es), total/sammanlagd (sv).")
 _TR_SCHEMA = {"type": "object", "properties": {"lang": {"type": "string"}, "english": {"type": "string"}},
               "required": ["lang", "english"]}
 _LANG_NAMES = {"pl": "Polish", "et": "Estonian", "es": "Spanish", "cs": "Czech", "hu": "Hungarian", "tr": "Turkish",
@@ -890,6 +937,8 @@ _tr_lock = threading.Lock()
 
 _NUM_SUFFIX = re.compile(r"(\d+(?:[.,]\d+)*)(-[^\W\d_]+)")  # Hungarian/Turkish case endings: 1.11-es, 12-ben
 _LETTER = re.compile(r"(?:(?<=\s)|^)[A-Z](?=[\s,.;:?!)]|$)")  # apartment/unit letters (A, B)
+_ONE_LETTER_WORDS = {"cs": "ovszkuai", "sk": "ovszkuai", "pl": "wzioau", "hu": "a", "sv": "i", "es": "yao",
+                     "it": "eaio", "ro": "a", "pt": "aoe", "fr": "a", "lt": "ir", "lv": "ar"}
 _QCHARS = "'\"‘’“”„«»"
 
 
@@ -897,7 +946,9 @@ def _protect(q: str) -> tuple[str, list[str]]:
     """Mask quoted names (quote marks stay visible, so the model knows a label is there), numbers/IDs and
     unit letters as [[n]]; return the masked text and the spans (quoted ones WITH their quote marks)."""
     spans: list[str] = []
-    hu = lang_guess(q) == "hu"  # Hungarian sentence-initial "A" is the article, not a unit letter
+    # a sentence-initial one-letter WORD of the language (cs 'O kolik', pl 'W modelu', hu article 'A') is not a unit
+    # letter; Turkish 'A dairesinin' (apartment A) has no such word, so it stays protected
+    one_letter = _ONE_LETTER_WORDS.get(lang_guess(q), "")
 
     def keep(text: str) -> str:
         spans.append(text)
@@ -913,7 +964,7 @@ def _protect(q: str) -> tuple[str, list[str]]:
         return keep(ns.group(1)) + ns.group(2) if ns else keep(t)
 
     def letter(m: re.Match) -> str:
-        return m.group(0) if (hu and m.start() == 0) else keep(m.group(0))
+        return m.group(0) if (m.start() == 0 and m.group(0).lower() in one_letter) else keep(m.group(0))
 
     masked = _QUOTED.sub(quoted, q)
     parts = re.split(r"(\[\[\d+\]\])", masked)  # outside the masked names only
@@ -936,15 +987,35 @@ def _restore(text: str, spans: list[str]) -> tuple[str, bool]:
     return text, ok and not re.search(r"\[\[\d+\]\]", text)
 
 
+def should_translate(question: str, intent: Any = None) -> bool:
+    """The measured trigger for to_english(question, force=True): a non-English question the rule-based intent
+    parser could not read (unknown language, no target, or fell back to a free-text task). R2 04:20: on the CS/HU/TR/RO
+    probe this fires on 46/48 and lifts the pipeline 38 -> 48/48; on hard's 175 non-English questions (fi/de/fr/it
+    templates + new sv/nl/pl/de wordings the rules already read) it fires on 0 and changes nothing, whereas
+    translating every non-English question there LOSES 7 answers to translation slips ("vasche da bagno" -> bathrooms,
+    "bastur" -> bathrooms, "vloeren" -> floors). After translating, re-parse; keep the translation only if the
+    re-parse finds a target. `intent` = stoa.router.intent.parse(question) (parsed here when None)."""
+    if lang_guess(question) == "en":
+        return False
+    if intent is None:
+        from stoa.router.intent import parse
+
+        intent = parse(question)
+    return (getattr(intent, "lang", "?") == "?" or getattr(intent, "target", None) in (None, "unknown")
+            or getattr(intent, "task", None) == "text")
+
+
 def to_english(question: str, *, keep: Sequence[str] = COVERED_LANGS, force: bool = False,
-               backend: str = "local", model: str = "default") -> Translation:
+               backend: str = "local", model: str | None = None) -> Translation:
     """Translate a question into English unless its language is in `keep` (default: the languages our rules cover).
 
     One local-LLM call (~150 tokens in / ~40 out, cost recorded like any chat) for an uncovered language; none
     otherwise. Quoted names, IDs and numbers are masked as [[n]] before the call and restored after, so they are
     byte-identical; if the model loses one, the original question is returned with ok=False (caller: keep the
     original route and lower the confidence). Memoised in-process; disk-cached with STOA_LLM_CACHE=1.
-    `force=True` translates any non-English question (e.g. when intent parsing failed on a covered language)."""
+    `force=True` translates any non-English question. Recommended use (measured, see should_translate):
+        if should_translate(q, intent): tr = to_english(q, force=True); re-parse tr.text; use it if that finds a target
+    Translating questions the rules already read loses answers (hard: 7 losses / 1 win on 175)."""
     guess = lang_guess(question)
     if guess == "en" or (not force and guess in keep):
         return Translation(question, guess, False, True, question)
@@ -954,7 +1025,7 @@ def to_english(question: str, *, keep: Sequence[str] = COVERED_LANGS, force: boo
             return _tr_memo[key]
     masked, spans = _protect(question)
     try:
-        r = chat(masked, system=_TR_SYSTEM, backend=backend, model=model, max_tokens=300, temperature=0.0,
+        r = chat(masked, system=_TR_SYSTEM + _TR_GLOSSARY, backend=backend, model=model, max_tokens=300, temperature=0.0,
                  json_schema=_TR_SCHEMA)
         d = extract_json(r.text) or {}
         eng = str(d.get("english", "")).strip()

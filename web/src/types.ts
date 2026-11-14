@@ -24,7 +24,10 @@ export interface Cost {
 }
 
 export interface Answer {
-  value: number | string | null;
+  /** set by the web middleware when a hosted call timed out and its recorded answer is shown instead */
+  replayed?: string;
+  recorded_at?: string;
+  value: number | string | boolean | null; // boolean: a Python bool from a solver (shown yes/no)
   unit: string | null;
   confidence: number;
   evidence: Evidence[];
@@ -38,6 +41,10 @@ export interface Answer {
   intent?: Intent | null;
   plan?: { op: string; parts: string[]; sub_questions: string[] } | null;
   cached?: boolean;
+  /** web only (set in main.ts, never from the API): the element types a free-text answer about an .ifc names,
+   *  counted in the loaded model in the browser. said = the count the answer gives (null: named without a count);
+   *  notInAnswer = a type of the same kind the answer leaves out. */
+  checked?: { name: string; model: number; said: number | null; notInAnswer?: boolean }[];
 }
 
 export interface Intent {

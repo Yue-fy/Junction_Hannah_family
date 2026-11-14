@@ -128,6 +128,9 @@ def _explain_codes(value: str, question: str, rows, legend) -> tuple[str, list[t
     return out, found
 
 
+# count nouns that name no thing ("how many items in total"): never evidence that the table is missing
+GENERIC_RE = re.compile(r"(items?|things?|objects?|elements?|units?|pieces?|total|numbers?|instances?|occurrences?|"
+                        r"times|each|every|overall|altogether)", re.I)
 KINDS_RE = re.compile(r"\b(types?|kinds?|marks?|different|distinct|unique|rows?|entries|lines?|records?|styles?|"
                       r"models?|categories|variants?)\b", re.I)
 
@@ -164,6 +167,18 @@ def _qty_sum(value: int, used: list, tables: dict[str, pd.DataFrame], question: 
         total += float(row[qty])
     total = int(round(total))
     return total if total != value else None
+
+
+SECOND_LOOK = ("\n(The tables are already loaded as pandas DataFrames under these names, with typed numeric columns; "
+               "use them directly.)")
+COMPLEX_Q = re.compile(r"\bif\b|\beach\b|\bevery\b|\bper\b|consist|assum|\btimes\b|multipl|\bratio\b|percent|"
+                       r"average|\bmean\b|\btotal\b|\bsum\b|\ball\b|\bwhose\b|\bstarts?\s+with|\bboth\b", re.I)
+
+
+def _complex(question: str, res: dict) -> bool:
+    """A multi-step question or query (where a second sample of the LLM-written code can disagree)."""
+    stm = [ln for ln in (res.get("code") or "").splitlines() if ln.strip() and not ln.strip().startswith("#")]
+    return len(stm) >= 4 or bool(COMPLEX_Q.search(question))
 
 
 def _clean(name: str) -> str:
@@ -313,7 +328,8 @@ class ScheduleSolver(BaseSolver):
                          [str(v) for n, df in tables.items() if n != "notes" for v in df.head(60).to_numpy().ravel()]).lower()
         hm = re.search(r"how many\s+(.*?)(?:\b(?:are|is|does|do|have|has|use|uses|in|on|of|with|that|which)\b|[?,(]|$)",
                        question, re.I)
-        counted = [w for w in re.findall(r"[a-z]{4,}", hm.group(1).lower()) if not KINDS_RE.fullmatch(w)] if hm else []
+        counted = [w for w in re.findall(r"[a-z]{4,}", hm.group(1).lower())
+                   if not KINDS_RE.fullmatch(w) and not GENERIC_RE.fullmatch(w)] if hm else []
         if named and not any(w.rstrip("s") in known for w in named):
             conf = min(conf, 0.3)  # e.g. "pier schedule" but no pier table was rebuilt from this sheet
             missing.append(f"no '{named[0]} schedule' table could be rebuilt from the PDF text (it may be drawn among "
@@ -321,6 +337,32 @@ class ScheduleSolver(BaseSolver):
         elif counted and not any(w.rstrip("s")[:5] in known for w in counted):
             conf = min(conf, 0.3)  # "how many pier types": no rebuilt table mentions piers
             missing.append(f"no rebuilt table mentions '{' '.join(counted)}'; the answer comes from other text")
+        if isinstance(value, (int, float)) and not isinstance(value, bool) and conf > 0.5 and _complex(question, res):
+            # S0 04:57: the same dev question gave 379 and 235 at conf 0.85 in two runs (LLM-written code is not
+            # deterministic on the server). For multi-step questions/code, draw a second independent query; on
+            # disagreement the answer is not sure. Simple lookups (75% of dev) were stable: no second call there.
+            try:
+                res2 = tableqa.ask(question, tables, backend=self.backend, doc=doc + SECOND_LOOK, id_col="row_id",
+                                   units='"count", "ft2", "m2", "ft", "m"', lookup_text=True, sep="|")
+                v2 = res2.get("value")
+            except Exception as e:  # noqa: BLE001
+                v2 = None
+                trace.append(f"second independent query failed: {type(e).__name__}: {e}")
+            if not (isinstance(v2, (int, float)) and not isinstance(v2, bool)) or v2 != v2:
+                conf = min(conf, 0.6)  # the second look found nothing: the first answer is not confirmed
+                trace.append(f"second independent query gave no number ({v2!r}); the answer is not confirmed")
+                missing.append("a second, independent table query could not reproduce the answer")
+            else:
+                v2n = int(round(float(v2))) if unit == "count" else round(float(v2), 2)
+                if unit == "count" and isinstance(value, int):
+                    v2f = _qty_sum(v2n, res2.get("used", []), tables, question)
+                    v2n = v2f if v2f is not None else v2n
+                same = abs(float(v2n) - float(value)) <= 0.005 * max(abs(float(value)), 1.0)
+                trace.append(f"second independent query: {v2n} -> {'agrees' if same else 'DISAGREES'} with {value}")
+                if not same:
+                    conf = min(conf, 0.5)
+                    missing.append(f"two independent table queries disagree ({value} vs {v2n}); the reading of the "
+                                   "schedule is unstable, check the cited rows")
         if isinstance(value, str) and value.strip().upper() in tableqa.id_tokens(question, path):
             conf = min(conf, 0.2)  # the answer only repeats an identifier from the question
             missing.append(f"the answer {value!r} repeats the question's identifier; the table row was not found")

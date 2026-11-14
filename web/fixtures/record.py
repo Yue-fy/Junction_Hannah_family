@@ -49,6 +49,8 @@ LOCATE = [("data/cubicasa5k/colorful-4539.png", "Kuinka monta makuuhuonetta (MH)
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--api", default="http://127.0.0.1:8100")
+    ap.add_argument("--no-write", action="store_true",
+                    help="only ask (warms the API's answer cache before a demo, web/demo.sh); recorded.json unchanged")
     args = ap.parse_args()
     out = []
     jobs = ([(p, q, None) for p, q in QUESTIONS] + [(p, q, SECOND_SOLVER) for p, q in SECOND]
@@ -69,6 +71,8 @@ def main() -> None:
         out.append(rec)
         print(f"{path.split('/')[-1][:48]:48} {ans.get('value')!s:>10} {ans.get('unit')} conf={ans.get('confidence')} "
               f"{ans.get('solver')} ev={len(ans.get('evidence', []))}")
+    if args.no_write:
+        return
     # entries marked "pinned": true (a known-good answer kept on purpose, e.g. when a regression is being fixed) stay
     # as they are and replace the fresh recording of the same (path, question, solver)
     try:
@@ -78,6 +82,12 @@ def main() -> None:
     key = lambda r: (r["path"], r["question"], r.get("solver"))  # noqa: E731
     pinned = {key(r): r for r in old if r.get("pinned")}
     out = [pinned.pop(key(r), r) for r in out] + list(pinned.values())
+    # an empty fresh answer (a hosted model rate-limited, a timeout) never replaces an earlier recording that had a value
+    prev = {key(r): r for r in old if r.get("answer", {}).get("value") is not None}
+    for i, r in enumerate(out):
+        if r["answer"].get("value") is None and key(r) in prev:
+            print(f"kept previous (fresh answer empty): {r['path'].split('/')[-1][:40]} {r.get('solver') or ''}")
+            out[i] = prev[key(r)]
     for r in out:
         if r.get("pinned"):
             print(f"kept pinned: {r['path'].split('/')[-1][:40]} {r['question'][:50]} ({r.get('recorded_at')})")

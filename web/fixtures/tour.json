@@ -22,12 +22,12 @@
  {
   "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
   "q": "If each door costs 450 euros, what do all the doors on '1.korrus' cost in total?",
-  "note": "A question no template covers, with a number in it: the IFC solver reads the price from the question, counts the 46 doors in the model and multiplies in code (46 × 450 € = 20,700 €). No model call; every counted door is evidence."
+  "note": "A question no template covers, with a number in it. The IFC rules read 'each door costs 450 €' as a factor, count the 46 doors on the storey and multiply in code: 46 × 450 € = 20,700 €, every door boxed, no language model call, 0.2 s. Questions the rules cannot read go to a small local model that plans tool calls; the numbers still come from the tools."
  },
  {
   "file": "data/ifc_bench/4351_arc.ifc",
   "q": "What plumbing fixtures are in this building and their respective counts?",
-  "note": "A free-text answer about a model is checked against the IFC model in the browser, no model call: fixture types it names are highlighted (orange) with their counts checked; plumbing fixtures it leaves out are flagged and shown in purple."
+  "note": "A free-text question about a Revit model. A local model answers from facts extracted from the IFC, then the browser counts every fixture type it names in the loaded model (no model call). The card leads with that table: 4 types, 21 fixtures, each count ✓, highlighted in 3D (orange). Fixtures of the same kind that an answer leaves out would be listed ✗ and shown in purple."
  },
  {
   "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
@@ -42,19 +42,25 @@
  {
   "file": "data/cubicasa5k/colorful-4539.png",
   "q": "Kuinka monta makuuhuonetta (MH) pohjapiirustuksessa on?",
-  "note": "A scanned Finnish apartment plan, asked in Finnish: our fine-tuned 8B vision model counts the bedrooms, a second reader reads the room names; they agree, so each counted 'MH' label is marked and the confidence goes up."
+  "note": "A Finnish apartment plan, asked in Finnish: our fine-tuned 8B vision model (LoRA) counts 3 bedrooms. To keep cost low it reads no boxes itself; 'Show where' asks a second reader for the room names, it finds the three 'MH' labels, they agree (✓), and each counted bedroom is marked.",
+  "locate": true
  },
  {
   "file": "data/cubicasa5k/high_quality_architectural-14797.png",
   "q": "How many saunas are on this floor plan?",
   "locate": true,
-  "note": "The fine-tuned model says 0 saunas, but the label reader disagrees, so the card says so and shows no boxes. 'Show where' marks what the reader found: 'LH' (löylyhuone, the sauna room). One glance shows the sauna: this is how a person catches a wrong answer in seconds."
+  "note": "The fine-tuned model says 0 saunas at 82 %, with nothing to point at. 'Show where' asks the label reader, which finds 'LH' (löylyhuone, the sauna room): the card turns the disagreement into a ✗ and marks the label. One glance shows the sauna: this is how a person catches a confident wrong answer in seconds."
  },
  {
   "file": "data/habs/vi0026_sheet_00003.jpg",
   "q": "What kind of drawing is this (floor plan, elevation, section, site plan)?",
   "second": true,
   "note": "Historical scan (HAER, 1977): no digital text at all. The local vision model reads the printed text tile by tile and answers from it, citing the lines it used: the title 'NORTH ELEVATION' is boxed on the sheet. NVIDIA Nemotron (hosted, one paid call) gives a second opinion. Below: the other sheets of the same survey, linked."
+ },
+ {
+  "file": "data/finna/mfa.81125dbb-8b52-48e3-bc9d-1128e233ac93.jpg",
+  "q": "Mikä on piirustuksen mittakaava?",
+  "note": "Helsinki Olympic Stadium, site plan (Lindegren & Jäntti; Architecture & Design Museum, CC BY 4.0), asked in Finnish: 'what is the scale of the drawing?' The answer 1/500 is read from the hand-lettered note 'ASEMAPIIRROS M.K. 1/500', which is boxed. On scans, every answer points at the printed text it came from; local model only, no cloud call."
  },
  {
   "file": "",

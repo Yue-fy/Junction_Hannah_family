@@ -1,0 +1,42 @@
+{"path": "data/swiss_dwellings/site986_bldg2066_floor9246.pdf", "question": "what's the size of the küche, room 3.09?", "gold": 7.5, "unit": "m2", "kind": "size"}
+{"path": "data/swiss_dwellings/site986_bldg2066_floor9246.pdf", "question": "How large is room 3.14?", "gold": 16.66, "unit": "m2", "kind": "size"}
+{"path": "data/swiss_dwellings/site986_bldg2066_floor9246.pdf", "question": "Room 3.21 - how much floor space does it have?", "gold": 20.32, "unit": "m2", "kind": "size"}
+{"path": "data/swiss_dwellings/site986_bldg2066_floor9246.pdf", "question": "Give me the floor space of the Bad in apartment C.", "gold": 3.31, "unit": "m2", "kind": "size"}
+{"path": "data/swiss_dwellings/site986_bldg2066_floor9246.pdf", "question": "How big is the kitchen, room 3.16?", "gold": 7.24, "unit": "m2", "kind": "size"}
+{"path": "data/swiss_dwellings/site986_bldg2066_floor9246.pdf", "question": "What is the area of the bathroom 3.05?", "gold": 3.35, "unit": "m2", "kind": "size"}
+{"path": "data/swiss_dwellings/site986_bldg2066_floor9246.pdf", "question": "How big is the living room, room 3.07?", "gold": 20.01, "unit": "m2", "kind": "size"}
+{"path": "data/swiss_dwellings/site986_bldg2066_floor9246.pdf", "question": "What size is the stairwell?", "gold": 10.88, "unit": "m2", "kind": "size"}
+{"path": "data/swiss_dwellings/site1067_bldg2190_floor9993.pdf", "question": "what's the size of the zimmer, room 2.10?", "gold": 20.09, "unit": "m2", "kind": "size"}
+{"path": "data/swiss_dwellings/site1067_bldg2190_floor9993.pdf", "question": "How big is room 2.06 (kitchen)?", "gold": 7.98, "unit": "m2", "kind": "size"}
+{"path": "data/swiss_dwellings/site986_bldg2066_floor9246.pdf", "question": "What is the net floor area of room 3.12 ('Küche') in m²?", "gold": null, "unit": null, "kind": "wrongname"}
+{"path": "data/swiss_dwellings/site986_bldg2066_floor9246.pdf", "question": "What's the area of the bedroom 3.45?", "gold": null, "unit": null, "kind": "wrongname"}
+{"path": "data/swiss_dwellings/site1067_bldg2190_floor9993.pdf", "question": "What is the net floor area of room 2.23 ('Sauna') in m²?", "gold": null, "unit": null, "kind": "wrongname"}
+{"path": "data/swiss_dwellings/site1067_bldg2190_floor9993.pdf", "question": "How big is room 2.07 (Küche)?", "gold": null, "unit": null, "kind": "wrongname"}
+{"path": "data/swiss_dwellings/site986_bldg2066_floor9246.pdf", "question": "What is the net floor area of room 3.03 ('Küche') in m²?", "gold": 7.44, "unit": "m2", "kind": "wrongname-control"}
+{"path": "data/swiss_dwellings/site986_bldg2066_floor9246.pdf", "question": "What is the fire rating of the front door of apartment B?", "gold": null, "unit": null, "kind": "unanswerable"}
+{"path": "data/swiss_dwellings/site986_bldg2066_floor9246.pdf", "question": "What is the ceiling height in room 3.06?", "gold": null, "unit": null, "kind": "unanswerable"}
+{"path": "data/swiss_dwellings/site986_bldg2066_floor9246.pdf", "question": "What material is the floor of room 3.13?", "gold": null, "unit": null, "kind": "unanswerable"}
+{"path": "data/swiss_dwellings/site986_bldg2066_floor9246.pdf", "question": "What is the U-value of the windows in W/m²K?", "gold": null, "unit": null, "kind": "unanswerable"}
+{"path": "data/swiss_dwellings/site1067_bldg2190_floor9993.pdf", "question": "Who owns apartment A?", "gold": null, "unit": null, "kind": "unanswerable"}
+{"path": "data/swiss_dwellings/site986_bldg2066_floor9246.pdf", "question": "Is apartment A bigger than apartment B?", "gold": "yes", "unit": null, "kind": "op-en"}
+{"path": "data/swiss_dwellings/site986_bldg2066_floor9246.pdf", "question": "How much bigger is apartment A than B, in square metres?", "gold": 6.28, "unit": "m2", "kind": "op-en"}
+{"path": "data/swiss_dwellings/site986_bldg2066_floor9246.pdf", "question": "Which is the smallest room in apartment F?", "gold": "room 3.40 (Bad)", "unit": null, "kind": "op-en"}
+{"path": "data/swiss_dwellings/site986_bldg2066_floor9246.pdf", "question": "What's the combined size of all the bathrooms?", "gold": 20.33, "unit": "m2", "kind": "op-en"}
+{"path": "data/swiss_dwellings/site986_bldg2066_floor9246.pdf", "question": "How many of the kitchens are larger than 7.5 m²?", "gold": 2, "unit": "count", "kind": "op-en"}
+{"path": "data/swiss_dwellings/site986_bldg2066_floor9246.pdf", "question": "¿Cuántas ventanas hay en este plano?", "gold": 30, "unit": "count", "kind": "lang-es"}
+{"path": "data/swiss_dwellings/site986_bldg2066_floor9246.pdf", "question": "Ile okien jest na tym rzucie?", "gold": 30, "unit": "count", "kind": "lang-pl"}
+{"path": "data/swiss_dwellings/site986_bldg2066_floor9246.pdf", "question": "Jaká je plocha místnosti 3.20?", "gold": 16.24, "unit": "m2", "kind": "lang-cs"}
+{"path": "data/swiss_dwellings/site986_bldg2066_floor9246.pdf", "question": "Kui suur on korteri B netopõrandapind?", "gold": 69.59, "unit": "m2", "kind": "lang-et"}
+{"path": "data/swiss_dwellings/site986_bldg2066_floor9246.pdf", "question": "¿Cuántas veces es más grande el apartamento A que el apartamento B?", "gold": 1.09, "unit": null, "kind": "lang-es"}
+{"path": "data/swiss_dwellings/site986_bldg2066_floor9246.pdf", "question": "O ile metrów kwadratowych mieszkanie A jest większe od mieszkania B?", "gold": 6.28, "unit": "m2", "kind": "lang-pl"}
+{"path": "data/swiss_dwellings/site986_bldg2066_floor9246.pdf", "question": "Qual é a área total dos apartamentos A e B juntos?", "gold": 145.46, "unit": "m2", "kind": "lang-pt"}
+{"path": "data/swiss_dwellings/site986_bldg2066_floor9246.pdf", "question": "Hány fürdőkád van ezen az alaprajzon?", "gold": 6, "unit": "count", "kind": "lang-hu"}
+{"path": "data/swiss_dwellings/site986_bldg2066_floor9246.pdf", "question": "Hoeveel kamers met het label 'Zimmer' zijn er op deze verdieping?", "gold": 13, "unit": "count", "kind": "lang-nl"}
+{"path": "data/swiss_dwellings/site986_bldg2066_floor9246.pdf", "question": "¿Qué porcentaje de la superficie neta de la planta ocupa el apartamento D?", "gold": 14.99, "unit": "%", "kind": "lang-es"}
+{"path": "data/swiss_dwellings/site986_bldg2066_floor9246.pdf", "question": "Mitu tuba on korteris E?", "gold": 7, "unit": "count", "kind": "lang-et"}
+{"path": "data/swiss_dwellings/site1067_bldg2190_floor9993.pdf", "question": "¿Cuál es la superficie de la habitación 2.12?", "gold": 17.19, "unit": "m2", "kind": "lang-es"}
+{"path": "data/swiss_dwellings/site1067_bldg2190_floor9993.pdf", "question": "Jaka jest powierzchnia netto mieszkania A w m²?", "gold": 77.27, "unit": "m2", "kind": "lang-pl"}
+{"path": "data/swiss_dwellings/site1067_bldg2190_floor9993.pdf", "question": "Mitu ust on sellel korrusel?", "gold": 27, "unit": "count", "kind": "lang-et"}
+{"path": "data/swiss_dwellings/site1067_bldg2190_floor9993.pdf", "question": "Kolikrát je byt A větší než byt B?", "gold": 1.1385, "unit": null, "kind": "lang-cs"}
+{"path": "data/swiss_dwellings/site1067_bldg2190_floor9993.pdf", "question": "¿Cuántas habitaciones tienen más de 15 m²?", "gold": 7, "unit": "count", "kind": "lang-es"}
+{"path": "data/swiss_dwellings/site1067_bldg2190_floor9993.pdf", "question": "Bu katta kaç pencere var?", "gold": 13, "unit": "count", "kind": "lang-tr"}

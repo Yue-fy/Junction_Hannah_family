@@ -1,0 +1,23 @@
+{"path": "data/swiss_dwellings/site986_bldg2066_floor9246.pdf", "question": "What is the perimeter of room 3.06 in metres?", "gold": 16.56, "unit": "m", "kind": "geom"}
+{"path": "data/swiss_dwellings/site986_bldg2066_floor9246.pdf", "question": "What is the length of the longer side of room 3.13?", "gold": 5.04, "unit": "m", "kind": "geom"}
+{"path": "data/swiss_dwellings/site986_bldg2066_floor9246.pdf", "question": "Which apartment has the largest balcony?", "gold": "apartment C", "unit": null, "kind": "set"}
+{"path": "data/swiss_dwellings/site986_bldg2066_floor9246.pdf", "question": "What is the total balcony area on this floor?", "gold": 90.94, "unit": "m2", "kind": "set"}
+{"path": "data/swiss_dwellings/site986_bldg2066_floor9246.pdf", "question": "What is the average apartment size on this floor?", "gold": 69.92, "unit": "m2", "kind": "set"}
+{"path": "data/swiss_dwellings/site986_bldg2066_floor9246.pdf", "question": "How many square metres of corridor does apartment E have?", "gold": 11.25, "unit": "m2", "kind": "scope"}
+{"path": "data/swiss_dwellings/site986_bldg2066_floor9246.pdf", "question": "What is the net area of the common areas, i.e. the numbered rooms that belong to no apartment?", "gold": 58.47, "unit": "m2", "kind": "set"}
+{"path": "data/swiss_dwellings/site986_bldg2066_floor9246.pdf", "question": "Which is the largest room that does not belong to any apartment?", "gold": "3.44", "unit": null, "kind": "set"}
+{"path": "data/swiss_dwellings/site986_bldg2066_floor9246.pdf", "question": "What is the difference in net floor area between the largest and the smallest apartment?", "gold": 22.66, "unit": "m2", "kind": "set"}
+{"path": "data/swiss_dwellings/site986_bldg2066_floor9246.pdf", "question": "How many rooms in apartment C are smaller than 10 m²?", "gold": 3, "unit": "count", "kind": "scope"}
+{"path": "data/swiss_dwellings/site986_bldg2066_floor9246.pdf", "question": "What's the total area of all Zimmer rooms in apartment D?", "gold": 31.26, "unit": "m2", "kind": "scope"}
+{"path": "data/swiss_dwellings/site986_bldg2066_floor9246.pdf", "question": "What percentage of apartment B's net floor area is its kitchen?", "gold": 10.78, "unit": "%", "kind": "scope"}
+{"path": "data/swiss_dwellings/site986_bldg2066_floor9246.pdf", "question": "Which apartment has the smallest kitchen?", "gold": "apartment C", "unit": null, "kind": "set"}
+{"path": "data/swiss_dwellings/site986_bldg2066_floor9246.pdf", "question": "How many numbered indoor rooms on this floor have an area between 10 and 15 m²?", "gold": 8, "unit": "count", "kind": "set"}
+{"path": "data/swiss_dwellings/site986_bldg2066_floor9246.pdf", "question": "What is the combined area of the kitchen and the bathroom in apartment D?", "gold": 11.01, "unit": "m2", "kind": "scope"}
+{"path": "data/swiss_dwellings/site351_bldg745_floor3216.pdf", "question": "Which apartment has more rooms, A or B?", "gold": "apartment B", "unit": null, "kind": "set"}
+{"path": "data/swiss_dwellings/site351_bldg745_floor3216.pdf", "question": "How many apartments have more than one bathroom?", "gold": 1, "unit": "count", "kind": "set"}
+{"path": "data/swiss_dwellings/site351_bldg745_floor3216.pdf", "question": "What share of apartment A is taken up by the Séjour/repas, in percent?", "gold": 39.39, "unit": "%", "kind": "scope"}
+{"path": "data/swiss_dwellings/site351_bldg745_floor3216.pdf", "question": "What's the total area of all Pièce rooms in apartment B?", "gold": 35.71, "unit": "m2", "kind": "scope"}
+{"path": "data/swiss_dwellings/site351_bldg745_floor3216.pdf", "question": "How many bathrooms does apartment B have?", "gold": 2, "unit": "count", "kind": "scope"}
+{"path": "data/swiss_dwellings/site351_bldg745_floor3216.pdf", "question": "What is the area of the largest Pièce in apartment A?", "gold": 14.4, "unit": "m2", "kind": "scope"}
+{"path": "data/swiss_dwellings/site351_bldg745_floor3216.pdf", "question": "Is apartment B's kitchen bigger than apartment A's kitchen?", "gold": "no", "unit": null, "kind": "scope"}
+{"path": "data/swiss_dwellings/site351_bldg745_floor3216.pdf", "question": "By how much does the living area (Séjour/repas) of apartment A exceed that of apartment B?", "gold": 0.84, "unit": "m2", "kind": "scope"}
