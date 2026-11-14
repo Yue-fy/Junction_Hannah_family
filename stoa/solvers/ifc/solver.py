@@ -17,6 +17,7 @@ Definitions (measured on the TRAIN split, experiments/w1/explore_defs.py, all 10
 
 from __future__ import annotations
 
+import functools
 import re
 import time
 from collections import Counter
@@ -171,11 +172,94 @@ def _ascii_drop(s: str) -> str:
     return re.sub(r"[^a-z0-9]+", "", (s or "").lower().encode("ascii", "ignore").decode())
 
 
+def _storey_by_tags(path: str, idx: IfcIndex) -> tuple[Storey | None, str]:
+    """The storey a sheet shows, from the IFC GlobalIds tagged in its SVG twin (for sheets whose file name says
+    nothing: uploads 'A101.pdf', hashed copies; F 09:39: 'this floor plan' was answered for the whole model). A floor
+    plan tags most rooms of ONE storey: the storey holding >= 80% of the tagged rooms/doors/windows/walls, and the
+    sheet tags >= 50% of that storey's rooms (a section cuts a few rooms of several storeys)."""
+    if Path(path).suffix.lower() not in (".pdf", ".svg"):
+        return None, "not a sheet"
+    try:
+        from stoa.solvers.ifc.plan2d import plan_items
+
+        items = plan_items(str(path))
+    except Exception:  # noqa: BLE001 - unreadable twin: no storey
+        return None, "no readable SVG twin"
+    votes: Counter = Counter()
+    rooms: Counter = Counter()
+    for g, itm in items.items():
+        e = idx.elements.get(g)
+        if e is None or not e.storey or e.cls not in ("IfcSpace", "IfcDoor", "IfcWindow", "IfcWall", "IfcWallStandardCase"):
+            continue
+        votes[e.storey] += 1
+        if e.cls == "IfcSpace":
+            rooms[e.storey] += 1
+    if sum(votes.values()) < 3:
+        return None, "no plan tags"
+    sg, n = votes.most_common(1)[0]
+    st = next((s_ for s_ in idx.storeys if s_.guid == sg), None)
+    if st is None or n < 0.8 * sum(votes.values()):
+        return None, "tags of several storeys (not a floor plan)"
+    n_sp = len(idx.in_storey(sg, "IfcSpace"))
+    if n_sp and rooms[sg] < 0.5 * n_sp:
+        return None, f"only {rooms[sg]} of the {n_sp} rooms of '{st.name}' tagged (a section?)"
+    return st, f"sheet tags {n} elements of storey '{st.name}' ({n / sum(votes.values()):.0%} of its tagged elements)"
+
+
+_PLAN_TITLE = re.compile(r"(?:floor ?plan|plan|grundriss|plattegrond|pohjapiirustus|plaan|plan d.etage|planta|pianta|rzut|"
+                         r"planritning)\s*(?:of|von|van|de|du|del|di)?\s*[:\-\u2013\u2014]\s*(.{1,60}?)\s*$", re.I)
+
+
+@functools.lru_cache(maxsize=256)
+def _sheet_text_lines(path: str) -> tuple[str, ...]:
+    try:
+        import pymupdf
+
+        doc = pymupdf.open(str(abspath(path)))
+        lines = [ln.strip() for ln in doc[0].get_text().splitlines() if ln.strip()]
+        doc.close()
+        return tuple(lines)
+    except Exception:  # noqa: BLE001 - no text layer / not a PDF
+        return ()
+
+
+def _storey_by_title(path: str, idx: IfcIndex) -> tuple[Storey | None, str]:
+    """'… — Floor plan: Intermediate level 1' in the sheet's title line (F 09:39: the sheets rendered from the
+    model carry it; tags alone confuse an intermediate level's plan with the floor it cuts through)."""
+    if Path(path).suffix.lower() != ".pdf":
+        return None, "not a PDF"
+    for ln in _sheet_text_lines(str(path)):
+        m = _PLAN_TITLE.search(ln)
+        if not m:
+            continue
+        name = m.group(1).strip()
+        exact = [s_ for s_ in idx.storeys if fold(s_.name or "") == fold(name)]
+        if len(exact) == 1:
+            return exact[0], f"sheet title '{ln[:80]}' names storey '{exact[0].name}'"
+        ms = match_storey(idx, name)
+        if ms is not None and ms.score >= 90:
+            return ms.obj, f"sheet title '{ln[:80]}' ~ storey '{ms.obj.name}'"
+    return None, "no storey in the sheet title"
+
+
+def is_plan_sheet(path: str, idx: IfcIndex) -> bool:
+    """A floor plan sheet: named '<model>_plan-NN-…', or a .pdf/.svg whose tags show one storey."""
+    if Path(path).suffix.lower() not in (".pdf", ".svg"):
+        return False
+    return "_plan-" in Path(path).stem or (_storey_by_title(path, idx)[0] or _storey_by_tags(path, idx)[0]) is not None
+
+
 def plan_storey(path: str, idx: IfcIndex) -> tuple[Storey | None, str]:
-    """Storey shown on a rendered plan `<model>_plan-NN-<level-slug>.pdf` (slug match, NN breaks ties)."""
+    """Storey shown on a rendered plan `<model>_plan-NN-<level-slug>.pdf` (slug match, NN breaks ties); for a sheet
+    whose name says nothing, the storey its GlobalId tags show (`_storey_by_tags`)."""
     m = re.search(r"_plan-(\d+)-(.+)$", Path(path).stem)
     if not m:
-        return None, "not a plan file"
+        if "_section-" in Path(path).stem or "_elevation-" in Path(path).stem:
+            return None, "not a plan file"
+        st_, why_ = _storey_by_title(path, idx)
+        if st_ is None:
+            st_, why_ = _storey_by_tags(path, idx)
+        return (st_, why_) if st_ is not None else (None, "not a plan file")
     nn, slug = int(m.group(1)), m.group(2)
     for key in (norm, _ascii_drop):
         hits = [s for s in idx.storeys if key(s.name) == key(slug)]
@@ -739,7 +823,7 @@ class IfcSolver(BaseSolver):
             if ms is not None and ms.score >= 90:
                 storey = ms.obj
                 break
-        asked_plan = Path(path).suffix.lower() in (".pdf", ".svg") and "_plan-" in Path(path).stem
+        asked_plan = is_plan_sheet(path, idx)
         if storey is None and asked_plan:
             storey = plan_storey(path, idx)[0]
         if storey is None:
@@ -3463,7 +3547,9 @@ class IfcSolver(BaseSolver):
         cross-check counts against what the drawing shows."""
         from stoa.solvers.ifc.plan2d import plan_items, plans_of_model
 
-        asked_plan = Path(path).suffix.lower() in (".pdf", ".svg") and "_plan-" in Path(path).stem
+        from stoa.solvers.ifc.index import load_index as _li0
+
+        asked_plan = is_plan_sheet(path, _li0(model))
         model_scope = it.scope == "model" or storey is None
         plans: list[str] = []
         other_sheet = False
