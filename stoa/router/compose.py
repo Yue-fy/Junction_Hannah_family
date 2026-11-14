@@ -29,6 +29,8 @@ _COUNT_CUE = re.compile(r"\bhow many\b|\bnumber of\b|\bwie viele\b|\bcombien\b|\
                         r"\bhur många\b|\bhoeveel\b|\bmitu\b|\bhvor mange\b", re.I)
 _EACH = re.compile(r"\b(respectively|separately|each separately|one by one|for each (?:kind|type|class)|jeweils|"
                    r"respectivement|rispettivamente|vastaavasti|var för sig|respectivamente|elk afzonderlijk)\b", re.I)
+_FIXTURES = {"sink", "washbasin", "wc", "bathtub", "shower", "shower_bathtub", "window", "door", "stair"}
+_ROOM_KINDS = {"kitchen", "bathroom", "bedroom", "wc_room", "sauna", "balcony", "apartment"}
 _MORE_THAN = re.compile(r"how many more (?P<a>.+?) than (?P<b>.+?)(?: are| is| does| do| on| in|\?|$)", re.I)
 _LARGER = re.compile(r"by how (?:many|much) (?:m²|m2|square metres|square meters|ft²)? ?is (?P<a>.+?) (?:larger|bigger|greater) than (?P<b>.+?)(?:\s*\(|\?|$)", re.I)
 _SMALLER = re.compile(r"by how (?:many|much) (?:m²|m2|square metres|square meters|ft²)? ?is (?P<a>.+?) smaller than (?P<b>.+?)(?:\s*\(|\?|$)", re.I)
@@ -195,11 +197,10 @@ def decompose(source: str, question: str) -> Plan | None:
         for _, t in _targets_in(clause):
             if t not in ts and t not in ("room", "storey") and not (mc and t == "sanitary"):
                 ts.append(t)
-        first = re.split(r"\?", qn)[0]
-        if len(ts) >= 2 and not _TOGETHER.search(q) and (len(_COUNT_CUE.findall(first)) >= 2 or _EACH.search(qn)):
-            subs = [_sub_for(source, t, base) for t in ts]
-            if all(subs):
-                return Plan("list", subs, list(ts), "count")
+        if any(t in _FIXTURES for t in ts):
+            # F 08:45: "How many sinks are there in total, kitchen and bathroom together?" -> sink + kitchen + bathroom
+            # = 5: rooms next to a counted fixture are where it is (scope), not more things to count
+            ts = [t for t in ts if t not in _ROOM_KINDS]
         if len(ts) >= 2:
             subs, labels = [], []
             for t in ts:
