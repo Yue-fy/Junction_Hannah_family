@@ -54,7 +54,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 0.0313
+    "wall_seconds": 0.2188
    },
    "intent": {
     "task": "area",
@@ -69,8 +69,8 @@
     "key": "area:room:room"
    }
   },
-  "recorded_at": "2026-11-14 01:18",
-  "api": "http://127.0.0.1:8101"
+  "recorded_at": "2026-11-14 01:43",
+  "api": "http://127.0.0.1:8102"
  },
  {
   "path": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
@@ -1073,7 +1073,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 0.0063
+    "wall_seconds": 0.0129
    },
    "intent": {
     "task": "count",
@@ -1087,8 +1087,8 @@
     "key": "count:door:storey"
    }
   },
-  "recorded_at": "2026-11-14 01:18",
-  "api": "http://127.0.0.1:8101"
+  "recorded_at": "2026-11-14 01:43",
+  "api": "http://127.0.0.1:8102"
  },
  {
   "path": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
@@ -1096,7 +1096,7 @@
   "answer": {
    "value": 55,
    "unit": "count",
-   "confidence": 0.952,
+   "confidence": 0.976,
    "evidence": [
     {
      "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
@@ -1109,7 +1109,7 @@
      ],
      "bbox_space": "pdf_pt",
      "ifc_guid": "3xJ0P67hizSPDr$5g3qzaL",
-     "note": "IfcWindow ARA; cross-check: answer 55 vs IFC model: 55 IfcWindow on storey '1.korrus' ✓; plan drawing: 52 symbols ✗"
+     "note": "IfcWindow ARA; cross-check: answer 55 vs IFC model: 55 IfcWindow on storey '1.korrus' ✓; plan drawing: 52 symbols = the 52 the cut plane at floor +1.2 m crosses ✓ (3 lie entirely above/below it, so they are not drawn)"
     },
     {
      "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
@@ -1775,6 +1775,45 @@
      "note": "IfcWindow ARA"
     },
     {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      1065.73,
+      400.97,
+      1085.41,
+      415.13
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "3Rz1QIxUo0YS8t2HdSDYt1",
+     "note": "IfcWindow ARA | projected: not drawn on this plan"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      1162.26,
+      454.87,
+      1181.97,
+      469.03
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "1hskr3jKrlRjoMjKuq6VvX",
+     "note": "IfcWindow ARA | projected: not drawn on this plan"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      1091.72,
+      415.49,
+      1164.77,
+      459.36
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "1wgzo5pXBKgVjlIte4hj5m",
+     "note": "IfcWindow ARA | projected: not drawn on this plan"
+    },
+    {
      "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
      "page": null,
      "bbox": null,
@@ -2219,13 +2258,14 @@
     "intent: count window [storey] (storey=1.korrus) (lang en)",
     "gate (train n=19): prior 0%, ifc 100%, vlm_direct 0%; skip vlm_direct",
     "ifc: 55 count (conf 0.95, train hit rate)",
-    "cross-check: answer 55 vs IFC model: 55 IfcWindow on storey '1.korrus' ✓; plan drawing: 52 symbols ✗",
+    "cross-check: answer 55 vs IFC model: 55 IfcWindow on storey '1.korrus' ✓; plan drawing: 52 symbols = the 52 the cut plane at floor +1.2 m crosses ✓ (3 lie entirely above/below it, so they are not drawn)",
     "[ifc] asked on bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf; answering from its source model bsc-esplanades_1807-ep-ar-v18.ifc",
     "[ifc] model bsc-esplanades_1807-ep-ar-v18.ifc: IFC2X3, 7 storeys, 2249 elements (index 7.3s, cached)",
     "[ifc] parsed: metric=count kind=window scope=storey names=['1.korrus']",
     "[ifc] storey '1.korrus' -> '1.korrus' (exact, 100) guid 1oZ0wPs_PE8ANCPg3bIs4j",
     "[ifc] 55 elements of IfcWindow in storey '1.korrus'",
-    "[ifc] 2D link: 52/55 evidence elements drawn on bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+    "[ifc] 3 elements not drawn on the cut plan: boxed by projecting the model footprint with a model->plan transform fitted on the drawn elements",
+    "[ifc] 2D link: 55/55 evidence elements drawn on bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
     "[ifc] cross-check: the plan drawing shows 52 IfcWindow symbols; model count 55 (differs by -3)"
    ],
    "solver": "pipeline/ifc",
@@ -2241,7 +2281,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 0.0116
+    "wall_seconds": 0.0144
    },
    "intent": {
     "task": "count",
@@ -2255,8 +2295,8 @@
     "key": "count:window:storey"
    }
   },
-  "recorded_at": "2026-11-14 01:18",
-  "api": "http://127.0.0.1:8101"
+  "recorded_at": "2026-11-14 01:43",
+  "api": "http://127.0.0.1:8102"
  },
  {
   "path": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
@@ -6721,7 +6761,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 0.0084
+    "wall_seconds": 0.0157
    },
    "intent": {
     "task": "count",
@@ -6735,8 +6775,155 @@
     "key": "count:door:model"
    }
   },
-  "recorded_at": "2026-11-14 01:18",
-  "api": "http://127.0.0.1:8101"
+  "recorded_at": "2026-11-14 01:43",
+  "api": "http://127.0.0.1:8102"
+ },
+ {
+  "path": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+  "question": "What share of the total room area on '1.korrus' does the room 'KORIDOR (119)' take, in percent?",
+  "answer": {
+   "value": 7.336,
+   "unit": "%",
+   "confidence": 0.854,
+   "evidence": [
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      1059.11,
+      638.74,
+      1662.14,
+      1023.05
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "2yu9t5gFecDw4PK0F5sh2s",
+     "note": "What is the net floor area of the room 'KORIDOR (119)'  — KORIDOR 63.84 m² | label 'KORIDOR 119'; cross-check: answer 63.84 m² vs IFC geometry 63.84 m² ✓; room polygon on the plan (1:100, scale fitted on all rooms) 63.84 m² ✓"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "2yu9t5gFecDw4PK0F5sh2s",
+     "note": "What is the net floor area of the room 'KORIDOR (119)'  — KORIDOR 63.84 m²"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      1059.11,
+      638.74,
+      1662.14,
+      1023.05
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "2yu9t5gFecDw4PK0F5sh2s",
+     "note": "What is the total net floor area of all rooms on '1.kor — KORIDOR 63.84 m² | label 'KORIDOR 119'"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      309.19,
+      414.41,
+      502.72,
+      608.49
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "2ca_7fVdg1tnEoP7lRg$Lz",
+     "note": "What is the total net floor area of all rooms on '1.kor — ELUTUBA+KÖÖK 25.25 m² | label 'ELUTUBA+KÖÖK 3-1'"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      306.36,
+      312.32,
+      401.64,
+      408.68
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "217rX8QDUtdStyz1UVzmsd",
+     "note": "What is the total net floor area of all rooms on '1.kor — TUALETTRUUM 5.76 m² | label 'TUALETTRUUM 4-3'"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      451.23,
+      394.11,
+      536.56,
+      483.49
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "1puxtnhbw3nIvxEHM2fGGh",
+     "note": "What is the total net floor area of all rooms on '1.kor — ESIK 5.10 m² | label 'ESIK 3-2'"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      823.79,
+      602.46,
+      916.47,
+      700.26
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "3JxZG5Cgrprg2Nno$0tjWT",
+     "note": "What is the total net floor area of all rooms on '1.kor — INVA-WC 5.96 m² | label 'INVA-WC 103'"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      380.62,
+      364.91,
+      482.11,
+      450.13
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "0DZrYnGRYctwGbrsm$W9WM",
+     "note": "What is the total net floor area of all rooms on '1.kor — TUALETTRUUM 5.83 m² | label 'TUALETTRUUM 3-3'"
+    }
+   ],
+   "trace": [
+    "general agent first: modifier share changes what is computed; not a known template",
+    "agent: general tool-using path (4 steps, 4 LLM calls)",
+    "think: Get total area on 1.korrus and area of KORIDOR (119). → ask(What is the total net floor area of all rooms on '1.korrus', in m²?): 870.288 m2 (confidence 0.96, by pipeline/ifc)",
+    "think: Get area of KORIDOR (119) on 1.korrus. → ask(What is the net floor area of the room 'KORIDOR (119)' on '1.korrus', in m²?): 63.841 m2 (confidence 0.99, by pipeline/ifc)",
+    "think: Calculate percentage share of KORIDOR (119) area relative to total area. → calc(63.841 / 870.288 * 100): 7.336",
+    "think: The share is 7.336%, which matches the requirement. → answer 7.336 %"
+   ],
+   "solver": "pipeline/agent",
+   "assumptions": [
+    "value computed in code from the tool results above (calc: 63.841 / 870.288 * 100)"
+   ],
+   "missing": [],
+   "cost": {
+    "llm_tokens_in": 3182,
+    "llm_tokens_out": 237,
+    "gpu_seconds": 12.003,
+    "api_calls": 0,
+    "api_tokens_in": 0,
+    "api_tokens_out": 0,
+    "llm_calls": 4,
+    "wall_seconds": 12.0681
+   },
+   "intent": {
+    "task": "area",
+    "target": "room",
+    "scope": "room",
+    "unit": "m2",
+    "filters": {
+     "storey": "KORIDOR (119)",
+     "room": "1.korrus"
+    },
+    "lang": "en",
+    "key": "area:room:room"
+   }
+  },
+  "recorded_at": "2026-11-14 01:44",
+  "api": "http://127.0.0.1:8102"
  },
  {
   "path": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
@@ -7237,7 +7424,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 0.018
+    "wall_seconds": 0.205
    },
    "intent": {
     "task": "count",
@@ -7249,8 +7436,8 @@
     "key": "count:door:drawing"
    }
   },
-  "recorded_at": "2026-11-14 01:18",
-  "api": "http://127.0.0.1:8101"
+  "recorded_at": "2026-11-14 01:44",
+  "api": "http://127.0.0.1:8102"
  },
  {
   "path": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
@@ -7437,7 +7624,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 0.0172
+    "wall_seconds": 0.0184
    },
    "intent": {
     "task": "count",
@@ -7451,8 +7638,8 @@
     "key": "count:room:label"
    }
   },
-  "recorded_at": "2026-11-14 01:18",
-  "api": "http://127.0.0.1:8101"
+  "recorded_at": "2026-11-14 01:44",
+  "api": "http://127.0.0.1:8102"
  },
  {
   "path": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
@@ -8315,7 +8502,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 1.2624
+    "wall_seconds": 0.0369
    },
    "intent": {
     "task": "count",
@@ -8338,25 +8525,112 @@
     ]
    }
   },
-  "recorded_at": "2026-11-14 01:18",
-  "api": "http://127.0.0.1:8101"
+  "recorded_at": "2026-11-14 01:44",
+  "api": "http://127.0.0.1:8102"
  },
  {
-  "path": "data/habs/ak0003_sheet_00019.jpg",
+  "path": "data/cubicasa5k/colorful-4539.png",
+  "question": "Kuinka monta makuuhuonetta (MH) pohjapiirustuksessa on?",
+  "answer": {
+   "value": 3,
+   "unit": "count",
+   "confidence": 0.619,
+   "evidence": [
+    {
+     "file": "data/cubicasa5k/colorful-4539.png",
+     "page": null,
+     "bbox": [
+      276.0,
+      322.9,
+      334.5,
+      356.0
+     ],
+     "bbox_space": "image_px",
+     "ifc_guid": null,
+     "note": "label 'MH' = bedroom 1"
+    },
+    {
+     "file": "data/cubicasa5k/colorful-4539.png",
+     "page": null,
+     "bbox": [
+      990.0,
+      322.9,
+      1048.5,
+      356.0
+     ],
+     "bbox_space": "image_px",
+     "ifc_guid": null,
+     "note": "label 'MH' = bedroom 2"
+    },
+    {
+     "file": "data/cubicasa5k/colorful-4539.png",
+     "page": null,
+     "bbox": [
+      580.5,
+      861.1,
+      637.5,
+      894.2
+     ],
+     "bbox_space": "image_px",
+     "ifc_guid": null,
+     "note": "label 'MH' = bedroom 3"
+    }
+   ],
+   "trace": [
+    "intent: count bedroom [drawing] (lang fi)",
+    "gate (train n=40): prior 20%, raster 62%, vlm_direct 60%",
+    "raster: 3 count (conf 0.62, train hit rate)",
+    "[raster] class=bedroom",
+    "[raster] prior (train mode for bedroom) = 1 (hit rate 31%, n=5410)",
+    "[raster] gate[bedroom] = labels (train acc {'prior': 0.26, 'labels': 0.64, 'labels_code': 0.64, 'max1': 0.54})",
+    "[raster] labels: 13 read in 10.9s: MH->bedroom, MH->bedroom, OH->-, VAR->-, VAR->-, MH->bedroom, VH->-, TK->kitchen, K->kitchen, ET->-, PH->bathroom, WC->wc_room, AUTOTALLI->-",
+    "[raster] reused R1 v2 label output",
+    "[raster] cross-check vs prior 1: differs"
+   ],
+   "solver": "pipeline/raster",
+   "assumptions": [
+    "counted room-name labels for bedroom (Finnish codes: MH bedroom, KH/PH/PESUH bathroom, S/SAUNA/LH sauna, WC, PARV balcony, K/KK/KT kitchen); one label = one room"
+   ],
+   "missing": [],
+   "cost": {
+    "llm_tokens_in": 5260,
+    "llm_tokens_out": 440,
+    "gpu_seconds": 10.925998449325562,
+    "api_calls": 0,
+    "api_tokens_in": 0,
+    "api_tokens_out": 0,
+    "llm_calls": 1,
+    "wall_seconds": 1.5505
+   },
+   "intent": {
+    "task": "count",
+    "target": "bedroom",
+    "scope": "drawing",
+    "unit": "count",
+    "filters": {},
+    "lang": "fi",
+    "key": "count:bedroom:drawing"
+   }
+  },
+  "recorded_at": "2026-11-14 01:44",
+  "api": "http://127.0.0.1:8102"
+ },
+ {
+  "path": "data/habs/vi0026_sheet_00003.jpg",
   "question": "What kind of drawing is this (floor plan, elevation, section, site plan)?",
   "answer": {
-   "value": "site plan",
+   "value": "elevation",
    "unit": null,
    "confidence": 0.2,
    "evidence": [],
    "trace": [
     "intent: text unknown [drawing] (lang en)",
     "no train gate for this kind of question: general path by file type",
-    "vlm_direct: site plan  (conf 0.20)",
+    "vlm_direct: elevation  (conf 0.20)",
     "[vlm_direct] kind=text unit=None",
-    "[vlm_direct] local:qwen3-vl-8b 0.8s tok 3208->3",
-    "[vlm_direct] raw: site plan",
-    "[vlm_direct] cost: calls=1 tok_in=3208 tok_out=3 gpu_s=0.13 api_calls=0"
+    "[vlm_direct] local:qwen3-vl-8b 6.7s tok 3246->3",
+    "[vlm_direct] raw: elevation",
+    "[vlm_direct] cost: calls=1 tok_in=3246 tok_out=3 gpu_s=0.13 api_calls=0"
    ],
    "solver": "pipeline/vlm_direct",
    "assumptions": [],
@@ -8364,14 +8638,14 @@
     "no located evidence from this solver"
    ],
    "cost": {
-    "llm_tokens_in": 3208,
+    "llm_tokens_in": 3246,
     "llm_tokens_out": 3,
-    "gpu_seconds": 0.1313,
+    "gpu_seconds": 0.1328,
     "api_calls": 0,
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 1,
-    "wall_seconds": 1.2555
+    "wall_seconds": 8.5189
    },
    "intent": {
     "task": "text",
@@ -8383,7 +8657,95 @@
     "key": "text:unknown:drawing"
    }
   },
-  "recorded_at": "2026-11-14 01:18",
-  "api": "http://127.0.0.1:8101"
+  "recorded_at": "2026-11-14 01:44",
+  "api": "http://127.0.0.1:8102"
+ },
+ {
+  "path": "data/cubicasa5k/colorful-4539.png",
+  "question": "Kuinka monta makuuhuonetta (MH) pohjapiirustuksessa on?",
+  "answer": {
+   "value": 3,
+   "unit": "count",
+   "confidence": 0.3,
+   "evidence": [],
+   "trace": [
+    "kind=count unit=count",
+    "nvidia:private/nvidia/nemotron-3.5-super-120b-a12b 6.3s tok 2150->159",
+    "raw: is a label \"MH\". |     *   Bottom middle room: There is a label \"MH\". |  | 2.  **Verify the count.** |     *   Room 1: Top left corner. |     *   Room 2: Top right area (next to the bathroom PH). |     *   Room 3: Bottom center area (next to OH and VH). |  | 3.  **Final Count:** 3. |  | 4.  **Format:** Single integer.3",
+    "cost: calls=1 tok_in=2150 tok_out=159 gpu_s=0.00 api_calls=1"
+   ],
+   "solver": "vlm_direct",
+   "assumptions": [],
+   "missing": [],
+   "cost": {
+    "llm_tokens_in": 2150,
+    "llm_tokens_out": 159,
+    "gpu_seconds": 0.0,
+    "api_calls": 1,
+    "api_tokens_in": 2150,
+    "api_tokens_out": 159,
+    "llm_calls": 1,
+    "wall_seconds": 6.6287
+   },
+   "intent": {
+    "task": "count",
+    "target": "bedroom",
+    "scope": "drawing",
+    "unit": "count",
+    "filters": {},
+    "lang": "fi",
+    "key": "count:bedroom:drawing"
+   }
+  },
+  "recorded_at": "2026-11-14 01:44",
+  "api": "http://127.0.0.1:8102",
+  "solver": "vlm_direct",
+  "solver_args": {
+   "backend": "nvidia"
+  }
+ },
+ {
+  "path": "data/habs/vi0026_sheet_00003.jpg",
+  "question": "What kind of drawing is this (floor plan, elevation, section, site plan)?",
+  "answer": {
+   "value": "Elevation",
+   "unit": null,
+   "confidence": 0.2,
+   "evidence": [],
+   "trace": [
+    "kind=text unit=None",
+    "nvidia:private/nvidia/nemotron-3.5-super-120b-a12b 8.1s tok 3249->3",
+    "raw: Elevation",
+    "cost: calls=1 tok_in=3249 tok_out=3 gpu_s=0.00 api_calls=1"
+   ],
+   "solver": "vlm_direct",
+   "assumptions": [],
+   "missing": [],
+   "cost": {
+    "llm_tokens_in": 3249,
+    "llm_tokens_out": 3,
+    "gpu_seconds": 0.0,
+    "api_calls": 1,
+    "api_tokens_in": 3249,
+    "api_tokens_out": 3,
+    "llm_calls": 1,
+    "wall_seconds": 8.3823
+   },
+   "intent": {
+    "task": "text",
+    "target": "unknown",
+    "scope": "drawing",
+    "unit": null,
+    "filters": {},
+    "lang": "en",
+    "key": "text:unknown:drawing"
+   }
+  },
+  "recorded_at": "2026-11-14 01:44",
+  "api": "http://127.0.0.1:8102",
+  "solver": "vlm_direct",
+  "solver_args": {
+   "backend": "nvidia"
+  }
  }
 ]

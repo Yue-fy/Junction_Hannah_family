@@ -31,7 +31,7 @@ def floor_tables(fm: FloorModel) -> dict[str, pd.DataFrame]:
     rooms = []
     for r in fm.rooms:
         rooms.append(dict(room_id=r.idx, number=r.number, name=r.name, area_m2=round(r.area, 2),
-                          apartment=r.unit, outdoor=r.outdoor, printed_area_m2=r.printed_area,
+                          apartment=r.unit, outdoor=r.outdoor, shaft=r.shaft, printed_area_m2=r.printed_area,
                           n_doors=0, n_windows=0, n_toilets=0, n_washbasins=0, n_bathtubs=0, n_showers=0))
     by_id = {d["room_id"]: d for d in rooms}
     objects = []
@@ -53,25 +53,34 @@ def floor_tables(fm: FloorModel) -> dict[str, pd.DataFrame]:
     for u in fm.units:
         rs = [r for r in fm.rooms if r.unit == u.label]
         apts.append(dict(apartment=u.label, n_rooms_numbered=sum(1 for r in rs if r.number),
+                         n_rooms_indoor=sum(1 for r in rs if r.number and not r.outdoor and not r.shaft),
                          net_area_m2=round(sum(r.area for r in rs if r.number and not r.outdoor), 2),
                          outdoor_area_m2=round(sum(r.area for r in rs if r.outdoor), 2)))
+    net = [r for r in fm.rooms if r.number and not r.outdoor and not r.shaft]
+    floor = [dict(net_area_m2=round(sum(r.area for r in net), 2), n_rooms_numbered_indoor=len(net),
+                  n_apartments=len(fm.units), outdoor_area_m2=round(sum(r.area for r in fm.rooms if r.number and r.outdoor), 2))]
     rdf = pd.DataFrame(rooms)
     if not rdf.empty:
         rdf = rdf.set_index("room_id", drop=False)  # rooms.index == room_id, so `.index` is safe to report
         rdf.index.name = None
-    return {"rooms": rdf, "objects": pd.DataFrame(objects), "apartments": pd.DataFrame(apts)}
+    return {"rooms": rdf, "objects": pd.DataFrame(objects), "apartments": pd.DataFrame(apts), "floor": pd.DataFrame(floor)}
 
 
 DOC = """Tables extracted from one floor plan (Swiss, DXF; areas in m²; labels in German/French/Italian):
 rooms: one row per room polygon. room_id (int, key), number (str like "2.05" or None), name (room label, e.g.
   Zimmer/Schlafzimmer=bedroom, Bad/Bain/Bagno=bathroom, Küche/Cuisine/Cucina=kitchen, Korridor/Couloir=corridor,
   Wohnen/Essen/Séjour=living, Balkon/Balcon=balcony, Reduit=storage, Treppenhaus=stairs, or None), area_m2 (float,
-  net floor area), apartment (letter like "A" or None), outdoor (bool), printed_area_m2 (area printed on the plan
+  net floor area), apartment (letter like "A" or None), outdoor (bool), shaft (bool: shaft/void), printed_area_m2 (area printed on the plan
   or None), n_doors, n_windows (doors/windows touching the room), n_toilets, n_washbasins, n_bathtubs, n_showers.
 objects: object_id, kind (door|window|toilet|washbasin|bathtub|shower), rooms (comma-separated room numbers it
   touches), apartment.
-apartments: apartment (letter), n_rooms_numbered, net_area_m2 (numbered indoor rooms), outdoor_area_m2.
-Conventions: "net floor area" of an apartment/floor = numbered rooms, excluding outdoor ones. A door between two
+apartments: apartment (letter), n_rooms_numbered (incl. balconies), n_rooms_indoor (what "how many rooms" means),
+  net_area_m2 (numbered indoor rooms), outdoor_area_m2.
+floor: one row: net_area_m2 (the floor's total net floor area), n_rooms_numbered_indoor, n_apartments, outdoor_area_m2.
+Conventions: "net floor area" of an apartment = its numbered rooms, excluding outdoor ones (= apartments.net_area_m2);
+of the floor = numbered rooms that are neither outdoor nor shafts (= floor.net_area_m2). A "room" is a row with a
+number; rows without a number are wall gaps, ducts or voids (ignore them unless asked). Rooms "not in apartment X" =
+floor total minus apartments.net_area_m2 of X. Answer "which apartment" with its letter. A door between two
 rooms appears in both rooms' n_doors; count doors/windows in `objects`, not by summing n_doors."""
 
 PROMPT = """{doc}
@@ -88,7 +97,8 @@ Compute everything from the DataFrames: never type a number or room_id from the 
 No imports, no printing. Reply with one ```python code block only."""
 
 
-WHICH = re.compile(r"^\s*(which|welche[rs]?|quel(?:le)?s?\s+(?:appartement|pièce|logement)|quale|in\s+which)\b", re.I)
+WHICH = re.compile(r"^\s*(which|welche[rs]?|quel(?:le)?s?\s+(?:appartement|pièce|logement)|lequel|laquelle|quale|"
+                   r"in\s+which|welk[e]?|vilk(?:en|et)|cu[áa]l|kumpi|kt[óo]r[ey])\b", re.I)
 
 
 def _render(tables: dict[str, pd.DataFrame], max_rows: int = 160) -> str:

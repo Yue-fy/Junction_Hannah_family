@@ -25,7 +25,8 @@ template and that carry a meaning-changing modifier (average, share/%, differenc
 several object classes) or name no known object class on a drawing without a deterministic solver; the agent
 asks this pipeline's atomic cascade simple sub-questions and does the arithmetic in code),
 raw_first=1 (before the agent, an operator question goes AS ASKED to the deterministic solvers (dxf, ifc, schedule,
-pdf_vector); if one answers with confidence >= accept it applied the operator itself and no LLM is called),
+pdf_vector); if one answers with confidence >= raw_accept=0.45 it applied the operator itself and no LLM is called),
+lora=1 (cubicasa counts may go to R2's counting LoRA `vlm_lora` where the train_gate gate prefers it; 0 = never),
 cc5k=1 (D8: cubicasa window/door/WC-seat/sink counts go to R1's pretrained `raster_cc5k` when it is registered, with
 hit rates measured on `cc5k_heldout` (stoa/router/gating_cc5k.json); cc5k=0 leaves every answer as without it).
 """
@@ -53,7 +54,7 @@ IMG_EXT = (".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp", ".gif")
 # tier of each solver (cost order); unknown names count as "local"
 TIER = {"dxf": "deterministic", "ifc": "deterministic", "schedule": "deterministic", "pdf_vector": "deterministic",
         "pdf_text": "deterministic", "raster": "local", "vlm_direct": "local", "agent": "local",
-        "vlm_nvidia": "api", "prior": "deterministic", "raster_cc5k": "local"}
+        "vlm_nvidia": "api", "prior": "deterministic", "raster_cc5k": "local", "vlm_lora": "local"}
 
 
 def route(path: str, intent: Intent | None = None) -> list[str]:
@@ -72,6 +73,8 @@ def route(path: str, intent: Intent | None = None) -> list[str]:
         out += ["pdf_vector", "pdf_text"]
     if ext in IMG_EXT or any(e in sib for e in IMG_EXT):
         out.append("raster")
+        if src == "cubicasa5k":  # R2's counting LoRA (cc-v2): gated per concept on train_gate (it never saw those)
+            out.append("vlm_lora")
     out += ["vlm_direct"]  # the general agent is called explicitly by the pipeline (agent=1), not routed
     seen: set[str] = set()
     return [x for x in out if not (x in seen or seen.add(x))]
@@ -93,6 +96,18 @@ def _agree(a, b, task: str) -> bool:
     return abs(x - y) <= 0.02 * max(abs(y), 1e-9)
 
 
+_UNIT_KIND = {"count": "count", "m2": "area", "m²": "area", "ft2": "area", "sqft": "area", "m3": "volume", "m³": "volume",
+              "ft3": "volume", "m": "length", "ft": "length", "mm": "length", "cm": "length"}
+
+
+def _fits(task: str, ans: Answer | None) -> bool:
+    """A count question answered in m² (or an area question in m) is not an answer to it."""
+    if ans is None or ans.value is None:
+        return False
+    k = _UNIT_KIND.get(str(ans.unit or "").lower())
+    return k is None or task not in ("count", "area", "volume", "length") or k == task
+
+
 def _cost_of(ans: Answer) -> Cost:
     c = ans.cost
     return Cost.model_validate(c) if isinstance(c, dict) else (c or Cost())
@@ -107,7 +122,8 @@ class Pipeline(BaseSolver):
     def __init__(self, accept: float | str = 0.6, agree: str = "cheap", api: int | str = 0, margin: float | str = 0.03,
                  max_tries: int | str = 3, vlm_args: str | dict | None = None, use_gate: int | str = 1,
                  compose: int | str = 1, normalise: int | str = 1, crosscheck: int | str = 1, agent: int | str = 1,
-                 raw_first: int | str = 1, cc5k: int | str = 1, **kwargs):
+                 raw_first: int | str = 1, raw_accept: float | str = 0.45, cc5k: int | str = 1, lora: int | str = 1,
+                 **kwargs):
         super().__init__(**kwargs)
         self.accept = float(accept)
         self.agree = {"1": "cheap", "0": "never", "2": "always"}.get(str(agree), str(agree))  # cheap|never|always
@@ -120,7 +136,11 @@ class Pipeline(BaseSolver):
         self.crosscheck = bool(int(crosscheck))
         self.use_agent = bool(int(agent))
         self.raw_first = bool(int(raw_first))
+        # dxf's own table-QA answers carry 0.45-0.6 and are right far more often than the agent on held-out wordings
+        # (W2: hard2q swiss dxf alone 85% vs pipeline 72.5%); "operator not applied" is capped at 0.3 by dxf and ifc
+        self.raw_accept = float(raw_accept)
         self.cc5k = bool(int(cc5k))
+        self.lora = bool(int(lora))  # R2's counting LoRA (vlm_lora) on cubicasa; 0 = never call it
         self.vlm_args = json.loads(vlm_args) if isinstance(vlm_args, str) else dict(vlm_args or {})
         self._solvers: dict[str, object | None] = {}
         self._cc5k_gate: dict | None = None
@@ -223,6 +243,8 @@ class Pipeline(BaseSolver):
         src = source_of(path)
         trace = [f"intent: {intent.describe()} (lang {intent.lang})"]
         cands = route(path, intent)
+        if not self.lora:
+            cands = [c for c in cands if c != "vlm_lora"]
         why = self._agent_reason(path, question, intent, cands) if allow_agent else None
         unsure = None  # a deterministic solver's own answer to the raw question that it was not sure of
         if self.raw_first and not known_template(question) and any(TIER.get(c) == "deterministic" for c in cands):
@@ -233,9 +255,15 @@ class Pipeline(BaseSolver):
             pre, unsure = self._raw_deterministic(path, question, intent, cands, trace, t0)
             if pre is not None:
                 return pre
+            if unsure is not None and not why and self.use_agent and allow_agent and intent.task != "text" and \
+                    source_of(path) != "ifc_bench" and any(re.search(r"operat|not appl|did not apply", m, re.I)
+                                                           for m in unsure[1].missing):
+                # the solver itself says the question has an operation it did not apply: the agent's job
+                why = f"{unsure[0]} flagged an operation it did not apply"
         if why:
             ans = self._run_agent(path, question, why, t0)
             if ans is not None:
+                ans.trace = trace + ans.trace  # intent, "dxf as asked: unsure", then the agent's steps
                 return self._vs_unsure(ans, unsure, intent)
             trace.append(f"general agent gave no answer ({why}); falling back to the template path")
         if self.api:
@@ -295,6 +323,9 @@ class Pipeline(BaseSolver):
             if ans.value is None:
                 trace.append(f"{name}: abstained ({(ans.missing or ['?'])[0][:80]})")
                 continue
+            if not _fits(intent.task, ans):
+                trace.append(f"{name}: {ans.value} {ans.unit} does not answer a {intent.task} question; ignored")
+                continue
             if name in rates:  # held-out hit rate (raster_cc5k on cc5k_heldout, D8), smoothed
                 conf = (rates[name][0] * rates[name][1] + 1) / (rates[name][1] + 2)
             elif gate and name in acc:  # train hit rate for this key, smoothed (k+1)/(n+2): 40/40 -> 0.976, not 1.0
@@ -307,6 +338,11 @@ class Pipeline(BaseSolver):
                 conf = ans.confidence
             trace.append(f"{name}: {ans.value} {ans.unit or ''} (conf {conf:.2f}"
                          + (", held-out hit rate" if name in rates else ", train hit rate" if name in acc else "") + ")")
+            if name == "vlm_lora" and gate and gate.get("lora_vs_raster"):
+                conf, extra = self._lora_vs_raster(path, ask, ans, gate["lora_vs_raster"], trace, conf)
+                total = total.add(extra)
+                answers.append((name, ans, conf))
+                break  # the LoRA's count stands; raster only sets the confidence and lends its boxes
             answers.append((name, ans, conf))
             if conf >= self.accept or self.agree == "never" or len(answers) >= 2:
                 break
@@ -318,7 +354,7 @@ class Pipeline(BaseSolver):
         best = self._combine(answers, intent, trace)
         if unsure is not None and not reused:
             total = total.add(_cost_of(unsure[1]))
-        if unsure is not None and (best is None or best.confidence < unsure[1].confidence):
+        if unsure is not None and _fits(intent.task, unsure[1]) and (best is None or best.confidence < unsure[1].confidence):
             n_u, a_u = unsure
             if best is not None:
                 trace.append(f"{n_u} on the question as asked ({a_u.value}, conf {a_u.confidence:.2f}) is surer than "
@@ -338,6 +374,34 @@ class Pipeline(BaseSolver):
         best.trace = trace + [f"[{best.solver}] {t}" for t in best.trace[-8:]]
         best.solver = f"pipeline/{best.solver}"
         return best
+
+    def _lora_vs_raster(self, path: str, ask: str, ans: Answer, table: dict, trace: list[str], conf: float):
+        """The counting LoRA has no boxes and its own confidence is not trusted (F): ask raster the same question;
+        confidence = how often the LoRA was right on train_gate when raster agreed / disagreed (smoothed); when they
+        agree, raster's label boxes become the evidence."""
+        r = self._get("raster")
+        if r is None:
+            return conf, Cost()
+        try:
+            ra = r.solve(path, ask) if r.can_handle(path, ask) else None
+        except Exception:  # noqa: BLE001
+            ra = None
+        if ra is None or ra.value is None:
+            return conf, Cost()
+        if not isinstance(ra, Answer):
+            ra = Answer.model_validate(ra)
+        same = _agree(ans.value, ra.value, "count")
+        k, n = table["agree" if same else "disagree"]
+        c = round((k + 1) / (n + 2), 3)
+        if same:
+            note = f"cross-check: vlm_lora {ans.value} = raster {ra.value} ✓"
+            ans.evidence = [*ans.evidence, *[e.model_copy(update={"note": (e.note + "; " if e.note else "") + note})
+                                             for e in ra.evidence[:12]]]
+        else:
+            note = f"cross-check: vlm_lora {ans.value} ≠ raster {ra.value}"
+            ans.missing = [*ans.missing, f"raster counted {ra.value}, the LoRA {ans.value}"]
+        trace.append(f"{note} → conf {c:.2f} (LoRA right {k}/{n} on train_gate when raster {'agreed' if same else 'disagreed'})")
+        return c, _cost_of(ra)
 
     def _cc5k_order(self, key: str, order: list[str], rates: dict, trace: list[str]) -> list[str]:
         """D8: R1's pretrained CubiCasa5K model for symbol counts, gated on cc5k_heldout (never train_gate: the
@@ -381,8 +445,9 @@ class Pipeline(BaseSolver):
             total = total.add(_cost_of(a))
             if a.value is None:
                 continue
-            if a.confidence < self.accept:
+            if a.confidence < self.raw_accept or not _fits(intent.task, a):
                 trace.append(f"{name} (question as asked): {a.value} {a.unit or ''} at conf {a.confidence:.2f}, unsure"
+                             + ("" if _fits(intent.task, a) else f" (a {a.unit} answer to a {intent.task} question)")
                              + (" → general agent" if self._agent_reason(path, question, intent, cands) else ""))
                 return None, (name, a)
             best = a.model_copy(deep=True)
@@ -403,6 +468,9 @@ class Pipeline(BaseSolver):
             return ans
         n_u, a_u = unsure
         ans.cost = _cost_of(ans).add(_cost_of(a_u))
+        if not _fits(intent.task, a_u):
+            ans.trace.append(f"{n_u} answered {a_u.value} {a_u.unit} to a {intent.task} question: ignored")
+            return ans
         same = _agree(ans.value, a_u.value, intent.task)
         note = (f"cross-check: agent {ans.value} = {n_u} {a_u.value} ✓" if same
                 else f"cross-check: agent {ans.value} ≠ {n_u} {a_u.value}")
@@ -430,7 +498,7 @@ class Pipeline(BaseSolver):
             return
         if not note:
             return
-        if intent.scope in ("apartment", "floor_total", "storey_total", "label_total", "model") and \
+        if intent.scope in ("apartment", "floor_total", "storey_total", "label_total", "model", "rooms") and \
                 re.search(r"polygon of room|vs (?:the )?room ", note):
             # an aggregate (apartment / floor / all rooms labelled X) compared with ONE room's polygon is not a check:
             # 272 correct swiss dev totals got a false ✗ this way (night 00:47)
@@ -441,7 +509,9 @@ class Pipeline(BaseSolver):
         if "✗" in note and "✓" not in note:
             ans.confidence = round(ans.confidence * 0.7, 3)
             ans.missing = [*ans.missing, "another source of the same building disagrees (see cross-check)"]
-        elif "✓" in note and "✗" not in note:
+        elif "✓" in note and "✗" not in note and ans.confidence >= self.accept:
+            # only when the solver was sure what was asked: the check confirms the value, not the reading
+            # (W2: "area of the largest room" with a 2% tie at 0.50 must stay unsure)
             ans.confidence = round(min(0.99, ans.confidence + (1 - ans.confidence) * 0.5), 3)
         if ans.evidence:
             e0 = ans.evidence[0]

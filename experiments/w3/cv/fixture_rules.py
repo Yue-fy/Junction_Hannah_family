@@ -12,7 +12,7 @@ prior = class_prior()
 def feats(r):
     items = [(t, label_class(t)) for t, c, *_ in (r.get("items") or [])]  # runtime classifier
     n = collections.Counter(c for _, c in items if c)
-    looped = any("loop" in x for x in r.get("notes", []))
+    looped = any(x.startswith("LOOP") for x in r.get("notes", []))  # as at runtime (retry fixed the rest)
     return n, looped
 
 RULES = {

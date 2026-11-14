@@ -1,6 +1,6 @@
 # Error analysis (E = agent F)
 
-Updated 23:56, 13 Nov 2026. Regenerate the tables with
+Updated 01:45, 14 Nov 2026 (sections newest first). Regenerate the tables with
 `/data/User/fangy4/envs/junction/bin/python -m stoa.eval.analyze <run_id> --baseline <dummy run_id> --top 20`.
 For paired significance use `python3 experiments/r1/stats/compare.py RUN_A RUN_B --by template` (cluster CI).
 
@@ -13,7 +13,82 @@ answer) vs `20261113-234812-dummy-dev` (template prior), both on dev v2 (hash f4
 | dummy (prior) | 26.1% | 40.4% | 0 | 0% |
 | vlm_direct | 32.0% (28.0–36.5) | 44.1% | 200 (all IFC) | 0% |
 
-## LATEST (01:15): clean held-out `hard2q`, judge numeric check
+## LATEST (01:45): night fdb0ecc: where the points are now, LoRA routing worth +8, held-out mechanisms
+
+### Dev (S0's run 20261114-012630-pipeline-dev-878d): weighted 74.0%, micro 84.0%
+Of the 26 weighted points still lost, ~25.6 are cubicasa counts (62.0%, 800 Qs). Swiss area 98%, swiss count / ifc
+100%, opening_design count 81% (n=37). Cubicasa losses by concept (EN+FI), ranked by weighted points lost:
+windows 7.9 (17% / 10% right; undercounts), doors 3.6 (12% / 40%), sinks 4.5 (44% / 48%; off-by-one under), WC seats
+3.9 (58% / 55%; off-by-one under), showers+baths 1.5, saunas 1.4, bedrooms 0.6, storeys 1.0.
+
+### LoRA routing simulation (experiments/F/lora_route_sim.py, gate table experiments/F/lora_gate_cc-v2.json)
+Per-concept choice and confidence fitted on **train_gate** (pipeline 20261114-013211-pipeline-train_gate-8bc9 vs LoRA
+20261114-012403-vlm_direct-train_gate-ee1b), then applied to dev. No model calls: stored predictions are merged.
+
+| policy (dev) | weighted | micro | cubicasa | ECE | AUROC | conf≥0.8 share / acc | $/1k |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| pipeline (fdb0ecc) | 74.0% | 84.0% | 62.0% | 0.011 | 0.922 | 72% / 97.2% | 0.055 |
+| LoRA for every cubicasa count (own conf) | 82.1% | 88.7% | 73.9% | 0.164 | 0.923 | 60% / 98.8% | 0.062 |
+| per concept (train_gate), conf = train_gate hit rate | 82.1% | 88.8% | 74.0% | 0.015 | 0.912 | 82% / 96.7% | 0.060 |
+| + agree/disagree confidence | **82.1%** | **88.8%** | 74.0% | **0.012** | 0.915 | 79% / 97.6% | 0.060 |
+
+Paired vs the pipeline (drawing-cluster bootstrap): ALL +4.8 [+3.4, +6.3] *, cubicasa +12.0 [+9.1, +14.9] * (126 wins,
+30 losses). LoRA for wc, sink, door, window, bathroom, bedroom, balcony, sauna, storey, wc_room; pipeline for
+shower_bathtub and kitchen (ties on train_gate). Use it only on ATOMIC questions (compose splits compounds; on whole
+compounds the LoRA scores 9.6% and its own confidence is inverted, see the 01:29 section).
+
+Overfitting check of the current cubicasa path: pipeline on train_gate cubicasa (480 Qs on 461 drawings nobody tuned
+on) 64.8% vs dev 62.0%: no dev overfitting.
+
+### Held-out (aggregates only, D10): raw_first fixed trust, not accuracy
+| run (night fdb0ecc unless noted) | hard2q (clean) | hard2p (partly seen) |
+|---|---:|---:|
+| pipeline, scored | 70.4% (474e3e4: 69.3) | 78.3% |
+| pipeline, judged text | 62.7% | 64.2% |
+| pipeline AUROC / conf≥0.8 right | 0.73 / 90.6% (474e3e4: 0.50 / 77.2%) | 0.78 / 91.5% |
+| pipeline by source: cubicasa / swiss / ifc (scored) | 38.0 / 76.2 / 100 | 38.0 / 90.5 / 100 |
+| dxf alone, swiss scored | 81.9% | 97.1% |
+| ifc alone, ifc scored | 100% | 100% |
+
+dxf on hard2p (whose wordings were quoted to W2 at 00:57) 97.1% vs clean hard2q 81.9%: a 15-point "seen wording"
+gap, the clearest overfitting signal tonight. ifc shows no gap (W1's fixes were general).
+
+Mechanisms on hard2q (counts only; messages to owners contain no wordings):
+1. **Canonical override** (W4), 6/45 swiss area, both held-out sets (hard2p 7): dxf answers as asked, right, but caps
+   conf at 0.3 because it saw an operator word; the pipeline's modifiers() saw none, asks the canonical form (operator
+   dropped), gets 0.98 "train hit rate", the KG cross-check ✓ confirms the wrong quantity → canonical wins. Pipeline
+   never beats dxf on swiss on either held-out set (0 questions). Fix: union of operator detectors; a canonical answer
+   never outranks a disagreeing raw answer; a ✓ only proves arithmetic.
+2. **Unrecognised ratio phrasing** (W2), 11/45 swiss ratio, one English phrasing, parsed as a sum of two apartments at
+   conf 0.6–0.9. Fix: dictionary-wide ratio family in all languages; no default sum at ≥0.6 without a sum cue.
+3. **Count question typed as text** (W4), 14/50 cubicasa: no gate, no compose, base VLM at conf 0.2 (3/14 right).
+4. **Compound question read as atomic** (W4), 11/50 cubicasa, language outside the dataset: prior '1' at the template
+   hit rate 0.60 (3/11 right). Fix: ≥2 concept stems → multi; template hit rates only for template wordings.
+
+### Cost depends on questions per drawing
+Cubicasa dev (4.0 Qs/drawing) $0.073/1k vs train_gate (1.04 Qs/drawing) $0.37/1k for the same pipeline (0.38 vs 0.99
+LLM calls/Q): the raster label call is made once per drawing. The eval now prints billed GPU seconds next to raw.
+
+## Earlier (01:29): LoRA cc-v2 overfitting watch: the biggest cubicasa gain, with routing rules
+
+R2's LoRA cc-v2 (Qwen3-VL-8B, trained on TRAIN cubicasa counts; train_gate drawings excluded), served on a private
+:8002 and asked via `vlm_direct model=cc-v2`:
+
+| split (cubicasa) | LoRA cc-v2 | integrated pipeline | note |
+|---|---:|---:|---|
+| dev (800) | **73.9%** | 61.8% (2b7935a) | +12.1 [+9.0, +15.2] cluster CI; ≈ +8 weighted pts |
+| train_gate (480, unseen drawings) | 76.7% | – | no memorisation gap |
+| hard: translation / paraphrase / composition | 75.0 / 65.0 / 9.6% | 66 / 58 / 23% (cbd2fe8) | compositions asked directly |
+| hard2q (clean held-out) | 26% scored, 68% text | 52% (scored + text) | LoRA conf ≥ 0.8 → 15.8% right (inverted) |
+
+Per concept on dev (LoRA / pipeline): windows 21/14, doors 35/26, WC seats 76/57, sinks 71/46, storeys 99/88,
+saunas 93/71, bedrooms 90/71, WC rooms 100/88, balconies 91/83, bathrooms 91/88, kitchens 100/100, showers+baths
+77/78.
+**Rules:** route only atomic, known concepts (after compose/canonical; not showers+baths) to the LoRA; take the
+confidence from the per-concept train_gate hit rate, never from the LoRA; paraphrases cost ~9 points, so canonicalise
+for this VLM path (but ask dxf/ifc the original question).
+
+## Earlier (01:15): clean held-out `hard2q`, judge numeric check
 
 - **hard2p is contaminated for dxf/ifc**: my messages quoted its wordings, and dxf v6 then reached 97% on it.
   `hard2q` (third wording: Italian/Dutch/Swedish + new English; same drawings and answers) is the clean held-out

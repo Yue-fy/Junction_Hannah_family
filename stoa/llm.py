@@ -326,8 +326,12 @@ def _client(backend: str):
 def served_model(backend: str = "local") -> str:
     """The concrete model id behind the "default" alias (first id listed by /v1/models)."""
     try:
-        ids = [m.id for m in _client(backend).models.list().data]
-        return next((i for i in ids if i != "default"), ids[0] if ids else "")
+        data = _client(backend).models.list().data
+        ids = [m.id for m in data]
+        # LoRA adapters are listed too (vLLM sets `parent` on them): the base model is the first without a parent
+        base = [m.id for m in data if m.id != "default" and not (getattr(m, "model_extra", None) or {}).get("parent")
+                and not getattr(m, "parent", None)]
+        return base[0] if base else next((i for i in ids if i != "default"), ids[0] if ids else "")
     except Exception as e:  # noqa: BLE001
         return f"unavailable ({type(e).__name__})"
 

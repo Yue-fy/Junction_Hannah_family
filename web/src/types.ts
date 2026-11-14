@@ -76,6 +76,7 @@ export interface KgFile {
   storey?: string | null; // storey GlobalId (ifc_models plans)
   svg?: string;
   relation?: string; // only from the directory-based fallback
+  label?: string; // historical sheets: the view named in the source's title ("West Elevation", "sheet 2 of 4")
 }
 
 export interface KgStorey {

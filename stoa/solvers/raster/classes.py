@@ -111,12 +111,12 @@ def _norm(s: str) -> str:
 
 # Room codes (after _norm: upper case, Ö->O, Ä->A). Union of R1's measured CODES table
 # (experiments/r1/room_labels/run.py) and Finnish plan practice: MH makuuhuone, K keittiö, KK keittokomero,
-# KT keittiötila, TK tupakeittiö (R1 counts it), KH/KPH kylpyhuone, PH/PESUH/PS pesuhuone, SH suihkuhuone,
+# KT keittiötila (TK is NOT a kitchen: tuulikaappi = entrance vestibule, W5 01:33), KH/KPH kylpyhuone, PH/PESUH/PS pesuhuone, SH suihkuhuone,
 # S/SAUNA/LH/LOYLYH sauna, WC, PARV parveke. Not mapped: KHH (utility), PKH (dressing), VH (closet),
 # OH (living), ET (hall), RT (dining).
 CODES = {
     "bedroom": {"MH", "MAKUUHUONE", "MAKUUH"},
-    "kitchen": {"K", "KK", "TK", "KT", "KEITTIO", "KEITTOKOMERO", "TUPAKEITTIO", "AVOK", "AVOKEITTIO",
+    "kitchen": {"K", "KK", "KT", "KEITTIO", "KEITTOKOMERO", "TUPAKEITTIO", "AVOK", "AVOKEITTIO",
                 "KEITTIOTILA", "APUK", "APUKEITTIO"},
     "bathroom": {"KH", "PH", "KPH", "PESUH", "SH", "KYLPYHUONE", "PESUHUONE", "KYLPYH", "PS", "PSH"},
     "wc_room": {"WC"},
