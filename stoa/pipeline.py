@@ -129,6 +129,14 @@ CC5K_KEYS = {"count:window:drawing", "count:door:drawing", "count:wc:drawing", "
 GATING_CC5K = next((f for f in (Path(__file__).parent / "router" / "gating_cc5k.json",
                                  Path(__file__).parent / "solvers" / "raster_cc5k" / "gating_cc5k.json") if f.exists()),
                    Path(__file__).parent / "router" / "gating_cc5k.json")
+# cubicasa room-label kinds -> R1's room-graph region test (rooms: {'cls', 'label', 'bbox', ...})
+ROOM_KINDS = {
+    "bedroom": lambda r: r.get("cls") == "bedroom",
+    "kitchen": lambda r: r.get("cls") == "kitchen",
+    "sauna": lambda r: r.get("cls") == "sauna",
+    "wc_room": lambda r: r.get("cls") == "bath" and bool(re.search(r"\bWC\b", r.get("label") or "")),
+    "bathroom": lambda r: r.get("cls") == "bath" and not re.fullmatch(r"\s*WC\s*", r.get("label") or ""),
+}
 IMG_EXT = (".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp", ".gif")
 # tier of each solver (cost order); unknown names count as "local"
 TIER = {"dxf": "deterministic", "ifc": "deterministic", "schedule": "deterministic", "pdf_vector": "deterministic",
@@ -631,6 +639,9 @@ class Pipeline(BaseSolver):
         if self.cc5k and src == "cubicasa5k" and intent.key in CC5K_KEYS and best.value is not None and \
                 best.solver != "raster_cc5k":
             self._cc5k_evidence(path, canon or question, best, trace, intent.key)
+        elif self.cc5k and src == "cubicasa5k" and intent.task == "count" and intent.target in ROOM_KINDS and \
+                best.value is not None and not best.evidence:
+            self._room_evidence(path, best, trace, intent.target)
         if self.crosscheck and best.value is not None:
             self._kg_crosscheck(path, intent, best, trace)
         measured = any(re.search(r"scale bar|flood fill", str(x), re.I)
@@ -708,6 +719,33 @@ class Pipeline(BaseSolver):
         trace.append(f"raster_cc5k (pretrained CubiCasa5K, CC BY-NC 4.0): held-out {100 * a:.0f}% vs prior "
                      f"{100 * p:.0f}% (cc5k_heldout n={n}) → first")
         return ["raster_cc5k"] + [c for c in order if c != "raster_cc5k"]
+
+    def _room_evidence(self, path: str, best: Answer, trace: list[str], target: str) -> None:
+        """Room-label counts on cubicasa (bedrooms, kitchens, saunas, bathrooms, WC rooms): the matching room regions of
+        R1's room graph (cached CC5K segmentation, no LLM, ~0.1 s) as evidence boxes WHEN their number equals the answer;
+        no confidence change (D8: the segmenter saw most cubicasa drawings in pretraining). S0 D16: evidence on dev
+        cubicasa 30.5% -> 47.6% (137 answers, 133 of them right) at $0, replacing the costly second reader."""
+        try:
+            from experiments.r1.room_graph.graph import room_graph
+
+            g = room_graph(path)
+        except Exception:  # noqa: BLE001
+            return
+        if not g:
+            return
+        rs = [r for r in g.get("rooms", []) if ROOM_KINDS[target](r)]
+        v = _num(best.value)
+        if v is None:
+            return
+        if len(rs) != round(v) or not rs:
+            trace.append(f"room segmentation (pretrained CubiCasa5K): {len(rs)} {target} region(s); no boxes attached")
+            return
+        best.evidence = [*best.evidence, *[Evidence(
+            file=path, bbox=[float(x) for x in r["bbox"]], bbox_space="image_px",
+            note=f"{target} region {r['id']} (CubiCasa5K room segmentation)"
+                 + (f", printed label '{r['label']}'" if r.get("label") else "")) for r in rs[:40]]]
+        trace.append(f"room segmentation (pretrained CubiCasa5K): {len(rs)} {target} region(s) = the answer ✓ "
+                     "(boxes attached as evidence; confidence unchanged)")
 
     def _cc5k_evidence(self, path: str, ask: str, best: Answer, trace: list[str], key: str = "") -> None:
         """The pretrained CubiCasa5K detector as a cross-check: agreement lends its symbol boxes (image_px) as evidence.
