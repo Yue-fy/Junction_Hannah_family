@@ -56,6 +56,63 @@ def _typed(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+CODE = r"(?:[A-Z]{1,3}-?\d{1,2}[A-Z]?|[A-Z]{2,3})"
+CODE_RE = re.compile(rf"^{CODE}$")
+CODES_ANSWER = re.compile(rf"^\s*{CODE}(?:\s*(?:&|,|/|\band\b)\s*{CODE})*\s*$")
+TOPICS = ("floor", "ceiling", "wall", "base", "door", "frame", "glaz", "glass", "window", "hardware", "partition",
+          "roof", "finish", "material")
+
+
+def _legend(rows) -> dict[str, list[tuple[str, tuple, int]]]:
+    """Legend lines of the sheet: a row that STARTS with a code cell ("F4") followed by its meaning
+    ("RESILIENT FLOORING (T.B.D.)"). Only the cell right after the code is the meaning (rows may merge columns)."""
+    out: dict[str, list] = {}
+    for k, r in enumerate(rows):
+        cells = r.cells
+        if len(cells) < 2:
+            continue
+        lead = 0 if CODE_RE.match(cells[0].text.strip()) else (
+            1 if len(cells) > 2 and not re.search(r"[A-Za-z]{2}", cells[0].text) and CODE_RE.match(cells[1].text.strip()) else None)
+        if lead is None:
+            continue
+        code, meaning = cells[lead].text.strip(), cells[lead + 1].text.strip()
+        if CODE_RE.match(meaning) or len(re.findall(r"[A-Za-z]{3,}", meaning)) < 1 or re.match(r"(?i)see\b", meaning):
+            continue
+        box = tuple(min(c.box[i] for c in cells[lead:lead + 2]) if i < 2 else max(c.box[i] for c in cells[lead:lead + 2])
+                    for i in range(4))
+        out.setdefault(code, []).append((meaning, box, k))
+    return out
+
+
+def _explain_codes(value: str, question: str, rows, legend) -> tuple[str, list[tuple[str, str, tuple]]] | None:
+    """'F2 & F3' -> 'F2 (ARTIFICIAL TURF) & F3 (RESILIENT ...)' from the sheet's own legend; None if nothing found."""
+    if not CODES_ANSWER.match(value):
+        return None
+    topics = [t for t in TOPICS if t in question.lower()]
+    found = []
+    for code in re.findall(CODE, value):
+        cands = legend.get(code)
+        if not cands:
+            continue
+
+        def score(c):
+            window = " ".join(cell.text for r in rows[max(0, c[2] - 15):c[2] + 1] for cell in r.cells).lower()
+            return sum(t in window for t in topics)
+        best = max(cands, key=score)
+        if topics and score(best) == 0:
+            continue  # e.g. a door type "B2" must not be explained by the base legend's "B2 = CERAMIC TILE"
+        meaning, box, _ = best
+        found.append((code, meaning, box))
+    if not found:
+        return None
+    if len(found) == 1 and len(re.findall(CODE, value)) == 1:
+        return f"{found[0][0]} - {found[0][1]}", found
+    out = value
+    for code, meaning, _ in found:
+        out = re.sub(rf"(?<![\w-]){re.escape(code)}(?![\w-])", f"{code} ({meaning})", out, count=1)
+    return out, found
+
+
 def _clean(name: str) -> str:
     return re.sub(r"\W+", "_", name).strip("_").lower()[:30] or "table"
 
@@ -148,9 +205,18 @@ class ScheduleSolver(BaseSolver):
         evidence = [Evidence(file=path, page=0, bbox=[round(v, 1) for v in boxes[i]], bbox_space="pdf_pt",
                              note=(f"note line {i - 900000}" if i >= 900000 else row_label.get(i, f"table row {i}")))
                     for i in res.get("used", []) if i in boxes]
+        n_rows_used = len(evidence)
+        if isinstance(value, str):
+            # a bare code answer ("F4") gets its meaning from the sheet's own legend: "F4 - RESILIENT FLOORING"
+            ex = _explain_codes(value, question, rows, _legend(rows))
+            if ex is not None:
+                value, found = ex
+                trace.append("legend: " + "; ".join(f"{c} = {m}" for c, m, _ in found))
+                evidence += [Evidence(file=path, page=0, bbox=[round(v, 1) for v in b], bbox_space="pdf_pt",
+                                      note=f"legend: {c} = {m}") for c, m, b in found]
         # calibrated on dev (opening_design, local model): 78% right overall; answers that cite rows are right more often
-        conf = 0.8 if evidence else 0.5
-        missing = [] if evidence else ["the query did not report which rows it used"]
+        conf = 0.8 if n_rows_used else 0.5
+        missing = [] if n_rows_used else ["the query did not report which rows it used"]
         about_table = re.search(r"schedul|listed|table|legend|\bkey\b|specified|finish", question, re.I)
         about_drawing = re.search(r"\b(drawn|shown|depicted|visible)\b|\bin\s+(?:the\s+)?(?:enlarged\s+)?plan\b",
                                   question, re.I)

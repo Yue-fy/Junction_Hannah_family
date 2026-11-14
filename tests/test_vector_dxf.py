@@ -131,3 +131,23 @@ def test_dxf_unknown_undotted_room_abstains():
     a = s.solve(P2, "What is the net floor area of room 1 in m²?")
     assert a.value is None and a.missing
     assert abs(s.solve(P2, "What is the net floor area of room 2.05 ('Cuisine') in m²?").value - 9.84) < 0.02
+
+
+def test_schedule_legend_explains_bare_codes():
+    """A bare code answer gets its meaning from the sheet's own legend, matched to the question's topic."""
+    from stoa.solvers.vector.pdftables import Cell, Row
+    from stoa.solvers.vector.schedule_solver import _explain_codes, _legend
+
+    def row(y, *texts):
+        return Row(y=y, cells=[Cell(t, 10.0 * i, 10.0 * i + 8, y, (10.0 * i, y, 10.0 * i + 8, y + 2))
+                               for i, t in enumerate(texts)])
+    rows = [row(0, "FLOOR FINISH LEGEND"), row(1, "F2", "ARTIFICIAL TURF"), row(2, "F4", "RESILIENT FLOORING"),
+            row(3, "BASE LEGEND"), row(4, "B2", "CERAMIC TILE")]
+    leg = _legend(rows)
+    value, found = _explain_codes("F4", "What floor finish is specified for room 101?", rows, leg)
+    assert value == "F4 - RESILIENT FLOORING" and found[0][2] == (0.0, 2, 18.0, 4)  # code + meaning cells
+    value, _ = _explain_codes("F2 & F4", "Which floor finishes are used in the gym?", rows, leg)
+    assert value == "F2 (ARTIFICIAL TURF) & F4 (RESILIENT FLOORING)"
+    # a door type "B2" must not be explained by the base legend
+    assert _explain_codes("B2", "What door type is door 104?", rows, leg) is None
+    assert _explain_codes("3 rooms, 4541 SF", "How many rooms are offices?", rows, leg) is None
