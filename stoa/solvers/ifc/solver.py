@@ -2076,7 +2076,15 @@ class IfcSolver(BaseSolver):
                               r"more|fewer|less|larger|bigger|greater|smaller)\b", qf_)
                 and storey_mention(ctx.get("question", ""), [s_.name for s_ in idx.storeys])[0] is None):
             # "Which storey has the most doors?": every storey of the model is a candidate
-            storeys = [(s_.name, s_) for s_ in own_storeys(idx) if s_.name]
+            cand = [s_ for s_ in own_storeys(idx) if s_.name]
+            used = used_storeys(idx, cand) if it.kind not in (None, "storey", "space") or it.metric == "count" else []
+            if used and len(used) < len(cand):
+                # "Which floor has the fewest doors?" -> not the roof/foundation level with 0 (Q 04:55: 'Vundament and
+                # Katus (tie, 0)'); the levels left out are named in the trace
+                trace.append("which-storey over the floors with rooms or doors; left out: "
+                             + ", ".join(s_.name for s_ in cand if s_ not in used))
+                cand = used
+            storeys = [(s_.name, s_) for s_ in cand]
             it = dataclasses.replace(it, names=[n for n, _ in storeys], top_n=False)
             trace.append(f"which-storey over all {len(storeys)} storeys")
         multi = len(storeys) >= 2 and not others and (it.op in ("sum", "argmax", "argmin", "diff", "max", "min", "compare",
