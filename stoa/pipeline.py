@@ -29,7 +29,8 @@ pdf_vector); if one answers with confidence >= raw_accept=0.45 it applied the op
 lora=1 (cubicasa counts may go to R2's counting LoRA `vlm_lora` where the train_gate gate prefers it; 0 = never),
 cc5k=1 (D8: cubicasa window/door/WC-seat/sink counts go to R1's pretrained `raster_cc5k` when it is registered, with
 hit rates measured on `cc5k_heldout` (stoa/router/gating_cc5k.json); cc5k=0 leaves every answer as without it),
-links=1 (questions about the plan <-> model relation / the sheet set go to R1's kg_qa over stoa.kg first),
+links=1 (questions about the plan <-> model relation / the sheet set go to R1's kg_qa over stoa.kg first; on drawings
+with no project graph only questions whose subject is a file, `_FILE_SUBJECT`: 'Is there an IFC model for this plan?'),
 pvm=1 (those link answers are checked by W1's deterministic GlobalId reading, stoa.solvers.ifc.plan_vs_model: agree
 -> ✓ + GUID evidence, disagree -> its value at LINK_DISAGREE, no KG answer -> it answers; 0 = the older ifc check).
 Every final answer passes `_shape_guard`: a which-floor/room/sheet question answered by a bare number or yes/no, a
