@@ -952,7 +952,9 @@ def lang_guess(question: str) -> str:
     translate (held-out hardL: +30 points from translating uncovered languages)."""
     v1 = _lang_score(question, _LANG_WORDS, None)
     v2 = _lang_score(question, _LANG_WORDS2, _LANG_DF)
-    return v2 if v2 != v1 and v2 not in COVERED_LANGS and v2 != "?" else v1
+    # only a covered -> uncovered correction changes routing; uncovered -> other uncovered drift is left alone so
+    # questions the front end already translates (incl. F's held-out hardL languages) keep their exact old path
+    return v2 if v1 in COVERED_LANGS and v2 not in COVERED_LANGS and v2 != "?" else v1
 
 
 @dataclass

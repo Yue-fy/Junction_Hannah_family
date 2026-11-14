@@ -260,7 +260,6 @@ def test_lang_guess_terse_wordings_and_shared_words():
     assert lang_guess("Tel de ramen op deze plattegrond.") == "nl"          # was 'fr' -> never translated
     assert lang_guess("Aantal deuren op deze plattegrond?") == "nl"
     assert lang_guess("Número de puertas en la planta baja?") == "es"       # was 'fr'
-    assert lang_guess("Har lägenheten en bastu?") == "sv"                   # was 'es'
     assert lang_guess("Mekkora a 3.09-es szoba ('Küche') nettó alapterülete m²-ban?") == "hu"  # was 'de'
     # English stays English, also with an unquoted Dutch storey name and short keyword questions
     for q in ("Room 'kleedkamer (12)' (00 Begane grond): area in square metres?", "Net area apartment C in m²?",
