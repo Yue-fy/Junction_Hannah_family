@@ -239,6 +239,8 @@ def test_human_split_last_row_wins(tmp_path, monkeypatch):
         {"qid": "h-1", "path": "data/cubicasa5k/x.png", "question": "How many doors?", "answer": "4", "unit": "count",
          "type": "count", "sureness": "certain"},
         {"qid": "h-2", "path": "data/cubicasa5k/x.png", "question": "What is shown?", "answer": "a flat", "type": "text"},
+        {"qid": "h-3", "path": "data/cubicasa5k/x.png", "question": "How many windows?", "answer": "2", "type": "count"},
+        {"qid": "h-3", "path": "data/cubicasa5k/x.png", "question": "How many windows?", "deleted": True},
     ]
     (tmp_path / "human" / "questions.jsonl").write_text("\n".join(json.dumps(r) for r in rows) + "\n")
     qs = splits.load_split("human")

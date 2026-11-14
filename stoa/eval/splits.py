@@ -272,7 +272,8 @@ def _split_file(name: str) -> Path:
 
 
 def _human_rows(f: Path) -> list[dict]:
-    """`human` split: the last saved row per qid wins (the workbench appends edits); the expert's sureness, page and
+    """`human` split: the last saved row per qid wins (the workbench appends edits; a last row with "deleted": true drops
+    the qid); the expert's sureness, page and
     method go to meta (meta.kind = "human:<sureness>"), so results can be read per sureness. Reported separately
     from dev (its own split name in the leaderboard)."""
     last: dict[str, dict] = {}
@@ -284,6 +285,9 @@ def _human_rows(f: Path) -> list[dict]:
             if not r.get("question") or not r.get("path"):
                 continue
             qid = r.get("qid") or make_qid(r["path"], r["question"])
+            if r.get("deleted"):  # H 10:57: the workbench's Delete button appends the row with "deleted": true
+                last.pop(qid, None)
+                continue
             ans = r.get("answer")
             if isinstance(ans, str):
                 try:
