@@ -53,6 +53,7 @@ CubiCasa probe: conf ≥ 0.75 went from 2/5 to 5/5 right).
   route for those.
 - Dimension-line reading (`dimline.py`): 16/126; it needs real tick/arrow detection.
 - A walls-only refill for tiny bathroom fills leaks through windows (no gain; reverted).
+- Door arcs on Revit-style IFC plan exports (resbim *_plan.png, no scale bar, 40 models, gold = IfcDoor): the door-arc scale fails there (text glyphs at the 12 px floor and grid bubbles outscore the doors; median 14-92 px/m vs ~115 true), best variant 7-8 exact of 40 vs the prior 18. The windows there are not 4-line symbols (the pre-scan finds none: abstain, 0 tokens). The scale-search ceiling (long side / 25) assumes a sheet with margins, not a tight crop. Grid bubbles pass the full-circle test because their centre is found ~3 px off; testing r +-4 px rejects them and drops 0 arcs on 99 Swiss floors (experiments/w3/doorwin/ifc_plan_doors.py, robust_circle_swiss.py). Not wired (freeze).
 - Window symbols at 1:200 (~30 px/m): the glass lines render as dark as the faces; dropping the ink test and
   rejecting a 5th / ≥ 6 equally spaced line (stairs) cost 1:100 exact floors or lost on dev (34 → 32). Abstain there.
 
