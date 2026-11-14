@@ -4,7 +4,7 @@ Hardware: 1× RTX PRO 6000 Blackwell 96 GB. Shared server budget ≈ 45 GB (`--g
 **Bandwidth is the real constraint tonight:** this machine downloads from Hugging Face at only ~2.5 MB/s total
 (Wi-Fi; measured with 8 parallel range requests), i.e. ~2 h per 19 GB. Every download must be chosen carefully.
 
-## TL;DR for the captain (10:45, end of night)
+## TL;DR for the captain (11:00, end of night)
 - **Small fine-tuned beats big general.** A LoRA on our own 8B (cc-v2, 2 output tokens per answer) is the night's largest gain on
   SEALED test: CubiCasa +8.8 [+6.0, +11.9], weighted 73.8 → 79.8, at ~$0.02 per 1k questions. A 4× bigger base VLM (Qwen3.6-35B-A3B)
   and hosted Nemotron 3.5 Super VL both count WORSE (35B base: −21 vs cc-v2 on dev CubiCasa; Nemotron: below even the base 8B on smoke).
@@ -17,11 +17,24 @@ Hardware: 1× RTX PRO 6000 Blackwell 96 GB. Shared server budget ≈ 45 GB (`--g
   uploads have 47 confident misses vs 24 on the dataset path. Tonight: W4's confidence cap (D23). Day team: file the upload by
   its image-guessed style (`stoa/style.py`, CubiCasa only): 47 → 31, evidence 0 → 32%, 586/588 touched answers = dataset path.
 - **Gemini** (key from Sat 10:50): `backend="gemini"` in stoa.llm with the no-abuse rules in code (daily cap, purpose log, rpm);
-  for visible steps only. Not yet run live.
+  for visible steps only. Not yet run live. First measurement = noon: `experiments/r2/noon_models.sh EXAMPLES.jsonl 40 40` (or EXAMPLES.txt: one question per line, drawings attached for you).
+- **Servers during the day:** :8001 (8B + LoRAs) and :8002 (35B) run detached; nothing restarts them if they die — recipe and an
+  opt-in `serving/watchdog.sh` under "Serving now".
 - **Cost honesty:** every local call is billed from tokens at measured GPU throughput (not wall time, which includes queueing).
+- **Day-team patch for Stoa point 3 on LoRA counts** (11:2x): `artifacts/R2/vlm_lora_method_range.patch` (applies on night 637a6df;
+  pytest 398 with it). vlm_lora always states its method as an assumption, and below conf 0.8 a LoRA-only 90% range; values and
+  confidence unchanged. Details: "LoRA counts: method + 90% range" below.
 - Negative results are listed under each section and in board/R2.md ("don't repeat").
 
 ## Serving now
+**If a server dies during the day** (nobody from the night shift is watching after 11:45): restart by hand with
+`serving/start.sh` (:8001, loads cc-v2 + cc-v3) and `PORT=8002 GPU_UTIL=0.48 SERVED_NAME=qwen3.6-35b-a3b serving/start.sh qwen36-35b-a3b`
+(:8002, optional: answers fall back to :8001), ~2–3 min each. Or let `serving/watchdog.sh` do it (written + dry-run tested 10:58,
+**NOT running**: starting a detached restarter was not permitted from the night agent's session) — start it from a terminal with
+`setsid nohup serving/watchdog.sh >> $JUNCTION_SHARED/logs/watchdog.log 2>&1 < /dev/null &`. It restarts a port only when its pid
+file exists, the pid is dead and /v1/models fails twice (so `serving/stop.sh` is never undone), never kills a live server, max 3
+restarts/port, :8002 only without the GPU lock held; `touch $JUNCTION_SHARED/locks/watchdog.off` stops it; exits at 19:00.
+
 | what | value |
 |---|---|
 | :8002 (since 09:40, D21) | Qwen3.6-35B-A3B-FP8 `qwen3.6-35b-a3b`, util 0.48; ONLY via `llm.text_backend()` (STOA_TEXT_BACKEND=local2), falls back to :8001 |
@@ -195,18 +208,58 @@ Cost of one answer (D21 item 4), measured, not assumed:
 
 ## Noon playbook (model side)
 0. One command (09:45): put Stoa's examples in eval-split format (path, question, answer or null, type, meta.kind) and run
-   `experiments/r2/noon_models.sh EXAMPLES.jsonl [NEMOTRON_LIMIT=40]` → pipeline vs plain local VLM vs hosted Nemotron (1 worker,
-   first N), numbers exact/2%, text by the local judge, one per-kind table + cost per run (`compare_runs.py --by kind`).
-   Tested on a 12-row mix (log $JUNCTION_SHARED/logs/R2/noon_models.log). Rows without gold (answer null) are predicted but not
+   `experiments/r2/noon_models.sh EXAMPLES.jsonl [NEMOTRON_LIMIT=40] [GEMINI_LIMIT=0]` → pipeline vs plain local VLM vs hosted
+   Nemotron (1 worker, a fixed N-row sample = the eval's seeded `--limit`, not the first N rows), numbers exact/2%, text by the local
+   judge, one per-kind table + cost per run (`compare_runs.py --by kind`; columns are labelled pipeline / local-8B / nemotron /
+   gemini via `LABEL=RUN` args). Tested on a 12-row mix (log $JUNCTION_SHARED/logs/R2/noon_models.log) and **re-tested 10:55 on
+   night 9b1abd3** (8 rows incl. 2 without gold, Nemotron limit 2: 38 s, exit 0). GEMINI_LIMIT needs $GEMINI_API_KEY in the shell
+   that runs it (F's eval hides it only on runs of > 200 questions, counted after --limit). Rows without gold (answer null) are predicted but not
    scored ('-' in the table, 10:30 fix); every question with each model's answer @ confidence goes to
    `$JUNCTION_SHARED/artifacts/R2/noon_side_by_side_<split>.txt`; F's `python -m stoa.eval.review RUN.jsonl` gives a readable review. For an unknown-folder raster, `experiments/r2/style/style.py
    FILE` (PYTHONPATH=.) says which reader family fits (cubicasa5k / swiss_dwellings / ifc_models / scan, p≥0.8 → 96.7% right).
+0b. **Examples given as text only (no drawings)** (11:09, night-R2 7ad19d5): write one question per line in a `.txt` and run
+   `PER_SOURCE=2 experiments/r2/noon_models.sh EXAMPLES.txt 40` — `experiments/r2/attach_drawings.py` puts every question on the
+   SAME seeded open dev drawings of each source (default cubicasa5k, swiss_dwellings, ifc_models, habs; `SOURCES=a,b` to change),
+   answer null. Line tags: `[habs]` / `[cubicasa5k,swiss_dwellings]` = sources, `[data/...file]` = that file, `[kind=x]` = label (tags first, or last on the line since 6920168),
+   `[answer=12]` = gold. Per question the table groups by kind; `compare_runs.py ... --by source` gives the other cut. Don't hand the
+   eval a row without `path`: `load_split` crashes with KeyError 'qid' (F told 11:03). Dry run 11:05 (4 questions → 8 rows, 3 min,
+   runs 20261114-110500-pipeline-noon_dry_txt-9562 / -110746-vlm_direct-…-f4e6 / -110750-…-n2-9c22): what's slow is the open
+   kinds: a CubiCasa 'total floor area' question → agent, **160 s wall** but only 4.9 GPU-s (10 LLM calls, 11.8k in / 4.5k out;
+   the rest = queueing on a GPU at 95% from other agents' evals), 75 m² @0.4 with missing 'agent and room_graph disagree (75 vs 750)'
+   and NO assumptions listed (Stoa point 3: should say 'no scale; assumed …'); a HABS
+   'which state' question → raster text layer, 41 s and 28k tokens ('Virginia' @0.75). Counts on dxf/ifc 2–4 s. Expect a
+   20-question × 4-source example run to take ~15–25 min on a busy GPU; start it right after noon.
 1. New question kinds on rasters/scans: first run `vlm_direct` (8B base, conf=logprob) and `vlm_lora` on Stoa's examples; if the LoRA
    answers a kind it was never trained on, its confidence is NOT calibrated (F 01:28) — keep W4's unseen-wording cap.
 2. Hosted Nemotron (`backend=nvidia`, 1 worker, ~4–8 s/Q) is the only model clearly different from ours; use it for visible demo
    steps (Nemotron prize) and as a second opinion on unsure answers, never bulk.
 3. To try another open model quickly: `experiments/r2/hold_8002.sh <preset> <name> <minutes>` (GPU lock, private :8002), then
    `experiments/r2/eval_backend.py --agent local2 -- --solver pipeline --split <file>` or `vlm_direct -k backend=local2`.
+
+## LoRA counts: method + 90% range (11:15–11:30, day-team patch; `experiments/r2/interval/lora_interval.py`)
+Problem (KNOWLEDGE 11:10): on the c43 gate, vlm_lora sets assumptions on 0 of 554 dev answers; the mid-confidence LoRA counts
+(0.5–0.8) list neither assumptions nor 'missing' (dev 43, hard 28), so Stoa's "what do you know / not know" is silent on them.
+- Range: residual (gold − LoRA) 5–95% quantiles of cc-v2 on **train_gate** (476 Qs, run ee1b; never dev/test), per predicted
+  count: 0 → [0, +1], 1–2 → [−1, +1], 3–5 → [−2, +3], 6–10 → [−5, +4], ≥11 → [−3, +11] (table `artifacts/R2/lora_interval_table.json`).
+- Coverage: dev cc-v2 run 26d4 (794 Qs) 97.6%, mean width 3.6 (conservative because counts are integers: 10–90% quantiles give
+  point intervals for 0–2, which claim certainty, so not used). On the c43 gate's vlm_lora answers: dev conf <0.5 96.9% (width
+  8.3), 0.5–0.8 100% (3.6), ≥0.8 99.7%; the 43 dev / 28 hard 'neither' rows 43/43 and 28/28 covered (width 3.5 / 2.4).
+- Patch (`artifacts/R2/vlm_lora_method_range.patch`, 4 files): `VlmLora._state_method` (my file) adds the assumption "count
+  read from the whole image by a fine-tuned 8B vision-language model (cc-v2); the individual symbols were not located …" and,
+  for conf < 0.8 without a range yet, "exact count not certain: 90% range lo–hi (this model's errors on training drawings); a
+  located symbol count (detector boxes) would settle it". Two 2-line hunks in R1's crosscheck.py and W4's pipeline.py drop the
+  LoRA-only range when the CubiCasa5K detector cross-check adds its better one (no duplicate ranges). + tests/test_vlm_lora_method.py.
+- Checked: no pipeline branch reads these strings to change a value or confidence (_PREMISE / _OP_FLAG / 'not understood' do
+  not match them). Side effect: `_absent_fact` and the "not traced to any value" note no longer fire on a low-conf LoRA count
+  (they only fire when 'missing' holds process notes alone); the range is the more useful statement there.
+- LIVE check (11:20, gate c43c done, --no-leaderboard, scratch copies of night 637a6df ± patch; 198 dev CubiCasa rows the gate answered with vlm_lora: all 158 below 0.8 + 40 random above): patched vs unpatched in the same minute: values 197/198, conf 194/198 identical (unpatched vs the gate run: 192 / 189 = vLLM batching noise of the same size); right 114 vs 115 (noise); method assumption on 198/198 LoRA answers; conf<0.8 LoRA answers with a range 155/155; rows stating NEITHER 41 → 0; duplicate range lines 0. Runs 20261114-112030-pipeline-lora_check-144b (patched) vs -112109-…-a85b (unpatched), ref -111300-pipeline-dev-cdc1.
+- v2 (11:26, W4's review 11:20): the two hunks no longer match a free-text substring; they call
+  `VlmLora.drop_lora_range(missing)` (filters on the constant `VlmLora.RANGE_NOTE`, which `_state_method` writes), so a
+  wording change cannot break the dedupe silently; a 4th test pins it. pytest 399 on night 637a6df + patch. Live, same 198 rows
+  (run 20261114-112449-pipeline-lora_check-fa83 vs v1 -112030-…-144b): right 115 vs 114, values 193/198 identical (batching
+  noise, as v1 vs unpatched), range text identical on all 183 rows with equal value + conf, 0 duplicate ranges, 153/153 conf<0.8
+  LoRA answers with a range, 0 rows stating neither. v1 kept as `artifacts/R2/vlm_lora_method_range.v1.patch`.
+  Day team: apply, pytest, then a full dev run to confirm before committing.
 
 ## Drawing style from image content (09:30–10:25, `stoa/style.py`; training in `experiments/r2/style/`)
 - `guess_style(path)` → (cubicasa5k | swiss_dwellings | ifc_models | scan, p): numpy softmax on ~110 cheap features (grey/sat/hue
@@ -312,3 +365,7 @@ pretrained CC5K net never saw them) minus drawings in the LoRA's training data m
 12. Files outside our folders (uploads, a hidden set in new folders): `stoa/style.py` guesses the reader family from the
     image (p≥0.8 → 96.7% right); filing an upload under the guess (stoa/data.py hook; day team, D23) restores the CubiCasa gate, boxes and the
     cheap path: confident misses 47 → 31 on 800 dev Qs as uploads, 586/588 touched answers = the dataset path.
+13. Hosted Gemini (`backend="gemini"`, from Sat 10:50): **unmeasured** (no key in the night agents' sessions). Candidate slot = the
+    same as Nemotron's (visible demo step, general agent on question kinds we have no reader for, unsure answers), never a bulk tier
+    (~200 calls per agent per day). Before wiring it anywhere: `noon_models.sh EXAMPLES.jsonl 40 40` puts it next to the pipeline,
+    the local 8B and Nemotron on the same ≤ 40 Stoa examples, with cost per run; wire it only on a kind where it wins clearly.

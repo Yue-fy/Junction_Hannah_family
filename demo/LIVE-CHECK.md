@@ -1,6 +1,17 @@
 # Demo pre-flight check
 
-**Newest: run `20261114-093457-pipeline-live_questions-9fa1` on night 0ffd81b** (S0 cycle 39 round 1: every owner head
+**Final night: run `20261114-111324-pipeline-live_questions-0abb` on night 637a6df** (S0 cycle 43 round 3), 11:13 14 Nov:
+**all 23 answers identical to b656826 / 41188a4 / 0ffd81b** (16 of 17 scored right).
+
+**Before: run `20261114-110655-pipeline-live_questions-1903` on night b656826** (S0 cycle 43 round 2), 11:07 14 Nov:
+**all 23 answers identical to 41188a4 and 0ffd81b** (16 of 17 scored right).
+
+**Before: run `20261114-103801-pipeline-live_questions-5788` on night 41188a4** (S0 cycle 40), 10:38 14 Nov, 23 rows:
+**all 23 answers identical to 0ffd81b's below** (16 of 17 scored right, as before). Re-run on the final 11:40 build
+before the pitch: `$JUNCTION_VENV/bin/python -m stoa.eval --solver pipeline --split demo/live_questions.jsonl --workers 4
+--no-leaderboard`, then compare by qid with the run below.
+
+**Before: run `20261114-093457-pipeline-live_questions-9fa1` on night 0ffd81b** (S0 cycle 39 round 1: every owner head
 of 09:25), 09:35 14 Nov, 23 rows. **Every answer the 3-minute script and W5's 15-step tour type is the same as on
 be57171** (and on 62754aa / c1d6149 / bb94fe4). One change, same text: tour step 4 ("Do the floor plan and the IFC model
 agree on the number of windows on '1.korrus'?") is now answered by R1's kg_qa — "no (IFC model 55 windows on

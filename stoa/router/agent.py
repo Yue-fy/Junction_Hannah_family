@@ -41,6 +41,11 @@ BUDGET_CALLS, BUDGET_TOKENS, BUDGET_CONF = 6, 30000, 0.5
 _ASSUMED = re.compile(r"\b(assum\w*|no (?:definitive|direct|clear) (?:evidence|data|information)|typical(?:ly)?|"
                       r"standard (?:practice|set|size)|guess\w*|probabl\w*|likely)\b", re.I)
 ASSUMED_CAP = 0.3
+# Q 10:53: "How many windows does the floor with the most doors have?" -> the agent's door lookups on invented storeys
+# all came back 'not found' (0.14), then it copied the WHOLE-model window count (0.97) -> 297 @0.95 (gold 55). An answer
+# copied from one ask while a lookup of ANOTHER quantity failed skips the question's selection step -> capped. Offline on
+# tonight's 527 unique agent answers it fires once (that row); no retry of the same quantity is touched (see _quantity)
+FAILED_STEP, FAILED_STEP_CAP = 0.2, 0.3
 SCOPE_PENALTY = 0.6  # an ask that names none of the question's quoted names (storey, room, label) is about another scope
 SYSTEM = """You answer one question about a construction drawing or building model by calling tools, step by step.
 Tools (one per step):
@@ -166,6 +171,17 @@ def _num(v):
         return float(v)
     except (TypeError, ValueError):
         return None
+
+
+def _quantity(q: str) -> str:
+    """What an ask counts or measures ('doors', 'windows', 'area'): a failed retry of the SAME quantity is not a skipped
+    step ('doors on Ground Floor' -> not found, then 'doors on 1.korrus' -> 46 is a rephrase, not a selection)."""
+    q = q.lower()
+    m = re.search(r"how many ([a-z][a-z \-()]*?)(?: are| is| does| do| on| in| there| shown| drawn| per|\?|$)", q)
+    if m:
+        return m.group(1).strip()
+    m = re.search(r"\b(area|length|height|volume|width|perimeter|count|number)\b", q)
+    return m.group(1) if m else q[:30]
 
 
 def _fmt(v) -> str:
@@ -600,6 +616,15 @@ class Agent:
         elif direct:
             conf = max(c for _, c, _, _ in direct)
             used = direct[:1]
+            src = max(direct, key=lambda r: r[1])[3]
+            failed = [w for v, c, e, w in asked if c < FAILED_STEP and w.startswith("ask: ") and w != src
+                      and src.startswith("ask: ") and _quantity(w[5:]) != _quantity(src[5:])]
+            if failed and conf > FAILED_STEP_CAP:
+                trace.append(f"the answer is copied from '{src[5:70]}', but {len(failed)} lookup(s) of another quantity "
+                             f"found nothing ('{failed[0][5:70]}'): confidence capped at {FAILED_STEP_CAP}")
+                missing.append(f"the step the question needs first ({_quantity(failed[0][5:])}: "
+                               f"'{failed[0][5:70]}') found nothing, so the answer may ignore the question's selection")
+                conf = FAILED_STEP_CAP
         elif x is None and value is not None and str(value).strip() and len(asked) >= 2 and len(str(value)) <= 60:
             # a text answer chosen by comparing values ("which storey has more doors?" -> '0'): backed by the asks
             conf = 0.85

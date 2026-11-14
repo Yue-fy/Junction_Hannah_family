@@ -44,21 +44,30 @@ def main(argv=None) -> int:
     ap.add_argument("--seed", type=int, default=7)
     ap.add_argument("--oversample", type=float, default=2.0, help="candidates per slot (to find wrong ones)")
     ap.add_argument("--out", default=None)
+    ap.add_argument("--split", default="dev", help="dev uses QUOTA; other splits get a proportional quota per stratum")
+    ap.add_argument("--prefix", default="a", help="item_id prefix (a = first batch, b = harder batch, ...)")
+    ap.add_argument("--refresh", default=None, metavar="ITEMS.jsonl",
+                    help="re-run the SAME items of this file on the current pipeline (items the expert already "
+                         "checked keep their old answer, so her verdict stays about what she saw)")
     a = ap.parse_args(argv)
 
     from stoa.eval.runner import run_one
     from stoa.eval.splits import load_split
     from stoa.solvers import get_solver
 
-    scale = a.n / sum(QUOTA.values())
+    if a.refresh:
+        return refresh(Path(a.refresh), run_one, load_split, get_solver("pipeline"))
+
     rng = random.Random(a.seed)
     strata: dict[tuple, list] = defaultdict(list)
-    for q in load_split("dev"):
+    for q in load_split(a.split):
         strata[(q.source, q.type)].append(q)
+    quotas = QUOTA if a.split == "dev" else {k: len(v) for k, v in strata.items()}
+    scale = a.n / sum(quotas.values())
 
     solver = get_solver("pipeline")
     picked: list[dict] = []
-    for key, quota in QUOTA.items():
+    for key, quota in quotas.items():
         quota = max(1, round(quota * scale))
         pool = strata.get(key, [])
         rng.shuffle(pool)
@@ -98,11 +107,50 @@ def main(argv=None) -> int:
     tmp = out.with_suffix(".tmp")
     with open(tmp, "w", encoding="utf-8") as f:
         for i, r in enumerate(order, 1):
-            r["item_id"] = f"a{i:02d}-{r['qid']}"
+            r["item_id"] = f"{a.prefix}{i:02d}-{r['qid']}"
+            r["split"] = a.split
             r["made_at"] = time.strftime("%Y-%m-%dT%H:%M:%S")
             f.write(json.dumps(r, ensure_ascii=False, default=str) + "\n")
     tmp.replace(out)
     print(f"wrote {len(order)} items to {out}", file=sys.stderr)
+    return 0
+
+
+def refresh(path: Path, run_one, load_split, solver) -> int:
+    from workbench import store
+
+    rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    checked = {r.get("item_id") for r in store.read("audit")}
+    by_split: dict[str, dict] = {}
+    changed = 0
+    out = []
+    for r in rows:
+        if r["item_id"] in checked:
+            out.append(r)
+            continue
+        sp = r.get("split") or "dev"
+        if sp not in by_split:
+            by_split[sp] = {q.qid: q for q in load_split(sp)}
+        q = by_split[sp].get(r["qid"])
+        if q is None:
+            print(f"{r['item_id']}: not in split {sp}, kept", file=sys.stderr)
+            out.append(r)
+            continue
+        new = run_one(solver, q, handled_only=False)
+        if (new.get("value"), new.get("correct")) != (r.get("value"), r.get("correct")):
+            changed += 1
+            print(f"{r['item_id']}: {r.get('value')!r} ({r.get('correct')}) -> {new.get('value')!r} ({new.get('correct')}) "
+                  f"conf {r.get('confidence')} -> {new.get('confidence')}", file=sys.stderr, flush=True)
+        keep = {k: r[k] for k in ("item_id", "split", "batch", "batch_label", "ref_label") if k in r}
+        out.append({**new, **keep, "made_at": time.strftime("%Y-%m-%dT%H:%M:%S"), "refreshed_from": r.get("made_at")})
+    checked = {r.get("item_id") for r in store.read("audit")}  # she may have clicked meanwhile
+    out = [o if o["item_id"] not in checked else next(r for r in rows if r["item_id"] == o["item_id"]) for o in out]
+    tmp = path.with_suffix(".tmp")
+    with open(tmp, "w", encoding="utf-8") as f:
+        for o in out:
+            f.write(json.dumps(o, ensure_ascii=False, default=str) + "\n")
+    tmp.replace(path)
+    print(f"refreshed {path}: {len(out)} items, {changed} answers changed", file=sys.stderr)
     return 0
 
 

@@ -30,12 +30,37 @@ def _clip(s, n=140) -> str:
     return s if len(s) <= n else s[: n - 1] + "…"
 
 
+def _median(xs: list[float]) -> float:
+    xs = sorted(xs)
+    n = len(xs)
+    return xs[n // 2] if n % 2 else (xs[n // 2 - 1] + xs[n // 2]) / 2
+
+
+def _time_line(done: list[dict]) -> str:
+    """'Time to verify' (Stoa: a human can verify an answer in seconds): median seconds from item shown to verdict,
+    page-hidden time left out (the browser measures it; rows before 11:20 have none)."""
+    secs = [(a["verdict"], float(a["seconds"])) for a in done if isinstance(a.get("seconds"), (int, float))]
+    if not secs:
+        return ""
+    parts = []
+    for v in ("supports", "wrong", "cant_tell"):
+        xs = [s for vv, s in secs if vv == v]
+        if xs:
+            parts.append(f"{VERDICT[v]} {_median(xs):.0f} s (n={len(xs)})")
+    allx = [s for _, s in secs]
+    quick = sum(1 for s in allx if s <= 30)
+    return (f"Time to verify (item shown → verdict): median **{_median(allx):.0f} s** over {len(allx)} items; "
+            f"{quick} of {len(allx)} within 30 s. By verdict: " + ", ".join(parts) + ".")
+
+
 def build() -> str:
     from stoa.eval.scoring import score
 
     items = store.read("audit_items")
     audits = _last_by(store.read("audit"), "item_id")
-    qs = list(_last_by(store.read("questions"), "qid").values())
+    live = [q for q in _last_by(store.read("questions"), "qid").values() if not q.get("deleted")]
+    qs = [q for q in live if q.get("origin") != "audit"]
+    agold = [q for q in live if q.get("origin") == "audit"]
     rules = store.read("rules")
     L = [f"# Expert workbench report (updated {time.strftime('%Y-%m-%d %H:%M')})", "",
          "Source: `$JUNCTION_SHARED/human/` (written by the workbench on :8200, agent H). "
@@ -48,21 +73,29 @@ def build() -> str:
     if done:
         L.append(f"Verdicts: {c.get('supports', 0)} ✓ supports, {c.get('wrong', 0)} ✗ wrong, "
                  f"{c.get('cant_tell', 0)} ? can't tell.")
+        t = _time_line(done)
+        if t:
+            L.append(t)
         by_src = defaultdict(Counter)
+        it_by = {i["item_id"]: i for i in items}
         for a in done:
-            src = a.get("path", "").split("/")[1] if a.get("path", "").count("/") >= 2 else "?"
+            it = it_by.get(a["item_id"]) or {}
+            src = (f"batch: {it['batch_label']}" if it.get("batch_label") else
+                   a.get("path", "").split("/")[1] if a.get("path", "").count("/") >= 2 else "?")
             by_src[src][a["verdict"]] += 1
-        L += ["", "| source | ✓ | ✗ | ? |", "|---|---|---|---|"]
+        L += ["", "| source (or batch) | ✓ | ✗ | ? |", "|---|---|---|---|"]
         for src, cc in sorted(by_src.items()):
             L.append(f"| {src} | {cc.get('supports', 0)} | {cc.get('wrong', 0)} | {cc.get('cant_tell', 0)} |")
         flagged = [a for a in done if (a["verdict"] == "wrong") or (a["verdict"] == "supports" and a.get("matches_reference") is False)
-                   or a.get("comment")]
+                   or a.get("comment") or a.get("correct_value")]
         if flagged:
             L += ["", "Items worth a look (✗, ✓ although we differ from the reference, or any comment):", "",
-                  "| item | verdict | ours | reference | matches ref | question | comment |", "|---|---|---|---|---|---|---|"]
+                  "| item | verdict | ours | reference | matches ref | expert's value | question | comment |",
+                  "|---|---|---|---|---|---|---|---|"]
             for a in flagged:
                 L.append(f"| {a['item_id']} | {VERDICT.get(a['verdict'], a['verdict'])} | {_clip(a.get('our_value'), 30)} "
                          f"{a.get('our_unit') or ''} | {_clip(a.get('gold'), 30)} | {a.get('matches_reference')} | "
+                         f"{_clip(a.get('correct_value'), 30)} | "
                          f"{_clip(a.get('question'), 90)} | {_clip(a.get('comment'), 200)} |")
     L.append("")
 
@@ -87,6 +120,20 @@ def build() -> str:
         if n_sc:
             L += ["", f"Scored agreement (eval tolerance, only questions where she pressed 'Ask our system'): {n_ok}/{n_sc}."]
     L.append("")
+    if agold:
+        L += [f"### 2b. Reference answers made by auditing items that had none: {len(agold)} "
+              "(also in split `human`, meta.kind `human:audit`)", "",
+              "| item | question | expert's reference | ours | agree |", "|---|---|---|---|---|"]
+        for q in agold:
+            sysa = q.get("system") or {}
+            try:
+                agree = score(q.get("type") or "other", q.get("answer") or None, q.get("unit") or None,
+                              sysa.get("value"), sysa.get("unit"))
+            except Exception:  # noqa: BLE001
+                agree = None
+            L.append(f"| {q.get('item_id')} | {_clip(q.get('question'), 110)} | {_clip(q.get('answer'), 40)} {q.get('unit') or ''} | "
+                     f"{_clip(sysa.get('value'), 40)} {sysa.get('unit') or ''} | {'✓' if agree else '✗' if agree is False else '–'} |")
+        L.append("")
 
     # --- rules
     L += [f"## 3. Physics & sanity rules: {len(rules)}", ""]

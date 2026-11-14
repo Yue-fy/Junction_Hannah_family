@@ -80,6 +80,23 @@ export interface HeroCtx {
   roundTripMs: number;
   /** the sheet label of a path in the current project ("Floor 2"), or "" */
   sheetLabel: (path: string) => string;
+  /** many elements on several floors (a whole-building answer): one numbered line per floor instead of per element */
+  groups?: FloorGroup[];
+}
+
+export interface FloorGroup {
+  storey: number;
+  /** "Floor 1", "Basement" */
+  label: string;
+  guids: string[];
+}
+
+/** "windows" for a count of the intent's target; "elements" when the answer names none. */
+export function targetNoun(target: string | undefined, n: number): string {
+  const t = (target ?? "").toLowerCase().replace(/^ifc/, "").replace(/_/g, " ").trim();
+  const base = !t ? "element" : t === "space" ? "room" : t === "storey" ? "floor" : t;
+  if (n === 1) return base;
+  return /(s|x|ch|sh)$/.test(base) ? `${base}es` : /[^aeiou]y$/.test(base) ? `${base.slice(0, -1)}ies` : `${base}s`;
 }
 
 export function confidenceWords(c: number): { cls: string; word: string; hint: string } {
@@ -100,7 +117,7 @@ function wherePhrase(a: Answer, ctx: HeroCtx): string {
 }
 
 /** Big value + one plain sentence. Yes/no answers lead with Yes / No. */
-function headline(a: Answer, ctx: HeroCtx): { big: string; unit: string; sentence: string; text?: string; name?: boolean; next?: string[] } {
+function headline(a: Answer, ctx: HeroCtx): { big: string; unit: string; sentence: string; text?: string; name?: boolean; next?: string[]; nextLabel?: string } {
   const v = a.value;
   if (v === null || v === undefined) return { big: "No answer", unit: "", sentence: (a.missing ?? [])[0] ?? "We could not find this on the drawing." };
   if (typeof v === "boolean") return { big: v ? "Yes" : "No", unit: "", sentence: "" };
@@ -116,6 +133,14 @@ function headline(a: Answer, ctx: HeroCtx): { big: string; unit: string; sentenc
       const where = wherePhrase(a, ctx);
       return { big: rows[0][1], unit: "", name: true, sentence: `the ${sup[1].toLowerCase()} ${a.intent?.target === "room" || /room/i.test(ctx.question) ? "room" : "one"}${where ? ` ${where}` : ""}: ${rows[0][2]} ${u}`,
         next: rows.slice(1, 5).map((r) => `${r[1]} · ${r[2]} ${r[3].replace("m2", "m²")}`) };
+    }
+    // "Total spaces (whole model): 285\nBy storey:\n- 1.korrus: 50 (17.5%)…": the total big, the split as 'Next'
+    const tot = v.match(/^Total (\w+)[^:\n]*:\s*(\d+)\s*\n\s*By (storey|type)[^:\n]*:\s*\n([\s\S]+)$/i);
+    if (tot) {
+      const noun = NOUN[tot[1].toLowerCase().replace(/s$/, "")]?.[1] ?? tot[1].toLowerCase();
+      const per = tot[4].split("\n").map((l) => l.match(/^\s*-\s*(.+?):\s*(\d+)/)).filter((m): m is RegExpMatchArray => !!m);
+      return { big: tot[2], unit: "", sentence: `${noun} in the whole building${tot[3].toLowerCase() === "storey" ? ", by floor:" : ", by type:"}`,
+        next: per.map((m) => `${plainify(m[1]).replace(/^floor/, "Floor")}: ${m[2]}`), nextLabel: "" };
     }
     return { big: "", unit: "", sentence: "", text: plainify(v) };
   }
@@ -133,7 +158,11 @@ function headline(a: Answer, ctx: HeroCtx): { big: string; unit: string; sentenc
     return { big: fmtValue(a), unit: "", sentence: [noun, where].filter(Boolean).join(" ") };
   }
   if (unit === "€" || unit === "$") return { big: `${unit}${fmtValue(a)}`, unit: "", sentence: costSentence(ctx.question) };
-  const room = a.intent?.filters?.room ? String(a.intent.filters.room) : "";
+  // the room as asked ("How big is room 119?" → "room 119"), its name from the evidence when there is one ("KORIDOR")
+  const asked = ctx.question.match(/\broom\s+'?([\w.()-]*\d[\w.()-]*)'?/i)?.[1];
+  const named = (a.evidence ?? []).length && (a.evidence ?? []).every((e) => e.note === a.evidence[0].note)
+    ? (a.evidence[0].note ?? "").match(/^([A-ZÄÖÜÕ][A-ZÄÖÜÕ+ -]{2,})\b/)?.[1]?.trim() : undefined;
+  const room = a.intent?.filters?.room ? String(a.intent.filters.room) : asked ? `room ${asked}${named ? ` (${named.toLowerCase()})` : ""}` : "";
   const apt = a.intent?.filters?.apartment ? `apartment ${a.intent.filters.apartment}` : "";
   const what = a.intent?.task === "area" ? (room ? `floor area of ${room}` : apt ? `floor area of ${apt}` : "floor area") : a.intent?.task === "length" ? "length" : a.intent?.task === "volume" ? "volume" : "";
   return { big: fmtValue(a), unit, sentence: [what, where].filter(Boolean).join(" ") };
@@ -202,7 +231,7 @@ export function heroHtml(a: Answer, ctx: HeroCtx): string {
   return `
     ${h.big ? `<div class="hero-value"><span class="big${h.name ? " name" : ""}">${esc(h.big)}</span>${h.unit ? `<span class="unit">${esc(h.unit)}</span>` : ""}</div>` : ""}
     ${h.sentence ? `<div class="hero-sentence">${esc(h.sentence)}</div>` : ""}
-    ${h.next?.length ? `<div class="hero-next"><span>Next:</span> ${h.next.map(esc).join(" &nbsp;·&nbsp; ")}</div>` : ""}
+    ${h.next?.length ? `<div class="hero-next">${h.nextLabel === "" ? "" : "<span>Next:</span> "}${h.next.map(esc).join(" &nbsp;·&nbsp; ")}</div>` : ""}
     ${text}${setRows}
     <div class="hero-badges">
       <span class="conf ${c.cls}" title="Our calibrated confidence: ${Math.round((a.confidence ?? 0) * 100)} %">${esc(c.word)}</span>${c.hint ? `<span class="conf-hint">${esc(c.hint)}</span>` : ""}
@@ -213,9 +242,14 @@ export function heroHtml(a: Answer, ctx: HeroCtx): string {
       <span>Answered in <b>${wall < 1 ? `${Math.max(0.1, wall).toFixed(1)} s` : `${wall.toFixed(1)} s`}</b></span>
       <span>about <b>${mt.minutes} min</b> by hand <small>(estimate)</small></span>
     </div>
-    ${shown.length ? `<div class="hero-where"><div class="hw-title">Where it comes from</div>
-      ${shown.map((i, k) => `<button type="button" class="hw-item" data-ev="${i}"><span class="num">${circled(k)}</span><span class="lbl">${esc(place(i))} · ${esc(evidenceLabel(ev[i].note ?? ""))}</span></button>`).join("")}
-      ${more > 0 ? `<div class="hw-more">+ ${more} more, all marked ${ev.some((e) => e.bbox) ? "on the drawing" : "in the 3D model"}</div>` : ""}</div>` : ""}`;
+    ${ctx.groups && ctx.groups.length > 1 ? `<div class="hero-where"><div class="hw-title">Where it comes from · by floor</div>
+      ${ctx.groups.map((g, k) => `<button type="button" class="hw-item" data-floor="${k}"><span class="num pin-badge">${k + 1}</span><span class="lbl">${esc(g.label)} · <b>${g.guids.length}</b> ${esc(targetNoun(a.intent?.target, g.guids.length))}</span></button>`).join("")}
+      <div class="hw-more">every one lit in the 3D model; pick a floor to see only that floor</div></div>`
+    : shown.length ? `<div class="hero-where"><div class="hw-title">Where it comes from</div>
+      ${shown.map((i, k) => `<button type="button" class="hw-item" data-ev="${i}"><span class="num pin-badge">${k + 1}</span><span class="lbl">${esc(place(i))} · ${esc(evidenceLabel(ev[i].note ?? ""))}</span></button>`).join("")}
+      ${more > 0 ? `<div class="hw-more">+ ${more} more, all marked ${/\.ifc$/i.test(ctx.file) || !ev.some((e) => e.bbox && e.file === ctx.file)
+        || ev.some((e) => e.ifc_guid && !(e.bbox && e.file === ctx.file) && !ev.some((x) => x.ifc_guid === e.ifc_guid && x.bbox && x.file === ctx.file))
+        ? "in the 3D model" : "on the drawing"}</div>` : ""}</div>` : ""}`;
 }
 
 /** The evidence items that get a number (①…⑤): the first ones with a place, one per element. */

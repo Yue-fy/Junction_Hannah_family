@@ -14,6 +14,19 @@ npm install
 npm run dev          # http://localhost:5173 (Vite, port 5173)
 ```
 
+**Two views.** The page opens in the **customer view** (default; the captain's redesign for Stoa's customers: site
+engineers, project managers, estimators): a project page (human names and facts read from the data,
+`fixtures/projects.json`), one big question box with 3–4 natural example questions per project (each checked on the
+API), the answer first in plain words ("46 · doors on floor 1", confidence as "Very sure / Fairly sure / Best
+estimate", "✓ Drawing and 3D model agree"), how long it would take by hand (`src/manual-time.ts`, our rough
+estimates, labelled as such), a short numbered list ①–⑤ matching markers on the plan, floor tabs, and **Differences
+found** (drawing vs 3D model for every floor of the project, from W1's knowledge graph; "Show me" asks "How many
+windows on floor 2 are in the 3D model but not drawn on this plan?" and lights them up). Everything technical is one
+click away: "How we worked it out ▸" (the full answer card: solver, cost, trace, evidence) and **Expert view** (the
+original layout: files by source, all example menus, knowledge-graph strip, side by side by default). "Accuracy report"
+is the benchmark page. `?view=expert` / `?view=customer` in the URL picks one (remembered per browser). The guided demo
+follows the view: customer story (`fixtures/tour-customer.json`, 9 steps) or the expert tour (`fixtures/tour.json`, 15).
+
 **Before a demo, one command:** `web/demo.sh` (from anywhere). It uses the API at `STOA_API_URL` (default :8100)
 or starts one from this checkout, checks the local model server (`LLM_BASE_URL`; IFC/Swiss/schedule steps need no
 model), starts Vite on :5173 if needed, and asks every tour question once so the presenter's answers come from the

@@ -6,7 +6,21 @@ Builds on F's `hard` (translations/paraphrases/compositions/ft²) and `hard2` (n
 don't. The first 205 rows start from dev questions the pipeline had **right at conf ≥ 0.8**, so a failure there is
 caused by the perturbation, not by the drawing.
 
-## Now (10:46) — the short version
+## Now (11:21) — the short version
+- **Final night 637a6df: v1–v18 397/397 at conf ≥ 0.8 right, 0 false premises at ≥ 0.8; all 1015 rows 607/616; the
+  259 IFC questions on renamed files 213/213 at ≥ 0.8; 1 won / 0 lost vs b656826; demo pre-flight 23/23 unchanged.
+  The only confident misses left on tonight's 27 families: 5 CubiCasa uploads (bug 26).**
+- **Final candidate night b656826: v1–v18 398/398 at conf ≥ 0.8 right, 0 false premises at ≥ 0.8; all 1015 rows
+  608/618; the 259 IFC questions on renamed files 213/213 at ≥ 0.8; 11 won / 2 lost vs 6025963 (both < 0.8); demo
+  pre-flight 23/23 unchanged.** Every family written tonight is at 0 confident misses except CubiCasa uploads (5, bug
+  26) and one agent confidence flake (297 at 0.95 / 0.145 run to run).
+- **Pre-merge check #11 (every owner head of 10:54, the candidate for S0's 11:15 merge): 11 won / 1 lost vs night
+  6025963 (the loss: a LoRA flip at 0.37), v1–v18 396/396 at ≥ 0.8, 0 false premises, 1015 rows 602/611; the newest
+  families' confident misses 18 → 5** (relative storeys fixed except "directly above"; 3 CubiCasa uploads; one agent
+  confidence bug).
+- **Pre-merge check #10 (10:47, all owner heads on 6025963 — what S0 merges at 11:15): 4 won / 1 lost (0.50), v1–v18
+  398/398 at ≥ 0.8, renamed-file IFC rows 240/251 with kg_qa answering again (2 → 27); confident misses on the newest
+  families 18 → 10** (left: relative storeys ×4 — bug 28, CubiCasa uploads ×4, one ranking, one agent flake).
 - **Night 6025963 (S0 cycle 42): v1–v18 402/402 at conf ≥ 0.8 right, 0 false premises at ≥ 0.8; v1–v20 437/437; all
   992 rows v1–v25 585/599; 9 won / 2 lost vs 41188a4 (both ≤ 0.65).** The v23 link misses are fixed (R1 a07af69);
   left at ≥ 0.8: 10 CubiCasa upload rows (bug 26) and 4 IFC rankings (bug 27). v27 *links round 4* (23 Qs):
@@ -969,6 +983,50 @@ v21 "3rd floor level" (21.92 at 0.85 → 22'-5" at 0.65), the plan-without-IFC "
 → 50 at 0.97; Italian "Quante finestre … non sono disegnate …?" → 55 at 0.88), both caught by W4's 87eaf64 shape guard
 or not (pre-merge check #10 below).
 
+## Night 637a6df (11:13, S0 cycle 43 round 3) — the final night
+Runs `20261114-111324-pipeline-all-637a6df-538a` (1015 rows), `-111324-…-v26_hash-637a6df-41e6`, demo pre-flight
+`-111324-…-live_questions-0abb` (23/23 unchanged). **v1–v18 397/397 at ≥ 0.8 right, 0 false premises at ≥ 0.8;
+v1–v20 432/432; 1015 rows 607/616; renamed-file IFC rows 242/251, 213/213 at ≥ 0.8. vs b656826 1 won / 0 lost; vs
+6025963 11 won / 1 lost (< 0.8).** The agent's 297 at 0.95 is gone (W4 3e08025 caps it). **Left at ≥ 0.8 on all 27
+families: 5 CubiCasa upload rows (bug 26)** (+ the same plan's 4 dataset-path / styled controls: the LoRA reads 2
+bedrooms, gold 3). Chart bar 5. Cost vs b656826 flat (LLM calls/Q 1.129 → 1.147, tokens in/Q 2,360 → 2,399).
+
+## Night b656826 (11:04, S0 cycle 43 round 2) — the candidate before round 3
+Runs `20261114-110445-pipeline-all-b656826-0aa9` (1015 rows), `-110445-…-v26_hash-b656826-3fa1` (renamed files),
+`-110445-…-v2527-b656826-ae94` (v25 + v27 alone), demo pre-flight `-110655-…-live_questions-1903` (23/23 unchanged).
+**v1–v18 398/398 at ≥ 0.8 right, 0 false premises at ≥ 0.8; v1–v20 433/433; 1015 rows 608/618; renamed-file IFC rows
+242/251, 213/213 at ≥ 0.8.** vs 6025963 11 won / 2 lost (both < 0.8: "studio units" 7 → 6 at 0.50, a LoRA flip at
+0.37); vs pre-merge #11 1 won ("the storey directly above this one" → 60, W1 15a4ddb) / 2 lost (both flakes: the
+height-difference agent answer 6.7 at 0.85 → a text at 0.30, studio units). Chart bar 6: 5 CubiCasa upload rows (bug
+26) + "How many windows does the floor with the most doors have?" → 297 at 0.95 — the same row gave 0.145 in the
+v25+v27 run on the same build 8 minutes earlier: the agent's confidence follows its last step (open, W4). Cost vs
+41188a4 on the same 956 rows: LLM calls/Q 1.180 → 1.160, tokens in/Q 2,509 → 2,432, mean wall 2.0 → 1.3 s.
+
+## Pre-merge check #11 (10:54): 6025963 + every owner head of 10:54 (W1 2ac850e, W2 ea0e1a8, W3 9b1abd3, W4 f4724ed, R1 891f4a2, R2 9b1abd3, F c850a6a, W5 9521587)
+Merged one by one (an 8-head octopus fails: "cannot read more than 8 trees"). Runs `20261114-105439-pipeline-all-snap12-e712`
+(1015 rows) + `-105439-…-v26_hash-snap12-5889`. **vs #10 8 won / 1 lost (a LoRA flip at 0.37), vs 6025963 11 won / 1
+lost; v26 2 won / 0 lost. v1–v18 396/396 at ≥ 0.8 right, 0 false premises; 1015 rows 602/611 — nothing lost at ≥ 0.8.**
+Bar 10 → 5. Bug 28 fixed (W1 82dc141): "doors on the floor above this one" → 42 at 0.98, "walls on the floor below this
+one" → 81, "doors on the floor below this one" → 0 at 0.42 (the foundation); IT "Quale piano …" → Piano 1 at 0.75 (W1
+2ac850e); "Which floor has the biggest room?" → 1.korrus at 0.86; "Are fewer doors drawn here …?" → no (kg_qa); the
+two-part "storey + windows" → "1.korrus; 55". Left at ≥ 0.8: 3 CubiCasa upload rows (bug 26), "How many windows does
+the storey *directly* above this one have?" → 55 at 0.88 (W1, told 11:03), and the agent's 297 at 0.95 (W4).
+
+## Pre-merge check #10 (10:47): 6025963 + W1 bbd2544 + W2 19c25d4 + W3 88eb185 + W4 c2b0fad + R1 c8d67d0 + R2 d6ce0dd + F 8aef6b2
+Scratch snapshot, all 1015 rows v1–v27 (`20261114-104643-pipeline-all-snap11-83bd`) + v26 hashed
+(`-104643-…-v26_hash-snap11-5d98`), both `--no-leaderboard`. **vs 6025963: 4 won / 1 lost (studio units 7 → 6 at
+0.50); v26 6 won / 1 lost (the known height-difference agent flake 6.7 → 0.30). v1–v18 398/398 at ≥ 0.8 right, 0
+false premises; v1–v20 433/433; 1015 rows 598/612; v26 hashed 240/251 (6025963: 235), 212/213 at ≥ 0.8, kg_qa answers
+27 of the renamed-sheet link questions (was 2: R1 4d9e901).** Chart bar (experiments/q/bar_count.py) 18 → 10. Fixed:
+'no MAGAMISTUBA' → 1.korrus, 'Of the floors that have rooms, which one has the fewest?' → 1.korrus, German top-3, IT
+'Quale piano …' (W1 bbd2544); renamed-sheet link shapes (W4 87eaf64 guard + R1). Left at ≥ 0.8: bug 28 (4 relative
+storeys, W1), 4 CubiCasa upload rows (bug 26), 'Which floor has the biggest room?' → a list of the largest rooms
+(0.80), and an agent flake with a real mechanism: "How many windows does the floor with the most doors have?" → **297
+at 0.95** — the agent asked invented storeys ('Ground Floor' … → 0.14 each), then the whole model (0.97); its
+confidence follows the last step, and "agent 297 = ifc 297 ✓" agrees with ifc's own *unsure* 297 (0.30). On 6025963
+the same path ended on a 0.14 step → 0.145. Sent to W4 10:53 (agent conf = min over the steps used; a ✓ with an answer
+< 0.5 must not lift).
+
 ## v25 (10:20): rankings and top-k lists from the IFC — 35 Qs (W1 882630f / 23ada76 are new code)
 Written before any run. Gold: storey counts by IFC containment / aggregation (ifcopenshell; matches the dataset's
 totals, e.g. barlad windows 38 + 74 + 71 + 70 + 62 = 315) and the dataset's own net room areas (esplanades). Two models
@@ -1039,6 +1097,14 @@ were ignored. Same family as bug 13 / 24 (a storey named the way people talk los
 10:41.
 
 ## "You know what you don't know — but refusing is not useful" (Stoa point 3), audited on be57171 (09:15)
+**Re-audited 11:05 on pre-merge #11 (all 1015 rows, run `-105439-…-all-snap12-e712`):** 0 bare refusals — one empty
+value ("What is the monthly rent of this apartment in euros?" on a CubiCasa plan, conf 0.25) carries the line "a unit
+price … from a cost plan, tender or market data is needed; the drawing gives only the quantities" (R1's estimate route,
+rent + range + assumptions with 0 LLM, is measured but not wired, D22). 134 wrong answers, 96 of them at conf < 0.5;
+**7 wrong answers carry no assumption and no "missing" line — all CubiCasa bedroom counts from the LoRA (vlm_lora)**,
+4 of them at 0.82. Of 596 "missing" lines, 294 (49 %) are still process notes ("no located evidence from this
+solver"), not what the documents lack.
+
 All 622 answers of run `…-090509-…-v19b-a85a` (+ 25 v19b/v20 rows: same picture), by confidence band:
 
 | confidence | answers | value None | with a "missing" line | with assumption or missing | wrong / scored |

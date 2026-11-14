@@ -338,3 +338,51 @@ def test_shape_guard():
                  ("Which spaces have supply air?", "No spaces are explicitly linked"),
                  ("Quelle est la surface nette de la pièce 3.03 ?", "10.48"), ("Mikä on asunnon B pinta-ala?", 80.83)]:
         assert c(q, v) == 0.9, q
+
+
+def test_file_subject_gate():
+    """R1 10:47: on drawings with no project graph the link route admits only questions whose subject is a file."""
+    from stoa.pipeline import _FILE_SUBJECT
+
+    for q in ("Is there an IFC model for this floor plan?", "Gibt es ein IFC-Modell zu diesem Grundriss?",
+              "Finns det en IFC-modell för den här planen?", "Is there a DXF file that goes with this sheet?",
+              "Y a-t-il un DXF pour ce plan ?", "Is there a 3D model or IFC file for this floor plan?"):
+        assert _FILE_SUBJECT.search(q), q
+    for q in ("Are there doors in the IFC model?", "Are there more windows in the plan than in the IFC model?",
+              "How many windows does the IFC model have on this storey?", "Is there a balcony?"):
+        assert not _FILE_SUBJECT.search(q), q
+
+
+def test_upload_window_route():
+    """W3 10:58: an uploaded twin-less image's window count -> raster before vlm_lora; doors and dataset files unchanged."""
+    from stoa.pipeline import route
+    from stoa.router.intent import parse
+
+    up = "/tmp/some_upload/plan.png"
+    assert route(up, parse("How many windows are shown on this floor plan?"))[:2] == ["raster", "vlm_lora"]
+    assert route(up, parse("How many doors are shown on this floor plan?"))[:2] == ["vlm_lora", "raster"]
+    assert route("data/cubicasa5k/colorful-10052.png", parse("How many windows are shown on this floor plan?"))[:2] == \
+        ["raster", "vlm_lora"]
+
+
+def test_agent_failed_step_cap():
+    """Q 10:53: door lookups on invented storeys all 'not found' (0.14), then the WHOLE-model window count (0.97) copied
+    as the answer to 'windows on the floor with the most doors' -> 297 @0.95. Capped; a same-quantity retry is not."""
+    import time
+
+    from stoa.contract import Cost
+    from stoa.router.agent import FAILED_STEP_CAP, Agent
+
+    def fin(results, final):
+        ag, trace, missing = Agent(), [], []
+        a = ag._finish(final, "count", results, [], trace, [], missing, Cost(), time.perf_counter(), "q")
+        return a, trace, missing
+
+    sel = [(211, 0.14, [], f"ask: How many doors are shown on the floor plan of '{s}'?") for s in ("Ground Floor", "First Floor")]
+    a, trace, missing = fin(sel + [(297, 0.97, [], "ask: How many windows are there in the model 'x.ifc'?")], "297")
+    assert a.value == 297 and a.confidence == FAILED_STEP_CAP
+    assert any("found nothing" in t for t in trace) and any("selection" in m for m in missing)
+    retry = [(46, 0.14, [], "ask: How many doors are shown on the floor plan of 'Ground Floor'?"),
+             (46, 0.98, [], "ask: How many doors are shown on the floor plan of '1.korrus'?")]
+    assert fin(retry, "46")[0].confidence == 0.95  # a rephrase of the same quantity: not a skipped step
+    assert fin([(14, 0.99, [], "ask: How many windows are drawn on this floor plan?")], "14")[0].confidence == 0.95

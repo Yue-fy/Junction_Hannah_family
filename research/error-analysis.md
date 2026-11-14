@@ -18,7 +18,7 @@ answer) vs `20261113-234812-dummy-dev` (template prior), both on dev v2 (hash f4
 **One command for the whole OPEN probe suite** (18 probes, 10,062 rows, ~8 min with 3 streams):
 `PYTHONPATH=. $JUNCTION_VENV/bin/python experiments/F/probe_suite.py run --tag X` then
 `python3 experiments/F/probe_suite.py compare $JUNCTION_SHARED/artifacts/F/probe_suite/X.json` (default base = night
-1a4e2af; lists every lost row). Use it on any change made after Stoa's noon reveal.
+637a6df, the freeze candidate; lists every lost row). Use it on any change made after Stoa's noon reveal.
 
 Night 7a78559 → 1a4e2af (S0 cycles 40–41), paired on 9,410 common rows: **60 won / 8 lost, confident-wrong 67 → 65**.
 All 8 losses are low-confidence flips (≤ 0.61: LoRA counts, an agent sum, a Swedish doors-minus-windows compose).
@@ -44,6 +44,20 @@ room ≥ 4 m² is right 34/50 (68%) vs 1407/1447 (97.2%) otherwise; dropping the
 (≈ 0.65 + an assumption line), not a rule (W2 told 10:40). NEGATIVE: a dxf-vs-pdf_vector disagreement check is no
 detector: they disagree (> 2%) on 10 of 400 dev Swiss area Qs and dxf is right on 7 of the 9 confident ones
 (run 20261114-102530-pdf_vector-dev-a2aa); the other 7 confident-wrongs have both readers agreeing.
+
+**Addendum 11:03 — night 9b1abd3 (S0 cycle 43 round 1): confident-wrong 68 → 33 at the same accuracy.**
+
+| night | suite acc | answers at conf ≥ 0.8 | precision there | confident-wrong |
+|---|---:|---:|---:|---:|
+| 1a4e2af (c41) | 92.2 | 7,900 (72.5%) | 99.08% | 73 |
+| 6025963 (c42 r2) | 92.5 | 7,953 (73.0%) | 99.14% | 68 |
+| 9b1abd3 (c43 r1) | 92.6 | 7,808 (71.7%) | 99.58% | 33 |
+| b656826 (c43 r2) | 92.9 | 7,896 (72.5%) | 99.59% | 32 |
+| **637a6df (c43 r3, final candidate)** | 92.9 | 7,897 (72.5%) | 99.59% | 32 |
+
+(10,894 paired OPEN rows, 19 probes.) The drop is W2 fd50ee3 (unnamed numbered rooms ≥ 2% of a total → 0.78, from the
+unlabeled-room finding above): the two Swiss apartments wrong in every wording lose their 0.9. What is left at ≥ 0.8 is
+almost all CubiCasa LoRA / compose counts, calibrated per concept (WC 0.82 tier: 79% on cc5k_heldout).
 
 **Addendum 10:55 — night 6025963 (S0 cycle 42 round 2) vs 1a4e2af, 19 probes / 10,894 paired rows: 51 won / 13 lost,
 confident-wrong 73 → 68, every loss at conf ≤ 0.65.** W1 7fa37ed: "How many N are in this building?" on a sheet = whole

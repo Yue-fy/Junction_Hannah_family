@@ -43,9 +43,60 @@ def data_dir() -> Path:
     return (data_root() / "data").resolve()
 
 
+HUMAN_PREFIX = "human/drawings/"
+
+
+def human_drawings_dir() -> Path:
+    """$JUNCTION_SHARED/human/drawings: drawings that are not in the dataset (Stoa's examples, the expert's uploads).
+    Flat folder; each drawing may have a sidecar '<file>.json' with title / credit / license."""
+    from workbench.store import human_dir
+
+    return human_dir() / "drawings"
+
+
+def is_added(rel: str) -> bool:
+    return rel.startswith(HUMAN_PREFIX)
+
+
+def canon(path: str) -> str:
+    """Any accepted spelling of a drawing path -> the workbench key: 'data/...' (dataset) or 'human/drawings/<name>'.
+    An absolute path is accepted only when it points into one of those two folders (predictions and saved
+    questions carry absolute paths for added drawings, because the solvers need a real file)."""
+    if not path or "\x00" in path:
+        raise BadPath("empty path")
+    p = Path(path)
+    if not p.is_absolute():
+        return path
+    rp = p.resolve()
+    hd = human_drawings_dir().resolve()
+    if rp.parent == hd:
+        return HUMAN_PREFIX + rp.name
+    if data_dir() in rp.parents:
+        return str(rp.relative_to(data_dir().parent))
+    raise BadPath("path outside the dataset")
+
+
+def solver_path(rel: str) -> str:
+    """Workbench key -> the path the pipeline gets: dataset-relative as is, an added drawing as its absolute path."""
+    return str(safe_file(rel, exts=None)) if is_added(rel) else rel
+
+
 def safe_file(rel: str, exts: set[str] | None = RENDER_EXT) -> Path:
-    """Dataset-relative 'data/...' path -> absolute file, or BadPath. Blocks '..', absolute paths, NUL bytes,
-    symlinks that leave the dataset, and (by default) anything that is not a drawing format."""
+    """Dataset-relative 'data/...' path (or 'human/drawings/<name>') -> absolute file, or BadPath. Blocks '..',
+    absolute paths, NUL bytes, symlinks that leave the folder, and (by default) anything that is not a drawing format."""
+    if rel and is_added(rel) and "\x00" not in rel:
+        name = rel[len(HUMAN_PREFIX):]
+        if not name or "/" in name or "\\" in name or name.startswith(".") or name.endswith(".json"):
+            raise BadPath("bad name for an added drawing")
+        hd = human_drawings_dir().resolve()
+        p = (hd / name).resolve()
+        if p.parent != hd:
+            raise BadPath("path outside the added-drawings folder")
+        if not p.is_file():
+            raise FileNotFoundError(rel)
+        if exts is not None and p.suffix.lower() not in exts:
+            raise BadPath(f"not a drawing file ({p.suffix})")
+        return p
     if not rel or "\x00" in rel or rel.startswith(("/", "\\")) or not rel.startswith("data/"):
         raise BadPath("path must be dataset-relative and start with data/")
     if ".." in Path(rel).parts or "\\" in rel:
@@ -98,6 +149,15 @@ def _licence_table(source: str) -> tuple[tuple[str, str] | None, dict[str, dict]
 
 def meta_of(rel: str) -> dict:
     """{'license', 'credit', 'title', 'url'} for a dataset file (best effort)."""
+    if is_added(rel):
+        side = human_drawings_dir() / (rel[len(HUMAN_PREFIX):] + ".json")
+        m = {}
+        try:
+            m = json.loads(side.read_text(encoding="utf-8")) if side.is_file() else {}
+        except (OSError, ValueError):
+            pass
+        return {"license": m.get("license") or "", "title": m.get("title") or "", "url": m.get("url") or "",
+                "credit": m.get("credit") or "added by our team (not part of the Stoa dataset)"}
     src = source_of(rel)
     default, per = _licence_table(src)
     sub = rel.split("/", 2)[2] if rel.count("/") >= 2 else rel
@@ -136,6 +196,16 @@ def credit_line(rel: str) -> str:
     return " · ".join(bits) if bits else f"see data/{source_of(rel)}/LICENSE.md"
 
 
+def added_drawings() -> list[dict]:
+    """Cards for the drawings in human/drawings (newest first)."""
+    d = human_drawings_dir()
+    if not d.is_dir():
+        return []
+    files = [p for p in d.iterdir() if p.is_file() and p.suffix.lower() in RENDER_EXT and not p.name.startswith(".")]
+    files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+    return [card(HUMAN_PREFIX + p.name) for p in files]
+
+
 # --- the picker -------------------------------------------------------------------------------------------
 @functools.lru_cache(maxsize=1)
 def _test_groups() -> frozenset[str]:
@@ -148,6 +218,8 @@ def _test_groups() -> frozenset[str]:
 def is_sealed(rel: str) -> bool:
     from stoa.data import drawing_group
 
+    if is_added(rel):
+        return False
     return drawing_group(rel) in _test_groups()
 
 
@@ -346,12 +418,23 @@ def views_for(path: str, evidence: list[dict]) -> tuple[list[dict], list[dict]]:
                         "credit": credit_line(rel), "boxes": [], "_meta": meta}
         return views[k]
 
+    def _key(f):
+        try:
+            return canon(f)
+        except BadPath:
+            return f
+
     if Path(path).suffix.lower() in RENDER_EXT:
-        pages = sorted({int(e.get("page") or 0) for e in evidence if e.get("file") == path and e.get("bbox")}) or [0]
+        pages = sorted({int(e.get("page") or 0) for e in evidence
+                        if _key(e.get("file") or path) == path and e.get("bbox")}) or [0]
         for pg in pages:
             view(path, pg)
     for i, e in enumerate(evidence):
         f = e.get("file") or path
+        try:
+            f = canon(f)  # an added drawing's evidence carries its absolute path
+        except BadPath:
+            pass
         bbox = e.get("bbox")
         if bbox and Path(f).suffix.lower() in RENDER_EXT:
             v = view(f, int(e.get("page") or 0))

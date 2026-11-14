@@ -8,8 +8,8 @@ import { roomKind, roomName, roomShown, Viewer2D } from "./viewer2d";
 import type { Viewer3D } from "./viewer3d"; // loaded lazily: web-ifc + three are ~4 MB
 import tourSteps from "../fixtures/tour.json";
 import tourCustomer from "../fixtures/tour-customer.json";
-import { diffQuestion, diffsHtml, heroHtml, heroLoadingHtml, initialView, landingHtml, numbered, projectDifferences, projectOf, PROJECTS, saveView, type Difference, type View } from "./customer";
-import type { Project } from "./projects";
+import { diffQuestion, diffsHtml, heroHtml, heroLoadingHtml, initialView, landingHtml, numbered, projectDifferences, projectOf, PROJECTS, saveView, type Difference, type FloorGroup, type View } from "./customer";
+import { floorName, type Project } from "./projects";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -399,6 +399,7 @@ async function uploadFiles(files: File[]) {
     $<HTMLSelectElement>("source").value = "";
     $<HTMLInputElement>("search").value = "";
     await refreshFiles();
+    $("landing").hidden = true; // an upload from the project page opens it right away
     await openFile(first);
     $("question").focus();
   } catch (e) {
@@ -423,6 +424,15 @@ function uploadMeta(f: FileInfo) {
   const others = (f.set ?? []).filter((p) => p !== f.path).map((p) => p.split("/").pop()!);
   const set = model ? ` · linked to ${model.split("/").pop()}` : others.length ? ` · uploaded with ${others.join(", ")}` : "";
   return `your upload${style}${set} · not in the dataset`;
+}
+/** Customer view: an upload, in plain words, before the first question. */
+function uploadIntro(f: FileInfo) {
+  const model = f.ext !== ".ifc" ? f.siblings?.[".ifc"]?.split("/").pop() : undefined;
+  if (model) return `<b>Your drawing is linked to its 3D model (${esc(model)}).</b> Answers come from the model, for the floor this sheet shows, and the counted elements light up in 3D.`;
+  if (f.ext === ".ifc") return `<b>Your 3D model is ready.</b> Ask about doors, rooms, floors or sizes: the answers are counted in the model and lit up in 3D.`;
+  const style = f.style ? " It looks like a Nordic apartment plan, so the readers trained on such plans help." : "";
+  return `<b>Your drawing is new to us:</b> no template and no 3D model behind it, so answers are a best estimate and say so.${style}`
+    + (f.ext === ".pdf" ? ` <span class="tip">Tip: upload the sheet and its .ifc model together for exact answers from the model.</span>` : "");
 }
 /** What happens to an upload, said before the first question. */
 function uploadHint(f: FileInfo) {
@@ -477,8 +487,8 @@ async function openFile(f: FileInfo, question = "", keep: Answer | null = null, 
   $("credit").innerHTML = creditLine(f);
   projectChrome(f);
   if (!keep) {
-    $("hero").hidden = true;
-    $("hero").innerHTML = "";
+    $("hero").hidden = !(isCustomer() && f.source === "upload");
+    $("hero").innerHTML = isCustomer() && f.source === "upload" ? `<div class="hero-intro">${uploadIntro(f)}</div>` : "";
     document.body.classList.remove("answered");
     markAnswerCheck($("linked"), undefined, undefined);
     $("xbanner").hidden = true;
@@ -580,10 +590,11 @@ async function loadExamples(f: FileInfo) {
     for (let k = 0; interleaved.length < uniq.length; k++)
       for (const l of byType.values()) if (l[k]) interleaved.push(l[k]);
     const proj = isCustomer() ? projectOf(f.path) : undefined;
+    const pchips = proj ? (f.ext === ".ifc" && proj.modelChips ? proj.modelChips : proj.chips) : [];
     if (proj) {
-      chips.innerHTML = proj.chips.map((q) => `<button type="button" class="chip" title="${esc(q)}">${esc(q)}</button>`).join("");
+      chips.innerHTML = pchips.map((q) => `<button type="button" class="chip" title="${esc(q)}">${esc(q)}</button>`).join("");
       chips.querySelectorAll<HTMLButtonElement>(".chip").forEach((b, i) => b.addEventListener("click", () => {
-        $<HTMLTextAreaElement>("question").value = proj.chips[i];
+        $<HTMLTextAreaElement>("question").value = pchips[i];
         void runAsk();
       }));
     }
@@ -591,6 +602,7 @@ async function loadExamples(f: FileInfo) {
       : f.style ? APARTMENT_QUESTIONS : UPLOAD_QUESTIONS) : GENERIC_QUESTIONS;
     const pick = qs.length ? [...english.filter((q) => q.has_fixture), ...interleaved.filter((q) => !q.has_fixture)].slice(0, 4)
       : general.map((question) => ({ question, type: "", unit: null }));
+    if (isCustomer() && !proj) pick.splice(4); // 3–4 suggestions, not a menu
     if (!proj) chips.innerHTML = pick.map((q) => `<button type="button" class="chip" title="${esc(q.question)}">${esc(q.question.length > 64 ? q.question.slice(0, 61) + "…" : q.question)}</button>`).join("");
     if (!proj) chips.querySelectorAll<HTMLButtonElement>(".chip").forEach((b, i) => b.addEventListener("click", () => {
       $<HTMLTextAreaElement>("question").value = pick[i].question;
@@ -740,6 +752,7 @@ async function runAsk() {
 
 async function showAnswer(a: Answer, roundTripMs: number) {
   state.answer = a;
+  hero = { groups: undefined, roundTripMs };
   const askedPath = state.file?.path ?? "";
   const askedQ = $<HTMLTextAreaElement>("question").value.trim();
   renderCard($("card"), a, {
@@ -801,8 +814,15 @@ async function showAnswer(a: Answer, roundTripMs: number) {
     xb.innerHTML = xcs.map((x) => `<b>${x.ok ? "✓" : "✗"}</b> ${esc(x.text)}`).join(" &nbsp;·&nbsp; ");
   }
   if (state.ifc && a.evidence.some((e) => e.ifc_guid)) {
-    if (state.mode === "2d" && !v2d.hasGuid(a.evidence.find((e) => e.ifc_guid)!.ifc_guid!)) setMode("split");
+    const drawnHere = v2d.hasGuid(a.evidence.find((e) => e.ifc_guid)!.ifc_guid!);
+    // customer view on a plan sheet: every answer picks its own view (the plan when its elements are drawn on it, plan +
+    // model when they are not, the 3D model for a whole building, below), whatever the previous answer showed
+    if (isCustomer() && state.file?.ext !== ".ifc") setMode(drawnHere ? "2d" : "split");
+    else if (state.mode === "2d" && !drawnHere) setMode("split");
     await ensure3D();
+    // customer view: many elements on several floors (the whole building) are shown in the 3D model, where all of them
+    // are lit; one floor plan would show only part of them (a few elements keep plan + model side by side)
+    if (isCustomer() && state.mode !== "3d" && v3d && v3d.file === state.ifc && floorGroups(a, v3d)) setMode("3d");
     applyEvidence3D(a);
   } else if (v3d && v3d.file === state.ifc) {
     applyEvidence3D(a); // clears the previous answer's highlight
@@ -880,6 +900,59 @@ function applyEvidence3D(a: Answer) {
   }
   const pane = $("pane3d");
   pane.dataset.found = String(n);
+  // the same numbers as the answer's short list (customer view; CSS hides them in the expert view)
+  // customer view, many elements on several floors: one numbered line (and pin) per floor instead of per element
+  const groups = isCustomer() && a === state.answer ? floorGroups(a, v) : undefined;
+  if (groups) {
+    if (!hero.groups) {
+      hero.groups = groups;
+      renderHero(a, hero.roundTripMs);
+      // the plan shows its own floor's number on one of its elements
+      v2d.setNumbers(groups.map((g) => a.evidence.findIndex((e) => !!e.ifc_guid && g.guids.includes(e.ifc_guid) && !!e.bbox && e.file === state.file?.path)));
+    }
+    v.setNumberGroups(groups.map((g) => g.guids));
+  } else v.setNumbers(numbered(a.evidence).map((i) => a.evidence[i].ifc_guid ?? ""));
+}
+
+/** The answer's elements grouped by floor (bottom first), when there are more than 5 on 2+ floors. */
+function floorGroups(a: Answer, v: Viewer3D): FloorGroup[] | undefined {
+  const guids = [...new Set(a.evidence.filter((e) => e.ifc_guid && !/^NOT in the answer:/.test(e.note ?? "")).map((e) => e.ifc_guid!))];
+  if (guids.length <= 5) return undefined;
+  const by = new Map<number, string[]>();
+  for (const g of guids) {
+    const s = v.storeyOfGuid(g);
+    if (s === null) continue;
+    if (by.has(s)) by.get(s)!.push(g);
+    else by.set(s, [g]);
+  }
+  if (by.size < 2) return undefined;
+  const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
+  return v.storeys.filter((s) => by.has(s.id)).map((s) => ({ storey: s.id, label: cap(floorName(s.name)), guids: by.get(s.id)! }));
+}
+
+/** A floor line of a whole-building answer: that floor in 3D, its elements framed, only its number shown. */
+async function focusFloor(k: number) {
+  const g = hero.groups?.[k];
+  if (!g || !state.ifc) return;
+  if (state.mode === "2d") setMode("3d");
+  await ensure3D();
+  if (!v3d) return;
+  const rows = $("hero").querySelectorAll<HTMLElement>(".hw-item[data-floor]");
+  const again = [...rows].some((b) => b.dataset.floor === String(k) && b.classList.contains("sel"));
+  rows.forEach((b) => b.classList.toggle("sel", !again && b.dataset.floor === String(k)));
+  if (again) {
+    // the same floor again: back to the whole building
+    v3d.highlight(hero.groups!.flatMap((x) => x.guids), false);
+    v3d.setStorey(null);
+    v3d.frameAll();
+    v3d.setNumberGroups(hero.groups!.map((x) => x.guids));
+    $<HTMLSelectElement>("storey").value = "";
+    return;
+  }
+  v3d.highlight(g.guids, false);
+  v3d.focusGuids(g.guids, g.storey);
+  v3d.setNumberGroups(hero.groups!.map((x, i) => (i === k ? x.guids : [])));
+  $<HTMLSelectElement>("storey").value = String(g.storey);
 }
 
 function focusEvidence(i: number) {
@@ -1024,7 +1097,8 @@ function projectChrome(f: FileInfo) {
   const p = projectOf(f.path);
   $("projHead").hidden = !isCustomer();
   $("projName").textContent = p?.name ?? (f.source === "upload" ? "Your drawing" : f.title || f.path.split("/").pop()!);
-  $("projPlace").textContent = p ? `${p.place} · ${p.contents}` : f.source === "upload" ? "your upload, kept only on this computer" : "";
+  const files = (f.set?.length ? f.set : [f.path]).map((x) => x.split("/").pop()).join(" + ");
+  $("projPlace").textContent = p ? `${p.place} · ${p.contents}` : f.source === "upload" ? `${files} · kept only on this computer` : "";
   const tabs = $("sheetTabs");
   tabs.hidden = !isCustomer() || !p || p.sheets.length < 2;
   tabs.innerHTML = p ? p.sheets.map((s) => `<button type="button" role="tab" class="${s.path === f.path ? "on" : ""}" data-path="${esc(s.path)}">${esc(s.label)}</button>`).join("") : "";
@@ -1059,6 +1133,9 @@ function projectChrome(f: FileInfo) {
   });
 }
 
+/** What the hero was last drawn with (the floor groups arrive once the 3D model has loaded). */
+let hero: { groups: FloorGroup[] | undefined; roundTripMs: number } = { groups: undefined, roundTripMs: 0 };
+
 function renderHero(a: Answer, roundTripMs: number) {
   const el = $("hero");
   el.hidden = false;
@@ -1067,8 +1144,14 @@ function renderHero(a: Answer, roundTripMs: number) {
   el.innerHTML = heroHtml(a, {
     question: $<HTMLTextAreaElement>("question").value.trim(), file: state.file?.path ?? "", roundTripMs,
     sheetLabel: (path) => p?.sheets.find((s) => s.path === path)?.label ?? "",
+    groups: hero.groups,
   });
-  el.querySelectorAll<HTMLButtonElement>("[data-ev]").forEach((b) => b.addEventListener("click", () => focusEvidence(Number(b.dataset.ev))));
+  el.querySelectorAll<HTMLButtonElement>("[data-floor]").forEach((b) => b.addEventListener("click", () => void focusFloor(Number(b.dataset.floor))));
+  el.querySelectorAll<HTMLButtonElement>("[data-ev]").forEach((b) => {
+    b.addEventListener("click", () => focusEvidence(Number(b.dataset.ev)));
+    b.addEventListener("mouseenter", () => v2d.hoverEvidence(Number(b.dataset.ev)));
+    b.addEventListener("mouseleave", () => v2d.hoverEvidence(null));
+  });
 }
 
 // --- boot ---------------------------------------------------------------------------------------------------

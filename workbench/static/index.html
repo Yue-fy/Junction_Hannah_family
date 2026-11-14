@@ -3,6 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<script>/* behind a path prefix (e.g. /workbench) the relative URLs need a trailing slash */
+if (!location.pathname.endsWith("/")) location.replace(location.pathname + "/" + location.search + location.hash);</script>
 <title>Expert Workbench</title>
 <link rel="icon" href="data:,">
 <link rel="stylesheet" href="static/style.css">
@@ -37,11 +39,17 @@
         <span id="audit-progress" class="progress">–</span>
         <div class="bar"><div id="audit-bar"></div></div>
       </div>
+      <div id="audit-more" class="more" hidden>
+        All checked — thank you! <button id="audit-more-btn" class="primary">Load <span id="audit-more-n"></span> harder items</button>
+        <div class="small">Reasoning questions made by our own agents (comparisons, ratios, combinations). Their reference answers were
+        computed by us too, so a ✗ may also mean “the reference is wrong” (please say so in the comment).</div>
+      </div>
+      <div id="audit-batches" class="more" hidden></div>
       <div class="meta-line" id="audit-meta"></div>
       <h2 id="audit-question" class="question"></h2>
       <div class="answers">
         <div class="ans ours"><div class="lbl">Our answer</div><div id="audit-answer" class="val"></div>
-          <div id="audit-conf" class="conf"></div></div>
+          <div id="audit-conf" class="conf"></div><div id="audit-cost" class="conf cost"></div></div>
         <div class="ans ref"><div class="lbl">Reference answer (dataset)</div><div id="audit-ref" class="val"></div>
           <div id="audit-match" class="conf"></div></div>
       </div>
@@ -51,6 +59,7 @@
         <button class="v unk" data-v="cant_tell">? Can't tell <kbd>3</kbd></button>
       </div>
       <textarea id="audit-comment" rows="2" placeholder="Optional comment: what is wrong, what you would check, what is missing…"></textarea>
+      <input id="audit-correct" type="text" placeholder="Optional: the right answer is… (e.g. 6, or 53.4 m2)">
       <div id="audit-last" class="last"></div>
       <div class="nav">
         <button id="audit-prev" class="ghost">← Previous</button>
@@ -76,7 +85,10 @@
       <input id="pick-search" type="search" placeholder="Search drawings by name or title (e.g. 'church', 'site 1000', 'clinic')">
       <button id="pick-search-btn">Search</button>
       <button id="pick-reset" class="ghost">Show all groups</button>
+      <button id="pick-upload-btn" class="ghost" title="PDF, PNG, JPEG, TIFF or WebP, up to 60 MB. Kept on our server only.">Add your own drawing…</button>
+      <input id="pick-upload" type="file" accept=".pdf,.png,.jpg,.jpeg,.tif,.tiff,.webp" hidden>
     </div>
+    <div id="pick-upload-msg" class="hint" hidden></div>
     <div id="pick-jump" class="jump"></div>
     <div id="pick-groups"></div>
   </div>
@@ -103,6 +115,7 @@
         <div id="ask-credit" class="credit"></div>
       </div>
       <div class="right">
+        <div id="q-editing" class="editing" hidden>Editing a saved question. <button id="q-cancel-edit" class="mini">Cancel editing</button></div>
         <label>Your question <span class="hint">(any language)</span>
           <textarea id="q-text" rows="3" placeholder="e.g. What is the total floor area of all bedrooms, and is the bathroom large enough for a wheelchair?"></textarea></label>
         <div class="row">
@@ -134,6 +147,8 @@
           <button id="q-save" class="v ok">Save question</button>
         </div>
         <div id="q-result" class="result" hidden></div>
+        <details id="ds-box"><summary>What the dataset already asks about this drawing (<span id="ds-n">0</span>)</summary>
+          <ul id="ds-list" class="mine"></ul></details>
         <h3 class="mine-h">Your questions (<span id="q-count">0</span>)</h3>
         <ul id="q-list" class="mine"></ul>
       </div>
@@ -145,8 +160,8 @@
 <section id="tab-rules" class="tabpane" hidden>
   <div class="howto">
     <b>How to use:</b> write down what a plausible value looks like (e.g. a door is 0.7–1.2 m wide) and why.
-    Our system uses these ranges to flag impossible answers and to state its uncertainty.
-    The big box below is for error-propagation rules ("1% scale error → about 2% area error").
+    Each rule is tested at once against our ~2,200 test answers (right column): a good rule catches our wrong answers, not the right ones.
+    The big box is for error-propagation rules ("1% scale error → about 2% area error").
   </div>
   <div class="rules-grid">
     <form id="rule-form" class="card">
@@ -164,7 +179,8 @@
     </form>
     <div class="card">
       <h3>Rules so far (<span id="rule-count">0</span>)</h3>
-      <table id="rule-table"><thead><tr><th>What</th><th>Range</th><th>Why / uncertainty</th></tr></thead><tbody></tbody></table>
+      <div id="rule-checked-on" class="hint small"></div>
+      <table id="rule-table"><thead><tr><th>What</th><th>Range</th><th>Why / uncertainty</th><th>Against our answers</th></tr></thead><tbody></tbody></table>
     </div>
   </div>
 </section>

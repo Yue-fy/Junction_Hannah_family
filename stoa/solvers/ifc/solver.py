@@ -415,7 +415,27 @@ def quote_room_refs(idx: IfcIndex, question: str) -> str:
         if fold(code) in names:
             out.append(question[last:m.start(2)] + f"'{code}'")
             last = m.end(2)
-    return "".join(out) + question[last:] if out else question
+    if out:
+        return "".join(out) + question[last:]
+    # an unquoted LongName that exactly one space of the model carries ('How big is the INVA-WC?',
+    # 'How big is Kellerraum-05-2?'): without quotes the room-type step read 'WC' as a type and summed all 13
+    # toilets @ 0.85 (c9 probe). Only names with a hyphen / digit / dot (codes, not type words like 'ESIK'), and
+    # never a storey name.
+    from collections import Counter
+    from stoa.solvers.ifc.resolve import match_storey as _ms
+
+    longs = Counter(fold(e.long_name or "") for e in idx.by_class("IfcSpace") if e.long_name)
+    for m in sorted(_LONGNAME_TOKEN.finditer(question), key=lambda m: -len(m.group(0))):
+        tok = m.group(0).rstrip(".")
+        if len(tok) >= 4 and re.search(r"[-\d.]", tok) and longs.get(fold(tok)) == 1:
+            st = _ms(idx, tok)
+            if st is not None and st.score >= 95:
+                continue
+            return question[:m.start()] + f"'{tok}'" + question[m.start() + len(tok):]
+    return question
+
+
+_LONGNAME_TOKEN = re.compile(r"(?<![\w'])[^\W_][\w.\-+]*[\w](?![\w'])")
 
 
 def rooms_named(idx: IfcIndex, question: str) -> tuple[list[Element], str]:
@@ -685,6 +705,13 @@ class IfcSolver(BaseSolver):
                             r"[^?]{0,20}\bmodel\b[^?]{0,15}\b(does not|doesn.t|do not|don.t)\b[^?]{0,10}\b(assign|place|put|"
                             r"have|locate|attach)\w*|\bof (other|another|different) (storeys?|floors?|levels?)\b")
     _PVM_NOTDRAWN = re.compile(r"\bnot (drawn|shown|visible)\b|\bmissing (from|on) (the |this )?(plan|drawing|sheet)\b|"
+                               # W4 10:49: Italian 'Quante finestre del modello IFC non sono disegnate in questa pianta?'
+                               # was the model's 55 @ 0.875 (gold 3); the same in de/fr/nl/es/fi/et
+                               r"\bnon (sono |e |risultano )?(disegnat\w*|rappresentat\w*|mostrat\w*)\b|"
+                               r"\bnicht (eingezeichnet|gezeichnet|dargestellt|abgebildet)\b|\bne (sont|est) pas (dessine\w*|"
+                               r"represente\w*)\b|\bniet (getekend|weergegeven|afgebeeld)\b|\bno (estan |esta )?(dibujad\w*|"
+                               r"representad\w*)\b|\b(ei ole|ole) piirretty\b|\bpiirtamat\w*\b|\bpole (joonistatud|"
+                               r"kujutatud)\b|"
                                r"\bin the model but not\b|\bonly in the model\b|\babsent from the (plan|drawing|sheet)\b|"
                                r"\b(plan|drawing|sheet)s?\b.{0,12}\b(not|n't|never) (show|draw|depict|include|contain)\b|"
                                r"\b(does|do|did)( not|n't) (this |the )?(floor )?(plan|drawing|sheet) (show|draw|depict|include)\b|"
@@ -1728,10 +1755,20 @@ class IfcSolver(BaseSolver):
                 trace.append(f"storey from the plan file: {why}")
                 # 'How many doors are on the floor above / below this one?' (Q: the sheet's own storey @ 0.97): the
                 # next storey up / down from the sheet's, by elevation
-                rel = re.search(r"\b(?:floor|storey|story|level)\s+(above|below|under|over|beneath)\s+(?:this|the current|"
-                                r"the present|the one shown|the one on this (?:sheet|plan))\b|\b(?:one|a) (?:floor|storey|level)"
+                # Q bug 28: also 'the storey directly above this one', 'the storey above' (on a sheet = above this one)
+                rel = re.search(r"\b(?:floor|storey|story|level)\s+(?:directly |immediately |right |just )?(above|below|under|"
+                                r"over|beneath)(?:\s+(?:this|the current|the present|the one shown|the one on this (?:sheet|"
+                                r"plan)|it)\b|\s*[?.,;]|\s*$|\s+(?:have|has|contain|hold|got)\b)|\b(?:one|a) (?:floor|storey|level)"
                                 r"\s+(up|down|higher|lower)\b|\bnext (?:floor|storey|level) (up|down)\b",
                                 fold(_QUOTED_RX.sub(" ", it.question or "")))
+                if re.search(r"\b(above|below|under|beneath)\s+(the\s+)?(ground|grade|street)(\s+level)?\b",
+                             fold(it.question or "")):
+                    # 'How many windows are on the floors above ground level?' fell back to this sheet's storey @ 0.97: a
+                    # set of floors by height is not this sheet; say so instead of answering it confidently (W1 c8)
+                    conf = min(conf, 0.5)
+                    trace.append("guard: 'above/below ground level' names floors by height, not this sheet -> confidence 0.5")
+                    assumptions.append("'above/below ground level' read as this sheet's storey only; which floors count "
+                                       "(is the ground floor included?) is not settled by the question")
                 if rel:
                     up = (rel.group(1) or rel.group(2) or rel.group(3)) in ("above", "over", "up", "higher")
                     order = sorted([st_ for st_ in own_storeys(idx) if st_.elevation is not None],
