@@ -230,9 +230,30 @@ The user may ask questions such as “Why is September tighter?”, “Can I sav
 
 The deterministic engine executes every calculation. Without Gemini, predefined prompts, deterministic ranking and direct controls provide the complete flow.
 
+The coach never opens as a blank conversation with no guidance. Its first state is a browsable question directory with short, customer-facing topics:
+
+- spending and the three literacy baskets;
+- cash flow, upcoming obligations, and safe to spend;
+- saving and observed investment transfers;
+- goals, large purchases, home, and vehicle planning;
+- transaction details and category/merchant statistics;
+- user-declared tax planning.
+
+Choosing a topic reveals concrete example questions and the exact deterministic operations currently supported. Free text remains available below the directory. Unsupported questions state which data or parameter is missing instead of producing a generic answer.
+
 Free exploration is not a license for unbounded model answers. The coach maps natural-language questions to typed, inspectable operations over the customer's own ledger. Supported questions expand with deterministic tools; unsupported questions explain the missing data instead of improvising. A `safe to spend` result is always a scenario: latest balance minus reserve floor, confirmed obligations until the next qualified income event, and a protected historical flexible-spend envelope. It is never described as a guarantee.
 
 Investment questions operate only on cash-flow evidence: contribution amount, frequency, interruptions, withdrawals and share of observed income. The coach may help attach a planned contribution to a goal, but cannot infer investment performance or recommend a product.
+
+Fine-grained account questions use a deterministic statistics tool scoped to the authenticated customer, account, dates, and exact filters. It returns integer-cent inflow, outflow, consumption, net flow, count, average, largest item, fact ID, and source-row references. Gemini may map natural language to the tool schema and explain its verified result; it may not calculate a total or invent a filter itself.
+
+Tax is split into two honest cases. An observed tax amount exists only when an explicit source field says it is a tax, such as a recorded mortgage `transfer_tax` event. Otherwise the product says that no tax record is available. A customer may separately add an amount and due date to a tax-planning scenario; this is labelled `You added this`, `Scenario`, and `Not tax advice`, and never becomes transaction history or an inferred Finnish tax liability.
+
+## Visual system and development preview
+
+The public S-Pankki/S-mobiili language informs the prototype without copying protected marks: green and white foundations, a darker trustworthy green for text/actions, bright green used selectively as a highlighter, generous white space, rounded soft surfaces, clear headings, and labelled bottom navigation. S-Coach uses an original coach/insight symbol and wordmark; it does not reproduce the official S-Pankki logo.
+
+The product itself is responsive at the actual viewport. A separate local-only device preview page may frame the same URL at a small phone, current compact phone, large Android phone, tablet, and desktop sizes for development and screenshots. It is QA tooling, not a control shown to bank customers. Automated browser checks continue to exercise representative widths directly.
 
 ## Demo personas and story
 
@@ -261,9 +282,9 @@ Only the first story is walked through in full during the primary demo. The pers
 Internally, each transaction receives one accounting role:
 
 - `income`: salary and other income;
-- `fixed_obligation`: housing, stable utilities, and user-declared recurring obligations such as taxes;
-- `flexible_essential`: groceries, transportation, health, and irregular essential items;
-- `discretionary`: restaurants, entertainment, lifestyle, travel, and eligible home/tech purchases;
+- `fixed_obligation`: the customer-facing regular-essential basket: housing, utilities, groceries, transportation, and user-declared recurring obligations such as taxes;
+- `flexible_essential`: the customer-facing irregular-essential basket: health and home/tech purchases such as replacing a broken appliance;
+- `discretionary`: restaurants, entertainment, lifestyle, and travel;
 - `saving_or_transfer`: investment deposits, withdrawals, and salary sweeps;
 - `needs_review`: ambiguous or unclassified cases.
 
@@ -274,7 +295,7 @@ The customer-facing financial-literacy labels for consumption are deliberately s
 - `everyday discretionary`;
 - `needs review`.
 
-Income and saving/transfers remain separate flows. Fixed bills appear under regular essentials. A tax item becomes a regular or irregular essential only after the customer creates or confirms the rule.
+Income and saving/transfers remain separate flows. The internal role names are retained for API compatibility, but the UI follows the partner brief's pedagogical baskets rather than claiming that groceries or transport are irregular. A tax item becomes a regular or irregular essential only after the customer creates or confirms the rule.
 
 Dataset categories seed the role, but the user may correct it. The correction is stored as a scenario rule with a visible audit entry. Recurring detection considers merchant/category, cadence, amount stability, and transaction type; it must not rely on merchant ID being present.
 
@@ -285,7 +306,7 @@ Insight candidates are ranked internally by goal relevance, materiality, urgency
 ## Forecast and scenario rules
 
 - Observed history and scenario projections use visually distinct line styles and labels.
-- The 30-day view is called a **confirmed cash-flow preview**, not a prediction. It starts from the latest observed balance and schedules qualified recurring items at robust median dates and amounts.
+- The 30-day view is called a **pattern-based cash-flow preview**, not a prediction or a list of confirmed bills. It starts from the latest observed balance and schedules qualified recurring patterns at robust median dates and amounts.
 - Housing and salary seed recurrence. Other items qualify after appearing in at least five of the last six months with appropriate 25–35-day cadence; utilities use a monthly envelope because individual merchant IDs are absent.
 - Flexible spending is displayed as a historical P25/P50/P75 30-day scenario band, explicitly described as historical variation rather than a probability interval.
 - A 90-day view, when present, is a coarse planning scenario. It never presents one precise future balance as reliable.
@@ -310,7 +331,7 @@ Insight candidates are ranked internally by goal relevance, materiality, urgency
 - Goal math is `remaining = max(target - current_saved, 0)` and `required_monthly = ceil(remaining / months_remaining)` in cents. The plan compares required monthly contribution with conservative monthly contribution; it never assumes the difference will be achieved.
 - An unusual-transaction cutoff is `max(Q3 + 1.5 × IQR, median + 3 × 1.4826 × MAD, €100, 10% of median monthly purchase spend)`, based on the preceding twelve complete months and requiring at least ten same-category observations.
 - Housing and salary recur by transaction type. Utilities are one monthly envelope. Another recurring group requires presence in at least five of the last six months, four 25–35-day gaps, day-of-month MAD no greater than three, and amount MAD divided by median no greater than 15% for the `fixed` label; otherwise it is `variable recurring`.
-- A 30-day preview begins at the latest observed balance, applies confirmed recurring items at median day and amount, and overlays P25/P50/P75 historical rolling 30-day flexible cash movement as scenario bands. These bands are not probabilities.
+- A 30-day preview begins at the latest observed balance, applies qualified history-derived recurring patterns at median day and amount, and overlays P25/P50/P75 historical rolling 30-day unscheduled-consumption movement as scenario bands. These bands are not probabilities, and the UI does not call inferred future items confirmed bills.
 
 ## Correction and persistence model
 
@@ -338,7 +359,7 @@ The pipeline is reproducible and records the source file checksums, import times
 
 No new dependency is required for the baseline implementation. If a dependency becomes necessary, work pauses for user approval as required by the repository rules.
 
-Gemini is an optional runtime enhancement but a fully implemented integration path, not placeholder copy. The environment contract is documented through `GEMINI_API_KEY` and configurable `GEMINI_MODEL`; tests use a local fake transport. The submission remains demoable without credentials.
+Gemini is an optional runtime enhancement but a fully implemented integration path, not placeholder copy. The environment contract is documented through `GEMINI_API_KEY` and configurable `GEMINI_MODEL` (default `gemini-3-flash-preview` for the Junction key); tests use a local fake transport. The submission remains demoable without credentials.
 
 ### Gemini contract
 
@@ -350,7 +371,7 @@ The adapter accepts only the intents `compare_periods`, `explain_change`, `show_
 - an optional proposed action drawn from `classify_row`, `exclude_from_scenario`, `create_rule`, or `link_goal`;
 - explanation blocks that cite server-supplied fact IDs.
 
-The server rejects unknown intents, candidate IDs, fact IDs and actions. Gemini cannot apply a mutation; the customer confirms it first. Numeric values rendered by the UI always come from cited deterministic facts, not model text. Live calls have a three-second target and a four-second fallback to deterministic ranking and copy. Gold tests cover the headline comparison, a missing parameter, an unknown action, malformed JSON, timeout and model-unavailable paths.
+The server rejects unknown intents, candidate IDs, fact IDs and actions. Gemini cannot apply a mutation; the customer confirms it first. Numeric values rendered by the UI always come from cited deterministic facts, not model text. Live calls use one explicit nine-second deadline, still bounded below the client request timeout, before falling back to deterministic ranking and copy. Gold tests cover the headline comparison, a missing parameter, an unknown action, malformed JSON, timeout and model-unavailable paths.
 
 ### Main modules
 

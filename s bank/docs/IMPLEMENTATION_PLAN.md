@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Status note (14 November 2026):** This file preserves the original TDD execution plan and its historical checkboxes. The implemented, current stage-by-stage status and verification evidence live in [`PIPELINE.md`](PIPELINE.md) and [`DEVELOPMENT_LOG.md`](DEVELOPMENT_LOG.md); unchecked boxes here do not mean the feature is absent.
+
 **Goal:** Build a standalone, mobile-first but fully adaptive S-Pankki financial coach under `s bank/` with a deterministic ledger engine, plain-language visual overview, auditable correction/scenario loop, universal savings goal, Finnish/Swedish/English product localization, optional multilingual Gemini orchestration, and data-backed trend/forecast extensions.
 
 **Architecture:** A standard-library Python package imports selected official synthetic customers into SQLite, performs all cents-based calculations, and serves JSON plus a static mobile web client. The UI renders deterministic API facts; Gemini may select verified candidates, request clarification, and phrase cited facts, but cannot calculate or mutate state without confirmation.
@@ -112,7 +114,7 @@ The headline 20% scenario must produce €45.14 before exclusion and €37.85 af
 
 - [ ] **Step 5: Update development log and pipeline stage.**
 
-### Task 4: Recurrence and confirmed cash-flow preview
+### Task 4: Recurrence and pattern-based cash-flow preview
 
 **Files:**
 - Create: `s bank/scoach/forecast.py`
@@ -149,7 +151,7 @@ The headline 20% scenario must produce €45.14 before exclusion and €37.85 af
 
 - [ ] **Step 2: Run focused tests and confirm expected failures.**
 
-- [ ] **Step 3: Implement deterministic coach copy and a standard-library Gemini REST transport with four-second fallback.**
+- [x] **Step 3: Implement deterministic coach copy and a standard-library Gemini REST transport with a nine-second bounded fallback.**
 
 - [ ] **Step 4: Run tests with fake transport only; live credentials are optional and never logged.**
 
@@ -250,6 +252,45 @@ The headline 20% scenario must produce €45.14 before exclusion and €37.85 af
 - [ ] **Step 3: Add allowlisted coach intents and deterministic fallback phrasing; Gemini may phrase only supplied verified values.**
 
 - [ ] **Step 4: Run focused and full tests; document the data limits.**
+
+### Task 7C: Guided coach directory and deterministic statistics tools
+
+**Files:**
+- Create: `s bank/scoach/statistics.py`
+- Modify: `s bank/scoach/gemini.py`
+- Modify: `s bank/scoach/coach.py`
+- Modify: `s bank/scoach/api.py`
+- Modify: `s bank/web/index.html`
+- Modify: `s bank/web/app.js`
+- Modify: `s bank/web/i18n.js`
+- Add focused backend and browser tests.
+
+**Interfaces:**
+- Produces a visible topic directory for spending, cash flow, saving/investment transfers, goals/large purchases, financing, transaction statistics, and tax planning, with supported example questions under each topic.
+- Produces deterministic account statistics scoped by validated customer, account, dates, and exact category/role/type/merchant filters. Gemini extracts a typed intent; code computes and cites every value.
+
+- [ ] **Step 1: Write failing exact-statistics tests and guided-coach browser contracts.**
+- [ ] **Step 2: Implement observed totals/count/average/largest/net/refs and complete-period comparison without model arithmetic.**
+- [ ] **Step 3: Add allowlisted intent parameters and execute them server-side before generating any explanation.**
+- [ ] **Step 4: Build the localized topic directory, suggested questions, unsupported-state copy, and free-text fallback.**
+- [ ] **Step 5: Verify keyboard/screen-reader navigation and exact row-backed answers in EN/FI/SV.**
+
+### Task 7D: Honest tax planning and device-preview QA
+
+**Files:**
+- Create: `s bank/scoach/tax.py`
+- Modify: `s bank/scoach/api.py`
+- Modify relevant web and test files.
+- Create: `s bank/web/device-preview.html`
+
+**Interfaces:**
+- Observed tax evidence comes only from explicit source fields. User-entered amount/date planning remains a separate labelled scenario and never changes history or claims a tax liability.
+- The local-only preview page embeds the real responsive app at representative phone/tablet widths; customers never see device simulation controls.
+
+- [ ] **Step 1: Write failing tests for missing observed tax, an explicit recorded transfer tax, and exact user-declared set-aside math.**
+- [ ] **Step 2: Add a localized tax-planning form with `You added this`, `Scenario`, and `Not tax advice` labels; do not infer tax rates.**
+- [ ] **Step 3: Add a dependency-free device preview with small-phone, compact-phone, large-phone, tablet, and desktop presets.**
+- [ ] **Step 4: Capture representative screenshots and verify the preview is not linked from production navigation.**
 
 ### Task 8: Documentation, full verification, and judge review
 

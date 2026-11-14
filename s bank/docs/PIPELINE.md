@@ -2,37 +2,48 @@
 
 ## Current state
 
+Status below distinguishes implemented calculations from unresolved question interpretation. The later semantic audit supersedes earlier claims that every official example was complete. See [README known limitations](../README.md#known-limitations) and [technical documentation](TECHNICAL_DOCUMENTATION.md).
+
 | Stage | Status | Evidence |
 |---|---|---|
 | Official CSV download | Complete | Four files under ignored `junction-dataset/` |
 | Source validation | Complete | Headers, line counts, sizes and SHA-256 below |
-| Demo SQLite schema | In progress | Implementation wave 1 |
-| Selected-persona import | In progress | Streaming importer implementation |
-| Financial roles | In progress | Deterministic classification implementation |
-| Period analytics | In progress | Money Map/comparison/trend implementation |
-| Corrections and scenarios | In progress | Immutable ledger plus audit implementation |
-| Goal plan | In progress | Universal goal engine implementation |
-| Cash-flow preview | In progress | Recurrence and 30-day scenario implementation |
-| JSON API | In progress | Parallel implementation against locked contracts |
-| Mobile UI | In progress | Parallel implementation against locked contracts |
-| Integrated verification | Not started | Starts after wave 1 integration |
-| Safe-to-spend scenario | Planned P1 | Requires integrated recurrence and reserve contracts |
-| Investment-transfer view | Planned P1 | Uses investment deposits/withdrawals and salary sweeps only |
+| Demo SQLite schema | Complete | Immutable source tables, separate state, audit and pipeline metadata |
+| Selected-persona import | Complete | Six customers plus linked mortgage rows in ignored demo database |
+| Financial roles | Complete | Partner-aligned regular, irregular and everyday baskets plus income, transfers and review |
+| Period analytics | Complete | Money Map, comparison, trends, unusual, salary and payday signals |
+| Deterministic statistics | Implemented; semantic selection incomplete | Exact totals/count/average/largest/net for chosen filters; correct arithmetic does not establish intended scope |
+| Official brief questions | Partial | Dining scenario, three-basket profile, safe-to-spend and restaurant total work; taxi incorrectly expands to Transportation |
+| Natural-language query scope | Pending fixes | Narrow concepts/MCC, explicit dates, relative dates, and follow-up inheritance need semantic acceptance cases |
+| Corrections and scenarios | Complete | Immutable actuals, user rules, scenario-only exclusions, audit and undo |
+| Goal plan | Complete | Universal goal templates, reserve, capacity and explicit scenario link |
+| Cash-flow preview | Complete | Qualified recurrence, 30-day scenario, assumptions and historical backtest |
+| Safe-to-spend scenario | Complete | History gate, EUR 500 sourced demo reserve, bills and flexible buffer |
+| Investment-transfer view | Complete | Deposits, withdrawals, salary sweeps and contribution consistency only |
+| Financing history | Complete | Optional linked home history; no approval or affordability inference |
+| Tax evidence/planning | Complete | Explicit-source evidence and unsaved user-declared scenario only |
+| VAT-inside-price lens | Complete | Date-aware MCC-first estimate, direct/broad/unmapped row provenance, versioned fact, period total and mapping coverage |
+| JSON API | Complete | Validated read/mutation/tool routes plus static server |
+| Adaptive localized UI | Complete | Phone/tablet/desktop, EN/FI/SV, month/range controls and evidence views |
+| Guided coach directory | Implemented; known gaps | Localized topics, tool results and tax planner; free-text scope and generic evidence consistency remain incomplete |
+| Local device preview | Complete | Six unlinked development-only viewport presets |
+| Integrated verification | Latest: 176 passed, one browser test skipped; semantic coverage incomplete | Earlier 177-test run included real Chrome device/locale flows; subsequent audits found defects not covered by those assertions |
 
 ## Flow
 
 ```text
 Official CSVs (ignored)
   -> BOM-aware streaming validation
-  -> selected synthetic personas
+  -> six selected synthetic personas
   -> normalized SQLite rows in integer cents
   -> immutable ledger + derived financial-literacy roles
   -> comparison / trends / recurrence / unusual candidates
+  -> exact account statistics / explicit tax evidence / estimated VAT lens
   -> user correction + scenario + goal audit state
   -> deterministic facts and candidate IDs
   -> optional Gemini selection/clarification over allowlisted facts
   -> JSON API
-  -> mobile Money Map, evidence, scenario and goal views
+  -> adaptive localized Money Map, evidence, scenario and goal views
 ```
 
 ## Source inventory
@@ -49,10 +60,11 @@ Official CSVs (ignored)
 | Customer | Purpose |
 |---|---|
 | `CUST00001` | Exact restaurant comparison, clarification, scenario and goal handoff |
-| `CUST00676` | Housing/payday timing and confirmed cash-flow preview |
+| `CUST00676` | Housing/payday timing and pattern-based cash-flow preview |
 | `CUST05097` | Customer-relative unusual travel purchase |
 | `CUST00756` | Positive salary change |
 | `CUST00296` | Optional linked mortgage history and home-goal context |
+| `CUST01331` | Age-18 payday timing, near-zero balance, and purchase-timing story |
 
 ## Invariants
 
@@ -66,8 +78,17 @@ Official CSVs (ignored)
 
 ## Build command
 
+Run from the repository root, only when an imported database is not already available:
+
 ```bash
-cd "s bank"
-python3 scripts/build_demo_db.py --source junction-dataset --output var/scoach.sqlite3
+python3 "s bank/scripts/build_demo_db.py" \
+  --source "s bank/junction-dataset" \
+  --output "s bank/var/scoach.sqlite3"
 ```
+
+For a rebuild, select an unused output filename and preserve the current database and user state. See [README](../README.md#quick-start) for startup, environment setup, health checks, tests, and troubleshooting. No dependency installation is required for the core runtime.
+
+## Next validation stage
+
+Create semantic acceptance questions with expected concept, account, date range, metric, selected rows, and either a supported answer or a clarification/unavailable response. Prioritize narrow-category resolution, question dates, follow-up context, and consistent scope from tool result to transaction list and calculation drawer. Do not promote this stage to complete merely because arithmetic tests pass.
 

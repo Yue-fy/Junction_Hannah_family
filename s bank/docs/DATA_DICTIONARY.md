@@ -25,6 +25,26 @@
 | `fact_id` | Server-generated allowlisted reference to one deterministic result |
 | `observed_or_scenario` | Prevents modeled values from being presented as actual history |
 
+## Estimated VAT fields
+
+These fields are derived for spending outflows only. They do not change the source transaction and do not represent a customer's tax liability.
+
+| Field | Meaning |
+|---|---|
+| `gross_cents` | Absolute observed purchase price including any VAT |
+| `estimated_vat_cents` | VAT estimated inside the gross price; null when no honest mapping exists |
+| `rate_basis_points` | Date-aware Finnish rate, for example `1350` for 13.5%; null when unmapped |
+| `rate_band` | `general`, `food`, `reduced`, `newspapers`, `exempt`, or `unknown` |
+| `rate_source.kind` | `mcc`, `category`, or `unmapped` |
+| `rate_source.value` | Exact MCC or source category that selected the band |
+| `mapping_quality` | `direct_mcc`, `category_fallback`, `broad_mcc_estimate`, `broad_category_estimate`, or `unmapped` |
+| `mapping_note` | Plain-language reason for the mapping choice or why no rate was assumed |
+| `coverage_basis_points` | Share of period gross spending for which any rate band was available; mapping coverage, not accuracy or confidence |
+| `source_status` / `source_observed` | Confirms that the source purchases are immutable observed rows |
+| `value_status` / `estimated` | Identifies the VAT amount as estimated rather than directly observed |
+| `scenario` | Always false for this historical lens; VAT is not a what-if plan |
+| `method_version` / `rate_map_version` | Version identifiers bound into the VAT fact ID with per-row rate evidence |
+
 ## Customer and mortgage fields
 
 `tx_customers_junction.csv` supplies synthetic age and postal code. The product does not use either for peer comparison or recommendation ranking.
