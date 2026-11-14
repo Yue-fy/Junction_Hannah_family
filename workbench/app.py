@@ -125,7 +125,32 @@ def audit_items():
         v = verdicts.get(it["item_id"])
         rows.append({"item_id": it["item_id"], "source": it["source"], "type": it["type"],
                      "verdict": v.get("verdict") if v else None})
-    return {"items": rows}
+    return {"items": rows, "more_available": len(_more_items())}
+
+
+def _more_items() -> list[dict]:
+    """The next (harder) batch, from human/audit_items_more.jsonl, minus items already in the sample."""
+    p = store.human_dir() / "audit_items_more.jsonl"
+    if not p.exists():
+        return []
+    have = {r["item_id"] for r in _audit_items()}
+    rows = [json.loads(line) for line in p.read_text(encoding="utf-8").splitlines() if line.strip()]
+    return [r for r in rows if r.get("item_id") not in have]
+
+
+_MORE_LOCK = threading.Lock()
+
+
+@app.post("/api/audit/more")
+def audit_more():
+    with _MORE_LOCK:
+        more = _more_items()
+        if more:
+            p = store.human_dir() / "audit_items.jsonl"
+            with open(p, "a", encoding="utf-8") as f:
+                for r in more:
+                    f.write(json.dumps(r, ensure_ascii=False, default=str) + "\n")
+    return {"ok": True, "added": len(more)}
 
 
 @app.get("/api/audit/item/{item_id}")
@@ -139,9 +164,11 @@ def audit_item(item_id: str):
         if r.get("item_id") == item_id:
             last = r
     return {"item_id": item_id, "path": it["path"], "source": it["source"], "type": it["type"],
+            "split": it.get("split", "dev"), "recipe": (it.get("meta") or {}).get("recipe"),
             "question": it["question"], "answer": _fmt_value(it.get("value"), it.get("unit")),
             "value": it.get("value"), "unit": it.get("unit"), "confidence": it.get("confidence"),
             "reference": _fmt_value(it.get("gold"), it.get("gold_unit")), "matches_reference": it.get("correct"),
+            "text_match": it.get("text_fuzzy"),
             "assumptions": it.get("assumptions") or [], "missing": it.get("missing") or [],
             "trace": it.get("trace") or [], "solver": it.get("solver"), "views": views, "other_evidence": other,
             "drawing_name": catalog.human_name(it["path"]), "credit": catalog.credit_line(it["path"]),
@@ -222,6 +249,39 @@ def ask(a: AskIn):
     return run_pipeline(a.path, a.question)
 
 
+def _warm() -> None:
+    """Load the pipeline and its imports in the background, so the expert's first "Ask" is not a 30 s wait."""
+    try:
+        item = next((r for r in _audit_items() if r.get("source") == "swiss_dwellings"), None)
+        if item:
+            run_pipeline(item["path"], item["question"])
+        else:
+            _pipeline()
+    except Exception:  # noqa: BLE001
+        pass
+
+
+@app.on_event("startup")
+def _startup() -> None:
+    threading.Thread(target=_warm, daemon=True).start()
+
+
+@app.get("/api/dataset-questions")
+def dataset_questions(path: str = Query(...)):
+    """What the dataset already asks about this drawing (so the expert can go beyond it). Never for test drawings."""
+    try:
+        catalog.safe_file(path)
+        if catalog.is_sealed(path):
+            raise catalog.BadPath("this drawing belongs to the sealed test split")
+    except Exception as e:  # noqa: BLE001
+        _bad(e)
+    from stoa.data import load_questions
+
+    rows = [q for q in load_questions() if q.path == path]
+    return {"n": len(rows), "questions": [{"question": q.question, "answer": _fmt_value(q.answer, q.unit), "type": q.type}
+                                          for q in rows[:60]]}
+
+
 class QuestionIn(BaseModel):
     path: str
     page: int = 0
@@ -233,6 +293,16 @@ class QuestionIn(BaseModel):
     sureness: str = Field(default="", max_length=40)
     marks: list[list[float]] = Field(default_factory=list)  # her own boxes on the rendered page (image px)
     system: dict | None = None  # what our system answered when she pressed "Ask our system"
+    qid: str = Field(default="", pattern="^(|h-[0-9a-f]{12})$")  # set when editing a saved question
+
+
+def _live_questions() -> dict[str, dict]:
+    """qid -> the last saved row, without deleted ones (same rule as the eval's `human` split: last row wins)."""
+    last: dict[str, dict] = {}
+    for r in store.read("questions"):
+        if r.get("qid"):
+            last[r["qid"]] = r
+    return {k: v for k, v in last.items() if not v.get("deleted")}
 
 
 def _guess_type(unit: str, answer: str) -> str:
@@ -276,13 +346,14 @@ def post_question(q: QuestionIn):
                                  "bbox": conv[0], "bbox_space": conv[1], "note": "expert mark"})
         except Exception:  # noqa: BLE001
             evid = []
+    qid = q.qid if q.qid and q.qid in _live_questions() else "h-" + make_qid(q.path, q.question.strip())
     row = store.append("questions", {
-        "qid": "h-" + make_qid(q.path, q.question.strip()), "path": q.path, "page": q.page,
+        "qid": qid, "path": q.path, "page": q.page,
         "question": q.question.strip(), "answer": q.answer.strip(), "unit": q.unit.strip(),
         "type": q.type or _guess_type(q.unit, q.answer), "method": q.method.strip(), "sureness": q.sureness,
         "marks": q.marks, "evidence": evid, "author": "expert", "system": sys_ans})
-    n = len(store.read("questions"))
-    if n in (1, 5, 10, 20, 40):
+    n = len(_live_questions())
+    if n in (1, 5, 10, 20, 40) and not q.qid:
         _notify("F", f"expert workbench: {n} human question(s) in $JUNCTION_SHARED/human/questions.jsonl "
                      f"(fields: path, question, answer, unit, type, method, sureness, system). Ready for an eval split 'human'.")
     _report()
@@ -291,8 +362,25 @@ def post_question(q: QuestionIn):
 
 @app.get("/api/questions")
 def get_questions():
-    return {"questions": [{k: r.get(k) for k in ("time", "qid", "path", "question", "answer", "unit", "sureness",
-                                                 "system")} for r in store.read("questions")][::-1]}
+    keys = ("time", "qid", "path", "page", "question", "answer", "unit", "type", "method", "sureness", "marks", "system")
+    rows = sorted(_live_questions().values(), key=lambda r: r.get("time", ""), reverse=True)
+    return {"questions": [{k: r.get(k) for k in keys} for r in rows]}
+
+
+class DeleteIn(BaseModel):
+    qid: str = Field(pattern="^h-[0-9a-f]{12}$")
+
+
+@app.post("/api/questions/delete")
+def delete_question(d: DeleteIn):
+    live = _live_questions()
+    if d.qid not in live:
+        raise HTTPException(404, "no such question")
+    r = live[d.qid]
+    store.append("questions", {"qid": d.qid, "path": r.get("path"), "question": r.get("question"), "deleted": True,
+                               "author": "expert"})
+    _report()
+    return {"ok": True, "n": len(_live_questions())}
 
 
 # --- tab 3: rules -------------------------------------------------------------------------------------------
@@ -331,7 +419,38 @@ def post_rule(r: RuleIn):
 
 @app.get("/api/rules")
 def get_rules():
-    return {"rules": store.read("rules")[::-1]}
+    rules = store.read("rules")
+    try:
+        stats = _rule_stats(len(rules))
+    except Exception:  # noqa: BLE001
+        stats = {}
+    out = []
+    for i, r in enumerate(rules, 1):
+        out.append({**r, "check": stats.get(i)})
+    return {"rules": out[::-1], "checked_on": _RULE_CACHE.get("desc")}
+
+
+_RULE_CACHE: dict = {}
+
+
+def _rule_stats(n_rules: int) -> dict:
+    """Per-rule test against our latest full dev run (cached per rules count + predictions file)."""
+    from workbench import rules_check
+
+    pred = rules_check.latest_dev_preds()
+    if not pred:
+        return {}
+    key = (n_rules, pred, Path(pred).stat().st_mtime_ns)
+    if _RULE_CACHE.get("key") != key:
+        if _RULE_CACHE.get("pred") != pred:
+            _RULE_CACHE["preds"] = rules_check.load_preds(pred)
+            _RULE_CACHE["pred"] = pred
+        res = rules_check.check(store.read("rules"), _RULE_CACHE["preds"])
+        _RULE_CACHE["stats"] = {r["i"]: {k: r.get(k) for k in ("touched", "touched_wrong", "flagged", "flagged_wrong",
+                                                                   "skip")} | {"examples": r["examples"][:3]} for r in res}
+        _RULE_CACHE["key"] = key
+        _RULE_CACHE["desc"] = f"{len(_RULE_CACHE['preds'])} answers of our latest dev run ({Path(pred).name[:15]})"
+    return _RULE_CACHE["stats"]
 
 
 def _report() -> None:

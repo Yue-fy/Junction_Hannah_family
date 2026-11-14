@@ -247,7 +247,7 @@ const audit = {
   viewer: new Viewer($("#audit-viewer")), items: [], idx: 0, cur: null, cache: new Map(),
   async init() {
     const r = await api("api/audit/items");
-    this.items = r.items;
+    this.items = r.items; this.moreN = r.more_available || 0;
     if (!this.items.length) {
       $("#audit-question").textContent = "No items to check yet.";
       this.viewer.empty("The audit sample has not been prepared yet.");
@@ -260,6 +260,8 @@ const audit = {
   },
   progress() {
     const done = this.items.filter((it) => it.verdict).length;
+    $("#audit-more").hidden = !(this.moreN && done === this.items.length);
+    $("#audit-more-n").textContent = this.moreN;
     $("#audit-progress").textContent = `${done} / ${this.items.length} checked`;
     $("#audit-bar").style.width = `${(100 * done) / this.items.length}%`;
   },
@@ -272,13 +274,17 @@ const audit = {
     let d;
     try { d = await this.get(it.item_id); } catch (e) { this.viewer.empty(`Could not load: ${esc(e.message)}`); return; }
     this.cur = d;
-    $("#audit-meta").textContent = `Item ${this.idx + 1} of ${this.items.length} · ${d.source} · ${d.type} · ${d.drawing_name}`;
+    $("#audit-meta").innerHTML = `Item ${this.idx + 1} of ${this.items.length} · ${esc(d.source)} · ${esc(d.type)} · ${esc(d.drawing_name)}` +
+      (d.split && d.split !== "dev" ? `<span class="split-tag" title="reference answer made by our agents">harder · ${esc(d.recipe || d.split)}</span>` : "");
+    $("#audit-ref").previousElementSibling.textContent = d.split && d.split !== "dev" ? "Reference answer (made by our agents)" : "Reference answer (dataset)";
     $("#audit-question").textContent = d.question;
     $("#audit-answer").textContent = d.answer;
     $("#audit-conf").textContent = confWords(d.confidence);
     $("#audit-ref").textContent = d.reference;
     $("#audit-match").textContent = d.matches_reference === true ? "our answer matches it" :
-      d.matches_reference === false ? "our answer differs" : "free-text answer: please compare";
+      d.matches_reference === false ? "our answer differs" :
+      d.text_match === true ? "free text: looks the same, please compare" :
+      d.text_match === false ? "free text: looks different, please compare" : "free-text answer: please compare";
     renderNotes($("#audit-assumptions"), d.assumptions, d.missing);
     $("#audit-trace").innerHTML = d.trace.map((t) => `<li>${esc(t)}</li>`).join("");
     $("#audit-comment").value = "";
@@ -325,6 +331,10 @@ const audit = {
   move(d) { const j = this.idx + d; if (j >= 0 && j < this.items.length) { this.idx = j; this.show(); } },
 };
 $$(".verdicts .v").forEach((b) => b.addEventListener("click", () => audit.verdict(b.dataset.v)));
+$("#audit-more-btn").addEventListener("click", async () => {
+  try { const r = await api("api/audit/more", { method: "POST" }); flash(`${r.added} new items`); } catch (e) { alert(e.message); return; }
+  await audit.init();
+});
 $("#audit-prev").addEventListener("click", () => audit.move(-1));
 $("#audit-next").addEventListener("click", () => audit.move(1));
 document.addEventListener("keydown", (e) => {
@@ -382,6 +392,15 @@ const asker = {
     if (v.n_pages > 1) $("#ask-page").addEventListener("change", (e) => this.open(this.path, +e.target.value));
     await this.viewer.load(v, []);
     measure.reset(v);
+    if (this.dsPath !== path) {
+      this.dsPath = path;
+      $("#ds-n").textContent = "…"; $("#ds-list").innerHTML = "";
+      api(`api/dataset-questions?path=${encodeURIComponent(path)}`).then((d) => {
+        $("#ds-n").textContent = d.n;
+        $("#ds-list").innerHTML = d.questions.map((q) => `<li>${esc(q.question)} <small>→ ${esc(q.answer)}</small></li>`).join("") ||
+          "<li>None: this drawing has no dataset questions yet.</li>";
+      }).catch(() => { $("#ds-n").textContent = "?"; });
+    }
   },
   async ask() {
     const question = $("#q-text").value.trim();
@@ -426,28 +445,59 @@ const asker = {
     const body = {
       path: this.path, page: this.page, question, answer: ans, unit: $("#q-unit").value, type,
       method: $("#q-method").value, sureness: ($("input[name=sure]:checked") || {}).value || "",
-      marks: this.viewer.marks, system: this.system,
+      marks: this.viewer.marks, system: this.system, qid: this.editQid || "",
     };
     try {
       const r = await api("api/questions", { method: "POST", body: JSON.stringify(body) });
       flash(`Saved ✓ (${r.n} questions so far)`);
+      this.edit(null);
       $("#q-text").value = ""; $("#q-answer").value = ""; $("#q-method").value = "";
       this.system = null; $("#q-result").hidden = true;
       this.viewer.marks = []; this.viewer.boxes = []; this.viewer.draw();
       this.listMine();
     } catch (e) { alert(`Could not save: ${e.message}`); }
   },
+  edit(q) {
+    this.editQid = q ? q.qid : null;
+    $("#q-save").textContent = q ? "Save changes" : "Save question";
+    $("#q-editing").hidden = !q;
+  },
   async listMine() {
     const r = await api("api/questions");
+    this.mine = r.questions;
     $("#q-count").textContent = r.questions.length;
-    $("#q-list").innerHTML = r.questions.map((q) => `<li><b>${esc(q.question)}</b> → ${esc(q.answer || "?")} ${esc(q.unit || "")}
-      ${q.system ? `<small>(ours: ${esc(q.system.value)} ${esc(q.system.unit || "")})</small>` : ""}</li>`).join("");
+    $("#q-list").innerHTML = r.questions.map((q, i) => `<li><b>${esc(q.question)}</b> → ${esc(q.answer || "?")} ${esc(q.unit || "")}
+      ${q.system ? `<small>(ours: ${esc(q.system.value)} ${esc(q.system.unit || "")})</small>` : ""}
+      <button class="mini" data-edit="${i}">Edit</button><button class="mini" data-del="${i}">Delete</button></li>`).join("");
+    $$("#q-list [data-edit]").forEach((b) => b.addEventListener("click", async () => {
+      const q = this.mine[+b.dataset.edit];
+      await this.open(q.path, q.page || 0);
+      $("#q-text").value = q.question || ""; $("#q-answer").value = q.answer || ""; $("#q-unit").value = q.unit || "";
+      if (q.type) $("#q-type").value = q.type;
+      $("#q-method").value = q.method || "";
+      const s = $(`input[name=sure][value="${q.sureness}"]`); if (s) s.checked = true;
+      this.viewer.marks = (q.marks || []).slice(); this.viewer.drawMarks();
+      this.edit(q);
+      $("#q-text").focus();
+    }));
+    $$("#q-list [data-del]").forEach((b) => b.addEventListener("click", async () => {
+      const q = this.mine[+b.dataset.del];
+      if (!confirm(`Delete this question?\n\n${q.question}`)) return;
+      try { await api("api/questions/delete", { method: "POST", body: JSON.stringify({ qid: q.qid }) }); flash("Deleted"); }
+      catch (e) { alert(`Could not delete: ${e.message}`); }
+      if (this.editQid === q.qid) this.edit(null);
+      this.listMine();
+    }));
   },
 };
 $("#pick-search-btn").addEventListener("click", () => asker.groups($("#pick-search").value.trim()));
 $("#pick-search").addEventListener("keydown", (e) => { if (e.key === "Enter") asker.groups(e.target.value.trim()); });
 $("#pick-reset").addEventListener("click", () => { $("#pick-search").value = ""; asker.groups(); });
-$("#ask-change").addEventListener("click", () => { $("#asker").hidden = true; $("#picker").hidden = false; });
+$("#ask-change").addEventListener("click", () => { $("#asker").hidden = true; $("#picker").hidden = false; asker.edit(null); });
+$("#q-cancel-edit").addEventListener("click", () => {
+  asker.edit(null); $("#q-text").value = ""; $("#q-answer").value = ""; $("#q-method").value = "";
+  asker.viewer.marks = []; asker.viewer.drawMarks();
+});
 $("#q-ask").addEventListener("click", () => asker.ask());
 $("#q-save").addEventListener("click", () => asker.save());
 $("#ask-mark").addEventListener("click", (e) => {
@@ -605,9 +655,18 @@ const rules = {
   async load() {
     const r = await api("api/rules");
     $("#rule-count").textContent = r.rules.length;
+    $("#rule-checked-on").textContent = r.checked_on ? `Tested on ${r.checked_on}.` : "";
+    const chk = (c) => {
+      if (!c) return "";
+      if (c.skip) return `<small>not testable (${esc(c.skip)})</small>`;
+      if (!c.touched) return `<small>no matching question in our test set</small>`;
+      const ex = (c.examples || []).map((e) => `<li>${esc(e.question.slice(0, 90))} → <b>${esc(e.value)} ${esc(e.unit || "")}</b> (reference ${esc(e.gold)})</li>`).join("");
+      return `applies to ${c.touched} answers; <b>${c.flagged}</b> outside the range` +
+        (c.flagged ? ` (${c.flagged_wrong} of them wrong)` : "") + (ex ? `<details><summary><small>examples</small></summary><ul class="small">${ex}</ul></details>` : "");
+    };
     $("#rule-table tbody").innerHTML = r.rules.map((x) => `<tr><td>${esc(x.what || "—")}</td>
       <td>${x.min != null || x.max != null ? `${esc(x.min ?? "?")} – ${esc(x.max ?? "?")} ${esc(x.unit || "")}` : "—"}</td>
-      <td>${esc(x.why || "")}${x.uncertainty ? `<br><i>${esc(x.uncertainty)}</i>` : ""}</td></tr>`).join("");
+      <td>${esc(x.why || "")}${x.uncertainty ? `<br><i>${esc(x.uncertainty)}</i>` : ""}</td><td>${chk(x.check)}</td></tr>`).join("");
   },
 };
 $("#rule-form").addEventListener("submit", async (e) => {
