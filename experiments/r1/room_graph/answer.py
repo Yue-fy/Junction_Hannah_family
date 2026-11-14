@@ -86,10 +86,14 @@ def _evidence(path: str, g: dict, ids: list[str], question: str, items_only: boo
     return out
 
 
-def solve(path: str, question: str, backend: str = "local"):
+def solve(path: str, question: str, backend: str = "local", textlayer: bool | None = None):
+    """textlayer: labels + printed areas from W3's OCR text layer (None -> env R1_RG_TEXTLAYER, default off)."""
+    import os
     from stoa import llm
     from stoa.contract import Answer
-    g = room_graph(path, printed=True)
+    if textlayer is None:
+        textlayer = os.environ.get("R1_RG_TEXTLAYER", "0") == "1"
+    g = room_graph(path, printed=True, textlayer=textlayer)
     if not g:
         return Answer(value=None, solver="room_graph", confidence=0.0,
                       missing=["no room segmentation for this plan (CC5K map not cached and live run unavailable)"])
