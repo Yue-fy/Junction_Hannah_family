@@ -400,6 +400,9 @@ class IfcSolver(BaseSolver):
     # ------------------------------------------------------------------------------------------------
     def solve(self, path: str, question: str) -> Answer:
         t0 = time.perf_counter()
+        from stoa.solvers.ifc.arith import ungroup_question
+
+        question = ungroup_question(question)  # "1,000 mm" -> "1000 mm" for every parser (Q bug 17)
         model = model_for(path)
         if model is None:
             return Answer.abstain(self.name, "no IFC model for this drawing", missing=["an IFC model of the building"])
@@ -1230,6 +1233,22 @@ class IfcSolver(BaseSolver):
                         conf = min(conf, 0.875)
                         missing.append(f"whether the {len(drop)} nested {kind}(s) are separate {kind}s: counting every "
                                        f"{'/'.join(classes)} entity gives {len(els) + len(drop)}")
+            if kind == "cable_tray" and els:
+                # IfcCableCarrierSegment holds trays AND conduits (sixty5_electrical: 7252 conduits + 25 trays, no
+                # PredefinedType): keep the ones typed or named as trays/ladders/trunking
+                def nm_(e: Element) -> str:
+                    return fold(f"{e.name or ''} {e.type_name or ''} {e.object_type or ''}")
+                tray = [e for e in els if (e.predefined_type or "").upper() in ("CABLETRAYSEGMENT", "CABLELADDERSEGMENT",
+                                                                               "CABLETRUNKINGSEGMENT")
+                        or re.search(r"tray|ladder|trunking|goot|trasse|pritsche|rinne|chemin", nm_(e))]
+                cond = [e for e in els if e not in tray and ((e.predefined_type or "").upper() == "CONDUITSEGMENT"
+                                                             or re.search(r"conduit|buis|rohr|tube|pipe", nm_(e)))]
+                if tray or cond:
+                    trace.append(f"cable trays: {len(tray)} of {len(els)} cable carrier segments typed/named as trays; "
+                                 f"{len(cond)} conduits left out")
+                    assumptions.append("cable trays = IfcCableCarrierSegment typed or named tray/ladder/trunking "
+                                       f"(conduits are carriers too: {len(cond)} left out)")
+                    els = tray
             if kind == "slab" and re.search(r"\bfloor[- ]?slabs?\b|\bfloors? (slab|plate)", fold(ctx.get("question", ""))):
                 keep = [e for e in els if (e.predefined_type or "").upper() not in ("ROOF", "LANDING", "BASESLAB")
                         and not _FOUNDATION_NAME.search(fold(f"{e.name or ''} {e.type_name or ''} {e.object_type or ''}"))]

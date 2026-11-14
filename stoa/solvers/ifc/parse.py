@@ -40,6 +40,7 @@ KIND_CLASSES: dict[str, tuple[str, ...]] = {
     "duct_fitting": ("IfcDuctFitting",), "duct": ("IfcDuctSegment",), "pipe_fitting": ("IfcPipeFitting",),
     "pipe": ("IfcPipeSegment",), "air_terminal": ("IfcAirTerminal",), "outlet": ("IfcOutlet",),
     "switch": ("IfcSwitchingDevice",), "valve": ("IfcValve",), "damper": ("IfcDamper",), "pump": ("IfcPump",),
+    "cable_tray": ("IfcCableCarrierSegment",),  # trays / ladders / trunking (cables run IN them: IfcCableSegment)
     "cable": ("IfcCableSegment", "IfcCableCarrierSegment"), "fire_terminal": ("IfcFireSuppressionTerminal",),
     "pipe_accessory": ("IfcPipeAccessory",), "duct_accessory": ("IfcDuctAccessory",),
     "meter": ("IfcFlowMeter", "IfcFlowInstrument", "IfcSensor"), "junction_box": ("IfcJunctionBox",),
@@ -129,7 +130,9 @@ _LEX: list[tuple[str, tuple[str, ...]]] = [
     ("valve", ("valve", "ventile", "ventil ", "ventils", "klep", "valvula")),  # not "ventilation"
     ("damper", ("damper", "klappe")),
     ("pump", ("pump", "pumpe", "pomp")),
-    ("cable", ("cable", "kabel", "cable tray")),
+    ("cable_tray", ("cable tray", "cable carrier", "cable ladder", "kabelgoot", "kabelgoten", "kabeltrasse",
+                    "kabelpritsche", "kabelrinne", "chemin de cable", "trunking")),
+    ("cable", ("cable", "kabel")),
     ("curtain_wall", ("curtain wall", "vorhangfassade", "muro cortina", "gardinvaeg", "vliesgevel")),
     ("stair_flight", ("stair flight", "treppenlauf", "tramo de escalera", "trappelob")),
     ("space", ("room", "space", "raum", "raeume", "rume", "local", "rum", "ruimte", "ruum", "pomieszcz",

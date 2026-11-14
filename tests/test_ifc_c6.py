@@ -134,3 +134,9 @@ def test_number_of_levels_matches_ifc_bench_gold(solver, model, gold):
     if not abspath(model).exists():
         pytest.skip("dataset not available")
     assert solver.solve(model, "What is the number of levels in the building?").value == gold
+
+
+@pytest.mark.skipif(not abspath(ESPL).exists(), reason="dataset not available")
+def test_grouped_numbers_in_thresholds(solver):
+    q = "How many doors on '1.korrus' are wider than {} mm?"
+    assert solver.solve(ESPL, q.format("1,000")).value == solver.solve(ESPL, q.format("1000")).value

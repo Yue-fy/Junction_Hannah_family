@@ -61,6 +61,18 @@ _GROUPED = re.compile(r"(?<![\w.,'’])(\d{1,3})((?P<sep>[,.'’ ])\d{3}(?:(?P=s
                       r"(?![\d]|[.,]\d)")
 
 
+def ungroup_question(question: str) -> str:
+    """`ungroup` on the raw question outside quoted names (their digits are names): every parser downstream (dimension
+    thresholds 'wider than 1,000 mm', area thresholds, factors) then sees plain numbers."""
+    out, last = [], 0
+    for m in _QUOTED.finditer(question):
+        out.append(ungroup(question[last:m.start()]))
+        out.append(m.group(0))
+        last = m.end()
+    out.append(ungroup(question[last:]))
+    return "".join(out)
+
+
 def ungroup(t: str) -> str:
     """Remove digit-group separators from numbers in folded text; the decimal separator becomes '.'.
     A separator followed by exactly three digits is a thousands separator when: it is an apostrophe or space (never
@@ -72,7 +84,7 @@ def ungroup(t: str) -> str:
         sep, groups, dsep = m.group("sep"), m.group(2), m.group("dsep")
         if dsep is not None and dsep == sep:
             return m.group(0)
-        near = t[max(0, m.start() - 6):m.end() + 10]
+        near = t[max(0, m.start() - 6):m.end() + 10].lower()
         money = re.search(_CUR, near) is not None
         multi = groups.count(sep) >= 2
         if sep == " " and not money:
