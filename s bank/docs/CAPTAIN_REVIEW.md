@@ -1,5 +1,167 @@
 # Captain review: S-Coach prototype
 
+## Round 2 · commit `1e65b45`, Saturday 14 November 2026, 18:00
+
+Final submission is due on **Sunday 15 November at 10:00**.
+
+**Summary.** Big step forward:
+
+- Gemini now answers.
+- The baskets match the brief.
+- The tax lens is excellent and every figure checks out.
+- Kai is in.
+
+Four things remain before submission:
+
+- The brief's taxi question still returns the wrong number.
+- VAT cannot be reached from chat.
+- "Last month" means different months offline and with Gemini.
+- 16 tests error on Linux.
+
+After that, the submission still needs a PR to `main`, the platform draft and the video.
+
+### What is done
+
+| Round 1 item | Status |
+| --- | --- |
+| Gemini | **Done.** `gemini-3-flash-preview` answered live with `source: gemini` in 2.5–6.4 s. "我九月份在餐厅花了多少钱？" (Chinese for "How much did I spend at restaurants in September?") returned €225.70 across 10 rows. "What kind of spender am I?" fell back once with `invalid_response`, but the answer was still correct. |
+| Baskets | **Done.** For Alex in September 2026: regular €1,266.90, irregular €0.00, everyday €611.76. |
+| Brief questions | **3 of 4 correct:** dining out −20% gives €45.14, the spender profile works, and safe-to-spend gives €3,288.31. The taxi question is wrong; see fix 1. |
+| Tax lens | **Done and correct.** The rate table matches Vero for all three periods. Each transaction in the list shows "tax inside". Rows without a clear rate stay uncovered instead of getting a guessed rate. Totals match my independent calculation to the cent: Alex €212.38 of €1,878.66, and Kai €135.64 of €1,768.76. |
+| Young-adult persona | **Done.** Kai is `CUST01331`, and the home card shows the payday-timing pattern. |
+| Submission | **Not yet.** There is no PR to `main`, and the platform shows only the Blueprint Evidence draft. |
+
+**How I checked**
+
+- I rebuilt the database from the four official CSVs, which took 7 s, and ran the test suite.
+- I ran the app twice, offline and with Gemini.
+- I asked the brief's questions through `POST /api/coach`.
+- I recomputed the figures from the raw CSV.
+
+### Fix before submission
+
+#### 1. The taxi question returns transport, not taxis
+
+"How much did I spend on taxis last month?" returns €266.80 across 6 rows: all of Transportation. For Alex in September 2026, those rows are:
+
+| Rows | MCC | Amount |
+| --- | --- | --- |
+| Fuel | 5541, 5542 | €155.55 |
+| Parking | 7523 | €62.16 |
+| Public transport | 4111 | €49.09 |
+
+**There are no taxi rides.** The dataset has a taxi MCC, **4121**, with 59,201 rows overall. The README already lists this as a known limitation. The problem is that it is the brief's first example question, so judges will probably type it.
+
+**Fix**
+
+- Add an `mcc_code` filter that accepts a list to `/api/statistics` and to the coach parameters.
+- Map these synonyms to MCCs:
+
+  | Words | MCC |
+  | --- | --- |
+  | taxi, taksi | 4121 |
+  | bus, train, tram, metro, public transport | 4111 |
+  | fuel, petrol, bensa | 5541, 5542 |
+  | parking | 7523 |
+
+  Keep the category-wide answer only for "transport" in general.
+- When the result is zero, say so and show what the category did contain. For example: "No taxi rides in September. Your €266.80 of transport was fuel €155.55, parking €62.16 and public transport €49.09." This makes a strong demo answer: the coach understood the question and taught something.
+- Use two personas as fixtures:
+  - Robin (`CUST00676`) has one taxi ride in September 2026, €26.64.
+  - Taylor (`CUST00296`) has one in August 2026, €75.49.
+- Change `test_official_questions.py` to expect MCC 4121 rows instead of all of Transportation.
+
+#### 2. VAT cannot be reached from chat
+
+The tax lens is our main differentiator, but asking about it in chat does not reach it:
+
+| Question | Offline | Gemini |
+| --- | --- | --- |
+| How much VAT did I pay in September? | `explain_change`, the restaurant comparison | `observed_tax_evidence`: "no explicit tax records" |
+| How much VAT is inside my purchases? | `explain_change` | not tested |
+| 我九月份交了多少增值税？ | not tested | `observed_tax_evidence` |
+
+The last question is Chinese for "How much VAT did I pay in September?".
+
+**Fix**
+
+- Add a `vat_estimate` intent that returns the existing VAT lens and its monthly card.
+- Add the intent to the Gemini allowlist.
+- Add these offline keywords: `vat` and `tax inside` (en), `alv` and `arvonlisävero` (fi), `moms` and `mervärdesskatt` (sv).
+- "How much tax did I pay?" should answer two things: explicit tax records are unavailable, and "≈ €212.38 of VAT was included in your September purchases (estimate)", with a link to the lens.
+- Add one test per language.
+
+#### 3. "Last month" and named months
+
+- **"Last month" differs.** With September selected, "last month" means September offline and August with Gemini. Use one rule in both paths. I recommend counting from the demo's reference date, 2026-09-30, so that "last month" is August 2026 and "this month" is September 2026. That is what Gemini already does.
+- **Named months are ignored offline.** "How much did I spend on groceries in August?" returns September, €379.79. The Gemini path correctly returns August, €442.26 across 6 rows. Parse month names in en, fi and sv (August, elokuu, augusti).
+- State the resolved period in every answer, for example "August 2026".
+
+#### 4. 16 tests error on Linux
+
+`tests/test_web_contract.py` passes about 138 KB of JavaScript as a single `node -e` argument. Linux limits one argument to 128 KiB and fails with "Argument list too long". macOS has no such limit, which is why the tests pass on your machine. I verified this one-line fix: with it, 176 tests pass and 1 is skipped.
+
+```python
+result = subprocess.run(['node', '--input-type=module'], input=script, capture_output=True, text=True, timeout=30)
+```
+
+#### 5. Submission
+
+- Open a PR from `Erin-lab-design/s-bank` to `main`. Yue merges it.
+- Create an S-Pankki submission on the Junction Platform: **New submission**, with S-Pankki as the main challenge. Ask Yue if anything is unclear.
+- Record a 2-minute video at phone width. Suggested order:
+  1. Alex's restaurant change.
+  2. The taxi answer with the MCC breakdown.
+  3. The VAT card and the "tax inside" rows.
+  4. Kai's payday story.
+
+### If time remains
+
+- **Make Kai's home card concrete.** For example: "Your balance went to −€11.82 on 28 Sep, one day before pay. The €236.44 clothing purchase on 26 Sep (≈ €48.04 VAT) caused it. Buying it on payday would have kept your lowest balance at €224.62." The numbers are in Round 1, section C.
+- **Follow-up questions.** "And restaurants?" should inherit the previous question's period and measure.
+
+### Order until Sunday 10:00
+
+| When | What |
+| --- | --- |
+| Sat evening | Fix 4 (5 minutes), then fixes 1 and 2 |
+| Sat night | Fix 3, the PR to `main` and the platform draft |
+| Sun 06:00–09:30 | Kai's card, the video and the final submit. No new features after 08:00 |
+
+### Agent prompt for Erin (round 2)
+
+```text
+Repo: Yue-fy/Junction_Hannah_family. Run:
+  git fetch && git switch Erin-lab-design/s-bank && git pull --ff-only
+Read AGENTS.md, then "Round 2" of the captain review:
+  git show "origin/Yue-fy/s-bank-review:s bank/docs/CAPTAIN_REVIEW.md"
+Work only inside `s bank/`.
+
+Do the Round 2 fixes in this order, each with unittest cases:
+4. tests/test_web_contract.py: pass the node script on stdin (input=script) instead of `-e`.
+1. Add an mcc_code filter (list) to /api/statistics and the coach parameters.
+   Map taxi->4121, public transport->4111, fuel->5541/5542, parking->7523.
+   A zero result names what the category did contain.
+   Update test_official_questions.py: Robin CUST00676 has one taxi ride in 2026-09, EUR 26.64.
+2. Add a vat_estimate coach intent (offline keywords en/fi/sv plus the Gemini allowlist) that returns the existing VAT lens.
+   "How much tax did I pay?" answers "explicit tax records unavailable" plus the VAT estimate.
+3. Use one rule for "last month" in both the offline and Gemini paths: relative to the reference date 2026-09-30, so August 2026.
+   Parse named months in en/fi/sv. State the resolved period in every answer.
+If time remains, make Kai's payday card concrete (numbers in Round 1, section C).
+
+Stop and ask before adding dependencies, deleting files or touching anything outside `s bank/`.
+Never commit data, .env or keys. Never push to main or force-push.
+
+Finish:
+- From the repo root, run: PYTHONPATH="s bank" python3 -m unittest discover -s "s bank/tests"
+- Ask the brief's four questions plus "How much VAT did I pay in September?", once offline and once with Gemini.
+- Push, then open a PR to main with screenshots and a short summary.
+```
+
+---
+
+## Round 1 · commit `c202ced`, Saturday 16:30 (kept for reference)
+
 Review of branch `Erin-lab-design/s-bank` at commit `c202ced`, Saturday 14 November 2026, 16:30. Final submission is due on **Sunday 15 November at 10:00**.
 
 **Summary.** The prototype is strong. It runs, the numbers are correct and the tests pass. Three issues should be fixed before submission:
@@ -10,7 +172,7 @@ Review of branch `Erin-lab-design/s-bank` at commit `c202ced`, Saturday 14 Novem
 
 After those fixes, the biggest gains come from three things: a **tax lens** that shows the VAT inside every purchase, free exploration of the user's own data, and a young-adult payday story.
 
-## What I verified
+### What I verified
 
 - I rebuilt the demo database from the four official CSVs. The SHA-256 checksums match `PIPELINE.md`. The import took about 5 seconds.
 - `python -m unittest discover -s tests` ran 96 tests: all passed, 1 skipped.
@@ -32,9 +194,9 @@ After those fixes, the biggest gains come from three things: a **tax lens** that
 
 - No data, `.env` or keys are committed.
 
-## Must-fix before submission
+### Must-fix before submission
 
-### 1. Gemini never answers
+#### 1. Gemini never answers
 
 - The default `GEMINI_MODEL=gemini-2.5-flash` returns **HTTP 404** on the Junction Gemini key, so every question silently falls back to the keyword rules.
 - With `GEMINI_MODEL=gemini-3-flash-preview`, the model Stoa uses, the call works. However, 4 of 5 test questions exceeded the hard 4-second timeout in `coach.py` and fell back anyway.
@@ -48,7 +210,7 @@ After those fixes, the biggest gains come from three things: a **tax lens** that
 
 **Done when** the questions in item 2 come back with `source: "gemini"` at least 4 times out of 5.
 
-### 2. The brief's own example questions
+#### 2. The brief's own example questions
 
 Judges will probably type these, because they are in the brief. Results for `CUST00001` today:
 
@@ -68,7 +230,7 @@ Judges will probably type these, because they are in the brief. Results for `CUS
 - Add a profile answer built from the Money Map.
 - Add one unit test per row of the table.
 
-### 3. The three baskets contradict the brief
+#### 3. The three baskets contradict the brief
 
 The brief defines the baskets as:
 
@@ -93,7 +255,7 @@ The brief defines the baskets as:
 
 If you prefer, keep "flexible essential" as an internal role, but do not label it "irregular".
 
-### 4. Smaller items
+#### 4. Smaller items
 
 - The calculation drawer shows the excluded row as `tx:574:34cb…`. Show it as date · merchant · amount, and keep the ref in a tooltip.
 - **Submission.**
@@ -101,9 +263,9 @@ If you prefer, keep "flexible essential" as an internal role, but do not label i
   - Create an S-Pankki draft on the Junction Platform. Each challenge needs its own submission, and only the Stoa draft exists today.
   - Record a 2-minute phone-sized video.
 
-## Improvement ideas, ranked by judging impact per hour
+### Improvement ideas, ranked by judging impact per hour
 
-### A. Tax lens: "how much tax is in each purchase" (captain's idea, recommended)
+#### A. Tax lens: "how much tax is in each purchase" (captain's idea, recommended)
 
 Finnish prices include VAT (ALV), but almost nobody knows how much. Showing the VAT inside every purchase and every month is concrete financial literacy. It is also original: we know of no budgeting app that does it. The data supports a good estimate, because 94.6% of purchases have an MCC code and every row has a category.
 
@@ -164,7 +326,7 @@ Healthcare and medical services are VAT-exempt. Residential rent is also exempt.
 
 **Optional, P2: income tax.** The data has net salary only. Let the user enter their tax-card withholding percentage, then show estimated gross pay and income tax. Label both as user input.
 
-### B. Free exploration (the brief's "MyData" point)
+#### B. Free exploration (the brief's "MyData" point)
 
 The brief asks to "let users explore their own data freely rather than showing fixed charts". Today the coach can only pick one of 7 intents and a precomputed candidate.
 
@@ -175,7 +337,7 @@ The brief asks to "let users explore their own data freely rather than showing f
 
 This is the highest-leverage change for both the AI and the MyData criteria.
 
-### C. A young-adult payday persona
+#### C. A young-adult payday persona
 
 The brief stresses young adults, but `CUST00001` is 63.
 
@@ -190,15 +352,15 @@ The brief stresses young adults, but `CUST00001` is 63.
 
 This is common in the data. From April to September 2026, 15.2% of customer-months dip below zero. The median first negative day is 6 days before the customer's usual payday, and 15.7% of gaps between paychecks are 40 days or longer. Safe-to-spend should therefore account for an uncertain next payday instead of assuming one date.
 
-### D. Open-data benchmark (only if time allows)
+#### D. Open-data benchmark (only if time allows)
 
 Comparing the user with Statistics Finland's household budget survey by age group is legitimate, unlike synthetic peer comparisons. Add it only if the category definitions can be mapped honestly. Otherwise skip it.
 
-### Not this weekend
+#### Not this weekend
 
 PSD2 multi-bank, the mortgage persona, and forecasts longer than 30 days.
 
-## Suggested order until Sunday 10:00
+### Suggested order until Sunday 10:00
 
 | When | What |
 | --- | --- |
@@ -206,7 +368,7 @@ PSD2 multi-bank, the mortgage persona, and forecasts longer than 30 days.
 | Sat night | Tax lens A (≈3 h) and free exploration B (≈3 h) |
 | Sun 06:00–09:30 | `CUST01331` demo story, 2-minute video, final submission. No new features after 08:00 |
 
-## Agent prompt for Erin
+### Agent prompt for Erin
 
 ```text
 Repo: Yue-fy/Junction_Hannah_family. Run:
