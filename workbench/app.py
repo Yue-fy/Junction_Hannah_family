@@ -178,6 +178,7 @@ class AuditIn(BaseModel):
     item_id: str
     verdict: str = Field(pattern="^(supports|wrong|cant_tell)$")
     comment: str = Field(default="", max_length=5000)
+    correct_value: str = Field(default="", max_length=500)  # "the right answer is ..." (optional)
 
 
 @app.post("/api/audit")
@@ -186,6 +187,7 @@ def post_audit(a: AuditIn):
     if it is None:
         raise HTTPException(404, "no such item")
     row = store.append("audit", {"item_id": a.item_id, "verdict": a.verdict, "comment": a.comment.strip(),
+                                 "correct_value": a.correct_value.strip(),
                                  "qid": it["qid"], "path": it["path"], "question": it["question"],
                                  "our_value": it.get("value"), "our_unit": it.get("unit"),
                                  "confidence": it.get("confidence"), "gold": it.get("gold"),

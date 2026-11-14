@@ -289,7 +289,7 @@ const audit = {
       d.text_match === false ? "free text: looks different, please compare" : "free-text answer: please compare";
     renderNotes($("#audit-assumptions"), d.assumptions, d.missing);
     $("#audit-trace").innerHTML = d.trace.map((t) => `<li>${esc(t)}</li>`).join("");
-    $("#audit-comment").value = "";
+    $("#audit-comment").value = ""; $("#audit-correct").value = "";
     $$(".verdicts .v").forEach((b) => b.classList.toggle("chosen", !!(d.last && d.last.verdict === b.dataset.v)));
     $("#audit-last").textContent = d.last ? `Already checked: ${d.last.verdict.replace("_", " ")}${d.last.comment ? ` — “${d.last.comment}”` : ""}. Press a button again to change it.` : "";
     $("#audit-credit").textContent = `Drawing: ${d.drawing_name} — ${d.credit}`;
@@ -319,9 +319,9 @@ const audit = {
   },
   async verdict(v) {
     if (!this.cur) return;
-    const comment = $("#audit-comment").value;
+    const comment = $("#audit-comment").value, correct_value = $("#audit-correct").value;
     try {
-      await api("api/audit", { method: "POST", body: JSON.stringify({ item_id: this.cur.item_id, verdict: v, comment }) });
+      await api("api/audit", { method: "POST", body: JSON.stringify({ item_id: this.cur.item_id, verdict: v, comment, correct_value }) });
     } catch (e) { alert(`Could not save: ${e.message}`); return; }
     this.items[this.idx].verdict = v;
     this.cache.delete(this.cur.item_id);
@@ -397,6 +397,10 @@ const asker = {
     if (v.n_pages > 1) $("#ask-page").addEventListener("change", (e) => this.open(this.path, +e.target.value));
     await this.viewer.load(v, []);
     measure.reset(v);
+    if (this.dsPath !== path && !this.editQid) {
+      $("#q-text").value = ""; $("#q-answer").value = ""; $("#q-method").value = "";
+      this.loadDraft();
+    }
     if (this.dsPath !== path) {
       this.dsPath = path;
       $("#ds-n").textContent = "…"; $("#ds-list").innerHTML = "";
@@ -442,6 +446,20 @@ const asker = {
       res.className = "result err"; res.innerHTML = `Could not ask: ${esc(e.message)}`;
     } finally { $("#q-ask").disabled = false; }
   },
+  draftKey() { return this.path ? `wb-draft|${this.path}` : ""; },
+  saveDraft() {
+    if (!this.path || this.editQid) return;
+    const d = { q: $("#q-text").value, a: $("#q-answer").value, u: $("#q-unit").value, t: $("#q-type").value, m: $("#q-method").value };
+    try { if (d.q || d.a || d.m) localStorage.setItem(this.draftKey(), JSON.stringify(d)); else localStorage.removeItem(this.draftKey()); } catch {}
+  },
+  loadDraft() {
+    let d = null;
+    try { d = JSON.parse(localStorage.getItem(this.draftKey()) || "null"); } catch {}
+    if (!d) return;
+    $("#q-text").value = d.q || ""; $("#q-answer").value = d.a || ""; $("#q-method").value = d.m || "";
+    if (d.t) $("#q-type").value = d.t;
+    $("#q-unit").value = d.u ?? $("#q-unit").value;
+  },
   async save() {
     const question = $("#q-text").value.trim();
     if (!question) { alert("Please write a question first."); return; }
@@ -459,6 +477,7 @@ const asker = {
       const r = await api("api/questions", { method: "POST", body: JSON.stringify(body) });
       flash(`Saved ✓ (${r.n} questions so far)`);
       this.edit(null);
+      try { localStorage.removeItem(this.draftKey()); } catch {}
       $("#q-text").value = ""; $("#q-answer").value = ""; $("#q-method").value = "";
       this.system = null; $("#q-result").hidden = true;
       this.viewer.marks = []; this.viewer.boxes = []; this.viewer.draw();
@@ -509,6 +528,7 @@ $("#q-cancel-edit").addEventListener("click", () => {
   asker.viewer.marks = []; asker.viewer.drawMarks();
 });
 $("#q-ask").addEventListener("click", () => asker.ask());
+["#q-text", "#q-answer", "#q-unit", "#q-method", "#q-type"].forEach((s) => $(s).addEventListener("input", () => asker.saveDraft()));
 $("#q-save").addEventListener("click", () => asker.save());
 $("#ask-mark").addEventListener("click", (e) => {
   const on = !asker.viewer.marking;
@@ -682,6 +702,9 @@ const rules = {
 $("#rule-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const body = Object.fromEntries(new FormData(e.target).entries());
+  const lo = parseFloat(String(body.min).replace(",", ".")), hi = parseFloat(String(body.max).replace(",", "."));
+  if (!isNaN(lo) && !isNaN(hi) && lo > hi && !confirm(`Min (${lo}) is larger than max (${hi}). Save anyway?`)) return;
+  if ((body.min || body.max) && !body.unit && !confirm("No unit given, so this range cannot be tested against our answers. Save anyway?")) return;
   try {
     await api("api/rules", { method: "POST", body: JSON.stringify(body) });
     e.target.reset(); flash(); rules.load();
