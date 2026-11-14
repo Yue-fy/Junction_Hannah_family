@@ -22,7 +22,7 @@ from stoa.router.canonical import canonical
 from stoa.router.intent import _NEGATION, _QUOTED, _TARGETS, Intent, modifiers, parse
 
 _TOGETHER = re.compile(r"\b(in total|together|altogether|combined|in all|total number|sum of|zusammen|insgesamt|"
-                       r"yhteens[aä]|au total|in totale|i alt|totaal|sammanlagt|tillsammans)\b", re.I)
+                       r"yhteens[aä]|au total|in totale|i alt|totaal|sammanlagt|tillsammans|totalt|inalles|totalt sett)\b", re.I)
 # Q 08:21: "How many doors and how many windows are on '1.korrus'?" was summed (101 @ 0.86; gold 46 and 55): two counting
 # cues, or "respectively / each / separately", without a total cue -> one count per class
 _COUNT_CUE = re.compile(r"\bhow many\b|\bnumber of\b|\bwie viele\b|\bcombien\b|\bquant[ie]\b|\bkuinka monta\b|\bmontako\b|"

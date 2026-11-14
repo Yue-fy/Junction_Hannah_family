@@ -61,3 +61,12 @@ def test_swedish_compositions():
     assert p and p.labels == ["wc", "shower_bathtub"]
     # a single class inside parentheses stays a definition
     assert decompose("cubicasa5k", "How many bedrooms (MH) are there in total?") is None
+
+
+def test_swedish_totalt():
+    from stoa.router.compose import decompose
+
+    p = decompose("cubicasa5k", "Hur många sanitetsenheter finns det totalt på planen (toalettstolar, handfat och "
+                                "diskhoar, duschar och badkar)?")
+    assert p and p.labels == ["wc", "sink", "shower_bathtub"]
+    assert decompose("cubicasa5k", "Hur många dörrar finns det totalt?") is None

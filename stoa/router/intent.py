@@ -43,7 +43,7 @@ _T = [
     ("wc_room", r"separate wc rooms?|toilet rooms?|erillis\w* wc-til|wc-til|wc-r[aä]um|separate toilets?|separata toaletter|"
                 r"separat toalett"),
     ("shower_bathtub", r"showers?\s*(?:and|plus|\+|&|,)\s*(?:bath)?tubs?|suihku\w* ja kylpyamme|suihku\w* ja ammee\w*|duschen und badewannen|dusch\w* och badkar\w*|badkar\w* och dusch\w*|bathtubs?\s*(?:and|plus|\+|&|,)\s*showers?"),
-    ("sink", r"sinks? and wash ?basins?|pesu- ja tiskial|wash ?basins? and sinks?|tiskial|sinks?\b|sp[üu]lbecken|[eé]viers?|diskh[oå]\w*|"
+    ("sink", r"sinks? and wash ?basins?|pesu- ja tiskial|wash ?basins? and sinks?|handfat\w* och diskh\w*|diskh\w* och handfat\w*|tiskial|sinks?\b|sp[üu]lbecken|[eé]viers?|diskh[oå]\w*|"
              # FI basin 'allas' (F 08:45: "Montako allasta keittiössä on?" read as a kitchen count)
              r"\ballas(?:ta)?\b|\baltaa\w*|\baltai\w+"),
     ("wc", r"toilet bowls?|wc seats?|wc-istui|toilets? \(wc\)|\btoilets?\b|\bwcs?\b|\bwc's\b|klosett|cuvettes?|wc-schalen|"
