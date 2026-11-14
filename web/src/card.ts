@@ -36,7 +36,7 @@ export function costTier(c: Cost): "deterministic" | "local" | "api" {
   return "deterministic";
 }
 
-const UNIT_LABEL: Record<string, string> = { m2: "m²", m3: "m³", ft2: "ft²", count: "", m: "m" };
+const UNIT_LABEL: Record<string, string> = { m2: "m²", m3: "m³", ft2: "ft²", count: "", m: "m", EUR: "€", eur: "€", USD: "$", usd: "$" };
 
 const esc = (s: unknown) => String(s ?? "").replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
@@ -51,7 +51,9 @@ function fmtEur(usd: number) {
 function fmtValue(a: Answer) {
   if (a.value === null || a.value === undefined) return "—";
   if (typeof a.value === "number") {
-    const v = Number.isInteger(a.value) ? String(a.value) : a.value.toLocaleString("en", { maximumFractionDigits: 2 });
+    // thousands separators only from 10,000 up (years and model ids like 2011 stay as they are)
+    const v = Math.abs(a.value) >= 10000 ? a.value.toLocaleString("en", { maximumFractionDigits: 2 })
+      : Number.isInteger(a.value) ? String(a.value) : a.value.toLocaleString("en", { maximumFractionDigits: 2 });
     return v;
   }
   return String(a.value);
@@ -71,9 +73,46 @@ export function crossChecks(a: Answer, asks: string[] = []): { text: string; ok:
     return [{ text: text.replace(/\s*[✓✗]\s*/g, " ").trim(), ok: !/✗|≠|!=|disagree|differs?\b|mismatch|conflict/i.test(text) }];
   });
   // Evidence notes carry the specific check; the trace usually repeats it, so use the trace only as fallback.
+  // Exception: boxes added by "Show where" (notes start with the locator's name) carry the locator's check only;
+  // the solver's own check (e.g. "vlm_lora 4 = raster 4") is then in the trace, so keep it next to it.
   const fromEv = parse(a.evidence.map((e) => e.note ?? ""));
-  const out = fromEv.length ? fromEv : parse(a.trace ?? []);
-  return out.filter((x, i) => out.findIndex((y) => y.text === x.text) === i).slice(0, Math.max(2, parts.size));
+  const fromTrace = parse(a.trace ?? []);
+  const located = a.evidence.some((e) => LOCATED_NOTE.test(e.note ?? ""));
+  const key = (t: string) => t.split("→")[0].replace(/\s+/g, " ").trim().slice(0, 24);
+  // "label reader (raster) finds 1 …" already says what the pipeline's "vlm_lora 0 ≠ raster 1" says: keep one line
+  const same = (t: string) => fromEv.some((e) => {
+    const m = e.text.match(/\((\w+)\) finds (\d+)/);
+    return m && new RegExp(`\\b${m[1]} ${m[2]}\\b`).test(t);
+  });
+  const extra = located ? fromTrace.filter((t) => !same(t.text) && !fromEv.some((e) => t.text.startsWith(key(e.text)) || e.text.startsWith(key(t.text)))) : [];
+  const out = fromEv.length ? [...fromEv, ...extra] : fromTrace;
+  // a failed check is never the one cut off: failures first (stable), then the cap
+  const uniq = out.filter((x, i) => out.findIndex((y) => y.text === x.text) === i);
+  return [...uniq.filter((x) => !x.ok), ...uniq.filter((x) => x.ok)].slice(0, Math.max(2, parts.size));
+}
+
+/** Ranked answers ("which storey has the most doors?"): the solver logs one value per candidate and "argmax over …";
+ * show them as bars with the chosen one marked, so the answer can be checked against the alternatives at a glance. */
+function compareHtml(a: Answer) {
+  const tr = a.trace ?? [];
+  const arg = tr.map((l) => l.match(/\barg(max|min) over (\w+)/)).find((x) => x);
+  if (!arg || typeof a.value !== "string") return "";
+  const rows = tr.map((l) => l.match(/^\[\w+\]\s*([^:\[\]]{1,60}?):\s*(-?\d+(?:\.\d+)?)\s*(count|m2|m²|m3|m³|m|%|EUR)\b/))
+    .filter((m): m is RegExpMatchArray => !!m).map((m) => ({ name: m[1].trim(), v: Number(m[2]), unit: m[3] === "count" ? "" : (UNIT_LABEL[m[3]] ?? m[3]) }));
+  const pick = String(a.value).trim();
+  if (rows.length < 2 || !rows.some((r) => r.name === pick)) return "";
+  const max = Math.max(...rows.map((r) => Math.abs(r.v)), 1e-9);
+  return `<div class="compare" title="Value per candidate from the solver's trace; the answer is the ${arg[1] === "max" ? "largest" : "smallest"}">
+    <div class="compare-h">Compared ${rows.length} ${esc(arg[2])} · ${arg[1] === "max" ? "largest" : "smallest"} wins</div>
+    ${rows.slice(0, 12).map((r) => `<div class="crow${r.name === pick ? " win" : ""}"><span>${esc(r.name)}</span><span class="bar"><i style="width:${Math.max(2, (Math.abs(r.v) / max) * 100).toFixed(1)}%"></i></span><b>${esc(r.v.toLocaleString("en", { maximumFractionDigits: 2 }))}${r.unit ? ` ${esc(r.unit)}` : ""}</b></div>`).join("")}
+  </div>`;
+}
+
+/** R1's calibrated 90% range for counts ("interval90: [lo, hi]" in the trace): shown under the value when lo < hi. */
+function rangeHtml(a: Answer) {
+  const m = (a.trace ?? []).map((l) => l.match(/interval90:\s*\[\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*\]/)).find((x) => x);
+  if (!m || typeof a.value !== "number" || Number(m[1]) >= Number(m[2])) return "";
+  return `<span class="range" title="Calibrated 90% range: on held-out drawings the true count lies in this range 9 times in 10">90% range ${esc(m[1])}–${esc(m[2])}</span>`;
 }
 
 /** One row per object: evidence items that share an ifc_guid (2D box + 3D element) are grouped. */
@@ -106,7 +145,8 @@ function evLabel(ev: Evidence[], g: { idx: number[]; first: number }, n: number,
   const where = has2D && has3D ? "2D + 3D" : has3D ? "3D" : has2D ? "2D" : "";
   const projected = items.some((x) => /projected: not drawn/i.test(x.note ?? ""));
   const files = new Set(items.map((x) => x.file.split("/").pop()));
-  return `<li class="ev-item" data-i="${g.idx.find((i) => ev[i].bbox) ?? g.first}" title="${esc([...files].join(" · "))}"><span class="n">${n}</span><span class="t">${step}${esc(note.replace(/\s*\|\s*projected: not drawn on this plan\s*$/i, ""))}${projected ? `<span class="proj" title="Not drawn on this plan (cut at 1.2 m): box = the element's footprint from the IFC model">projected</span>` : ""}</span><span class="w">${where}</span></li>`;
+  const notIn = items.some((x) => /^NOT in the answer:/.test(x.note ?? ""));
+  return `<li class="ev-item${notIn ? " contrast" : ""}" data-i="${g.idx.find((i) => ev[i].bbox) ?? g.first}" title="${esc([...files].join(" · "))}"><span class="n">${n}</span><span class="t">${step}${esc(note.replace(/\s*\|\s*projected: not drawn on this plan\s*$/i, ""))}${projected ? `<span class="proj" title="Not drawn on this plan (cut at 1.2 m): box = the element's footprint from the IFC model">projected</span>` : ""}</span><span class="w">${where}</span></li>`;
 }
 
 /** Long text answers (often "- item" lists from the model fact card): a compact list, folded after 8 lines. */
@@ -121,17 +161,19 @@ function richText(v: string) {
 }
 
 /** Trace lines: "[solver] text" → tag + text; long traces show the first steps and fold the rest. */
+const CALC = /\d(?:\s+[a-z]+)?\s*[x×*/÷+−-]\s*\d[^=]*=\s*-?\d/;
 function traceHtml(trace: string[], keep = 6) {
-  const li = (full: string) => {
+  const li = (full: string, n: number) => {
     const t = full.length > 260 ? `${full.slice(0, 240).replace(/\s*\n\s*/g, " ")} …` : full;
     const m = t.match(/^\[([\w:/-]+)\]\s*(.*)$/);
-    const cc = /cross-?check/i.test(t) ? " class=\"cc\"" : /\d\s*[x×*/÷+−-]\s*\d[^=]*=\s*-?\d/.test(t) ? " class=\"calc\"" : "";
-    return m ? `<li${cc}><span class="tag">${esc(m[1])}</span>${esc(m[2])}</li>` : `<li${cc}>${esc(t)}</li>`;
+    const cc = /cross-?check/i.test(t) ? " class=\"cc\"" : CALC.test(t) ? " class=\"calc\"" : "";
+    return m ? `<li value="${n}"${cc}><span class="tag">${esc(m[1])}</span>${esc(m[2])}</li>` : `<li value="${n}"${cc}>${esc(t)}</li>`;
   };
-  const head = trace.slice(0, keep).map(li).join("");
-  const rest = trace.slice(keep);
-  return `<ol class="trace">${head}</ol>` + (rest.length
-    ? `<details class="more-steps"><summary>${rest.length} more step${rest.length > 1 ? "s" : ""}</summary><ol class="trace" start="${keep + 1}">${rest.map(li).join("")}</ol></details>`
+  // the first steps, plus any arithmetic line further down (the jury should see "46 count x 450 = 20700" unfolded)
+  const shown = trace.map((t, i) => i).filter((i) => i < keep || (CALC.test(trace[i]) && !/cross-?check/i.test(trace[i])));
+  const rest = trace.map((t, i) => i).filter((i) => !shown.includes(i));
+  return `<ol class="trace">${shown.map((i) => li(trace[i], i + 1)).join("")}</ol>` + (rest.length
+    ? `<details class="more-steps"><summary>${rest.length} more step${rest.length > 1 ? "s" : ""}</summary><ol class="trace">${rest.map((i) => li(trace[i], i + 1)).join("")}</ol></details>`
     : "");
 }
 
@@ -215,8 +257,11 @@ function intentHtml(a: Answer, run: AgentRun | null) {
   // "operator question (modifier share …)" + "<solver> (question as asked): …": the template intent was not used
   const op = !run && (a.trace ?? []).find((l) => /^operator question \(modifiers? /.test(l))?.match(/modifiers? ([\w+]+)/)?.[1];
   const raw = !run && (a.trace ?? []).find((l) => /^\w+ \(question as asked\):/.test(l))?.match(/^(\w+)/)?.[1];
-  if (op && raw) {
-    bits.push(op.split("+").map((m) => `<b>${esc(m.replace(/_/g, " "))}</b>`).join(" + "));
+  // the solver's own operation line, e.g. "[ifc] outer operation: factor 450 EUR per door" (numbers given in the question)
+  const outer = !run && (a.trace ?? []).map((l) => l.match(/^(?:\[\w+\]\s*)?outer operation:\s*(.+)$/)?.[1]).find((x) => x);
+  if ((op || outer) && raw) {
+    if (op) bits.push(op.split("+").map((m) => `<b>${esc(m.replace(/_/g, " "))}</b>`).join(" + "));
+    if (outer) bits.push(`<b>${esc(outer)}</b>`);
     bits.push(`not a template: ${esc(raw)} read the question itself and computed it in code`);
   } else if (run) {
     // the template intent was NOT used (it misreads operators); say what the agent did instead
@@ -282,9 +327,29 @@ export function secondOpinionHtml(a: Answer, b: Answer, ms: number) {
     ${raw ? `<details><summary>its reasoning</summary><p>${esc(raw.replace(/\s*\|\s*/g, " ").slice(0, 900))}</p></details>` : ""}</div>`;
 }
 
+/** Who can mark what a CubiCasa count counted when the answer itself carries no boxes: room names → the label
+ * reader (raster, local VLM, cached per drawing); symbols → R1's pretrained CubiCasa5K detector (cached, no GPU). */
+const ROOM_TARGETS = new Set(["bedroom", "kitchen", "bathroom", "sauna", "wc_room", "balcony"]);
+const SYMBOL_TARGETS = new Set(["window", "door", "wc", "sink"]);
+export const LOCATED_NOTE = /^(label reader|CubiCasa5K detector): /;
+export interface Locator { solver: string; name: string; button: string; title: string; noun: string }
+const NOUNS: Record<string, string> = { window: "windows", door: "doors", wc: "WC seats", sink: "sinks", wc_room: "WC room labels" };
+export function locatorFor(a: Answer, file: string): Locator | null {
+  if (a.value === null || (a.evidence ?? []).length || !/^data\/cubicasa5k\/.*\.(png|jpe?g)$/i.test(file)) return null;
+  const t = a.intent?.target ?? (a.trace ?? []).map((l) => l.match(/^intent: count (\w+)/)?.[1]).find((x) => x) ?? "";
+  const noun = NOUNS[t] ?? (ROOM_TARGETS.has(t) ? `${t} labels` : "symbols");
+  // the pipeline already asked the label reader and it found none: nothing to mark
+  if (ROOM_TARGETS.has(t) && (a.trace ?? []).some((l) => /cross-check:.*\braster 0\b/.test(l))) return null;
+  if (ROOM_TARGETS.has(t)) return { solver: "raster", name: "label reader", button: "Show where · read the room labels", noun,
+    title: "Read the room labels on the drawing (local vision model, once per drawing, cached) and mark the ones this answer counts" };
+  if (SYMBOL_TARGETS.has(t)) return { solver: "raster_cc5k", name: "CubiCasa5K detector", button: "Show where · symbol detector", noun,
+    title: "Mark every symbol the pretrained CubiCasa5K model finds (Kalervo et al. 2019, weights CC BY-NC 4.0; cached, no GPU)" };
+  return null;
+}
+
 export interface CardOpts {
-  /** CubiCasa answers without located evidence: ask the label reader (raster) where the counted rooms are. */
-  onLocate?: () => Promise<void>;
+  /** CubiCasa answers without located evidence: ask a locator (see locatorFor) to mark what was counted. */
+  onLocate?: (loc: Locator) => Promise<void>;
   onSecondOpinion?: () => Promise<{ answer: Answer; ms: number }>;
   onAsk?: (question: string) => void;
   roundTripMs: number;
@@ -328,21 +393,22 @@ export function renderCard(el: HTMLElement, a: Answer, opts: CardOpts) {
   const ev = a.evidence ?? [];
   const groups = groupEvidence(ev);
   const shown = groups.slice(0, 80);
+  const loc = locatorFor(a, opts.currentFile);
 
   el.className = `card answer ${a.value === null ? "refused" : ""}`;
   el.innerHTML = `
     <div class="value-row${rich ? " rich" : ""}">
       ${rich ? `<span class="rich-lbl">Text answer · ${String(a.value).split(/\n+/).filter((l) => l.trim()).length} line(s)</span><div class="value text rich">${richText(String(a.value))}</div>`
-        : `<div class="value ${isText ? "text" : ""} ${isText && String(a.value).length > 40 ? "long" : ""}">${esc(fmtValue(a))}${unit ? `<span class="unit">${esc(unit)}</span>` : ""}</div>`}
+        : `<div class="value ${isText ? "text" : ""} ${isText && String(a.value).length > 40 ? "long" : ""}">${esc(fmtValue(a))}${unit ? `<span class="unit">${esc(unit)}</span>` : ""}${rangeHtml(a)}</div>`}
       <div class="conf ${confClass}" title="Calibrated confidence">
         <div class="conf-num">${conf}%</div><div class="conf-bar"><i style="width:${conf}%"></i></div><div class="conf-lbl">confidence</div>
       </div>
     </div>
     ${intentHtml(a, run)}
+    ${compareHtml(a)}
     ${checks.map((x) => `<div class="xcheck ${x.ok ? "ok" : "bad"}"><b>${x.ok ? "✓ Cross-checked" : "✗ Sources disagree"}</b> ${esc(x.text)}</div>`).join("")}
     ${cascadeHtml(tier)}
-    ${opts.onLocate && !ev.length && a.value !== null && /^data\/cubicasa5k\/.*\.(png|jpe?g)$/i.test(opts.currentFile)
-      ? `<div class="locate-slot"><button class="locate-btn" title="Read the room labels on the drawing (local vision model, once per drawing, cached) and mark the ones this answer counts">Show where · read the room labels</button></div>` : ""}
+    ${opts.onLocate && loc ? `<div class="locate-slot"><button class="locate-btn" title="${esc(loc.title)}">${esc(loc.button)}</button></div>` : ""}
     ${opts.onSecondOpinion && /\.(png|jpe?g|pdf)$/i.test(opts.currentFile) && (tier !== "deterministic" || (a.confidence ?? 0) < 0.8)
       ? `<div class="second-slot"><button class="second-btn" title="Ask NVIDIA Nemotron 3.5 Super VL (hosted vision + reasoning model) the same question: one API call, only when you click">Second opinion · NVIDIA Nemotron</button></div>` : ""}
     <div class="cost">
@@ -367,15 +433,15 @@ export function renderCard(el: HTMLElement, a: Answer, opts: CardOpts) {
     b.addEventListener("keydown", (e) => e.key === "Enter" && opts.onAsk?.(b.dataset.q!));
   });
   const lb = el.querySelector<HTMLButtonElement>(".locate-btn");
-  if (lb && opts.onLocate) {
+  if (lb && opts.onLocate && loc) {
     const go = opts.onLocate;
     lb.addEventListener("click", async () => {
       lb.disabled = true;
-      lb.textContent = "Reading the labels…";
+      lb.textContent = loc.solver === "raster" ? "Reading the labels…" : "Detecting symbols…";
       try {
-        await go();
+        await go(loc);
       } catch (e) {
-        lb.parentElement!.innerHTML = `<div class="xcheck bad"><b>Label reader failed</b> ${esc(e)}</div>`;
+        lb.parentElement!.innerHTML = `<div class="xcheck bad"><b>${esc(loc.name)} failed</b> ${esc(e)}</div>`;
       }
     });
   }

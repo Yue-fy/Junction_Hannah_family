@@ -435,23 +435,32 @@ async function showAnswer(a: Answer, roundTripMs: number) {
       $<HTMLTextAreaElement>("question").value = q;
       void runAsk();
     },
-    onLocate: async () => {
-      // the label reader answers the same question; its label boxes become the evidence, with a cross-check line
+    onLocate: async (loc) => {
+      // a second reader answers the same question; its boxes become the evidence, with a cross-check line
       const t0 = performance.now();
-      const r = await ask(askedPath, askedQ, "raster");
+      const r = await ask(askedPath, askedQ, loc.solver);
       if (state.file?.path !== askedPath) return;
       const same = r.value !== null && Number(r.value) === Number(a.value);
       const ev = (r.evidence ?? []).filter((e) => e.bbox);
-      const check = r.value === null ? `label reader: no answer (${(r.missing ?? [])[0] ?? "no labels for this kind of room"})`
-        : `cross-check: label reader counts ${r.value} label${Number(r.value) === 1 ? "" : "s"} ${same ? "✓" : `✗ (answer ${a.value})`}`;
+      const what = Number(r.value) === 1 ? loc.noun.replace(/s$/, "") : loc.noun;
+      const check = r.value === null ? `${loc.name}: no answer (${(r.missing ?? [])[0] ?? `nothing to mark for this question`})`
+        : `cross-check: ${loc.name} (${loc.solver}) finds ${r.value} ${what} ${same ? "✓" : `✗ (answer ${a.value})`}`;
       const a2: Answer = {
         ...a, cached: a.cached,
-        evidence: ev.map((e, i) => ({ ...e, note: `label reader: ${e.note ?? ""}${i === 0 ? `; ${check}` : ""}` })),
-        trace: [...(a.trace ?? []), `${check} — raster label reader, ${Math.round(performance.now() - t0)} ms (labels read once per drawing, cached)`],
+        evidence: ev.map((e, i) => ({ ...e, note: `${loc.name}: ${e.note ?? ""}${i === 0 ? `; ${check}` : ""}` })),
+        trace: [...(a.trace ?? []), `${check} — ${loc.solver}, ${Math.round(performance.now() - t0)} ms (cached per drawing)`,
+          ...(r.trace ?? []).filter((l) => /CC BY|Kalervo/.test(l)).slice(0, 1)],
         missing: ev.length ? (a.missing ?? []).filter((m) => !/no located evidence/i.test(m)) : a.missing,
+        // the extra reader's tokens/GPU count too (both are cached per drawing, so usually 0)
+        cost: Object.fromEntries([...new Set([...Object.keys(a.cost ?? {}), ...Object.keys(r.cost ?? {})])].map((k) =>
+          [k, k === "wall_seconds" ? a.cost?.[k] : (a.cost?.[k] ?? 0) + (r.cost?.[k] ?? 0)])),
+        assumptions: [...(a.assumptions ?? []), ...(same ? [] : [`the marks show the ${loc.name}'s ${r.value ?? "?"}, not the answer's ${a.value}: compare them on the drawing`])],
       };
       if (!ev.length) a2.evidence = [{ file: askedPath, note: check } as Answer["evidence"][number]];
       await showAnswer(a2, 0);
+      // the detector's weights have their own licence: credit them next to the drawing's credit while its boxes show
+      const lic = (r.trace ?? []).find((l) => /CC BY/.test(l));
+      if (lic && ev.length && !$("credit").textContent?.includes("weights")) $("credit").insertAdjacentHTML("beforeend", ` · boxes: ${esc(lic)}`);
     },
     onSecondOpinion: async () => {
       const t0 = performance.now();
@@ -480,6 +489,38 @@ async function showAnswer(a: Answer, roundTripMs: number) {
   } else if (v3d && v3d.file === state.ifc) {
     applyEvidence3D(a); // clears the previous answer's highlight
   }
+  // A free-text answer about a model with no element evidence ("Toilet-Domestic-3D: 9 units, Urinal-Wall-3D: 4"):
+  // find the element types it names in the loaded model (in the browser, no model call), highlight them and check
+  // the counts it gives against the model.
+  if (/\.ifc$/i.test(askedPath) && typeof a.value === "string" && !a.evidence.some((e) => e.ifc_guid)) {
+    await ensure3D();
+    const v = v3d;
+    if (state.answer !== a || !v || v.file !== askedPath) return;
+    const named = v.findNamed(String(a.value), askedQ);
+    if (!named.length) return;
+    const said = named.filter((n) => !n.missed);
+    const missed = named.filter((n) => n.missed);
+    if (!said.length && !missed.length) return;
+    const checks = said.filter((n) => n.said !== null).map((n) => `${n.name} ${n.guids.length}${n.said === n.guids.length ? " ✓" : ` ✗ (answer says ${n.said})`}`);
+    const ev = said.flatMap((n) => n.guids.map((g, i) => ({
+      file: askedPath, ifc_guid: g,
+      note: `named in the answer: ${n.name} (${i + 1} of ${n.guids.length})${i === 0 && n.said !== null
+        ? `; cross-check: the model has ${n.guids.length} '${n.name}', the answer says ${n.said} ${n.said === n.guids.length ? "✓" : "✗"}` : ""}`,
+    }) as Answer["evidence"][number]));
+    // same kind of fixture in the model but not in the answer: shown as a ✗ check, its elements listed after the named ones
+    const miss = missed.map((n) => `${n.name} ×${n.guids.length}`).join(", ");
+    ev.push(...missed.flatMap((n) => n.guids.map((g, i) => ({
+      file: askedPath, ifc_guid: g,
+      note: `NOT in the answer: ${n.name} (${i + 1} of ${n.guids.length})${i === 0 && n === missed[0] ? `; cross-check: the model ${said.length ? "also " : ""}has ${miss} of ${said.length ? "the same kind" : "the kind the question asks about"} (purple in 3D), which the answer does not mention ✗` : ""}`,
+    }) as Answer["evidence"][number])));
+    await showAnswer({
+      ...a, evidence: [...ev, ...a.evidence],
+      trace: [...(a.trace ?? []), `checked against the model by element name (in the browser, no model call): ${said.length ? `named in the answer ${said.map((n) => `${n.name} ×${n.guids.length}`).join(", ")}` : "the answer names no element type of the model"}${checks.length ? `; counts: ${checks.join(", ")}` : ""}${miss ? `; same kind, not named: ${miss}` : ""}`],
+      missing: [...(a.missing ?? []), ...(miss ? [`the answer does not mention ${miss} (same kind of fixture in the model)`] : [])],
+      assumptions: [...(a.assumptions ?? []), said.length ? "highlighted elements are matched by the family/type names the answer uses; the solver did not cite them"
+        : "purple elements are the model's families of the kind the question asks about (matched by element name), not cited by the solver"],
+    }, roundTripMs);
+  }
 }
 
 function applyEvidence3D(a: Answer) {
@@ -487,7 +528,8 @@ function applyEvidence3D(a: Answer) {
   if (!v || v.file !== state.ifc) return;
   const guids = a.evidence.filter((e) => e.ifc_guid).map((e) => e.ifc_guid!);
   const storeyIds = new Set(guids.map((g) => v.storeyOfGuid(g)).filter((s): s is number => s !== null));
-  const n = v.highlight(guids, true);
+  const contrast = new Set(a.evidence.filter((e) => e.ifc_guid && /^NOT in the answer:/.test(e.note ?? "")).map((e) => e.ifc_guid!));
+  const n = v.highlight(guids, true, contrast);
   if (storeyIds.size === 1) {
     const s = [...storeyIds][0];
     v.setStorey(s);
@@ -520,7 +562,7 @@ function focusEvidence(i: number) {
   }
 }
 
-// --- demo tour: five steps, each one sentence for the presenter ----------------------------------------
+// --- demo tour: one step per key press, each one sentence for the presenter ----------------------------------------
 const TOUR: { file: string; q: string; note: string; bench?: boolean; second?: boolean; locate?: boolean }[] = [
   { file: "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
     q: "What is the net floor area of the room 'KORIDOR (119)' on '1.korrus', in m²?",
@@ -535,8 +577,11 @@ const TOUR: { file: string; q: string; note: string; bench?: boolean; second?: b
     q: "How many doors are there in the model 'Maleva tänav 18 korterelamu (Esplanades example model)'?",
     note: "Model-wide question: evidence on five sheets. Click a sheet chip to open it." },
   { file: "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
-    q: "What share of the total room area on '1.korrus' does the room 'KORIDOR (119)' take, in percent?",
-    note: "A question no template covers: the IFC solver reads the operator itself, computes part ÷ whole in code (see 'Why') and marks every room it summed. No model call. Questions no solver can read go to a small planning agent (ask → calc → answer)." },
+    q: "If each door costs 450 euros, what do all the doors on '1.korrus' cost in total?",
+    note: "A question no template covers, with a number in it: the IFC solver reads the price from the question, counts the 46 doors in the model and multiplies in code (46 × 450 € = 20,700 €). No model call; every counted door is evidence." },
+  { file: "data/ifc_bench/4351_arc.ifc",
+    q: "What plumbing fixtures are in this building and their respective counts?",
+    note: "A free-text answer about a model is checked against the IFC model in the browser, no model call: fixture types it names are highlighted (orange) with their counts checked; plumbing fixtures it leaves out are flagged and shown in purple." },
   { file: "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
     q: "How many doors (interior doors and entrance doors together) are drawn on this floor plan?",
     note: "Vector drawing: doors counted on the CAD layer and mapped back onto the PDF." },
@@ -544,8 +589,11 @@ const TOUR: { file: string; q: string; note: string; bench?: boolean; second?: b
     q: "Wie viele Türen und Fenster sind insgesamt auf diesem Grundriss eingezeichnet?",
     note: "A German question that combines two counts: it is split into two sub-questions, each answered and cross-checked, and the sum is done in code." },
   { file: "data/cubicasa5k/colorful-4539.png",
-    q: "Kuinka monta makuuhuonetta (MH) pohjapiirustuksessa on?", locate: true,
-    note: "A scanned Finnish apartment plan, asked in Finnish: our fine-tuned 8B vision model counts the bedrooms; 'Show where' reads the room labels and marks each 'MH', so the count can be checked in seconds." },
+    q: "Kuinka monta makuuhuonetta (MH) pohjapiirustuksessa on?",
+    note: "A scanned Finnish apartment plan, asked in Finnish: our fine-tuned 8B vision model counts the bedrooms, a second reader reads the room names; they agree, so each counted 'MH' label is marked and the confidence goes up." },
+  { file: "data/cubicasa5k/high_quality_architectural-14797.png",
+    q: "How many saunas are on this floor plan?", locate: true,
+    note: "The fine-tuned model says 0 saunas, but the label reader disagrees, so the card says so and shows no boxes. 'Show where' marks what the reader found: 'LH' (löylyhuone, the sauna room). One glance shows the sauna: this is how a person catches a wrong answer in seconds." },
   { file: "data/habs/vi0026_sheet_00003.jpg",
     q: "What kind of drawing is this (floor plan, elevation, section, site plan)?", second: true,
     note: "Historical scan (HAER, 1977) with no text layer: a local vision model answers but is unsure, so we ask NVIDIA Nemotron (hosted) for a second opinion, one paid call. Below: the other sheets of the same survey, linked." },
