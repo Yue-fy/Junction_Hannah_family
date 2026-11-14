@@ -45,6 +45,12 @@ talks to Stoa can decide on the spot. Keep it to 10 minutes: ask 1–6 first.
   begane grond") or "in the whole building" in Swedish/French/Italian/Estonian is answered for the *sheet's* storey at
   high confidence; with the file's own names the same questions are ~100 %. If the hidden set uses everyday words,
   that is the first fix.
+- **Can one question ask for two or more things** ("How many doors and how many windows are on level 2?", "How many
+  bedrooms and what is their total area?", "List the rooms and their areas")? **What answer format do you score**
+  for those — one string, a list, a table, one field per part?
+- **Why:** our red team (08:16, v14) found that "how many doors *and how many* windows" is answered with their sum
+  at high confidence (two answers were asked), and two-part area questions get only one part. The fix is easy once
+  we know the format you expect; a wrong format would cost every multi-part question.
 
 ## 4. How do you score cost?
 - Per question in dollars? Wall time? Does local GPU inference count, and at what price? Do you count the one-off

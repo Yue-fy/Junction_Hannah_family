@@ -1,0 +1,47 @@
+# Written by R1 at 05:25 BEFORE running route.py on it. 1 = should route to room_graph, 0 = whole-plan question.
+1|What's the size of the master bedroom?
+1|Which rooms can you reach directly from the hallway?
+1|Is the toilet next to the kitchen?
+1|How many windows face out of the living room?
+1|Count the doors leading into the bathroom.
+1|Which bedroom is the biggest?
+1|Where is the washing machine?
+1|Which room has a bathtub?
+1|How many sinks are there in the bathroom?
+1|Does the sauna have a window?
+1|What is the area of the living room in square metres?
+1|How large is the kitchen?
+1|How many rooms are connected to the entrance hall?
+1|Can you get to the balcony from the bedroom?
+1|Which room is closest to the front door?
+1|How many bedrooms have a window?
+1|List the rooms adjacent to the kitchen.
+1|Is the WC accessed from the hall?
+1|How many doors lead to the corridor?
+1|What is the combined area of the bathroom and the sauna?
+1|Which room is between the kitchen and the bedroom?
+1|How many windows are there in the master bedroom?
+1|Which room does the front door open into?
+1|Is there a window in the WC?
+1|What is the smallest bedroom's area?
+1|How many toilets are there in the bathrooms?
+0|How many windows does the apartment have?
+0|How many doors are there in total?
+0|What is the total area of the flat?
+0|How many bedrooms does this unit have?
+0|Count the sinks in the drawing.
+0|How many rooms are there?
+0|Are there more windows than doors?
+0|How many floors does the plan show?
+0|Is there a sauna in this apartment?
+0|How many bathrooms are there?
+0|Does the apartment have a balcony?
+0|How many toilets are drawn in the plan?
+0|What is the scale of the drawing?
+0|How many showers are on this floor plan?
+0|How many WC seats are there?
+0|Which apartment type is this (e.g. 3H+K+S)?
+0|How many kitchens are shown?
+0|Is this a two-storey apartment?
+0|How many windows are on the upper floor?
+0|How many balconies does the flat have?

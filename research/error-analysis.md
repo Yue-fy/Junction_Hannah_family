@@ -1,6 +1,6 @@
 # Error analysis (E = agent F)
 
-Updated 04:55, 14 Nov 2026 (sections newest first). Regenerate the tables with
+Updated 08:55, 14 Nov 2026 (sections newest first). Regenerate the tables with
 `/data/User/fangy4/envs/junction/bin/python -m stoa.eval.analyze <run_id> --baseline <dummy run_id> --top 20`.
 For paired significance use `python3 experiments/r1/stats/compare.py RUN_A RUN_B --by template` (cluster CI).
 
@@ -13,7 +13,172 @@ answer) vs `20261113-234812-dummy-dev` (template prior), both on dev v2 (hash f4
 | dummy (prior) | 26.1% | 40.4% | 0 | 0% |
 | vlm_direct | 32.0% (28.0–36.5) | 44.1% | 200 (all IFC) | 0% |
 
-## LATEST (04:55, cycle 62): language is the biggest held-out gap, and a translate-first front end closes most of it
+## LATEST (08:55, cycle 225): same-gold wording probes in 8 languages: where a judge's own wording breaks us
+
+All probes are OPEN (dev drawings / open hard + hard2 bases; quote and fix freely). Each re-asks a dataset question in
+the words a judge might type, with the SAME gold; most carry the dataset wording of the same base as a control
+(`experiments/F/add_controls.py`), so `python3 experiments/F/control_compare.py PROBE RUN` isolates the wording effect.
+Code: night c1d6149 (S0 cycle 37 merges incl. W4 0319d93 apartment normalisation). Generators:
+`experiments/F/apt_wording_probe.py [N] [--ml|--cc|--ifc|--ml2]`, `experiments/F/comp_ml_probe.py`.
+
+| probe (artifacts/F/…) | rows | acc | vs control | confident-wrong (≥0.8) | where it breaks |
+|---|---:|---:|---|---:|---|
+| apt_wording (EN: Swiss/IFC/CubiCasa) | 1711 | 89.3 | Swiss 82.5 → **94.5** after W4 0319d93 (152 won / 0 lost) | 123 → 39 (Swiss) | "including the apartment entrance doors" 0/28 @0.98; plural "areas" 0/30; CubiCasa "this apartment" windows 3/30; IFC unquoted room names |
+| apt_wording_ml (Swiss apartments DE/FR/IT) | 880 | 66.8 | — | 84 | **Wohneinheit / logement → floor total @0.96–0.98 (77)**; 'wie viele Quadratmeter / combien de mètres carrés / quanti metri quadrati' → balcony count 0/120; 'ohne Balkon und Loggia' / 'balcons exclus' → balcony area |
+| apt_wording_ml2 (Swiss rooms/labels/fixtures DE/FR/IT) | 934 | **100** | = control | 0 | none |
+| apt_wording_ifc (IFC rooms/counts in 7 languages) | 348 | **100** | = control | 0 | none (quoted names) |
+| apt_wording_cc (CubiCasa casual FI/EN) | 1080 | 73.2 | 71.8 vs 75.8 | 18 | composer: "sinks … kitchen and bathroom together" → sink+kitchen+bathroom (0/30); FI '…keittiössä ja kylpyhuoneessa yhteensä' → kitchen+bathroom @0.92; 'Laske ikkunat.' → text |
+| comp_ml (Swiss hard/hard2 compositions DE/FR/IT) | 780 | 93.3* | 537/585 vs control 573/585; all 36 losses in two buckets | 36 | **FR 'de plus que' summed (compose.py 'plus' = +) 23/23 @0.976; IT 'Di quanti m² … più grande del …' → max (room name) 13/13 @0.99** |
+| comp_ml_cc (CubiCasa hard/hard2 count compositions FI/SV) | 399 | 45.4 | FI = control (7/7 recipes); SV 42.1 vs 51.9 | 2 | **SV 'våtrum (badrum, separata toaletter och bastur)' → 'sauna' via LoRA @0.75 (0/25); 'sovrum och badrum … sammanlagt' → 'bedroom'** (no sv sum cues; front end skips because a target was found) |
+
+\* first run had a probe bug (sanitary item list always 'bathtubs'; English bases vary bathtubs/showers): 15 false
+losses, fixed; clean re-run 20261114-084910-pipeline-comp_ml-a0c6 = the baseline (all 36 confident-wrong are the FR
+'de plus que' and IT 'di quanti m²' rows; ECE 0.218, AUROC 0.40: right DE/FR/IT compositions sit under the unseen cap).
+
+Runs: 20261114-083551-pipeline-apt_wording-93e0, -083721-…-apt_wording_ml-7b6c, -084334-…-apt_wording_ml2-1f56,
+-084147-…-apt_wording_ifc-f27a, -084051-…-apt_wording_cc-1bc6, -084910-…-comp_ml-a0c6, -085023-…-comp_ml_cc-4f34; plural mini-probe -083814-…-areas_plural-e14a.
+
+**Reading.** Per-entity atomic questions are wording- and language-robust everywhere we looked (Swiss rooms/labels/
+fixtures in DE/FR/IT, IFC in 7 languages, CubiCasa casual FI/EN: 100% / 100% / = control). The failures are all in
+**the small set of words that change scope or operator**, and they fail confidently:
+1. *Dwelling nouns outside the normaliser* (Wohneinheit, Einheit, logement, alloggio, "units") lose the apartment
+   scope → whole-floor sum at 0.96–0.98. The cross-check that should catch it compares the floor total with itself.
+   Fix asked of W4: the nouns + a whole-floor safety net (dwelling id in the question, floor-total trace → cap ≤0.5).
+2. *Operator words that are also other words*: French 'plus' (= more) → '+'; plural 'areas' → not an area; 'including
+   the apartment entrance doors' → '+ apartments'; Italian 'di quanti m² … più grande' → 'which is larger'.
+3. *Locations read as terms*: "sinks in the kitchen and bathroom" → sinks + kitchens + bathrooms.
+4. *Intent says area, the solver says count*: 'wie viele Quadratmeter …' (intent right, dxf counts balconies). A kind
+   mismatch between intent and answer should trigger the canonical re-ask instead of returning the count.
+
+Owners told (inbox 08:40–08:52): W4 (1, 2-plus/areas, 3, 4, CubiCasa 'Laske'), W2 (2-incl/areas/di quanti, the
+Quadratmeter parse, exclusions read as targets, alloggio table-QA). Re-run commands for each are in board/F.md NEXT.
+
+## Earlier (08:20, cycle 224): the wired language front end on held-out languages; "both readings" fixes its underconfidence; one English confident-wrong
+
+Context: all agents were stopped by the org spend limit 05:20–08:10, so night is still bb94fe4 (S0 cycle 19) and
+sealed test 2 started only at 08:12 (S0). S0's last gate on bb94fe4: dev 89.9 / 83.6 w, hard 84.7, hard2 92.1,
+ifc dev 100, $0.036/1k (logs/S0/c19-*.log). The dev loss table is unchanged from 04:55 (cubicasa window/door
+counts still 37% / 33% of the 165 such dev questions; dev run 20261114-051705-pipeline-dev-f35a).
+
+**1. The pipeline's language front end, measured as wired (night bb94fe4), paired on the same items.**
+hardL v2 = 58 dev/hard2 bases (39 atomic, 19 compositions) in 4 held-out languages (nb/hr/el/lt; F/S0 only,
+aggregates) and 4 open ones (cs/hu/tr/ro). English base 93.1% on the same items.
+
+| split | front end on | translate=0 | paired on − off (drawing-cluster 95% CI) | conf ≥ 0.8 (on / off) |
+|---|---:|---:|---|---|
+| hardL held-out (232) | **84.5** | 78.0 | **+6.5 [+1.7, +11.6]**, 20 won / 5 lost | 22% @ 100% / 41% @ 99.0% |
+| hardL_open (232 non-en) | 84.5 | 76.7 | +7.8 [+0.9, +15.4], 25 / 7 | 25% @ 100% / 42% @ 96.9% |
+
+Runs: held-out 20261114-081146-pipeline-hardL-4273 (on) / -081245-…-hardL-b5d8 (off); open -081146-…-hardL_open-aa12 /
+-081246-…-hardL_open-d162. By language (held-out, on): nb 86.2, hr 87.9, lt 82.8, el 81.0. By source (on vs off):
+cubicasa 56.9 vs 37.5, swiss 95.7 = 95.7, ifc 98.5 vs 97.1.
+- translate=0 is no longer "no translation": W2's dxf translates inside itself and W1's ifc cross-checks a translated
+  reading, so swiss/ifc are already ~96–98% without the pipeline front end (the 04:45 "as is" baseline was 50.0).
+  The pipeline front end now earns its points on **cubicasa** (+19 points held-out), where the VLM reads the
+  question.
+- Caveat: LT/HR appear in W4's lang4b probe (R2 declined to tune on it; R2's glossary has general da/no nouns for
+  beam/column). Greek is the cleanest language here and it is the lowest (81.0).
+
+**2. The front end is underconfident, and it demotes right answers.** Translated answers are capped at 0.9, or 0.75
+with extra structure. The 0.7 bin is 96% right on held-out (109/114) and 91% on open (101/111), and on Swiss
+plans the ≥ 0.8 bin falls from 69 answers (front end off, all right) to 25 (front end on): the cap throws away
+confidence that the rules solver earned on the original wording. ECE 0.173 held-out.
+**"Both readings" rule** (offline from the two stored runs; `experiments/F/both_readings_sim.py ON OFF [--det-only]`):
+for a question the front end translated, also answer the original (translate=0). If the two answers agree,
+confidence = max(both); if they disagree, take the more confident one, capped at 0.5.
+
+| | acc | ECE | conf ≥ 0.8 | confident-wrong |
+|---|---:|---:|---|---:|
+| open, current | 84.5 | 0.145 | 25% @ 100% | 0 |
+| open, both readings (rule designed here) | 84.9 | 0.114 | 56% @ 97.7% | 3 (2 = bug in §3, 1 = probe defect) |
+| held-out, current | 84.5 | 0.173 | 22% @ 100% | 0 |
+| held-out, both readings | 84.9 | 0.132 | 54% @ 99.2% | 1 (cubicasa) |
+| held-out, both readings, lift only for rules solvers (`--det-only`)* | 84.9 | 0.134 | 53% @ 100% | 0 |
+
+\*`--det-only` was chosen after seeing the held-out cubicasa row (ECE worse when a VLM answer is lifted; the
+open set showed the same direction), so its held-out row is slightly optimistic. Cost: one more pipeline pass,
+only on questions the front end translates (0 of 2,199 on sealed test; 75/256 on hard2r). The two readings share
+the memoised translation inside dxf/ifc, so they are not independent; agreement still separates right from wrong
+here: held-out, 89.8% of agreeing answers are right; on disagreement the translated reading is right 56% (20/36) and the original only 14% (5/36), (open: 90.0%; 60% vs 17%). Always taking the translated answer on disagreement (`--dis-pick translated`) is no better than the more confident one (acc 84.5 vs 84.9, ECE 0.135 vs 0.132 held-out), so keep the simple rule.
+
+**3. An English confident-wrong found through the Turkish rows (W4, intent.py).** "What is the net floor area of
+B apartment in m², excluding balconies…?" → `_APT` (case-insensitive) takes 'in' from "apartment in m²" →
+apartment 'IN' → dxf sums the whole floor: **321.76 m² @ 0.95** (gold 63.07; "apartment B" wording → 63.07 @ 0.965).
+Fix: in the area branch, require the id to be upper case or a digit in the original text (the count branch
+already does this), accept "<Letter> apartment|flat|unit", and add 'flat' (currently "area of flat A" parses as area/unknown).
+
+**4. Other translated-question mechanisms (open set, en base right → translated wrong, 20 rows):**
+- compose adds a fixture to a room sum (6 rows, all at 0.75): translated "bathrooms or **toilets** (KH, KPH, PH…)"
+  → parts bathroom + **wc (toilet bowls)** + wc_room + sauna → 2 instead of 1. With 'rooms' as the head noun, only
+  room kinds should be summed, and "X or Y (codes)" names one class.
+- count answered with an area (1, 0.67): hu "How many rooms (spaces) … on the '-1' floor" → 54.406 m². The
+  fraction guard only fires when unit == count; a how-many question answered in m² should be capped too.
+- translation slips (6, all ≤ 0.63): cs 'Kolik van' (bathtubs) → "How many are shown" (inside dxf), hu
+  'Hány … közül' (how many of) → "Which of", 'washrooms' → 'toilets', 'showers and bathtubs' → 'showers and
+  bathrooms' (ro 'băi', tr 'banyo' are ambiguous).
+- Probe defects (mine): the hosted Romanian translations contain non-words ('arulate', 'aritate', 'bați',
+  'număruând', 'sediiile'), and one ro composition dropped "average" (gold 13.81 = average, the question as written
+  asks the sum 27.63 → the pipeline is right). The ro numbers are slightly pessimistic.
+
+**5. English wording probe on the commonest Swiss kinds (open; 08:22): apartment references are the weak spot.**
+`experiments/F/apt_wording_probe.py` → `$JUNCTION_SHARED/artifacts/F/apt_wording.jsonl`: 30 dev Swiss bases per kind,
+each re-asked in natural English wordings with the same gold (810 rows). Run 20261114-082232-pipeline-apt_wording-6bcb
+(night bb94fe4): 76.9% overall, conf ≥ 0.8 on 66% of answers but only 83.8% of those right.
+
+| kind (dev template) | wordings | right | confident-wrong (≥ 0.8) |
+|---|---:|---:|---:|
+| apartment net area ("apartment X") | 10 | **143/300 (47.7%)** | **87** |
+| room area by number ("room 1.02 ('Wohnen')") | 8 | 240/240 | 0 |
+| count of rooms by label | 5 | 150/150 | 0 |
+| total area by label | 4 | 90/120 | 0 |
+
+Apartment wordings: flat X / unit X / "How big is flat X?" / "How many square meters is apartment X?" 29/30 each;
+"the X apartment" 3/30, "X apartment in m²" 5/30, "apartment-X" 0/30 (30 confident-wrong), "apt. X" 6/30,
+"apartment 'X'" 0/30 (quoted letter read as a storey → abstain → VLM 2.2 m² @ 0.32), "Apartment X: … balconies
+excluded?" 11/30 (dxf reads the exclusion as the target: balcony area). Mechanism of all 87: no apartment filter
+(neither the router intent nor dxf's own parse) → dxf area_total = whole floor (e.g. 128.23 vs 28.34) @ 0.95.
+Fix (W4/W2, sent 08:28): normalise apartment references to "apartment X" before parsing, plus a safety net:
+a question that names an apartment but gets a whole-floor answer → conf ≤ 0.3 + missing "which apartment".
+Imperative "Sum the floor areas of the rooms named 'X'." → task text → count 5 @ 0.30 (0/30, calibrated).
+Extended at 08:25 with Swiss counts (1264 rows; run 20261114-082449-pipeline-apt_wording-1a8e): doors / bathtubs /
+apartments / windows in 3–4 plain judge wordings each 100%; washbasins 88/90 ("bathroom sinks": agent 2 @ 0.9 although
+its own trace says "cross-check: agent 2 ≠ dxf 4" → W4); **"How many doors does this floor have, including the
+apartment entrance doors?" 0/28, all @ 0.98**: dxf parses count(door) + count(apartment) = 20 + 2 (a qualifier read
+as a second class; the LLM operation check agrees → W2). apt re-run 139/300 (vs 143: VLM/agent run-to-run noise).
+Why it matters: S0's gates only use dataset wordings ("apartment X"), so this never showed on dev/hard; the
+hard split's paraphrases were generated by templates that keep "apartment X".
+
+**5b. The same probe on IFC and CubiCasa (08:31).** IFC (135 rows on dev models; run 20261114-083112-pipeline-apt_wording-1356):
+92.6%, conf ≥ 0.8 100% right; per-storey counts/totals/wall side area/slab volume 100%; only unquoted room names
+("What is the area of Living (414B-19-001-002) on 1. Level?") 3/8 at 0.3 → W1 (substring match of the storey's
+IfcSpace names). CubiCasa (312 rows; run 20261114-083158-pipeline-apt_wording-2f99), vs the dataset wording on the same
+drawings (dev run f35a): rewordings that keep the structure reproduce the dataset accuracy exactly (same solver); any
+wording with **"this apartment"** goes to the general agent: windows 3/30 (15/30), toilets 18/30 with 3 wrong at
+≥ 0.8 (22/30), bedrooms 15/19 (16/19). → W4: on a one-dwelling plan an unlettered apartment scope is the drawing.
+Across sources, "apartment" handling is the one wording weakness (Swiss §5 and here).
+
+**6. Sealed hard3 on the test-2 code (bb94fe4): 34.6 → 62.2; what is left (aggregates; mechanisms only).**
+Run 20261114-081621-pipeline-hard3-d242 (S0) vs 20261114-035756-pipeline-hard3-55fd (test-1 code). By recipe:
+swiss growth/fixtures/split-bill 35/35, heating-year 11/12, carpet-ft2 9/12 (0 → 9), ifc cleaning-hours 8/8 (0 → 8);
+left: **ifc wall surface 0/9, all 9 at 0.95** (the confident-wrongs that drive the hard3 conf ≥ 0.8 bin to 73%),
+ifc flooring-waste 4/8, swiss occupancy 8/11 (**10 in test 1**), cubicasa per-sauna/per-room derived kinds 13/48 (low conf).
+- Wall surface: ifc's as-asked reading was unsure (0.30, correctly); the pipeline's canonical-form retry ("total
+  net side area of all walls on <storey>") drops the number the question states (an assumed wall height) and
+  answers at 0.95 from the train hit rate, ignoring its own cross-check (−60.6%). → W4: unused-number guard at the
+  canonical retry; cross-check disagreement > 5% caps conf.
+- Occupancy regression: the agent concludes "floor(6.873) → 6 count", then `_finish` restores 6.873 (rule meant
+  for "5.908 days → 6") and the fraction guard caps 0.3. → W4: never un-round when unit == count.
+- Flooring waste (4, Italian): language guessed 'fr', the waste percentage read as a share → agent, 0.3.
+
+**7. Sealed hard2r on test-2 code: 63.0 → 80.4 (aggregates).** Run 20261114-081509-pipeline-hard2r-dd4e vs -035900-…-6f03.
+Scored (189): left = cubicasa wc+showers 12/25 and wet-rooms 15/25 (perception, low conf), swiss rooms-above-threshold
+7/15 (4 in test 1; "how many of rooms … larger than N m²" parsed as an AREA question → dxf area differences at ≤ 0.3 →
+agent), ifc room-share-% 4/8 (Estonian: "translation lost a name or number; used the original" → vlm_direct guess at
+0.27). Gains since test 1: swiss apartment-ratio 8 → 15, doors-per-apartment 9 → 15, ifc 14 → 30 of 36. Text (67,
+judged): 60 right; two-wc-yes-no has 5 wrong at ≥ 0.8. Underconfidence (S0): 42% of answers at ≥ 0.8, 98.7% right —
+same picture as hardL §2, so "both readings" applies here too.
+
+## Earlier (04:55, cycle 62): language is the biggest held-out gap, and a translate-first front end closes most of it
 
 ### 1. hardL: the same known-gold questions in 8 languages nobody tuned on (stoa/eval/hardl.py)
 Base = dev questions with gold (v0: 20 atomic; cubicasa 7, ifc 9, swiss 4; the 20 hard2 compositions are still

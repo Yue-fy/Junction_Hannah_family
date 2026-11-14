@@ -124,11 +124,43 @@ F's held-out hardL (nb/hr/el/lt; v1 prompt): 50.0 → 80.6% (English 90.0), 52 w
 translator: 47/48 on lang4 (8B v1 46, v3 47) at 10 s vs 0.4 s → keep the 8B. Wired by W4 (Pipeline._front_end).
 Wiring belongs in the pipeline front (W4). Honest number: sealed hard2r at test 2.
 
+## Qwen3.6-35B-A3B bake-off (08:12–08:31, private :8002, util 0.48 next to :8001; `experiments/r2/hold_8002.sh`)
+FP8 MoE (3B active), vLLM 0.31 `Qwen3_5MoeForConditionalGeneration`, 225 s to load, transient OOM warnings while preparing
+the FP8 experts (harmless; :8001 unaffected). Text calls ~0.3 s. Harness: `experiments/r2/eval_backend.py --agent local2`
+(moves ONLY the agent's planner; atomic solvers and LoRAs stay on :8001) and `probes/concept_backend.py` (translator).
+| role | set | Qwen3.6-35B-A3B | Qwen3-VL-8B (now) | verdict |
+|---|---|---|---|---|
+| agent planner (pipeline, only agent-touched Qs) | 44 Qs (derived3 24, red team 19, hard2 1) | 79.5 | **82.0** | 1 win / 2 losses, +31% tokens, +1.4 s/Q; one new 0.75 confident-wrong |
+| translator (`to_english` v3) | hardL_open concept match (232) | 195–200 | **210** | lang4 48 vs 47/48 (tie) |
+| base VLM (vlm_direct, no LoRA) | dev cubicasa n200 | 54.0 | 47.5 (base) / **cc-v2 ~75** | +6.5 [−0.5, +13.4] vs base, −21.0 [−27.5, −14.7] vs cc-v2 |
+| base VLM | swiss PNG counts dev (200) | 45.0 | 40.5 (base) / **cc-v3 56.5** | +4.5 [−1.6, +10.7] vs base, −11.5 vs cc-v3 |
+| base VLM | smoke (184 paired) | | | +0.5 [−6.2, +7.2] vs base |
+Conclusion: like the Nemotron planner (04:01), a stronger planner/translator does not move our numbers; a fine-tuned 8B beats
+a 4× bigger base VLM on our counting. :8001 stays Qwen3-VL-8B + cc-v2/cc-v3. A 35B LoRA is the only route left (hours; not tonight).
+
+## Language front end, morning fixes (08:35–08:45)
+- Conjunction trigger (adec1a2): `should_translate` also fires on a count/area question in a language outside en/fi/de/fr/it whose
+  'and' joins words, unless the composer already reads it (2 classes + `compose._TOGETHER`). Q multilingual probe 143 → 146/150
+  (compose-cc:sv "toalettstolar och balkonger"), 0 losses; 0 new firings on dev/train_gate/hard/hard2/smoke/hard_nonen. `STOA_TR_CONJ=0` = off.
+- Lost placeholders (a699667; F 08:30 hard2r mechanism): the 8B writes `'[1]'` for `'[[1]]'` or drops one → restore reads [n] as [[n]],
+  ONE corrective retry when still lost; Estonian function words in lang_guess. Own Estonian room-share probe (hard2 gold) 16/24 → 24/24;
+  hardL_open concept 210 → 212/232, not-ok 2 → 0.
+- Grouped thousands (2ccace2): Swiss 1'200 / 1 200 masked as one number.
+- NEGATIVE: extra slip hints (room codes = rooms, 'Hány … közül' = how many of, băi/banyo = bathtubs): hardL_open 206 vs 212 (hu 45 vs 54).
+
+## Noon playbook (model side)
+1. New question kinds on rasters/scans: first run `vlm_direct` (8B base, conf=logprob) and `vlm_lora` on Stoa's examples; if the LoRA
+   answers a kind it was never trained on, its confidence is NOT calibrated (F 01:28) — keep W4's unseen-wording cap.
+2. Hosted Nemotron (`backend=nvidia`, 1 worker, ~4–8 s/Q) is the only model clearly different from ours; use it for visible demo
+   steps (Nemotron prize) and as a second opinion on unsure answers, never bulk.
+3. To try another open model quickly: `experiments/r2/hold_8002.sh <preset> <name> <minutes>` (GPU lock, private :8002), then
+   `experiments/r2/eval_backend.py --agent local2 -- --solver pipeline --split <file>` or `vlm_direct -k backend=local2`.
+
 ## Candidates surveyed (23:35–23:50, HF hub listing; vLLM 0.31 registry checked)
 | model | size | vLLM | why interesting | verdict |
 |---|---|---|---|---|
 | Qwen3-VL-8B-Instruct | 17.5 GB bf16 | ✅ Qwen3VL | strong grounding (0..1000), OCR, fast | **serving** (already on disk) |
-| Qwen3.6-35B-A3B-FP8 | 37.5 GB | ✅ Qwen3_5Moe | newest Qwen (Nov 2026), MoE: only 3B active → cheap per token, likely much stronger | **downloading** (~4 h at 2.5 MB/s); bake-off when it lands |
+| Qwen3.6-35B-A3B-FP8 | 37.5 GB | ✅ Qwen3_5Moe | newest Qwen (Nov 2026), MoE: only 3B active → cheap per token, likely much stronger | **tested 08:12–08:31: no role** (see 'Qwen3.6-35B-A3B bake-off') |
 | Qwen3.5-9B | 19.3 GB bf16 | ✅ Qwen3_5 | newer than Qwen3-VL-8B, hybrid thinking | download cancelled to give 3.6 the bandwidth |
 | Qwen3.6-27B-FP8 | 30.9 GB | ✅ | dense 27B: slower than 35B-A3B | skip |
 | Molmo2-8B / 4B | ~17 / ~9 GB | ✅ Molmo2 | trained for pointing + counting (PixMo-Points) → count-by-pointing with evidence | next download candidate if counting stays weak |
