@@ -5,6 +5,10 @@ import json, sys, time
 sys.path.insert(0, "experiments/w1/probes")
 from c5_ml import ROWS, GOLD, PATHS  # noqa: E402
 from stoa.solvers.ifc.solver import IfcSolver  # noqa: E402
+import os  # noqa: E402
+if os.environ.get("ML_SOLVER"):
+    from stoa.solvers import get_solver as _get  # noqa: E402
+    IfcSolver = lambda: _get(os.environ["ML_SOLVER"])  # noqa: E731
 from stoa import llm  # noqa: E402
 
 S = IfcSolver()

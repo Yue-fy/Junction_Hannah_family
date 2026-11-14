@@ -1,0 +1,28 @@
+# c5 fresh question types on unprobed IFC-Bench models (W1-written 05:00, before any run; none is a test model)
+PATH ../ifc_bench/city_house_munich_arc.ifc
+How many doors are on the Erdgeschoss?
+How many windows are in the Obergeschoss?
+What is the total floor area of the rooms in the Kellergeschoss?
+How many rooms does the Dachgeschoss have?
+Which storey has the most doors?
+How many storeys does the building have?
+What is the largest room in the Erdgeschoss?
+How many toilets and washbasins are in the building?
+How many stairs are in the model?
+How many doors are there per storey?
+PATH ../ifc_bench/digital_hub_arc.ifc
+How many columns are on E00_OKRD?
+Which storey has the most windows?
+What is the total net floor area of all spaces on E01_OKRD?
+What is the width of the widest door in the model?
+How tall is the tallest window?
+How many doors are wider than 1 m?
+What is the most common door type?
+How many of the walls on B01_OKRD are external walls?
+PATH ../ifc_bench/dental_clinic_arc.ifc
+How many doors are on the First Floor?
+How many curtain walls are there?
+Which room on the Second Floor is the largest?
+What is the combined area of all rooms on 'First Floor' and 'Second Floor'?
+How many rooms are on the First Floor and what is their total area?
+What is the smallest room on the First Floor and how big is it?

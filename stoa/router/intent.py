@@ -298,6 +298,14 @@ def infer_task(q: str) -> tuple[str, str | None]:
     return "text", None
 
 
+_WHOLE = re.compile(
+    r"\b(?:(?:the )?(?:whole|entire) (?:building|model|house)|in (?:the|this) building\b|throughout the building|"
+    r"in all (?:floors|storeys|levels)|on all (?:floors|storeys|levels)|(?:ganzen|gesamten) geb[aä]ude|im geb[aä]ude|"
+    r"tout le b[aâ]timent|l'ensemble du b[aâ]timent|dans le b[aâ]timent|(?:intero|tutto l')\s*edificio|nell'edificio|"
+    r"koko rakennukse\w*|hela byggnaden|i byggnaden|hele bygningen|(?:het )?hele gebouw|in het gebouw|"
+    r"w ca[lł]ym budynku|kogu hoone\w*|todo el edificio|en el edificio)", re.I)
+
+
 def parse(question: str) -> Intent:
     q = _fold(question).strip()
     task, unit = infer_task(q)
@@ -366,6 +374,10 @@ def parse(question: str) -> Intent:
                     if len(pos) == len(quoted) and len(st) == 1:
                         filters["storey"] = quoted[st[0]]
                         filters["room"] = next(x for i, x in enumerate(quoted) if i != st[0])
+    if scope == "drawing" and task == "count" and _WHOLE.search(q_noquote):
+        # Q 04:57: "How many doors are there in the whole building?" on a storey sheet = the model, not the sheet (the KG
+        # compared ifc's right 211 with the sheet's 46 -> false ✗)
+        scope = "model"
     if task in ("area",) and scope == "drawing" and (_NUMBERED.search(q_noquote) or _OUTDOOR_EXCL.search(q)):
         scope, target = "floor_total", "room"
     if scope == "storey" and task in ("area", "volume", "length") and _TOTAL.search(q_noquote):
