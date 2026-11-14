@@ -51,6 +51,7 @@ DERIVED_CAP = 0.4  # max confidence of a rules-only (0 LLM calls) as-asked answe
 UNSEEN_CAP = 0.5  # (until c72) max confidence of a local-tier / prior answer to a wording that is not a train template
 UNSEEN_SCALE = 0.92  # unseen wording, ONE plain concept: hard's cubicasa paraphrases were 79.2% right at mean conf 0.863
 UNSEEN_MAX = 0.75  # an unseen wording never enters the >= 0.8 'trust' bin (F 04:05, hard2q aggregate)
+XCHECK_DISAGREE = 0.5  # agent vs an unsure rules answer to the same quantity, disagreeing (D19 (5))
 XCHECK_CAP = 0.7  # a disagreeing cross-check (✗) caps confidence (S0 04:00: sealed test, 21 such answers at >= 0.8, 76% right)
 UNSEEN_STRUCT_CAP = 0.35  # unseen wording WITH extra structure (comparison/exclusion words, numbers): F, held-out: 33%
 
@@ -193,9 +194,22 @@ _APT_REFS = [
     # apartment 'D' / "D" / «D» / ‘D’
     (re.compile(r"\b(?:[Aa]partment|[Ff]lat|[Uu]nit)\s+(?:'|\"|«|‘|“)" + _APT_ID + r"(?:'|\"|»|’|”)"), "apartment {id}"),
     (re.compile(r"\bWhg\.\s*" + _APT_ID + r"\b"), "Wohnung {id}"),
+    # F 08:40 (de/fr/it probe: 'Wohneinheit B' 1/40 with 39 confident-wrong, 'logement B' 38): other dwelling nouns
+    (re.compile(r"\b(?:[Dd]ie\s+)?" + _APT_ID + r"-Wohnung\b"), "die Wohnung {id}"),
+    (re.compile(r"\b(?:[Ww]ohneinheit|[Ee]inheit|[Nn]utzungseinheit)\s+" + _APT_ID + r"(?![\w'’])"), "Wohnung {id}"),
+    (re.compile(r"\b(?:[Ll]ogement|[Aa]ppart\.?|[Aa]ppt\.?)\s+" + _APT_ID + r"(?![\w'’])"), "appartement {id}"),
 ]
-_EXCL_AFTER = re.compile(r"\b(balcon(?:y|ies)|terraces?|loggias?|outdoor (?:spaces?|areas?))\s+(?:excluded|not included)\b",
-                         re.I)
+_OUT_EN = r"(?:balcon(?:y|ies)|terraces?|loggias?|outdoor (?:spaces?|areas?))"
+_EXCL_AFTER = re.compile(rf"\b({_OUT_EN}(?:\s*(?:,|and)\s*{_OUT_EN})*)\s+(?:excluded|not included)\b", re.I)
+# fr/de/it fronted exclusions ("…, balcons exclus ?" -> dxf answered the balcony area, F 08:40)
+_OUT_FR, _OUT_DE, _OUT_IT = r"(?:balcons?|terrasses?|loggias?)", r"(?:Balkone?|Terrassen?|Loggien|Loggias?)", \
+    r"(?:balconi|balcone|terrazz[ie]|logge)"
+_EXCL_AFTER_ML = [
+    (re.compile(rf"\b({_OUT_FR}(?:\s*(?:,|et)\s*{_OUT_FR})*)\s+(?:exclus|exclues|non compris(?:es)?)\b", re.I), "sans {x}"),
+    (re.compile(rf"\b({_OUT_DE}(?:\s*(?:,|und)\s*{_OUT_DE})*)\s+(?:ausgenommen|nicht mitgerechnet|ausgeschlossen)\b",
+                re.I), "ohne {x}"),
+    (re.compile(rf"\b({_OUT_IT}(?:\s*(?:,|e)\s*{_OUT_IT})*)\s+(?:esclus[ie]|non compres[ie])\b", re.I), "esclusi {x}"),
+]
 
 
 def normalise_refs(question: str) -> str:
@@ -203,7 +217,10 @@ def normalise_refs(question: str) -> str:
     for rx, fmt in _APT_REFS:
         q = rx.sub(lambda m: (lambda t: t[:1].upper() + t[1:] if m.start() == 0 else t)(fmt.format(id=m.group("id"))), q)
     # "balconies excluded" -> "excluding balconies" (dxf read the fronted form as the balcony area, F 08:28)
-    return _EXCL_AFTER.sub(lambda m: "excluding " + m.group(1), q)
+    q = _EXCL_AFTER.sub(lambda m: "excluding " + m.group(1), q)
+    for rx, fmt in _EXCL_AFTER_ML:
+        q = rx.sub(lambda m: fmt.format(x=m.group(1)), q)
+    return q
 
 
 # D19 (1), F 08:33: a CubiCasa plan is ONE dwelling, so "this apartment / flat / home" is the drawing itself ("How many
@@ -251,6 +268,25 @@ def _unconsumed_numbers(question: str, canon: str, trace) -> list[str]:
     return out
 
 
+# Q bug 6: "net floor area of room 1.11 ('Zimmer') in cm²?" -> "17.58 m2" @ 0.99, "apartment B in SF" -> "135.38 m2": the
+# canonical rewrite drops the asked unit; a person reads m² as SF. The answer is converted to the unit asked for.
+_ASKED_UNIT = [
+    (re.compile(r"\bin (?:cm²|cm2|cm\^2|square centimet\w*)", re.I), "cm2"),
+    (re.compile(r"\bin (?:mm²|mm2|mm\^2|square millimet\w*)", re.I), "mm2"),
+    (re.compile(r"\b(?:in )?(?:ft²|ft2|ft\^2|sq\.? ?ft|sqft|square f(?:ee|oo)t)\b|\bin SF\b", re.I), "ft2"),
+    (re.compile(r"\bin (?:cubic f(?:ee|oo)t|ft³|ft3|cu\.? ?ft)\b", re.I), "ft3"),
+    (re.compile(r"\bin lit(?:re|er)s?\b", re.I), "l"),
+    (re.compile(r"\bin (?:feet|foot|ft)\b(?!²|2|\^)", re.I), "ft"),
+    (re.compile(r"\bin (?:centimet\w*|cm)\b(?!²|2|\^)", re.I), "cm"),
+    (re.compile(r"\bin (?:millimet\w*|mm)\b(?!²|2|\^)", re.I), "mm"),
+    (re.compile(r"\bin inch(?:es)?\b", re.I), "in"),
+]
+
+
+def _asked_unit(question: str) -> str | None:
+    return next((u for rx, u in _ASKED_UNIT if rx.search(question)), None)
+
+
 def _question_numbers(question: str) -> list[float]:
     q = re.sub(r"'[^']*'|\"[^\"]*\"|«[^»]*»|„[^“”]*[“”]", " ", question)
     return [float(t.replace(",", ".")) for t in re.findall(r"(?<![\w.])\d+(?:[.,]\d+)?(?![\w.])", q)]
@@ -261,7 +297,7 @@ def _code_applied_all(question: str, trace) -> bool:
     uses EVERY number of the question: "35 € per door plus 10 € of brushes" -> 'factor 35' alone gave 1610 @ 0.92."""
     # (its op line echoes the rest of the phrase, "factor 35 EUR per door plus 10 euros of bru", so matching numbers
     # against it is not proof: one stated number at most, else the agent does the arithmetic)
-    ops = [str(t) for t in trace if re.match(r"outer operation: (?:factor|per)\b", str(t))]
+    ops = [str(t) for t in trace if re.match(r"outer operation: (?:factor|per|rate)\b", str(t))]  # W1 08:39: 'rate
     return bool(ops) and len(_question_numbers(question)) <= 1
 
 
@@ -301,6 +337,8 @@ ROOM_REL = re.compile(
     r"|\bmistä huoneesta|\bminkä huoneen kautta|\bmihin huoneeseen|\bsuurin huone|\bvon welchem raum|\bdurch welchen raum"
     r"|\bgrö(?:ß|ss)te(?:r|n)? raum|\bfrån vilket rum|\bgenom vilket rum|\bstörsta rummet",
     re.I)
+_AREA_SUM = re.compile(r"\b(?:total|combined|summed|together|sum of)\b[^?]{0,40}\barea|\barea of (?:the )?(?:two|three|all|both)\b|"
+                       r"\barea of [^?]{1,40}\band\b", re.I)
 IMG_EXT = (".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp", ".gif")
 # tier of each solver (cost order); unknown names count as "local"
 TIER = {"dxf": "deterministic", "ifc": "deterministic", "schedule": "deterministic", "pdf_vector": "deterministic",
@@ -533,6 +571,18 @@ class Pipeline(BaseSolver):
             ans.missing = [("the number is not traced to any value read from the drawing (an estimate); " if not grounded
                             else f"no reliable reading ({ans.solver}, confidence {ans.confidence:.2f}); ")
                            + "a label, table or model property stating it directly would settle it"]
+        want = _asked_unit(asked) if ans.value is not None and _num(ans.value) is not None else None
+        if want and str(ans.unit or "").lower() not in ("", want, "count"):
+            from stoa.eval.scoring import convert
+
+            v = convert(float(ans.value), ans.unit, want)
+            if v is not None and v != float(ans.value):
+                ans.trace.append(f"converted {ans.value} {ans.unit} to {v:.4g} {want} (the question asks in {want})")
+                ans.assumptions = [*ans.assumptions, f"{ans.value} {ans.unit} = {round(v, 2)} {want}"]
+                ans.value, ans.unit = round(v, 2), want
+        if ans.evidence and any(e.bbox or getattr(e, "ifc_guid", None) for e in ans.evidence):
+            # W5 08:32: a LoRA count that got room-segmentation boxes afterwards still said "no located evidence"
+            ans.missing = [m for m in ans.missing if "no located evidence" not in str(m)]
         question = asked
         if question != original:
             ans.trace = [f"question normalised (numbers / apartment references): \"{question[:140]}\""] + list(ans.trace)
@@ -696,6 +746,8 @@ class Pipeline(BaseSolver):
         conf = 1.0
         for a in parts:
             conf *= max(0.0, min(1.0, a.confidence))
+        if plan.op == "list" and parts:  # separate answers, each with its own reading (Q 08:45: 2 sure parts -> 0.39)
+            conf = min(max(0.0, min(1.0, a.confidence)) for a in parts)
         if plan.op == "exists":
             conf = max(conf, parts[0].confidence)
         evidence = []
@@ -836,6 +888,10 @@ class Pipeline(BaseSolver):
         so it never enters the >= 0.8 bin here. -> (accepted | None, unsure (name, answer) | None)."""
         if not (self.cc5k and source_of(path) == "cubicasa5k" and (force or ROOM_REL.search(question))) or \
                 known_template(question):
+            return None, None
+        if not force and not _AREA_SUM.search(question):
+            # R1 08:45: per_room() (before the composer) owns relations / per-room counts; single-room AREAS from the
+            # graph were 3/6 right at conf 0.7 (area AUROC 0.52) -> the in-atomic fallback is for sums the VLM can't add
             return None, None
         try:
             from experiments.r1.room_graph.answer import solve as rg_solve
@@ -1381,6 +1437,17 @@ class Pipeline(BaseSolver):
         ans.trace.append(note)
         if not same:
             ans.missing = [*ans.missing, f"agent and {n_u} disagree ({ans.value} vs {a_u.value})"]
+            # D19 (5), F 08:27: "bathroom sinks" agent 2 @ 0.9 vs dxf 4 (right) kept the agent at 0.9. A disagreement
+            # is EXPECTED when the rules skipped the question's operation / stated number (they answered the input,
+            # the agent the result); otherwise two readings of the same quantity differ -> neither is sure
+            expected = any(re.search(r"may not be applied|did not use|does not use|operation was not applied(?! to every class)|"
+                                     r"not apply|leaves .* out", str(m)) for m in a_u.missing)
+            numeric = _num(ans.value) is not None and _num(a_u.value) is not None  # a text blob is not a reading
+            if not expected and numeric and max(ans.confidence, a_u.confidence) > XCHECK_DISAGREE:
+                ans.trace.append(f"agent and {n_u} read the same quantity differently: confidence capped at "
+                                 f"{XCHECK_DISAGREE}")
+                ans.confidence = min(ans.confidence, XCHECK_DISAGREE)
+                a_u = a_u.model_copy(update={"confidence": min(a_u.confidence, XCHECK_DISAGREE)})
             if a_u.confidence > ans.confidence:
                 out = a_u.model_copy(deep=True)
                 out.trace = ans.trace + [f"keeping {n_u}: its confidence {a_u.confidence:.2f} > agent {ans.confidence:.2f}"]
