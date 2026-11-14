@@ -30,13 +30,17 @@ Code: night c1d6149 (S0 cycle 37 merges incl. W4 0319d93 apartment normalisation
 | apt_wording_cc (CubiCasa casual FI/EN) | 1080 | 73.2 | 71.8 vs 75.8 | 18 | composer: "sinks … kitchen and bathroom together" → sink+kitchen+bathroom (0/30); FI '…keittiössä ja kylpyhuoneessa yhteensä' → kitchen+bathroom @0.92; 'Laske ikkunat.' → text |
 | comp_ml (Swiss hard/hard2 compositions DE/FR/IT) | 780 | 93.3* | 537/585 vs control 573/585; all 36 losses in two buckets | 36 | **FR 'de plus que' summed (compose.py 'plus' = +) 23/23 @0.976; IT 'Di quanti m² … più grande del …' → max (room name) 13/13 @0.99** |
 | comp_ml_cc (CubiCasa hard/hard2 count compositions FI/SV) | 399 | 45.4 | FI = control (7/7 recipes); SV 42.1 vs 51.9 | 2 | **SV 'våtrum (badrum, separata toaletter och bastur)' → 'sauna' via LoRA @0.75 (0/25); 'sovrum och badrum … sammanlagt' → 'bedroom'** (no sv sum cues; front end skips because a target was found) |
+| apt_wording_syn (Swiss fixture synonyms EN) | 660 | 99.1 | 98.8 vs 100 | 0 | 'tubs' 36/40, 'loos' 36/38 (vlm_direct ≤0.34, calibrated) |
+| apt_wording_typo (quick typing: lower-case ids, misspellings, decimal comma) | 534 | 78.6 | **72.8 vs 98.6** | 2 | 'room 5,11' 2/30; 'apartment d' 12/30; 'apartmnet' 14/30; 'appartment' 19/30; 'sq m' 11/30 (all ≤0.6: accuracy, not calibration) |
+| apt_wording_scope (IFC storey by role: 'ground floor' / 'basement', plan sheets) | 114 | 100 | = control | 0 | none (sheet implies the storey) |
+| apt_wording_scope_model (same, asked on the .ifc model path; night 31397eb) | 114 | 95.6 | 109/114 | 5 | **smiley-west 'on the ground floor' / 'at ground level' → whole model (walls 281 vs EG 81 @0.97; slabs 522 vs 105 m³ @0.95)**; '0', '00 Begane grond', basement → KG/-1/Basement fine (W1 told) |
 
 \* first run had a probe bug (sanitary item list always 'bathtubs'; English bases vary bathtubs/showers): 15 false
 losses, fixed; clean re-run 20261114-084910-pipeline-comp_ml-a0c6 = the baseline (all 36 confident-wrong are the FR
 'de plus que' and IT 'di quanti m²' rows; ECE 0.218, AUROC 0.40: right DE/FR/IT compositions sit under the unseen cap).
 
 Runs: 20261114-083551-pipeline-apt_wording-93e0, -083721-…-apt_wording_ml-7b6c, -084334-…-apt_wording_ml2-1f56,
--084147-…-apt_wording_ifc-f27a, -084051-…-apt_wording_cc-1bc6, -084910-…-comp_ml-a0c6, -085023-…-comp_ml_cc-4f34; plural mini-probe -083814-…-areas_plural-e14a.
+-084147-…-apt_wording_ifc-f27a, -084051-…-apt_wording_cc-1bc6, -084910-…-comp_ml-a0c6, -085023-…-comp_ml_cc-4f34, -090345-…-apt_wording_syn-1d9e (62754aa), -090539-…-apt_wording_typo-6f1b (62754aa); plural mini-probe -083814-…-areas_plural-e14a.
 
 **Reading.** Per-entity atomic questions are wording- and language-robust everywhere we looked (Swiss rooms/labels/
 fixtures in DE/FR/IT, IFC in 7 languages, CubiCasa casual FI/EN: 100% / 100% / = control). The failures are all in
@@ -49,6 +53,34 @@ fixtures in DE/FR/IT, IFC in 7 languages, CubiCasa casual FI/EN: 100% / 100% / =
 3. *Locations read as terms*: "sinks in the kitchen and bathroom" → sinks + kitchens + bathrooms.
 4. *Intent says area, the solver says count*: 'wie viele Quadratmeter …' (intent right, dxf counts balconies). A kind
    mismatch between intent and answer should trigger the canonical re-ask instead of returning the count.
+
+**Round-2 merges (night 62754aa, 09:00), paired per wording vs c1d6149:** English 89.3 → 91.4% (confident-wrong
+43 → 13: 'Sum the floor areas …' 0 → 30/30, 'including the apartment entrance doors' still 0/28 but capped, 28 → 0
+confident); Swedish 'våtrum' 0 → 16/25; DE/FR/IT apartments 66.8 → 67.0 (77 Wohneinheit/logement confident-wrong left),
+compositions 93.3 = (36 left), CubiCasa casual 73.2 → 72.9 (sinks composer 10 left). Runs 20261114-085553-pipeline-
+{apt_wording-a614, apt_wording_ml-4942, comp_ml-1e99, comp_ml_cc-b8c5, apt_wording_cc-8fe9} = baselines for the next fixes.
+
+**Round-3 (night 31397eb = S0 4fb47c9 + R1, 09:10), paired per wording vs 62754aa — the wording gaps close:**
+
+| probe | 62754aa | 31397eb | confident-wrong | won / lost |
+|---|---:|---:|---|---|
+| apt_wording (EN) | 91.4 | **92.7** | 13 → 10 | 28 / 6 (IFC unquoted names 3 → 8/8; CubiCasa 'this apartment' windows 7 → 15/30) |
+| apt_wording_ml (DE/FR/IT apartments) | 67.0 | **92.0** | 84 → 12 | 224 / 4 |
+| comp_ml (Swiss compositions DE/FR/IT) | 93.3 | **97.9** | 37 → 1 | 36 / 0 |
+| comp_ml_cc (CubiCasa FI/SV compositions) | 50.4 | 53.1 | 4 → 4 | 21 / 10 (SV now = control) |
+| apt_wording_cc (CubiCasa casual) | 72.9 | 74.4 | 28 → 11 | 23 / 6 (sinks composer 0 → 17/30) |
+| apt_wording_syn / _typo | 99.1 / 78.7 | 98.9 / 77.9 | 0 / 3 | single low-conf flips |
+
+All 7 probes: 6,044 rows, 86.8%, confident-wrong 168 → 41. 32 of the 41 are two Swiss apartments wrong by ~3% in
+EVERY wording incl. the dataset's (site171_bldg350_floor1442 A 123.1 vs 119.14; site790_bldg1731_floor7704 B 105.78
+vs 102.63: a dxf/data issue, W2 told); only one is wording-specific. Runs 20261114-090750-pipeline-{apt_wording-b90c,
+apt_wording_ml-7528, comp_ml-e57e, comp_ml_cc-eaff, apt_wording_cc-f375, apt_wording_syn-0308, apt_wording_typo-85c3}.
+Still open (low confidence, accuracy only): quick typing (lower-case ids, misspelt 'apartment', 'room 5,11', 'sq m').
+
+**Held-out check of W4's 'both readings' (2b954b5)** on hardL (nb/hr/el/lt; F/S0 only, aggregates): 85.3 → 84.9%
+(paired −0.5 [−3.2, +2.3], 4 vs 3), ECE 0.179 → 0.085, conf ≥ 0.8 on 23% → 60% of answers at 99.3% right, AUROC
+0.925 → 0.932, $0.12 → $0.15 per 1k. hardL_open 87.0 → 87.7, ECE 0.134 → 0.084, 36% → 61% @ 99.4%. My offline
+simulation (08:20) predicted ECE 0.132 and 54%: the wired rule does better. Runs -085405-…-hardL-5270 / -085553-…-hardL-4adb.
 
 Owners told (inbox 08:40–08:52): W4 (1, 2-plus/areas, 3, 4, CubiCasa 'Laske'), W2 (2-incl/areas/di quanti, the
 Quadratmeter parse, exclusions read as targets, alloggio table-QA). Re-run commands for each are in board/F.md NEXT.
