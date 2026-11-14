@@ -195,7 +195,7 @@ def _room_area_answer(img_path: str, question: str, tl: T.TextLayer, bars: list,
     unit = "ft2" if re.search(r"\b(sq\.? ?ft|square feet|ft²|feet)\b", question, re.I) else "m2"
     v = r["m2"] / 0.3048 ** 2 if unit == "ft2" else r["m2"]
     W = M.WITHIN
-    return Answer(value=round(v, 2), unit=unit, confidence=round(W["2%"], 2), solver=solver,
+    return Answer(value=round(v, 2), unit=unit, confidence=M.CONF, solver=solver,
                   evidence=[lab_ev, Evidence(file=img_path, page=0, bbox=r["box"], bbox_space="image_px",
                                              note=f"room outline (flood fill): {r['m2']:.2f} m²")]
                   + bar.evidence(img_path),
@@ -203,7 +203,7 @@ def _room_area_answer(img_path: str, question: str, tl: T.TextLayer, bars: list,
                   assumptions=[f"the room's outline is the blank region around its label up to the drawn walls "
                                f"(convex hull, so fixtures against walls count), measured with the graphic scale bar "
                                f"({bar.px_per_m:.2f} px per m); no area is printed for this room"],
-                  missing=[f"a printed area or dimensions: on 71 Swiss plan rooms this measurement was within 2% for "
+                  missing=[f"a printed area or dimensions: on 23 held-out Swiss plan rooms this measurement was within 2% for "
                            f"{100 * W['2%']:.0f}%, within 5% for {100 * W['5%']:.0f}% and within 10% for "
                            f"{100 * W['10%']:.0f}%"])
 

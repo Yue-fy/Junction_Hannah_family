@@ -52,8 +52,11 @@ def _ink(path: str) -> np.ndarray:
 # p10/p50/p90 0.77/0.98/1.07. Steps that mattered (each measured): convex hull (fixtures against walls), split open
 # regions by nearest room number, walls-only refill when the label sits in a fixture, +1 px border (anti-aliasing:
 # 7 -> 25 within 2%). Closing 1-m door gaps up front made it worse (median 29%: it cuts rooms at furniture).
+# HELD-OUT check (15 Swiss PNG train drawings never looked at, 30 rooms, 23 measured; artifacts/W3/room_fill_heldout.jsonl):
+# within 2% 6/23, 5% 11/23, 10% 15/23, 20% 19/23, median 5.8% (untuned hull: 2/23, median 9.0%). WITHIN = held-out.
 FILL = {"door_m": 0.0, "hull": True, "clip": True, "clip_m2": 3.0, "fixture_retry": True, "grow": 1}
-WITHIN = {"2%": 25 / 71, "5%": 38 / 71, "10%": 47 / 71, "20%": 58 / 71}
+WITHIN = {"2%": 6 / 23, "5%": 11 / 23, "10%": 15 / 23, "20%": 19 / 23}
+CONF = 0.3  # P(within 2%): held-out 6/23 rooms; end-to-end held-out 5/17 at the old 0.35
 
 
 def _fill(ink: np.ndarray, label_box, px_per_m: float, door_m: float, hull: bool, clip: bool, clip_m2: float,
