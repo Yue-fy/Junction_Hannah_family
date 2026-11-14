@@ -403,3 +403,28 @@ table.checked .bad { color: var(--bad); font-weight: 650; }
 table.checked .muted { color: var(--muted); }
 .checked-src { font-size: 11.5px; color: var(--muted); margin: 6px 0 2px; }
 .llm-words summary { cursor: pointer; color: var(--muted); font-size: 12px; margin-top: 4px; }
+
+/* R1's room graph on CubiCasa plans (viewer2d setRoomGraph): rooms tinted by kind, doors, door links */
+.room-layer .rg-room { fill: var(--rg, #adb5bd); fill-opacity: .2; stroke: var(--rg, #adb5bd); stroke-opacity: .75; stroke-width: 1.5; vector-effect: non-scaling-stroke; pointer-events: all; }
+.room-layer .rg-room.on { fill-opacity: .36; stroke-width: 3; }
+.room-layer.focus .rg-room:not(.on) { fill-opacity: .08; }
+.room-layer .k-living { --rg: #e9a23b; } .room-layer .k-bedroom { --rg: #3f7fe0; } .room-layer .k-kitchen { --rg: #e0613f; }
+.room-layer .k-bath { --rg: #1f9e8f; } .room-layer .k-entry { --rg: #8b5cf6; } .room-layer .k-storage { --rg: #7b8794; }
+.room-layer .k-garage { --rg: #5b6470; } .room-layer .k-sauna { --rg: #c2410c; } .room-layer .k-outdoor { --rg: #6aa84f; }
+.room-layer .rg-link { fill: none; stroke: #1d3557; stroke-width: 3.2; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; opacity: .85; pointer-events: none; }
+.room-layer .rg-link.out { stroke-dasharray: 2 5; }
+.room-layer .rg-link.open { stroke-dasharray: 8 6; stroke: #5d6b7e; }
+.room-layer.focus .rg-link { opacity: .15; }
+.room-layer.focus .rg-link.on { opacity: 1; stroke: var(--accent); stroke-width: 4; }
+.room-layer .rg-door { fill: #fff; stroke: #1d3557; stroke-width: 1.5; vector-effect: non-scaling-stroke; pointer-events: all; }
+.room-layer .rg-label { fill: #17202c; font-weight: 750; text-anchor: middle; paint-order: stroke; stroke: rgba(255,255,255,.92); stroke-width: 4px; vector-effect: non-scaling-stroke; pointer-events: none; }
+.room-layer .rg-label.sub { font-weight: 600; fill: #3d4a5c; }
+#roomsBtn.on { background: var(--accent-soft); border-color: #ffc29e; color: #9a3d00; }
+.rg-legend { position: absolute; left: 10px; bottom: 10px; z-index: 4; max-width: min(460px, 70%); background: rgba(255,255,255,.94); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; font-size: 12px; line-height: 1.35; color: var(--ink); box-shadow: 0 4px 14px rgba(20, 30, 50, .1); }
+.rg-legend b { font-weight: 700; }
+.rg-legend small { display: block; color: var(--muted); font-size: 11px; margin-top: 3px; }
+.rg-legend .rg-hub { color: var(--accent); cursor: default; }
+
+/* bench: overnight progress line (previous sealed test → this one) */
+.bn-progress { margin: 2px 0 14px; padding: 9px 12px; border-radius: 8px; background: #eef5ff; border: 1px solid #cfe0f7; font-size: 13px; line-height: 1.45; color: var(--ink); }
+.bn-progress b { font-weight: 700; }

@@ -180,6 +180,33 @@ function kgFromDisk(rel: string) {
 const KG_REPO = process.env.STOA_KG_REPO ?? path.resolve(__dirname, "../..");
 const PY = process.env.JUNCTION_VENV ? `${process.env.JUNCTION_VENV}/bin/python` : "python3";
 const kgCache = new Map<string, Promise<{ body: Record<string, unknown>; backend: string }>>();
+/**
+ * Room graph of a CubiCasa plan (R1, experiments/r1/room_graph/graph.py): rooms (class, printed label, ~m² with an
+ * 80% band, box, centroid), doors and which rooms each links, open-plan links, windows. Read from R1's cached
+ * pretrained-CubiCasa5K segmentation (live=False: never runs the network here); no LLM. Local only, cached per path.
+ */
+const ROOMS_PY = "import json,sys\nfrom experiments.r1.room_graph.graph import room_graph\ng = room_graph(sys.argv[1], live=False)\nprint(json.dumps(g))";
+const roomsCache = new Map<string, Promise<Record<string, unknown> | null>>();
+const ROOMS_REC = path.resolve(__dirname, "../fixtures/rooms.json"); // {path: graph}, written by fixtures/record.py
+function roomGraph(rel: string) {
+  if (!roomsCache.has(rel)) {
+    roomsCache.set(rel, new Promise((resolve) => {
+      execFile(PY, ["-c", ROOMS_PY, rel], { cwd: KG_REPO, timeout: 60_000, maxBuffer: 16 << 20, env: { ...process.env, STOA_DATA: DATA } },
+        (err, stdout) => {
+          let g: Record<string, unknown> | null = null;
+          try {
+            g = err ? null : JSON.parse(stdout);
+          } catch {
+            g = null;
+          }
+          if (!g) roomsCache.delete(rel);
+          resolve(g);
+        });
+    }));
+  }
+  return roomsCache.get(rel)!;
+}
+
 const KG_PY = "import json,sys\nfrom stoa.kg import links\nprint(json.dumps(links(sys.argv[1])))";
 function kg(rel: string) {
   if (!kgCache.has(rel)) {
@@ -238,7 +265,22 @@ function bench() {
   // also log runs of uncommitted work), all on ONE commit when possible: the commit of the latest full S0/F dev run
   // (since D14, S0 skips duplicate dev/hard runs and F's runs are the reference). Baselines: latest full run of anyone.
   const integ = (r: LbRow) => r.agent === "S0" || r.agent === "F";
-  const anchor = rows.filter((r) => r.solver === "pipeline" && r.split === "dev" && r.n >= 1500 && full(r) && integ(r)).at(-1)?.commit;
+  // S0's sealed test (experiments/s0/run_test.sh): only the CLEAN run counts (cc5k=0, or the single run when the
+  // pipeline has no cc5k switch); the cc5k=1 run is labelled inflated (D8) and never shown as the headline.
+  // Ablations (e.g. test-lora0: cc5k=0 + lora=0) are not the headline either: exactly {cc5k: 0}, or no args at all.
+  const clean = (r: LbRow) => {
+    const args = Object.keys(r.solver_args ?? {});
+    if (/test-(lora|cc5k1)/i.test(r.note ?? "")) return false;
+    if (/test-cc5k0\b/.test(r.note ?? "")) return true;
+    return (args.length === 1 && String(r.solver_args?.cc5k) === "0") || (args.length === 0 && !/cc5k|lora/i.test(r.note ?? ""));
+  };
+  const tests = rows.filter((r) => r.solver === "pipeline" && r.split === "test" && r.agent === "S0" && r.n >= 500 && full(r) && clean(r));
+  const test = tests.at(-1);
+  const devOn = (commit?: string) => rows.some((r) => r.solver === "pipeline" && r.split === "dev" && r.n >= 1500 && full(r) && integ(r) && r.commit === commit);
+  // ONE commit for every pipeline number: the sealed test's commit when dev was also run on it (the whole scorecard of
+  // that milestone: dev, hard, hard2*, test), else the commit of the latest full S0/F dev run
+  const anchor = test && devOn(test.commit) ? test.commit
+    : rows.filter((r) => r.solver === "pipeline" && r.split === "dev" && r.n >= 1500 && full(r) && integ(r)).at(-1)?.commit;
   const pickPipeline = (ok: LbRow[]) => {
     const mine = ok.filter(integ);
     return mine.filter((r) => anchor && r.commit === anchor).at(-1) ?? mine.at(-1) ?? ok.at(-1);
@@ -271,26 +313,21 @@ function bench() {
   for (const [split, minN] of [["dev", 1500], ["hard", 500]] as const)
     out[split] = { pipeline: summary(pick("pipeline", split, minN)), vlm_direct: summary(pick("vlm_direct", split, minN)),
       prior: summary(pick("prior", split, minN)) };
-  // S0's sealed test (experiments/s0/run_test.sh): only the CLEAN run counts (cc5k=0, or the single run when the
-  // pipeline has no cc5k switch); the cc5k=1 run is labelled inflated (D8) and never shown as the headline.
-  // Ablations (e.g. test-lora0: cc5k=0 + lora=0) are not the headline either: exactly {cc5k: 0}, or no args at all.
-  const clean = (r: LbRow) => {
-    const args = Object.keys(r.solver_args ?? {});
-    if (/test-(lora|cc5k1)/i.test(r.note ?? "")) return false;
-    if (/test-cc5k0\b/.test(r.note ?? "")) return true;
-    return (args.length === 1 && String(r.solver_args?.cc5k) === "0") || (args.length === 0 && !/cc5k|lora/i.test(r.note ?? ""));
-  };
-  const test = rows.filter((r) => r.solver === "pipeline" && r.split === "test" && r.agent === "S0" && r.n >= 500 && full(r) && clean(r)).at(-1);
   // the same sealed test without R2's counting LoRA (run_test.sh "test-lora0": cc5k=0 + lora=0, same commit): shows what the
   // small fine-tuned model adds on data nobody has seen
   const lora0 = test && rows.filter((r) => r.solver === "pipeline" && r.split === "test" && r.agent === "S0" && full(r)
     && r.commit === test.commit && (/test-lora0\b/.test(r.note ?? "") || String(r.solver_args?.lora ?? "") === "0")).at(-1);
-  out.test = { pipeline: summary(test), ...(lora0 ? { no_lora: summary(lora0) } : {}) };
+  // the previous sealed test on an earlier commit (test 1 before test 2): the overnight progress line
+  const prev = test && tests.filter((r) => r.commit !== test.commit).at(-1);
+  out.test = { pipeline: summary(test), ...(lora0 ? { no_lora: summary(lora0) } : {}), ...(prev ? { previous: summary(prev) } : {}) };
   // novel question kinds (operators no template covers): hard2 = developed on; hard2q = held-out rewording (D10, now
   // "worn"); hard2r = F's sealed fresh draw in a fourth wording (D12, the clean one). Aggregates only.
-  for (const split of ["hard2", "hard2q", "hard2r"]) {
+  // hard3 = sealed derived quantities (D15: ratios, differences, per-unit values). With a previous sealed test, the same
+  // split on that test's commit (any agent: F logged hard3's test-1 baseline) shows how far the night moved them.
+  for (const split of ["hard2", "hard2q", "hard2r", "hard3"]) {
     // the integration run on the same commit as dev/hard first (F logs a base and a candidate commit side by side)
-    out[split] = { pipeline: summary(pick("pipeline", split, 200)) };
+    const was = prev && rows.filter((r) => r.solver === "pipeline" && r.split === split && r.n >= 100 && full(r) && r.commit === prev.commit).at(-1);
+    out[split] = { pipeline: summary(pick("pipeline", split, split === "hard3" ? 100 : 200)), ...(was ? { previous: summary(was) } : {}) };
   }
   return { from: "leaderboard", generated: new Date().toISOString(), runs: out };
 }
@@ -390,7 +427,7 @@ async function handle(req: Connect.IncomingMessage, res: http.ServerResponse, ne
     const body = req.method === "POST" ? await readBody(req) : Buffer.alloc(0);
     const askBody = route === "/ask" && req.method === "POST" ? (() => { try { return JSON.parse(body.toString() || "{}"); } catch { return {}; } })() : null;
     const hosted = !!askBody && isHosted(askBody);
-    const live = route === "/bench" ? null : await forward(req, route + url.search, body, hosted ? HOSTED_WAIT_MS : 600_000);
+    const live = route === "/bench" || route === "/rooms" ? null : await forward(req, route + url.search, body, hosted ? HOSTED_WAIT_MS : 600_000);
     if (hosted) {
       let ans: { value?: unknown } | null = null;
       try {
@@ -457,6 +494,15 @@ async function handle(req: Connect.IncomingMessage, res: http.ServerResponse, ne
     if (route === "/bench") {
       const b = bench();
       return b ? send(res, 200, b, "kg") : send(res, 404, { detail: "no leaderboard and no fixtures/bench.json" });
+    }
+    if (route === "/rooms") {
+      const rel = url.searchParams.get("path") ?? "";
+      if (!/^data\/cubicasa5k\/[^/]+\.png$/i.test(rel) || !safeAbs(rel)) return send(res, 404, { detail: "room graph: CubiCasa plans only" });
+      const g = await roomGraph(rel);
+      if (g) return send(res, 200, g, "kg");
+      // no Python env / no R1 cache here: the graph fixtures/record.py saved for the tour plans
+      const rec = (() => { try { return JSON.parse(fs.readFileSync(ROOMS_REC, "utf8")) as Record<string, unknown>; } catch { return {}; } })()[rel];
+      return rec ? send(res, 200, rec, "mock") : send(res, 404, { detail: "no cached CubiCasa5K segmentation for this plan" });
     }
     if (route === "/kg") {
       const rel = url.searchParams.get("path") ?? "";

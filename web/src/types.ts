@@ -159,3 +159,28 @@ export interface Kg {
   graph?: { nodes: { id: string; type: string; label: string }[]; edges: { from: string; to: string; rel: string }[] };
   kg_error?: string;
 }
+
+/** R1's room graph of a CubiCasa plan (GET /api/rooms, experiments/r1/room_graph/graph.py); boxes in image px. */
+export interface RoomGraphRoom {
+  id: string;
+  cls: string; // living | bedroom | kitchen | bath | entry | storage | garage | sauna | outdoor | undefined
+  label?: string | null; // printed label read on the plan ('MH', 'OH', 'WC')
+  bbox: number[];
+  centroid: number[];
+  m2?: number | null;
+  m2_80?: number[] | null;
+  windows?: number[][];
+  doors?: string[];
+  fixtures?: Record<string, number[][]>;
+  door_to?: string[];
+  open_to?: string[];
+}
+export interface RoomGraph {
+  path: string;
+  size: number[];
+  rooms: RoomGraphRoom[];
+  doors: { id: string; box: number[]; between: string[] }[];
+  windows: { box: number[]; room: string | null; side?: string }[];
+  scale?: { px_per_m?: number; assumptions?: string[]; missing?: string[] } | null;
+  source?: string;
+}
