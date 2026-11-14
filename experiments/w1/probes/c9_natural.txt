@@ -1,0 +1,24 @@
+# cycle 9 (11:05): natural customer phrasings (W5 10:34 + chip-style wordings), written before running.
+# Gold column after '#=' is checked against the dataset-template wording on the same model (100% on dev).
+PATH bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf
+What is the area of 'KORIDOR (119)'?
+How big is room 119?
+How big is corridor 119?
+What is the area of corridor 119 on floor 1?
+How large is the corridor 119?
+How many doors on floor 2?
+How many doors are there on the 2.korrus floor?
+How many windows on this floor?
+How many rooms on this floor?
+How many toilets on this floor?
+What is the biggest room on this floor?
+What is the total floor area of this floor?
+How many floors does the building have?
+How many doors in the whole building?
+Where is room 103?
+How big is the INVA-WC?
+PATH kit-smiley-west_ac-20-smiley-west-10-bldg_plan-01-kg.pdf
+How big is room 05.0.2?
+How big is Kellerraum-05-2?
+How many rooms in the basement?
+How many doors on this floor?

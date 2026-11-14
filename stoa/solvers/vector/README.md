@@ -16,6 +16,10 @@ AGENT_ID=W2 $JUNCTION_VENV/bin/python -m stoa.eval --solver dxf --split dev --so
 Pipeline: `qparse.parse` (EN/DE/FR/IT keywords; labels grounded in the floor's own ROOM_TEXT vocabulary) →
 `Query(terms, op)` → `floor.load_floor` (rules below) → combine (sum / diff / max / min) → evidence boxes mapped
 DXF → PDF points (`pdfmap.fit_transform`, least squares on shared text, rms ≈ 0.05 pt) → PNG px (×png_w/page_w).
+Exclusion clauses (`EXCL_CLAUSE` except/ohne/sans/senza/without …, `POST_EXCL` '… excluded') are blanked before
+concept words are read, and a floor label that is an outdoor room (Balkon, balcon, loggia, terrace) is dropped as a
+target when it appears only inside such a clause ('Wohnfläche der Wohnung A (ohne Balkon)' = apartment A, not the
+Balkon; c582e13). `covered()` treats 'Welche/which + Fläche/area' and 'senza/ohne/sans/without + balcony' as rule-covered.
 
 Rules (measured on train floors):
 - doors = 5-vertex DOOR LWPOLYLINE (leaf); evidence box = leaf ∪ its swing arc.

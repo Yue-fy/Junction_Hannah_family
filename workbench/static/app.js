@@ -279,6 +279,8 @@ const audit = {
     $("#audit-ref").previousElementSibling.textContent = d.split && d.split !== "dev" ? "Reference answer (made by our agents)" : "Reference answer (dataset)";
     $("#audit-question").textContent = d.question;
     $("#audit-answer").textContent = d.answer;
+    $("#audit-answer").classList.toggle("long", String(d.answer).length > 30);
+    $("#audit-ref").classList.toggle("long", String(d.reference).length > 30);
     $("#audit-conf").textContent = confWords(d.confidence);
     $("#audit-ref").textContent = d.reference;
     $("#audit-match").textContent = d.matches_reference === true ? "our answer matches it" :
@@ -287,7 +289,7 @@ const audit = {
       d.text_match === false ? "free text: looks different, please compare" : "free-text answer: please compare";
     renderNotes($("#audit-assumptions"), d.assumptions, d.missing);
     $("#audit-trace").innerHTML = d.trace.map((t) => `<li>${esc(t)}</li>`).join("");
-    $("#audit-comment").value = "";
+    $("#audit-comment").value = ""; $("#audit-correct").value = "";
     $$(".verdicts .v").forEach((b) => b.classList.toggle("chosen", !!(d.last && d.last.verdict === b.dataset.v)));
     $("#audit-last").textContent = d.last ? `Already checked: ${d.last.verdict.replace("_", " ")}${d.last.comment ? ` — “${d.last.comment}”` : ""}. Press a button again to change it.` : "";
     $("#audit-credit").textContent = `Drawing: ${d.drawing_name} — ${d.credit}`;
@@ -301,9 +303,12 @@ const audit = {
     if (d.views.length) await pick(0);
     else {
       $("#audit-views").innerHTML = "";
+      const els = d.other_evidence.slice(0, 150).map((e) => `<li>${esc(e.note || "(no note)")}${e.ifc_guid ? ` <small>· ${esc(e.ifc_guid)}</small>` : ""}</li>`).join("");
       this.viewer.empty(d.path.endsWith(".ifc") ?
-        `This question is about a <b>3D building model (IFC)</b>, not a drawing.<br>The evidence is a list of model elements on the right.` :
-        "No drawing to show for this question.");
+        `<div class="msg"><h3>This question is about a 3D building model (IFC), not a drawing.</h3>
+         <div>Our evidence is the list of model elements below (${d.other_evidence.length}${d.other_evidence.length > 150 ? ", first 150 shown" : ""}).
+         Each line is one element with its IFC GlobalId.</div>${els ? `<ol>${els}</ol>` : "<p>No elements were cited.</p>"}</div>` :
+        `<div class="msg">No drawing to show for this question.</div>`);
     }
     const n = renderEvidence($("#audit-evidence"), d.views, d.other_evidence, this.viewer, pick);
     $("#audit-ev-n").textContent = n;
@@ -314,9 +319,9 @@ const audit = {
   },
   async verdict(v) {
     if (!this.cur) return;
-    const comment = $("#audit-comment").value;
+    const comment = $("#audit-comment").value, correct_value = $("#audit-correct").value;
     try {
-      await api("api/audit", { method: "POST", body: JSON.stringify({ item_id: this.cur.item_id, verdict: v, comment }) });
+      await api("api/audit", { method: "POST", body: JSON.stringify({ item_id: this.cur.item_id, verdict: v, comment, correct_value }) });
     } catch (e) { alert(`Could not save: ${e.message}`); return; }
     this.items[this.idx].verdict = v;
     this.cache.delete(this.cur.item_id);
@@ -392,6 +397,10 @@ const asker = {
     if (v.n_pages > 1) $("#ask-page").addEventListener("change", (e) => this.open(this.path, +e.target.value));
     await this.viewer.load(v, []);
     measure.reset(v);
+    if (this.dsPath !== path && !this.editQid) {
+      $("#q-text").value = ""; $("#q-answer").value = ""; $("#q-method").value = "";
+      this.loadDraft();
+    }
     if (this.dsPath !== path) {
       this.dsPath = path;
       $("#ds-n").textContent = "…"; $("#ds-list").innerHTML = "";
@@ -410,6 +419,7 @@ const asker = {
     $("#q-ask").disabled = true;
     try {
       const r = await api("api/ask", { method: "POST", body: JSON.stringify({ path: this.path, question }) });
+      r.fresh = true;
       this.system = r;
       if (!r.ok) { res.className = "result err"; res.innerHTML = `Our system failed: ${esc(r.error)}`; return; }
       const mine = $("#q-answer").value.trim();
@@ -436,6 +446,20 @@ const asker = {
       res.className = "result err"; res.innerHTML = `Could not ask: ${esc(e.message)}`;
     } finally { $("#q-ask").disabled = false; }
   },
+  draftKey() { return this.path ? `wb-draft|${this.path}` : ""; },
+  saveDraft() {
+    if (!this.path || this.editQid) return;
+    const d = { q: $("#q-text").value, a: $("#q-answer").value, u: $("#q-unit").value, t: $("#q-type").value, m: $("#q-method").value };
+    try { if (d.q || d.a || d.m) localStorage.setItem(this.draftKey(), JSON.stringify(d)); else localStorage.removeItem(this.draftKey()); } catch {}
+  },
+  loadDraft() {
+    let d = null;
+    try { d = JSON.parse(localStorage.getItem(this.draftKey()) || "null"); } catch {}
+    if (!d) return;
+    $("#q-text").value = d.q || ""; $("#q-answer").value = d.a || ""; $("#q-method").value = d.m || "";
+    if (d.t) $("#q-type").value = d.t;
+    $("#q-unit").value = d.u ?? $("#q-unit").value;
+  },
   async save() {
     const question = $("#q-text").value.trim();
     if (!question) { alert("Please write a question first."); return; }
@@ -445,12 +469,15 @@ const asker = {
     const body = {
       path: this.path, page: this.page, question, answer: ans, unit: $("#q-unit").value, type,
       method: $("#q-method").value, sureness: ($("input[name=sure]:checked") || {}).value || "",
-      marks: this.viewer.marks, system: this.system, qid: this.editQid || "",
+      marks: this.viewer.marks, qid: this.editQid || "",
+      // an old answer of ours only stays attached if the question text is unchanged (or she asked again)
+      system: this.system && (this.system.fresh || !this.editQid || question === this.editOrigQ) ? this.system : null,
     };
     try {
       const r = await api("api/questions", { method: "POST", body: JSON.stringify(body) });
       flash(`Saved ✓ (${r.n} questions so far)`);
       this.edit(null);
+      try { localStorage.removeItem(this.draftKey()); } catch {}
       $("#q-text").value = ""; $("#q-answer").value = ""; $("#q-method").value = "";
       this.system = null; $("#q-result").hidden = true;
       this.viewer.marks = []; this.viewer.boxes = []; this.viewer.draw();
@@ -467,7 +494,7 @@ const asker = {
     this.mine = r.questions;
     $("#q-count").textContent = r.questions.length;
     $("#q-list").innerHTML = r.questions.map((q, i) => `<li><b>${esc(q.question)}</b> → ${esc(q.answer || "?")} ${esc(q.unit || "")}
-      ${q.system ? `<small>(ours: ${esc(q.system.value)} ${esc(q.system.unit || "")})</small>` : ""}
+      ${q.system ? `<small>(ours: ${esc(q.system.value)} ${esc(q.system.unit || "")}${q.agree === true ? " ✓ same" : q.agree === false ? " — <b>we disagree: a hard one!</b>" : ""})</small>` : ""}
       <button class="mini" data-edit="${i}">Edit</button><button class="mini" data-del="${i}">Delete</button></li>`).join("");
     $$("#q-list [data-edit]").forEach((b) => b.addEventListener("click", async () => {
       const q = this.mine[+b.dataset.edit];
@@ -478,6 +505,8 @@ const asker = {
       const s = $(`input[name=sure][value="${q.sureness}"]`); if (s) s.checked = true;
       this.viewer.marks = (q.marks || []).slice(); this.viewer.drawMarks();
       this.edit(q);
+      this.system = q.system ? { ok: true, ...q.system } : null;  // keep our earlier answer unless she asks again
+      this.editOrigQ = q.question;
       $("#q-text").focus();
     }));
     $$("#q-list [data-del]").forEach((b) => b.addEventListener("click", async () => {
@@ -499,6 +528,7 @@ $("#q-cancel-edit").addEventListener("click", () => {
   asker.viewer.marks = []; asker.viewer.drawMarks();
 });
 $("#q-ask").addEventListener("click", () => asker.ask());
+["#q-text", "#q-answer", "#q-unit", "#q-method", "#q-type"].forEach((s) => $(s).addEventListener("input", () => asker.saveDraft()));
 $("#q-save").addEventListener("click", () => asker.save());
 $("#ask-mark").addEventListener("click", (e) => {
   const on = !asker.viewer.marking;
@@ -672,6 +702,9 @@ const rules = {
 $("#rule-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const body = Object.fromEntries(new FormData(e.target).entries());
+  const lo = parseFloat(String(body.min).replace(",", ".")), hi = parseFloat(String(body.max).replace(",", "."));
+  if (!isNaN(lo) && !isNaN(hi) && lo > hi && !confirm(`Min (${lo}) is larger than max (${hi}). Save anyway?`)) return;
+  if ((body.min || body.max) && !body.unit && !confirm("No unit given, so this range cannot be tested against our answers. Save anyway?")) return;
   try {
     await api("api/rules", { method: "POST", body: JSON.stringify(body) });
     e.target.reset(); flash(); rules.load();
