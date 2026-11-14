@@ -253,6 +253,12 @@ Problem (KNOWLEDGE 11:10): on the c43 gate, vlm_lora sets assumptions on 0 of 55
   not match them). Side effect: `_absent_fact` and the "not traced to any value" note no longer fire on a low-conf LoRA count
   (they only fire when 'missing' holds process notes alone); the range is the more useful statement there.
 - LIVE check (11:20, gate c43c done, --no-leaderboard, scratch copies of night 637a6df ± patch; 198 dev CubiCasa rows the gate answered with vlm_lora: all 158 below 0.8 + 40 random above): patched vs unpatched in the same minute: values 197/198, conf 194/198 identical (unpatched vs the gate run: 192 / 189 = vLLM batching noise of the same size); right 114 vs 115 (noise); method assumption on 198/198 LoRA answers; conf<0.8 LoRA answers with a range 155/155; rows stating NEITHER 41 → 0; duplicate range lines 0. Runs 20261114-112030-pipeline-lora_check-144b (patched) vs -112109-…-a85b (unpatched), ref -111300-pipeline-dev-cdc1.
+- v2 (11:26, W4's review 11:20): the two hunks no longer match a free-text substring; they call
+  `VlmLora.drop_lora_range(missing)` (filters on the constant `VlmLora.RANGE_NOTE`, which `_state_method` writes), so a
+  wording change cannot break the dedupe silently; a 4th test pins it. pytest 399 on night 637a6df + patch. Live, same 198 rows
+  (run 20261114-112449-pipeline-lora_check-fa83 vs v1 -112030-…-144b): right 115 vs 114, values 193/198 identical (batching
+  noise, as v1 vs unpatched), range text identical on all 183 rows with equal value + conf, 0 duplicate ranges, 153/153 conf<0.8
+  LoRA answers with a range, 0 rows stating neither. v1 kept as `artifacts/R2/vlm_lora_method_range.v1.patch`.
   Day team: apply, pytest, then a full dev run to confirm before committing.
 
 ## Drawing style from image content (09:30–10:25, `stoa/style.py`; training in `experiments/r2/style/`)
