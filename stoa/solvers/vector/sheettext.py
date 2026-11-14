@@ -201,6 +201,18 @@ def ask(question: str, rows: list[dict], backend: str = "local", context: str = 
                 out.update(value=_fmt_ftin(v), unit=None)
             trace.append(f"{op} over {len(dims)} feet-inch lengths = {out['value']} (computed in Python)")
             return out
+        def _length(it):  # the value is (the feet part of) a printed feet-inch dimension: a length, not a count
+            v = str(it.get("value") or "").strip()
+            return _ftin(v) is not None or bool(re.fullmatch(r"\d+", v) and re.search(
+                rf"(?<![\d.]){re.escape(v)}\s*'\s*-", by_id[it["row"]]["text"]))
+        lengths = [it for it in items if _length(it)]
+        if lengths and len(items) - len(lengths) >= 2:
+            # A-100-A: '24 PARKING STALLS' + ... + "60' - 0\" (UNLIMITED AREA SETBACK)" summed to 176 (gold 116):
+            # a length mixed into a sum of plain numbers is another quantity -> dropped
+            trace.append("dropped lengths mixed into a sum of plain numbers: " +
+                         "; ".join(f"[{it['row']}] {it.get('value')}" for it in lengths))
+            items = [it for it in items if it not in lengths]
+            out["used"] = [it["row"] for it in items]
         nums = [(_num(it.get("value")), it) for it in items]
         if any(v is None for v, _ in nums):
             out["ok"] = False
