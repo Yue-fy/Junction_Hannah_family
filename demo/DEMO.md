@@ -95,8 +95,9 @@ headless chromium, numbers from `redteam/REPORT.md`). **Say only this (≈ 22 s,
 > number, not that it answered what was asked. Each bar is a round of fixes; the tall ones on the right are this
 > morning's new attacks. On the first 600, all 397 confident answers are right — and it never just refuses."
 (The bars from 09:28 on count only the newest families — uploads, links, lists, rankings, renamed files, relative
-storeys — on builds where every older family is at 0: 14 / 12 / 19 / 18, then 10 and 5 with the 10:47 / 10:54 owner
-heads, 6 on b656826, **5 on the final night 637a6df: all five are CubiCasa uploads without the style (bug 26)**. Redraw after the final
+storeys — on builds where every older family is at 0: 14 / 12 / 19 / 18, then **5 on the final night 637a6df: all
+five are CubiCasa uploads without the style (bug 26)** (pre-merge checks at 10:47 / 10:54 gave 10 / 5 and b656826 6;
+not drawn, see REPORT). Redraw after the final
 build: `python3 experiments/q/bar_count.py MAIN_RUN [V27_RUN] --v26 V26_RUN` gives the bar.)
 (Numbers by stage build — say the line for the build on stage: **the final night 637a6df (11:13):
 "… all 397 confident answers are right, and no confident answer to a trick question"** (run
