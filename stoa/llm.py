@@ -915,6 +915,15 @@ _TR_GLOSSARY = (
     "vannituba (et), koupelna (cs), fürdőszoba (hu), baie (ro), baño (es), badrum (sv); bedroom = sypialnia (pl), "
     "magamistuba (et), ložnice (cs), hálószoba (hu), dormitor (ro), dormitorio (es), sovrum (sv); storey = kondygnacja/"
     "piętro (pl), korrus (et), podlaží/patro (cs), szint/emelet (hu), nivel/etaj (ro), planta (es), våning (sv).")
+# F 08:20 (open hardL cs/hu/tr/ro slips): room codes read as fixtures ('washrooms (KH, KPH, PH)' -> 'toilets'),
+# hu 'Hány … közül' -> 'Which of', ro 'băi' / tr 'banyo' next to showers -> 'bathrooms', cs 'Kolik van' noun dropped.
+# NOT used (08:50, experiments/r2/probes/hints2_ab.py): appended to v3 it was WORSE, hardL_open concept match 206 vs
+# 212/232 (hu 45 vs 54: 'A lakás' read as 'A apartment' -> room area), lang4 47 vs 48/48, and the targeted slips stayed.
+_TR_HINTS2 = (
+    " Room codes in parentheses (KH, KPH, PH, PESUH, SH, WC, MH, S) mark ROOMS: name them as rooms (bathroom, "
+    "washroom, WC room), never as fixtures (toilet, toilet bowl). 'How many of …' = 'Hány … közül' (hu), 'kaç "
+    "tanesi' (tr), 'câte dintre' (ro), 'kolik z' (cs): keep it a count, never 'which'. bathtub = küvet (tr); "
+    "'van' in 'kolik van' (cs) is bathtubs; next to showers, 'băi' (ro) and 'banyo' (tr) are bathtubs.")
 # Quantity and unit words (W1 04:56: et 'kogumaht' total volume -> 'total area', hu 'lábban' in feet -> 'at ground
 # level'). NOT used (05:10): with the one-letter fix v3 already matches W1's c5 cs/hu/sv rows 54/54, and adding these
 # was slightly worse elsewhere (hardL_open concept match 208 vs 210/232, lang4 46 vs 47/48; noise-level).
