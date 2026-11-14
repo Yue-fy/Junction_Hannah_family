@@ -69,8 +69,13 @@ _COUNT_CUE = re.compile(r"how many|number of|wie viele|anzahl|combien|nombre de|
 
 def labelled_query(question: str) -> str | None:
     """The quoted room label of a 'how many rooms labelled X' question (greedy: "Cage d'escalier" stays whole)."""
-    m = _LABELLED.search(question or "")
-    return m.group(1).strip() if m and _COUNT_CUE.search(question) else None
+    if not _COUNT_CUE.search(question or ""):
+        return None
+    m = _LABELLED.search(question)
+    if m:
+        return m.group(1).strip()
+    from stoa.solvers.raster.apartment import unquoted_label
+    return unquoted_label(question)
 GATE_FILE = Path(__file__).with_name("gate.json")
 COND_FILE = Path(__file__).with_name("cond_prior.json")  # experiments/w3/cv/cond_prior.py --write
 
