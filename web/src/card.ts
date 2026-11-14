@@ -81,7 +81,8 @@ export function crossChecks(a: Answer, asks: string[] = []): { text: string; ok:
   const parse = (lines: string[]) => lines.flatMap((l) => {
     const m = l.match(/cross-?check:?\s*(.*)$/i);
     // a comparison with the training prior is a sanity note, not a second source: keep it in the trace only
-    if (!m || /^vs\.? prior\b/i.test(m[1].trim())) return [];
+    // (a route line "… ifc as asked as a cross-check" names a check without its result: not one)
+    if (!m || !m[1].replace(/[✓✗\s.]/g, "") || /^vs\.? prior\b/i.test(m[1].trim())) return [];
     const part = l.match(/^([^:;]+):\s/)?.[1];
     const k = asks.length ? evStep(l, asks) : -1;
     const text = (k >= 0 ? `step ${k + 1}: ` : part && parts.has(part) ? `${part}: ` : "") + m[1].trim();

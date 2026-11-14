@@ -2302,6 +2302,84 @@
  },
  {
   "path": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+  "question": "Do the floor plan and the IFC model agree on the number of windows on '1.korrus'?",
+  "answer": {
+   "value": "no (IFC model 55 windows on '1.korrus', plan draws 52; the other 3 lie entirely above/below the plan's 1.2 m section plane, so the drawing is consistent with the model)",
+   "unit": null,
+   "confidence": 0.85,
+   "evidence": [
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": null,
+     "note": "windows on storey '1.korrus' (plan bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf): IFC model 55; 52 of them cut by the plan's section plane (floor +1.2 m),"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "3Rz1QIxUo0YS8t2HdSDYt1",
+     "note": "IfcWindow ARA | not drawn on bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "1hskr3jKrlRjoMjKuq6VvX",
+     "note": "IfcWindow ARA | not drawn on bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "1wgzo5pXBKgVjlIte4hj5m",
+     "note": "IfcWindow ARA | not drawn on bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf"
+    }
+   ],
+   "trace": [
+    "route: link question (plan vs model) -> project knowledge graph (R1 kg_qa over stoa.kg), ifc as asked as a cross-check",
+    "project knowledge graph: no (IFC model 55 windows on '1.korrus', plan draws 52; the other 3 lie entirely above/below the plan's 1.2 m section plane, so the drawing is consistent with the model)  at conf 0.85",
+    "[kg_qa] kg_qa: 319 fact rows (34 shown); op agree on ['C2', 'S2']",
+    "[kg_qa] kg_qa: why: C2 states that for storey '1.korrus', the IFC model has 55 windows and the plan draws 52. But wait — this is a discrepancy. The question asks if they agree. The",
+    "cross-check: ifc as asked says no: the IFC model has 55 windows on '1.korrus', the plan dra ✓"
+   ],
+   "solver": "pipeline/kg_qa",
+   "assumptions": [
+    "counts of 'drawn' elements come from the sheet's vector twin (IFC GUID per element)"
+   ],
+   "missing": [],
+   "cost": {
+    "llm_tokens_in": 2836,
+    "llm_tokens_out": 135,
+    "gpu_seconds": 0.2484,
+    "api_calls": 0,
+    "api_tokens_in": 0,
+    "api_tokens_out": 0,
+    "llm_calls": 1,
+    "wall_seconds": 3.6681
+   },
+   "intent": {
+    "task": "count",
+    "target": "window",
+    "scope": "model",
+    "unit": "count",
+    "filters": {
+     "model": "1.korrus"
+    },
+    "lang": "en",
+    "key": "count:window:model"
+   }
+  },
+  "recorded_at": "2026-11-14 09:16",
+  "api": "http://127.0.0.1:8103 (night-W4 1b831ed preview: kg_qa routing)"
+ },
+ {
+  "path": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
   "question": "How many doors are there in the model 'Maleva tänav 18 korterelamu (Esplanades example model)'?",
   "answer": {
    "value": 211,

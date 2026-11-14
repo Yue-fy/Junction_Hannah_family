@@ -50,7 +50,7 @@ questions (floor-plan ones for drawings, model ones for IFC).
 Deep links: `/?file=<dataset-relative path>&q=<question>` opens a file and asks right away, e.g.
 `/?file=data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf&q=How many doors are shown on the floor plan of '1.korrus'?`
 
-## Demo script (14 steps, ~2 min; steps 1–3 + 6 + 10 + 13 + 14 for a short pitch)
+## Demo script (15 steps, ~2 min; steps 1–4 + 7 + 11 + 14 + 15 for a short pitch)
 
 Click **Demo tour ▸** (top left), or press → / ← (when not typing). Each step opens a file, asks one question
 and shows a one-line note:
@@ -62,50 +62,57 @@ and shows a one-line note:
 3. Same sheet, windows → 55 from the model; the drawing shows 52. The cross-check explains the gap (the plan
    is a cut at floor + 1.2 m; 3 windows lie entirely above/below it) and the matching knowledge-graph pill is
    highlighted ("windows plan 52 · IFC 52 at the cut (55 on storey) ✓").
-4. Model-wide doors → 211 with evidence on 5 sheets (chips; click one to open that plan, same answer).
-5. A question no template covers, with a number in it ("if each door costs 450 euros, what do all the doors on
+4. Same sheet, a question about the link itself: "Do the floor plan and the IFC model agree on the number of windows
+   on '1.korrus'?" → "no (IFC model 55, plan draws 52; the other 3 lie entirely above/below the 1.2 m section plane,
+   so the drawing is consistent with the model)" at 0.85, the 3 undrawn windows highlighted in 3D. Answered from the
+   project knowledge graph (R1's kg_qa over W1's stoa.kg, routed by W4 1b831ed): one local call picks fact rows,
+   Python computes; the IFC rules answer it independently (✓). Same family: "Which sheet shows the server room?",
+   "How many floor plan sheets does this building have?" → 5 (no model call).
+5. Model-wide doors → 211 with evidence on 5 sheets (chips; click one to open that plan, same answer).
+6. A question no template covers, with a number in it ("if each door costs 450 euros, what do all the doors on
    '1.korrus' cost in total?") → 20,700 €. Since night 753eccb the IFC rules read "each door costs 450 €" as a
    factor themselves ("Understood as: cost + given · factor 450 EUR per door"), count 46 doors and multiply in
    code: conf 0.92, 0 LLM calls, ~20 ms, all 46 doors boxed. Questions the rules cannot read go to W4's planning
    agent (ASK → CALC → ANSWER, numbers from tools only; "Reasoning · N steps" on the card). Same family: "what
    share of the total room area on '1.korrus' does 'KORIDOR (119)' take?" → 7.34 %.
-6. A free-text question about a model (4351_arc.ifc, "what plumbing fixtures are in this building and their counts?"):
-   a local model answers from facts extracted from the IFC; the browser then counts every type the text names in the
+7. A free-text question about a model (4351_arc.ifc, "what plumbing fixtures are in this building and their counts?"):
+   since W1 1f54e41 the IFC rules answer it from the type names (the model has no IfcSanitaryTerminal; conf 0.6, 21 GUIDs,
+   0 LLM calls; before, a local model answered from extracted facts); the browser then counts every type the text names in the
    loaded model (`findNamed` in `src/viewer3d.ts`, no model call). The card leads with that table ("Counted in the IFC
    model · 4 types": Toilet-Domestic-3D 9, Sink Vanity-Round 6, Urinal-Wall-3D 4, Sink Kitchen-Double 2, total 21,
-   each ✓ vs the answer) and the 21 fixtures turn orange in 3D; the LLM's own wording folds when every count matches
+   each ✓ vs the answer) and the 21 fixtures turn orange in 3D; the solver's own wording folds when every count matches
    (its confidence is labelled "before the check"). Same-kind fixtures an answer leaves out are listed ✗ and shown purple.
-7. Swiss floor plan: doors counted on the DXF layer, boxed on the PDF (36).
-8. Same floor, asked in German, doors and windows together → 64. The card shows "Understood as: count · door +
+8. Swiss floor plan: doors counted on the DXF layer, boxed on the PDF (36).
+9. Same floor, asked in German, doors and windows together → 64. The card shows "Understood as: count · door +
    window · German" and the plan (sum of 2 sub-questions, each clickable); both parts are cross-checked.
-9. CubiCasa scan (colorful-4539), asked in Finnish: bedrooms → 3 from the fine-tuned 8B vision model (LoRA cc-v2),
+10. CubiCasa scan (colorful-4539), asked in Finnish: bedrooms → 3 from the fine-tuned 8B vision model (LoRA cc-v2),
    92 %. Since night bb94fe4 (W4 f889ace) the pipeline attaches R1's room-segmentation regions for room-label counts
    when their number equals the answer (cached pretrained CubiCasa5K map, ~0.1 s, no LLM): the 3 'MH' bedrooms are
    outlined and the card shows "✓ Cross-checked: 3 bedroom regions in the room segmentation (pretrained CubiCasa5K)
    = the answer".
-10. Same plan, **Rooms & doors** (no question): R1's room graph (`experiments/r1/room_graph/graph.py`, read by the
+11. Same plan, **Rooms & doors** (no question): R1's room graph (`experiments/r1/room_graph/graph.py`, read by the
    middleware's `GET /api/rooms` from the cached CC5K segmentation; offline from `fixtures/rooms.json`): every room
    tinted by kind with its English kind + ~m² under the printed code, every door as a link room → door → room
    (dashed: open-plan links, dotted: to the outside). The legend names the best-connected room ("hall 'ET' leads to
    6 rooms") and lights its links; hover any room for its links, windows and the 80 % area band. Areas: no scale
    printed, so the scale comes from the measured door widths (assumption in the legend).
-11. CubiCasa scan (high_quality_architectural-14797): "how many saunas?" → the fine-tuned LoRA says 0 (82 %) with no
+12. CubiCasa scan (high_quality_architectural-14797): "how many saunas?" → the fine-tuned LoRA says 0 (82 %) with no
    boxes; the card already shows "✗ Sources disagree: 1 sauna region in the room segmentation; the answer says 0".
    The tour clicks **Show where**: the label reader's box lands on "LH 2,7" (löylyhuone = sauna room) and adds
    "✗ label reader (raster) finds 1 sauna label (answer 0)" — two independent readers against the answer (gold: 1).
    For symbol counts (windows, doors, WC seats, sinks) the same button asks R1's CubiCasa5K detector (`raster_cc5k`,
    cached, no GPU) and the credit line adds its weights' licence (CC BY-NC 4.0).
-12. HAER historical scan (vi0026 sheet 3, Creque Marine Railway, 1977; no questions in the dataset): "what kind
+13. HAER historical scan (vi0026 sheet 3, Creque Marine Railway, 1977; no questions in the dataset): "what kind
    of drawing is this?" → "elevation" at 75 %, read from the scan's own printed text: W3's text layer
    (`stoa/solvers/raster/textlayer.py`, the local VLM reading the sheet tile by tile) finds the texts and the
    scale note (1/4" = 1'-0", 1:48), and the answer cites the title lines "HEAD HOUSE AND RESIDENCE" / "NORTH
    ELEVATION", boxed on the scan (first read minutes on a busy GPU, then cached; the card says "first time").
    The tour then clicks **Second opinion · NVIDIA Nemotron**: the hosted Nemotron 3.5 Super VL agrees (time,
    tokens and € shown; its reasoning folded). The knowledge-graph strip links the other sheets of the same survey.
-13. Finna scan of the Helsinki Olympic Stadium site plan (Lindegren & Jäntti, Architecture & Design Museum, CC BY
+14. Finna scan of the Helsinki Olympic Stadium site plan (Lindegren & Jäntti, Architecture & Design Museum, CC BY
    4.0), asked in Finnish: "Mikä on piirustuksen mittakaava?" → 1:500 (0.75), read from the hand-lettered note
    "ASEMAPIIRROS M.K. 1/500", which is boxed (the language front end translates the question first).
-14. "How well it works": every pipeline number from ONE commit (the sealed test's commit when dev also ran on it;
+15. "How well it works": every pipeline number from ONE commit (the sealed test's commit when dev also ran on it;
    now bb94fe4 = test 2): accuracy per source on held-out drawings against "just ask the VLM" and the template
    prior, the hard split, new question kinds (hard2, hard2r) and derived quantities (hard3), cost per 1,000
    questions, the share answered by rules alone, calibration, and the blue **Overnight, on sealed data** line
