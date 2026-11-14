@@ -81,6 +81,9 @@ def _typed(df: pd.DataFrame) -> pd.DataFrame:
 
 NOT_FOUND_RE = re.compile(r"^\s*(unknown|not found|not (?:listed|specified|available|shown|given)|n/?a|none|no data|"
                           r"no (?:such|matching) \w+|cannot (?:be )?determined?)\s*\.?\s*$", re.I)
+# a short answer that is a refusal in other words ("Size not found in note", "No path distances found")
+REFUSAL_IN_RE = re.compile(r"\b(not (?:found|listed|specified|available|shown|given|mentioned)|no \w+(?: \w+)? found|"
+                           r"cannot be determined|unknown)\b", re.I)
 CODE = r"(?:[A-Z]{1,3}-?\d{1,2}[A-Z]?|[A-Z]{2,3})"
 CODE_RE = re.compile(rf"^{CODE}$")
 CODES_ANSWER = re.compile(rf"^\s*{CODE}(?:\s*(?:&|,|/|\band\b)\s*{CODE})*\s*$")
@@ -239,7 +242,10 @@ class ScheduleSolver(BaseSolver):
         # and note columns together, so the model gets the text groups instead (tags, paragraphs, two-column lists;
         # plus any table of >= 3 columns). Schedule sheets keep exactly the old prompt: adding the text table there
         # changed the code the model wrote (dev A-801 'rooms listed' 29 -> 27).
-        schedule_sheet = any(len(t.df) >= 4 and len(t.df.columns) >= 3 for t in tabs)
+        def _named(t):  # a real schedule has a title or mostly named columns (not a plan's dimension chains)
+            names = [c for c in t.df.columns if not re.fullmatch(r"col\d+", str(c)) and re.search(r"[A-Za-z]{2}", str(c))]
+            return bool(t.title) or len(names) >= 0.5 * len(t.df.columns)
+        schedule_sheet = any(len(t.df) >= 4 and len(t.df.columns) >= 3 and _named(t) for t in tabs)
         groups = [g for g in text_groups(pdf) if g.n_lines >= 2 or g.kind == "list" or
                   (len(g.text) >= 12 and re.search(r"[A-Za-z]{3}", g.text))] \
             if self.use_text and not schedule_sheet else []
@@ -313,7 +319,8 @@ class ScheduleSolver(BaseSolver):
                          "so the typed value is kept")
         if res.get("value") is None or (isinstance(res["value"], float) and res["value"] != res["value"]):
             return Answer.abstain(self.name, f"table QA gave no answer ({res.get('error') or 'NaN'})", trace)
-        if isinstance(res["value"], str) and NOT_FOUND_RE.match(res["value"]):
+        if isinstance(res["value"], str) and (NOT_FOUND_RE.match(res["value"]) or
+                                              (len(res["value"]) < 60 and REFUSAL_IN_RE.search(res["value"]))):
             # "Unknown" / "Not found" is a refusal dressed as a value: say so, so the cascade can try another reader
             return Answer.abstain(self.name, f"the rows the question needs were not found in the tables rebuilt from "
                                              f"the PDF text (table QA said {res['value']!r})", trace)
@@ -331,6 +338,14 @@ class ScheduleSolver(BaseSolver):
             value = int(round(float(value)))
         elif isinstance(value, float):
             value = round(value, 2)
+        if isinstance(value, float) and unit in ("ft", None) and value == int(value):
+            # "11' - 3 1/8\"" read as 11.0: a length printed in feet-inches is answered as printed (A200 held-out)
+            used_txt = " ".join(str(v) for df in tables.values() if "row_id" in df.columns
+                                for v in df[df["row_id"].isin(res.get("used", []))].drop(columns="row_id").to_numpy().ravel())
+            m = re.search(rf"(?<![\d.]){int(value)}' ?- ?(\d+(?: \d+/\d+)?)\"", used_txt)
+            if m and m.group(1) not in ("0",):
+                trace.append(f"the query returned {value:g}, the feet part of the printed {m.group(0)}; answered as printed")
+                value, unit = m.group(0).replace("' - ", "'-"), None
         if unit not in ("count", "ft2", "m2", "ft", "m", None):
             unit = None
         row_label = {}
@@ -468,7 +483,8 @@ class ScheduleSolver(BaseSolver):
         except Exception as e:  # noqa: BLE001
             return Answer.abstain(self.name, f"sheet text QA failed: {type(e).__name__}: {e}", trace)
         trace += res["trace"]
-        if res["value"] is None or (isinstance(res["value"], str) and NOT_FOUND_RE.match(res["value"])):
+        if res["value"] is None or (isinstance(res["value"], str) and (NOT_FOUND_RE.match(res["value"]) or (
+                len(res["value"]) < 60 and REFUSAL_IN_RE.search(res["value"])))):
             return Answer.abstain(self.name, "the printed text of the sheet does not contain the answer "
                                              f"(op={res['op']})", trace)
         by_id = {r["id"]: r for r in rows}
@@ -477,7 +493,8 @@ class ScheduleSolver(BaseSolver):
                     for i in res["used"] if i in boxes]
         # fresh probe (experiments/w2/sheet_probe, 20 Qs, no dataset questions on these sheets): not calibrated yet,
         # so below the schedule rows' 0.85; aggregates (count/sum over tags) can miss an untagged or split tag
-        conf = 0.75 if res["op"] == "lookup" else 0.6
+        # held-out probes (3 sheets written before running): lookups 0.75 were right ~6/10, so 0.65 / 0.55
+        conf = 0.65 if res["op"] == "lookup" else 0.55
         missing = []
         if not res["ok"]:
             conf = min(conf, 0.4)
@@ -493,6 +510,12 @@ class ScheduleSolver(BaseSolver):
         if isinstance(res["value"], str) and res["value"].strip().upper() in ids:
             conf = min(conf, 0.2)
             missing.append(f"the answer {res['value']!r} repeats the question's identifier")
+        if isinstance(res["value"], str):
+            qw = set(re.findall(r"[a-z0-9]+", question.lower()))
+            aw = set(re.findall(r"[a-z0-9]+", res["value"].lower()))
+            if aw and aw <= qw:
+                conf = min(conf, 0.2)  # "(FRONT YARD SETBACK)" for "what is the front yard setback?": the label, not the value
+                missing.append(f"the answer {res['value']!r} only repeats words of the question (a label, not its value)")
         cited = " ".join(by_id[i]["text"] for i in res["used"] if i in by_id).upper()
         if ids and evidence and not any(re.search(rf"(?<![\w.-]){re.escape(x)}(?![\w-])", cited) for x in ids):
             conf = min(conf, 0.3)  # "pier P13" but no cited row contains P13 (S-101: a scale string at 0.75)
