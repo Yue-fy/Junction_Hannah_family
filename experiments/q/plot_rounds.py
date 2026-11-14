@@ -3,16 +3,20 @@ Writes demo/redteam-rounds.svg (render to PNG with headless chromium, see REPORT
 conf >= 0.8 that is wrong, or any answer at >= 0.8 to a false-premise/unanswerable row, over the runs in REPORT.md.
 Palette: dataviz reference categorical slots 1-5, validated (light); every segment carries its value (relief rule)."""
 SURF, INK, INK2, GRID = "#fcfcfb", "#0b0b0b", "#52514e", "#e2e1dc"
-SER = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300"]
+SER = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#e34948", "#6250d6"]
 FAMS = ["v1–v2 noise, injection, images, false premises (205 Qs)", "v3–v4 “A and B in total”, 11 languages (78)",
         "v5 everyday storey &amp; room words (70)", "v6–v8 judge questions, “whole building”, 7th floor (65)",
-        "v9–v10 Finnish judge, scan follow-ups (22)", "v11 number formats: “1,200 euros”, “1'200 CHF” (10)"]
-SIZES = [205, 78, 70, 65, 22, 10]
+        "v9–v10 Finnish judge, scan follow-ups (22)", "v11 number formats: “1,200 euros”, “1'200 CHF” (10)",
+        "v12–v13, v16 Estonian labels; plans handed over without DXF (61)", "v14–v15 two-part questions, comparisons, storey heights (53)"]
+SIZES = [205, 78, 70, 65, 22, 10, 61, 53]
 ROUNDS = [("04:15", "0589ce3"), ("04:19", "58073d5"), ("04:33", "W4 fix"), ("04:41", "cc1ca5b"), ("04:46", "dde6347"),
-          ("04:59", "753eccb"), ("05:05", "+W1/W2/W4"), ("05:12", "+W1 basement")]
-DATA = [[8, None, None, None, None, None], [7, None, None, None, None, None], [2, None, None, None, None, None],
-        [2, 2, None, None, None, None], [0, 0, 18, None, None, None], [0, 0, 11, 9, None, None], [0, 0, 6, 9, 0, None],
-        [0, 0, 1, 6, 0, 2]]
+          ("04:59", "753eccb"), ("05:05", "+W1/W2/W4"), ("05:12", "+W1 basement"),
+          ("08:16", "bb94fe4 = test 2"), ("08:27", "+5 heads"), ("08:33", "+6 heads")]
+ASKED = {7: 450, 8: 494, 9: 516}  # rounds that asked only part of a family (08:16: v14 without v15)
+DATA = [[8, None, None, None, None, None, None, None], [7, None, None, None, None, None, None, None],
+        [2, None, None, None, None, None, None, None], [2, 2, None, None, None, None, None, None],
+        [0, 0, 18, None, None, None, None, None], [0, 0, 11, 9, None, None, None, None], [0, 0, 6, 9, 0, None, None, None],
+        [0, 0, 1, 6, 0, 2, None, None], [0, 0, 1, 6, 0, 2, 0, 3], [0, 0, 0, 3, 0, 0, 0, 8], [0, 0, 0, 3, 0, 0, 0, 1]]
 W, H = 1100, 600
 L, R, T, B = 70, 30, 200, 90          # plot margins
 YMAX = 24
@@ -49,7 +53,7 @@ for i, (row, (t, c)) in enumerate(zip(DATA, ROUNDS)):
             o.append(f'<text x="{cx:.1f}" y="{(y0 + y1) / 2 + 5:.1f}" font-size="13" fill="{INK}" '
                      f'text-anchor="middle">{v}</text>')
         bottom += v
-    asked = sum(n for n, v in zip(SIZES, row) if v is not None)
+    asked = ASKED.get(i) or sum(n for n, v in zip(SIZES, row) if v is not None)
     o.append(f'<text x="{cx:.1f}" y="{y(bottom) - 8:.1f}" font-size="16" font-weight="700" fill="{INK}" '
              f'text-anchor="middle">{bottom}</text>')
     o.append(f'<text x="{cx:.1f}" y="{T + ph + 22}" font-size="13" fill="{INK}" text-anchor="middle">{t}</text>'

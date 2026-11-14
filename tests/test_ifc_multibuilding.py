@@ -44,7 +44,8 @@ def test_storey_name_shared_with_a_neighbour(tmp_path):
     assert a.value == 3 and a.confidence <= 0.75, a.trace
     assert any("main building 'House'" in t for t in a.trace)
     a = s.solve(p, "How many storeys does the building have?")
-    assert a.value == 2 and a.confidence <= 0.75, a.trace
+    # main building only (2 storeys, not 4); its '1. Kellergeschoss' holds no room or door -> 1 used floor, both said
+    assert a.value == 1 and a.confidence <= 0.75 and any("with them: 2" in m for m in a.missing), a.trace
     assert s.solve(p, "How many doors does the building have?").value == 3
     a = s.solve(p, "How many doors are in the model?")
     assert a.value == 4 and a.confidence <= 0.75 and any("covers all" in m for m in a.missing)

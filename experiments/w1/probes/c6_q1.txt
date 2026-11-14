@@ -1,0 +1,44 @@
+# c6 (08:20) open inbox bugs, gold written BEFORE any fix. Esplanades: 1.korrus doors 46 windows 55; 2..4.korrus doors 42 windows 60;
+# 5.korrus doors 39; storeys Vundament(-1.2, no rooms) 1..5.korrus Katus(17.0, no rooms)
+PATH bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf
+# gold 55200
+If each door costs 1,200 euros, what do all the doors on '1.korrus' cost in total?
+# gold 63000
+If each door costs €1,500, what do the doors on '2.korrus' cost?
+# gold 55200
+Wenn eine Tür 1.200 € kostet, was kosten alle Türen auf '1.korrus'?
+# gold 72000
+If a window costs 1'200 CHF, what do all the windows on '3.korrus' cost?
+# gold 55200
+If each door costs 1 200 euros, what do the doors on '1.korrus' cost?
+# gold 20723
+If each door costs 450,50 euros, what do the doors on '1.korrus' cost?
+# gold 52521
+If each door costs 1,250.50 euros, what do the doors on '2.korrus' cost?
+# gold 69 (h)
+If painting a door takes 1.5 hours, how many hours does it take to paint every door on '1.korrus'?
+# gold 2700 (min)
+If installing one window takes 45 minutes, how many minutes does it take to install all the windows on '2.korrus'?
+# gold = wall length on 1.korrus / 15 (days)
+If a crew builds 15 metres of wall per day, how many days do all the walls on '1.korrus' take?
+What is the total length of the walls on '1.korrus'?
+# gold no (55 < 60)
+Does '1.korrus' have more windows than '2.korrus'?
+# gold yes (46 > 42)
+Are there more doors on '1.korrus' than on '2.korrus'?
+# gold: no such storey -> conf <= 0.3
+How many doors are there on the 7th floor?
+How many doors are on the eighth floor?
+# gold 5 (plus foundation + roof levels) or 7 at < 0.8
+How many floors does this building have?
+# gold 39 (5.korrus)
+How many doors are on the top floor?
+# gold 88
+How many doors are on 1.korrus and 2.korrus together?
+PATH kit-smiley-west_ac-20-smiley-west-10-bldg_plan-03-1-og.pdf
+# gold 20 (KG)
+Montako ovea kellarikerroksessa on?
+How many doors are there in the basement?
+PATH bimspeed-warmond_ar_plan-08-attic.pdf
+# gold 190.82
+How much net floor area (m²) do all the other rooms on 'Attic' have together, leaving out 'Attic (414B-11-004-011)'?

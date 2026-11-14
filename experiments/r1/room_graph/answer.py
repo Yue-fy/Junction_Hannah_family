@@ -44,7 +44,10 @@ _ICON_WORDS = {"window": r"window|ikkun|fenster|fenêtre|finestr", "door": r"doo
                "sauna_bench": r"sauna"}
 
 
-def _evidence(path: str, g: dict, ids: list[str], question: str) -> list:
+def _evidence(path: str, g: dict, ids: list[str], question: str, items_only: bool = False) -> list:
+    """Boxes of the rooms used + the windows / doors / fixtures in them that the question names.  items_only (a count
+    of windows / doors / fixtures): leave the room's own box out, so the located items ARE the counted objects (the
+    eval's 'located items = answer' check, W5's card); each item's note names its room."""
     from stoa.contract import Evidence
     by = {r["id"]: r for r in g["rooms"]}
     q = question.lower()
@@ -56,7 +59,8 @@ def _evidence(path: str, g: dict, ids: list[str], question: str) -> list:
         note = f"{r['cls']}" + (f" '{r['label']}'" if r.get("label") else "")
         if r.get("printed"):
             note += " printed " + " + ".join(f"{p['m2']} m²" for p in r["printed"])
-        ev.append(Evidence(file=path, bbox=[float(v) for v in r["bbox"]], bbox_space="image_px", note=note))
+        if not items_only:
+            ev.append(Evidence(file=path, bbox=[float(v) for v in r["bbox"]], bbox_space="image_px", note=note))
         if re.search(_ICON_WORDS["window"], q):
             for k, b in enumerate(r["windows"], 1):
                 ev.append(Evidence(file=path, bbox=[float(v) for v in b], bbox_space="image_px",
@@ -82,10 +86,14 @@ def _evidence(path: str, g: dict, ids: list[str], question: str) -> list:
     return out
 
 
-def solve(path: str, question: str, backend: str = "local"):
+def solve(path: str, question: str, backend: str = "local", textlayer: bool | None = None):
+    """textlayer: labels + printed areas from W3's OCR text layer (None -> env R1_RG_TEXTLAYER, default off)."""
+    import os
     from stoa import llm
     from stoa.contract import Answer
-    g = room_graph(path, printed=True)
+    if textlayer is None:
+        textlayer = os.environ.get("R1_RG_TEXTLAYER", "0") == "1"
+    g = room_graph(path, printed=True, textlayer=textlayer)
     if not g:
         return Answer(value=None, solver="room_graph", confidence=0.0,
                       missing=["no room segmentation for this plan (CC5K map not cached and live run unavailable)"])
@@ -150,8 +158,15 @@ def solve(path: str, question: str, backend: str = "local"):
         missing.append("the answer could not be tied to a segmented room")
     if value is None:
         conf = 0.0
+    q = question.lower()
+    items_only = unit == "count" and any(re.search(_ICON_WORDS[k], q) for k in ("window", "door", "toilet", "sink",
+                                                                                   "bathtub")) \
+        and not re.search(r"how\s+many\s+(?:rooms?|spaces?|bedrooms?)\b", q)
+    ev = _evidence(path, g, ids, question, items_only=items_only)
+    if items_only and not ev:  # nothing located: show the rooms instead
+        ev = _evidence(path, g, ids, question)
     return Answer(value=value, unit=unit if unit in ("m2", "count") else None, confidence=conf,
-                  evidence=_evidence(path, g, ids, question), trace=trace, solver="room_graph",
+                  evidence=ev, trace=trace, solver="room_graph",
                   assumptions=assumptions, missing=missing)
 
 
