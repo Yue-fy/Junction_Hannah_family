@@ -6,7 +6,14 @@ Builds on F's `hard` (translations/paraphrases/compositions/ft²) and `hard2` (n
 don't. The first 205 rows start from dev questions the pipeline had **right at conf ≥ 0.8**, so a failure there is
 caused by the perturbation, not by the drawing.
 
-## Now (10:40) — the short version
+## Now (10:46) — the short version
+- **Night 6025963 (S0 cycle 42): v1–v18 402/402 at conf ≥ 0.8 right, 0 false premises at ≥ 0.8; v1–v20 437/437; all
+  992 rows v1–v25 585/599; 9 won / 2 lost vs 41188a4 (both ≤ 0.65).** The v23 link misses are fixed (R1 a07af69);
+  left at ≥ 0.8: 10 CubiCasa upload rows (bug 26) and 4 IFC rankings (bug 27). v27 *links round 4* (23 Qs):
+  comparatives 9/9 in five languages — and a new bug 28: "the floor above / below this one" is ignored (the sheet's
+  own storey at 0.88–0.98, 4 confident misses; W1).
+
+## Earlier (10:37)
 - **Night 41188a4 (S0 cycle 40; answer code unchanged in 5970609): v1–v18 379/379 at conf ≥ 0.8 right, 0 false
   premises at ≥ 0.8; v1–v20 414/414; all 957 rows v1–v24 544/558** (7a78559: 378/378, 412/412, 544/560); 10 won / 5
   lost (3 LLM table-code flips on v21 sheets, 2 LoRA flips at 0.37). Cost on the same rows: tokens in/Q −4.9 %, out
@@ -17,7 +24,7 @@ caused by the perturbation, not by the drawing.
   "total area of the 3 largest" → the list; "which floor has the fewest [rooms]" → the smallest room; "which floor has
   the biggest room?" → kg_qa "yes" (bug 27). v26 *the same IFC rows on hashed file names* (259 Qs, F's neutralize):
   accuracy holds (231 → 230/249) but kg_qa stops answering (28 → 2), and ifc answers link questions in the wrong
-  shape — a yes/no question with "50" at 0.97 (bug 27 again). Sent to W1, W4, R1 at 10:32–10:38.
+  shape — a yes/no question with "50" at 0.97 (bug 27 again). Sent to W1, W4, R1 at 10:32–10:35.
 
 ## Earlier (10:02)
 - **Night 7a78559 (S0 cycle 39 round 2): on the 609 questions v1–v18, 378 of 378 answers at confidence ≥ 0.8
@@ -948,6 +955,20 @@ the same plan's dataset-path / styled controls), the plan-without-IFC "0 stairs"
 *Scorer fix:* `analyze.rescore` read an integer answer 0 as an empty string (`str(value or "")`), so the Downtowner
 "front yard setback 0 FT" looked lost; fixed (`"" if value is None else str(value)`), all runs rescored.
 
+## Night 6025963 (10:38) = 41188a4 + S0 cycle 41–42 (W1 bb5b6e6 comparatives / 414e928 plan_vs_model / 7fa37ed 'this building', W4 4b8b6cd top-N totals / 630ca1c VLM-zero cap / 5b2c407, R1 a07af69 kg_qa, W2 50e5365 / 2d088e8 / e461199, W3 raster windows, R2 stoa/style.py)
+Run `20261114-103834-pipeline-all-6025963-f05a` (992 rows v1–v25) vs 41188a4 (`artifacts/Q/night41188a4-992.jsonl`):
+**9 won / 2 lost (both at ≤ 0.65: a v21 table-code flip "(6) accessible stalls" → 1, a LoRA flip at 0.37); v1–v18
+402/402 at ≥ 0.8 right (41188a4: 379/379 — 32 answers gained confidence, all right, 2 lost some), 0 false premises
+at ≥ 0.8; v1–v20 437/437; all 992 rows 585/599.** Fixed here: the three v23 link misses (bug 25: "fewer than"
+polarity, "which sheet shows the ground floor" → plan-02-eg, the two-part storey + match), the top-3 sum (232.88), the
+v21 "3rd floor level" (21.92 at 0.85 → 22'-5" at 0.65), the plan-without-IFC "0 stairs" (0.89 → capped). Left at
+≥ 0.8 (14): 10 CubiCasa upload rows (bug 26; 4 are the same plan's dataset-path / styled controls, 2 bedrooms vs gold
+3) and 4 v25 rankings (bug 27, W1). Cost, same 956 rows: calls/Q 1.180 → 1.169, tokens in/Q 2,509 → 2,469, mean wall
+2.0 → 1.5 s. v26 on this build (`-103835-…-v26_hash-6025963-c9eb`): 235/251 right, 206/213 at ≥ 0.8 (41188a4:
+201/210), 3 won / 0 lost — still 2 link answers of the wrong shape on hashed names ("Is the door count … the same …?"
+→ 50 at 0.97; Italian "Quante finestre … non sono disegnate …?" → 55 at 0.88), both caught by W4's 87eaf64 shape guard
+or not (pre-merge check #10 below).
+
 ## v25 (10:20): rankings and top-k lists from the IFC — 35 Qs (W1 882630f / 23ada76 are new code)
 Written before any run. Gold: storey counts by IFC containment / aggregation (ifcopenshell; matches the dataset's
 totals, e.g. barlad windows 38 + 74 + 71 + 70 + 62 = 315) and the dataset's own net room areas (esplanades). Two models
@@ -996,6 +1017,26 @@ differ from the IFC model?" → **"yes: … both have 46" at 0.85**; Italian "Qu
 disegnate in questa pianta?" → **55 at 0.88** (gold 3). One link answer gets better: "Does this plan show fewer
 windows than the IFC model has?" → yes (ifc; kg_qa says no on the dataset path, bug 25). Sent to W4 (shape guard) and
 R1 (build the graph from the sheet + the model next to it).
+
+## v27 (10:39): links round 4 — comparatives, two-part, relative storeys — 23 Qs (R1 10:34 asked for wordings neither of us wrote)
+Run `20261114-103938-pipeline-v27-b9d0` (night 6025963). Facts as v17/v20/v23 + IFC containment (esplanades 2.korrus
+doors 42 / windows 60, below 1.korrus only 'Vundament' with walls; smiley KG / EG / 1.OG / 2.OG walls 60 / 81 / 70 /
+70). **17/23; at ≥ 0.8 15 of 20 right.** **Links hold now (R1 a07af69 / W1 bb5b6e6):** comparatives 9/9 in
+EN/DE/FI/ES/SV ("Does the IFC model contain more windows … than this drawing shows?" → yes 55 > 52; "Zeigt dieser Plan
+weniger Fenster …?" → yes; "Visar ritningen lika många dörrar som modellen?" → yes 46 = 46), "How many more windows
+does the model have than this plan shows?" 3, "what's the difference" 0 (twice). Storey roles hold ('top floor' 55 /
+40, 'lowest floor' KG 20). Misses: "Name this sheet's storey and say how many windows the model has there." →
+"1.korrus" at 0.85 (second half dropped, R1); "Are fewer doors drawn here than the model has on this storey?" → 211
+at 0.30 (ifc; kg_qa did not fire on "drawn here").
+
+### 28. A relative storey ("the floor above this one") is ignored; the sheet's own storey is answered (HIGH, confident) — owner W1 (`ifc` storey resolution)
+On the 1.korrus sheet: "How many doors are on the floor above this one?" → **46 at 0.98** (1.korrus; gold 2.korrus
+42); "How many windows does the storey directly above this one have?" → **55 at 0.88** (gold 60); "How many doors are
+on the floor below this one?" → **46 at 0.98** (below is the foundation: 0). On the smiley 1.OG sheet: "How many walls
+does the floor below this one have?" → **70 at 0.98** (gold EG 81). "Walls on the floor above this one" (70) and "rooms
+on the storey above" (40) score as right only because 2.OG has the same counts as 1.OG — 6 of 6 relative references
+were ignored. Same family as bug 13 / 24 (a storey named the way people talk loses to the sheet's storey). Sent to W1
+10:41.
 
 ## "You know what you don't know — but refusing is not useful" (Stoa point 3), audited on be57171 (09:15)
 All 622 answers of run `…-090509-…-v19b-a85a` (+ 25 v19b/v20 rows: same picture), by confidence band:

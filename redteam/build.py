@@ -1284,6 +1284,55 @@ def main():
     ]:
         out.append(row(path, q, g, unit, typ, kind, "same", note=note))
 
+    # ===== v27 (10:45): links round 4 — comparatives, two-part, RELATIVE storeys (R1 10:34 asked for wordings neither of
+    # us wrote). Facts as v17/v20/v23 (esplanades 1.korrus doors 46 = 46, windows model 55 / plan 52) + IFC containment:
+    # esplanades 2.korrus doors 42 / windows 60, below 1.korrus = 'Vundament' (walls only: 0 doors), top floor 5.korrus 55
+    # rooms; smiley-west KG / EG / 1.OG / 2.OG walls 60 / 81 / 70 / 70, doors 20 / 50 / 50 / 50, rooms 30 / 30 / 40 / 40.
+    for path, q, g, typ, kind, note in [
+        (E, "Does the IFC model contain more windows on '1.korrus' than this drawing shows?", "yes", "text",
+         "yesno:link27", "55 > 52"),
+        (E, "Are fewer doors drawn here than the model has on this storey?", "no", "text", "yesno:link27", "46 = 46"),
+        (E, "Is the window count in the drawing lower than in the model for this floor?", "yes", "text",
+         "yesno:link27", "52 < 55"),
+        (SM, "Does this drawing show more doors than the model has on 1.OG?", "no", "text", "yesno:link27",
+         "50 = 50"),
+        (E, "Zeigt dieser Plan weniger Fenster als das Modell auf diesem Geschoss hat?", "yes", "text",
+         "yesno:link27-de", "52 < 55"),
+        (E, "Onko mallissa enemmän ikkunoita kuin tässä piirustuksessa?", "yes", "text", "yesno:link27-fi",
+         "55 > 52"),
+        (E, "¿Tiene el modelo más ventanas que este plano?", "yes", "text", "yesno:link27-es", "55 > 52"),
+        (E, "Visar ritningen lika många dörrar som modellen?", "yes", "text", "yesno:link27-sv", "46 = 46"),
+        (E, "How many more windows does the model have than this plan shows?", 3, "count", "link27:count",
+         "55 - 52"),
+        (E, "If I count the doors on this plan and in the model, what's the difference?", 0, "count",
+         "link27:count", "46 - 46"),
+        (SM, "What is the difference between the number of doors in the model on 1.OG and on this drawing?", 0,
+         "count", "link27:count", "50 - 50"),
+        (E, "How many doors are on the floor above this one?", 42, "count", "storey27:relative", "2.korrus"),
+        (E, "How many windows does the storey directly above this one have?", 60, "count", "storey27:relative",
+         "2.korrus"),
+        (E, "How many doors are on the floor below this one?", 0, "count", "storey27:relative",
+         "Vundament (foundation, walls only)"),
+        (SM, "How many walls does the floor below this one have?", 81, "count", "storey27:relative", "EG"),
+        (SM, "How many walls are on the floor above this one?", 70, "count", "storey27:relative", "2.OG"),
+        (SM, "How many rooms are on the storey above?", 40, "count", "storey27:relative", "2.OG"),
+        (E, "On the top floor, how many rooms are there?", 55, "count", "storey27:role", "5.korrus (Katus has none)"),
+        (SM, "How many rooms does the top floor have?", 40, "count", "storey27:role", "2.OG"),
+        (SM, "How many doors are on the lowest floor?", 20, "count", "storey27:role", "KG"),
+    ]:
+        out.append(row(path, q, g, "count" if typ == "count" else None, typ, kind, "same", note=note))
+    for path, q, items, kind, note in [
+        (E, "What floor is drawn here, and how many doors are on it?", [r"\b1\.\s?korrus", r"\b46\b"],
+         "link27:two-part", "1.korrus; 46"),
+        (SM, "Which storey is this, and how many walls does the model have on it?", [r"1\.\s?OG", r"\b70\b"],
+         "link27:two-part", "1.OG; 70"),
+        (E, "Name this sheet's storey and say how many windows the model has there.", [r"\b1\.\s?korrus", r"\b55\b"],
+         "link27:two-part", "1.korrus; 55"),
+    ]:
+        r_ = row(path, q, "; ".join(items), None, "text", kind, "same", note=note)
+        r_["meta"]["items"] = items
+        out.append(r_)
+
     with open(OUT, "w", encoding="utf-8") as f:
         for r in out:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
