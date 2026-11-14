@@ -293,7 +293,11 @@ _FRAC = r"(\d+\s+\d+/\d+|\d+/\d+|\d+(?:\.\d+)?)"
 _RATIO = re.compile(r"(?<![\d/.])1\s*[:]\s*(\d{1,3}(?:[ ,.]\d{3})+|\d{1,6})(?![\d])")
 _IMPERIAL = re.compile(_FRAC + r"\s*(?:\"|”|''|in\.?|inch(?:es)?)\s*=\s*(\d+)\s*(?:'|’|ft\.?|feet|foot)\s*-?\s*(\d+)?\s*(?:\"|”)?",
                        re.I)
-_SCALE_WORD = re.compile(r"scale|mittakaava|maßstab|massstab|échelle|echelle|skala|scala|escala|schaal|\bm\s*1\s*:", re.I)
+_SCALE_WORD = re.compile(r"scale|mittakaava|mittak\.|maßstab|massstab|échelle|echelle|skala|scala|escala|schaal|"
+                         r"\bm\s*1\s*:|\bm\.?\s?k\.?(?=\s*1\s*[:/])|\bmst\.?(?=\s*1\s*[:/])", re.I)
+# '1/500' is a scale only next to a scale word (ASEMAPIIRROS M.K. 1/500, Skala 1/100): bare '1/16' is a fraction
+_STD_SCALES = {20, 25, 50, 100, 200, 250, 400, 500, 1000, 2000, 2500, 5000, 10000, 20000, 25000, 50000}
+_SLASH = re.compile(r"(?<![\d/.])1\s*/\s*(\d{1,3}(?:[ ,.]\d{3})+|\d{2,6})(?![\d/\"”'’])")
 
 
 def _frac(s: str) -> float:
@@ -322,6 +326,12 @@ def parse_scales(text: str) -> list[dict]:
         for m in _RATIO.finditer(text):
             n = int(re.sub(r"[ ,.]", "", m.group(1)))
             if 1 <= n <= 1_000_000:
+                out.append({"ratio": float(n), "kind": "ratio", "text": m.group(0)})
+    if not out:
+        worded = bool(_SCALE_WORD.search(text))
+        for m in _SLASH.finditer(text):
+            n = int(re.sub(r"[ ,.]", "", m.group(1)))
+            if (worded and 10 <= n <= 1_000_000) or n in _STD_SCALES:  # 'POHJA 1/100' (Finnish plan title)
                 out.append({"ratio": float(n), "kind": "ratio", "text": m.group(0)})
     return out
 
@@ -378,6 +388,13 @@ def summary(path: str, max_lines: int = 80, **kw) -> str:
         lines.append("scale notes: " + "; ".join(f"'{s['line'][:50]}' -> 1:{s['ratio']:g}" for s in sc[:3]))
     else:
         lines.append("scale notes: none found (lengths/areas need a scale bar, a dimension string or an assumption)")
+    try:  # graphic scale bars (CPU only here: labels from this layer, snapped to the drawn bar)
+        from stoa.solvers.raster import scalebar
+
+        for b in scalebar.bars(path, reread=False, layer=tl)[:2]:
+            lines.append(b.describe())
+    except Exception:  # noqa: BLE001 - optional fact
+        pass
     ds = dimensions(tl)
     if ds:
         lines.append(f"dimension strings ({len(ds)}): " + ", ".join(f"{d['text']}={d['feet']:g} ft" for d in ds[:12]))

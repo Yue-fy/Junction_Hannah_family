@@ -68,6 +68,24 @@ def risk_coverage(rows):
     return aurc / max(n, 1), pts
 
 
+YES = re.compile(r"^\W*(yes|kyllä|joo|ja|jo|oui|sì|si|true)\b", re.I)
+NO = re.compile(r"^\W*(no|ei|nej|nein|non|false)\b", re.I)
+
+
+def yesno_ok(value, gold):
+    """v5 yes/no rows (text type, so the eval scorer leaves them unscored): first word, or a count (> 0 = yes)."""
+    v = str(value or "")
+    if YES.search(v):
+        said = "yes"
+    elif NO.search(v):
+        said = "no"
+    elif num(v) is not None:
+        said = "yes" if num(v) > 0 else "no"
+    else:
+        return False
+    return said == str(gold).lower()
+
+
 def ece(rows, bins=10):
     b = defaultdict(list)
     for c, ok in rows:
@@ -83,6 +101,16 @@ def main():
     ap.add_argument("--rerun", default=None, help="another run over the same questions: report answer changes")
     a = ap.parse_args()
     rows = [json.loads(line) for line in open(a.run)]
+    for r in rows:
+        k = (r.get("meta") or {}).get("kind", "")
+        if k.startswith("yesno"):
+            r["correct"] = yesno_ok(r["value"], r.get("gold"))
+        elif (r.get("meta") or {}).get("accept"):  # v10 scan text: any accepted substring in the answer
+            norm2 = lambda x: re.sub(r"\s+", "", str(x or "").lower())
+            r["correct"] = any(norm2(a_) in norm2(r["value"]) for a_ in r["meta"]["accept"])
+        elif k == "judge:ifc-text":  # v6 'which floor': the storey name must appear in the answer
+            norm = lambda x: re.sub(r"[\s.]+", "", str(x or "").lower())
+            r["correct"] = norm(r.get("gold")) in norm(r["value"])
     out = []
     p = out.append
 
@@ -134,6 +162,23 @@ def main():
     for k in sorted(flips):
         n, f_, fc = flips[k]
         p(f"| {k} | {n} | {f_} | {fc} |")
+
+    # v5: natural references — show every storey / room-name / yes-no row with its first assumption
+    v5 = [r for r in rows if (r.get("meta") or {}).get("kind", "").startswith(("storey", "room-name", "yesno", "judge", "scan", "scope"))]
+    if v5:
+        p("")
+        p("Natural references (v5): every row, with the first assumption / missing line:")
+        p("")
+        p("| kind | drawing | question | value | gold | ok | conf | solver | assumption / missing (first) |")
+        p("|---|---|---|---|---|---|---:|---|---|")
+        for r in v5:
+            why = ((r.get("assumptions") or []) + (r.get("missing") or []) or [""])[0]
+            ok = {True: "✓", False: "**✗**", None: "—"}[r["correct"]]
+            if (r.get("meta") or {}).get("expect") == "flag":
+                ok = "flag ok" if handled_flag(r) else "**flag NO**"
+            p(f"| {r['meta']['kind']} | {r['path'].split('/')[-1][-28:]} | {r['question'][:60]} | "
+              f"{str(r['value'])[:30]} | {r.get('gold')} | {ok} | {(r['confidence'] or 0):.2f} | {r['solver']} | "
+              f"{str(why)[:100]} |")
 
     # false premise / unanswerable
     p("")

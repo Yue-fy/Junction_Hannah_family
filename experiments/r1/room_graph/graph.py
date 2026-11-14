@@ -60,12 +60,33 @@ def _rel(path: str) -> str:
     return p[i:] if i >= 0 else p
 
 
-def _npz(path: str) -> Path | None:
+def _npz(path: str, live: bool = False) -> Path | None:
+    """Cached map with rooms + icons; live=True runs the CC5K model once on an uncached image (torch env, ~3-10 s
+    CPU) and saves its maps to artifacts/R1/cc5k_seg_live/ (new drawings, e.g. a hidden test plan)."""
     for d in (ART / "cc5k_seg", ART / "cc5k_seg_live"):
         f = d / f"{Path(path).stem}.npz"
         if f.exists():
-            return f
-    return None
+            with np.load(f) as z:
+                if "icons" in z.files:
+                    return f
+    if not live:
+        return None
+    import subprocess
+    import sys
+    here = Path(__file__).resolve().parents[1] / "cc5k_model"
+    py = os.environ.get("CC5K_PYTHON", "/data/User/fangy4/envs/junction-train/bin/python")
+    data = Path(os.environ.get("STOA_DATA", "/home/fangy4/work/projects/junction-data/stoa-full/junction-dataset"))
+    full = Path(path) if Path(path).is_absolute() else data / path
+    if not (Path(py).exists() and full.exists()):
+        return None
+    env = dict(os.environ, CC5K_SAVE_MAPS=str(ART / "cc5k_seg_live"))
+    try:
+        subprocess.run([py, "-I", str(here / "predict.py"), str(full)], env=env, capture_output=True, timeout=300,
+                       check=True)
+    except Exception as e:  # noqa: BLE001
+        print(f"room_graph: live CC5K run failed: {type(e).__name__}", file=sys.stderr)
+        return None
+    return _npz(path, live=False)
 
 
 def _components(mask: np.ndarray, min_area: float, k: int) -> list[tuple[np.ndarray, list[int]]]:
@@ -135,9 +156,12 @@ def _labels_index() -> dict:
     return out
 
 
-def room_graph(path: str, labels: list | None = None) -> dict | None:
-    """Room graph of one plan, or None if no cached CC5K map exists. labels: optional [(text, cls, box)]."""
-    f = _npz(path)
+def room_graph(path: str, labels: list | None = None, live: bool = True, printed: bool = False) -> dict | None:
+    """Room graph of one plan, or None (no cached map and no live CC5K run). labels: optional [(text, cls, box)].
+
+    printed=True also reads the areas printed on the plan (scale.printed_areas: ONE local VLM call, cached) and
+    attaches each to the room under it ("printed_m2"); apartment totals go to g["printed_total"]."""
+    f = _npz(path, live=live)
     if f is None:
         return None
     z = np.load(f)
@@ -279,6 +303,86 @@ def room_graph(path: str, labels: list | None = None) -> dict | None:
             if multi:
                 mt["merged"] = multi
 
+    # ---- printed label kind beats the CC5K class when they disagree (CC5K has no sauna class; thin rooms get
+    # 'undefined'; e.g. a bedroom 'H' segmented as undefined). Only when the region's labels agree on one kind.
+    if expected:
+        import re as _re
+        from experiments.r1.room_graph.validate import norm as _norm
+        # codes validate.py leaves out because they are ambiguous for a label<->class check, but fine for naming
+        extra = [(r"^(H|AH|HUONE|ASUINH(UONE)?|MAKUUHUONE\d*)$", "bedroom"), (r"^(HV|VAATEHUONE)$", "storage"),
+                 (r"^(L\.?H\.?|LOYLYHUONE)$", "sauna"), (r"^(SUIHKU|SUIHKUH(UONE)?|PH/KHH|KPH/KHH)$", "bath")]
+
+        def kind(t):
+            k = expected(t)
+            if k:
+                return k
+            for n in (_norm(t), _re.sub(r"[\s\d,]+(M2|M²)?$", "", t.upper().replace("Ö", "O"))):
+                k = next((c for rx, c in extra if _re.match(rx, n.replace(" ", ""))), None)
+                if k:
+                    return k
+            return None
+
+        for mt in meta.values():
+            kinds = {kind(t) for t in mt.get("labels", [])} - {None}
+            if len(kinds) == 1 and not mt.get("merged"):
+                k = kinds.pop()
+                if k != mt["cls"]:
+                    mt["cls_cc5k"], mt["cls"] = mt["cls"], k
+
+    # ---- areas printed on the plan (exact when present; the door estimate is only a cross-check) -----------------
+    printed_total = []
+    if printed:
+        try:
+            from experiments.r1.raster_scale.scale import printed_areas
+            for it in printed_areas(path):
+                b = it["box"]
+                cx, cy = int((b[0] + b[2]) / 2), int((b[1] + b[3]) / 2)
+                if it.get("total"):
+                    printed_total.append({"m2": it["m2"], "text": it["text"], "box": b})
+                elif 0 <= cx < W and 0 <= cy < H and inst[cy, cx]:
+                    mt = meta[int(inst[cy, cx])]
+                    mt.setdefault("printed", []).append({"m2": it["m2"], "text": it["text"], "box": b,
+                                                        "unitless": bool(it.get("unitless"))})
+        except Exception as e:  # noqa: BLE001
+            notes.append(f"printed areas not read: {type(e).__name__}")
+        # labels often carry the area without a unit ('MAKUUHUONE 13,1', 'MH 9.5'): use it when the reader found none
+        import re as _re2
+        for mt in meta.values():
+            if mt.get("printed"):
+                continue
+            for t in mt.get("labels", []):
+                m = _re2.search(r"(?<![\d.,])(\d{1,3}[.,]\d)(?![\d.,])", t)
+                if m and 1.0 <= float(m.group(1).replace(",", ".")) <= 200:
+                    mt.setdefault("printed", []).append({"m2": float(m.group(1).replace(",", ".")), "text": t,
+                                                        "box": None, "from": "label", "unitless": True})
+        for mt in meta.values():  # two printed room areas in one region = a partition the segmentation missed
+            if len(mt.get("printed", [])) >= 2 and not mt.get("merged"):
+                mt["merged"] = {mt["cls"]: len(mt["printed"])}
+
+    # ---- separate drawings on one sheet (two floors side by side): components of the dilated footprint holding
+    # >= 15% of it (6007 / 4828: two parts of 52/48% and 57/43%; single plans: one part of 99-100%)
+    k = max(3, int(0.02 * max(H, W)))
+    foot = cv2.dilate((rooms > 0).astype(np.uint8), cv2.getStructuringElement(cv2.MORPH_RECT, (k, k)))
+    n_p, lab_p, st_p, _ = cv2.connectedComponentsWithStats(foot, connectivity=8)
+    tot = float(st_p[1:, cv2.CC_STAT_AREA].sum()) if n_p > 1 else 0.0
+    big = [i for i in range(1, n_p) if tot and st_p[i, cv2.CC_STAT_AREA] >= 0.15 * tot]
+    parts = []
+    if len(big) >= 2:
+        wide = (max(st_p[i, 0] + st_p[i, 2] for i in big) - min(st_p[i, 0] for i in big)) >= \
+               (max(st_p[i, 1] + st_p[i, 3] for i in big) - min(st_p[i, 1] for i in big))
+        big.sort(key=lambda i: st_p[i, 0] if wide else st_p[i, 1])
+        name = {}
+        for j, i in enumerate(big):
+            x, y, w_, h_ = (int(v) for v in st_p[i, :4])
+            letter = chr(65 + j)
+            name[i] = letter
+            parts.append({"part": letter, "bbox": [x, y, x + w_, y + h_],
+                          "where": (["left", "right"] if wide else ["top", "bottom"])[min(j, 1)] if len(big) == 2
+                          else f"{j + 1} of {len(big)}"})
+        for mt in meta.values():
+            cx, cy = mt["centroid"]
+            mt["part"] = name.get(int(lab_p[min(H - 1, max(0, cy)), min(W - 1, max(0, cx))]))
+
     # ---- areas -------------------------------------------------------------------------------------------------
     out_rooms = []
     for i in sorted(meta, key=lambda j: -meta[j]["px"]):
@@ -296,26 +400,47 @@ def room_graph(path: str, labels: list | None = None) -> dict | None:
     return {"path": _rel(path), "size": [W, H], "wall_px": round(wall, 1), "rooms": out_rooms, "doors": doors,
             "windows": windows, "scale": ({k: sc[k] for k in ("px_per_m", "px_per_m_80", "area_factor_80",
                                                                 "n_doors", "assumptions", "missing")} if sc else None),
-            "unassigned": dict(unassigned), "notes": notes,
+            "unassigned": dict(unassigned), "notes": notes, "printed_total": printed_total, "parts": parts,
             "source": "pretrained CubiCasa5K multi-task model (Kalervo et al. 2019, CC BY-NC 4.0) segmentation; "
                       "geometry rules in experiments/r1/room_graph/graph.py"}
 
 
-def graph_text(g: dict) -> str:
-    """Compact, LLM-readable summary (one line per room) for an agent tool or the answer card."""
+def graph_text(g: dict, show_parts: bool = False) -> str:
+    """Compact, LLM-readable summary (one line per room) for an agent tool or the answer card.
+
+    show_parts=True prefixes rooms with their drawing ([A]/[B], two floors side by side). Off by default: on the
+    probe it changed 2 answers on the one two-storey v3 plan for the worse and fixed none (methods 8i)."""
     if not g:
         return "no room graph (plan not segmented)"
-    lines = [f"Room graph of {g['path']} (CubiCasa5K segmentation; areas from door widths, "
-             f"{'80% band shown' if g['scale'] else 'no scale'}):"]
+    anyp = any(r.get("printed") for r in g["rooms"]) or bool(g.get("printed_total"))
+    lines = [f"Room graph of {g['path']} (CubiCasa5K segmentation; 'printed' areas are read from the plan and exact; "
+             f"'estimated' areas come from door widths and can be off by 50%"
+             + ("; this plan prints areas, so a room without a printed area may be outside the apartment or a "
+                "segmentation fragment" if anyp else "") + "):"]
+    if g.get("parts") and show_parts:
+        lines.append(f"This sheet shows {len(g['parts'])} separate drawings, usually the floors of one building "
+                     "(the ground floor normally has the main entrance and the kitchen): "
+                     + "; ".join(f"[{p['part']}] = {p['where']} drawing, box {p['bbox']}" for p in g["parts"])
+                     + ". Each room line starts with its drawing.")
     for r in g["rooms"]:
         fx = ", ".join(f"{len(v)} {k}{'s' if len(v) > 1 else ''}" for k, v in r["fixtures"].items())
-        area = f" ~{r['m2']} m² ({r['m2_80'][0]}–{r['m2_80'][1]})" if "m2" in r else ""
+        if r.get("printed"):
+            area = " printed " + " + ".join(f"{p['m2']} m²" for p in r["printed"])
+            if any(p.get("unitless") for p in r["printed"]):
+                area += " (number printed without a unit)"
+        else:
+            area = f" ~{r['m2']} m² ({r['m2_80'][0]}–{r['m2_80'][1]}, estimated)" if "m2" in r else ""
         name = f" '{r['label']}'" if r.get("label") else ""
-        lines.append(f"- {r['id']} {r['cls']}{name}{area}; {len(r['windows'])} window(s); "
+        if r.get("cls_cc5k"):
+            name += f" (segmentation said {r['cls_cc5k']})"
+        part = f"[{r['part']}] " if r.get("part") and show_parts else ""
+        lines.append(f"- {part}{r['id']} {r['cls']}{name}{area}; {len(r['windows'])} window(s); "
                      f"doors to: {', '.join(r['door_to']) or 'none'}; open to: {', '.join(r['open_to']) or 'none'}; shares walls with: {', '.join(r['wall_to']) or 'none'}"
                      + (f"; fixtures: {fx}" if fx else "")
                      + (f"; WARNING holds {', '.join(f'{n} {k} labels' for k, n in r['merged'].items())} (probably "
                         f"{max(r['merged'].values())} rooms merged)" if r.get("merged") else "") + f"; box {r['bbox']}")
+    for t in g.get("printed_total") or []:
+        lines.append(f"Printed apartment total: {t['m2']} m² ('{t['text']}')")
     ext = [d for d in g["doors"] if "outside" in d["between"]]
     lines.append(f"{len(g['doors'])} doors ({len(ext)} to outside), {len(g['windows'])} windows "
                  f"({sum(w['side'] == 'exterior' for w in g['windows'])} exterior)."

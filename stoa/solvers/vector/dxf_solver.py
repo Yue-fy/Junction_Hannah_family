@@ -125,6 +125,10 @@ def _opcheck(question: str, backend: str = "local") -> str | None:
     return m.group(1) if m else None
 
 
+WHICH_APT = (r"^\s*(?:which|what|in\s+which|welche[rs]?|in\s+welcher|quel(?:le)?|dans\s+quel|quale|in\s+quale|welk(?:e)?)\s+"
+             r"(?:apartment|flat|unit|dwelling|wohnung|wohneinheit|appartement|logement|appartamento|woning)\b")
+
+
 def _echo(question: str, value) -> str | None:
     """The table-QA answer is just an entity (or number) the question itself names, and the only one of its kind
     there (so 'which is larger, apartment A or B' -> 'apartment A' is not an echo)."""
@@ -539,6 +543,14 @@ class DxfSolver(BaseSolver):
         if not known:
             return Answer(value=None, unit=qr.unit, confidence=0.0, solver=self.name, trace=trace + ["abstain: no term resolved"],
                           missing=missing or ["nothing matched on this floor"])
+        if qr.qtype == "area" and qr.op == "sum" and qr.terms and all(t.kind == "area_label" for t in qr.terms) and \
+                not any(p.boxes for p in parts):
+            # "How big is the Ripostiglio?" on a floor without one was 0 m² at 0.98: a false premise, not an area
+            names = sorted({r.name for r in fm.rooms if r.name})
+            asked = qr.terms[0].arg if isinstance(qr.terms[0].arg, str) else qr.terms[0].note
+            return Answer(value=None, unit=qr.unit, confidence=0.0, solver=self.name,
+                          trace=trace + [f"no room labelled {asked!r} on this floor"],
+                          missing=[f"no room labelled '{asked}' on this floor (labels here: {', '.join(names[:15])})"])
         conf = 1.0
         for p in parts:
             conf *= p.conf if p.value is not None else 0.2
@@ -556,13 +568,18 @@ class DxfSolver(BaseSolver):
         if qr.qtype == "text" and len(parts) == 1 and qr.terms[0].kind == "rooms":
             r = parts[0].room
             value = f"room {r.number}" + (f" ({r.name})" if r.name else "") if r.number else (r.name or r.label())
+            if r.unit and re.search(WHICH_APT, question, re.I):  # "which apartment has the largest balcony"
+                value = f"apartment {r.unit}"
+                trace.append(f"the question asks for the apartment: room {r.number} is in apartment {r.unit}")
             trace.append(f"{qr.op}: {r.label()} with {r.area:.2f} m²")
             unit = None
         elif qr.qtype == "text" and qr.op in ("max", "min"):
             pairs = [(v, t) for v, t in zip(vals, qr.terms) if v is not None]
             v, t = (max if qr.op == "max" else min)(pairs, key=lambda vt: vt[0])
             value = str(t.arg if not isinstance(t.arg, list) else t.arg[0])
-            if t.kind == "area_apartment":
+            if t.kind == "area_label" and t.scope and len(t.scope) == 1:  # "which apartment has the bigger kitchen"
+                value = f"apartment {t.scope[0]}"
+            elif t.kind == "area_apartment":
                 value = f"apartment {value}"
             elif t.kind in ("area_room", "rooms"):
                 r = getattr(p, "room", None) if t.kind == "rooms" else next((r for r in fm.rooms if r.number == t.arg), None)
@@ -613,6 +630,9 @@ class DxfSolver(BaseSolver):
         elif qr.op == "diff":
             value = known[0] - sum(known[1:])
             trace.append(f"difference: {' - '.join(str(round(v, 2)) for v in known)} = {value:.2f}")
+            if qr.absolute and value < 0:
+                value = -value
+                trace.append("'difference between' is symmetric: reported as a positive number")
         else:
             value = sum(known)
             if len(known) > 1:
@@ -643,6 +663,19 @@ class DxfSolver(BaseSolver):
             missing.append("could not map DXF to the PDF page (no matching text); evidence in DXF metres")
         if fm.warnings:
             trace += [f"warning: {w}" for w in fm.warnings[:3]]
+        if qr.op == "sum" and len(qr.terms) == 1 and qr.terms[0].kind == "area_label" and len(parts[0].boxes) > 1 \
+                and qparse.singular_label(question):
+            conf = min(conf, 0.5)  # Q 04:50: "How big is the Küche?" with 8 kitchens -> their sum at 0.98
+            rs = [(note.split(":")[0].replace("room ", ""), note) for _, note in parts[0].boxes]
+            missing.append(f"{len(parts[0].boxes)} rooms match '{qr.terms[0].arg if isinstance(qr.terms[0].arg, str) else qr.terms[0].note}'"
+                           f" on this floor; the value is their total. Name the room number or the apartment for one room")
+            assumptions.append("several rooms match the singular name; answered their total: "
+                               + "; ".join(n for _, n in parts[0].boxes[:8]))
+            trace.append(f"singular name matches {len(parts[0].boxes)} rooms -> confidence <= 0.5")
+        if (lost := qparse.unparsed_conjunct(question, qr)) is not None:
+            conf = min(conf, 0.3)  # Q 04:48: "toilets and sinks" counted toilets only at 0.95
+            missing.append(f"parsed only {qr.terms[0].kind} {qr.terms[0].arg!s}; could not read '{lost}'")
+            trace.append(f"conjunction check: '{lost}' not parsed -> confidence <= 0.3")
         for n, asked in qparse.asked_room_names(question, qr, vocab).items():
             r = next((r for r in fm.rooms if r.number == n), None)
             if r is not None and not qparse.name_fits(r.name, asked):

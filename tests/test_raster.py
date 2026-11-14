@@ -122,6 +122,11 @@ def test_textlayer_parsers_and_merge():
     assert T.parse_scales("MITTAKAAVA 1:50")[0]["ratio"] == 50
     assert T.parse_scales("SCALE: 1:125,000")[0]["ratio"] == 125000
     assert T.parse_scales("drawn 12:30") == []
+    # Finnish/Swedish slash form (W5 04:31): a scale only next to a scale word or with a standard denominator
+    assert T.parse_scales("ASEMAPIIRROS M.K. 1/500")[0]["ratio"] == 500
+    assert T.parse_scales("POHJA 1/100")[0]["ratio"] == 100
+    assert T.parse_scales("Skala 1/75")[0]["ratio"] == 75
+    assert T.parse_scales("1/16") == [] and T.parse_scales("3/4 1/2") == []
     # Qwen bbox_2d JSON (0..1000) -> pixels of a 2000x1000 tile; loops (> 6 repeats) dropped
     items = T.parse_items('[{"bbox_2d": [100, 100, 200, 150], "text": "SAUNA"}, '
                           '{"bbox_2d": [500, 500, 600, 550], "text": "12\'-6\\""}]', 2000, 1000)
@@ -151,3 +156,100 @@ def test_off_domain_symbol_counts_abstain_and_scans_go_to_text_mode():
     assert s._text_mode("data/habs/x_sheet_00001.jpg", "What is the scale of this drawing?")
     assert not s._text_mode("data/cubicasa5k/x.png", "What is the scale of this drawing?")
     assert not RasterSolver(text=0)._text_mode("data/habs/x.jpg", "What is the scale of this drawing?")
+
+
+def _bar_image(tmp_path, x0=100, x1=500, y=60, stepped=False):
+    """A white image with a drawn scale bar from x0 to x1 (a 6 px thick black band, or a HABS-style stepped bar)."""
+    import numpy as np
+    from PIL import Image
+
+    a = np.full((140, 700), 255, np.uint8)
+    if stepped:
+        seg = (x1 - x0) // 4
+        for k in range(4):
+            yy = y if k % 2 == 0 else y + 8
+            a[yy:yy + 4, x0 + k * seg:x0 + (k + 1) * seg + 1] = 0
+            a[y:y + 12, x0 + k * seg:x0 + k * seg + 2] = 0
+        a[y:y + 12, x1 - 1:x1 + 1] = 0
+    else:
+        a[y:y + 6, x0:x1] = 0
+    a[120:122, :] = 0  # a frame line running through both margins must not be taken as the bar
+    p = tmp_path / "bar.png"
+    Image.fromarray(a).save(p)
+    return str(p)
+
+
+def test_scalebar_labels_fit_and_snap_to_the_drawn_bar(tmp_path):
+    from stoa.solvers.raster import scalebar as S
+    from stoa.solvers.raster.textlayer import TextItem
+
+    assert S.unit_of("FEET") == "ft" and S.unit_of("Meter.") == "m" and S.unit_of("METERS 1:48") == "m"
+    assert S.unit_of("100'") == "ft" and S.unit_of("SCALE B") is None
+    for stepped in (False, True):
+        path = _bar_image(tmp_path, stepped=stepped)
+        # VLM label boxes: evenly spaced guesses that put '20' at x 470 although the bar ends at 500 (10% short)
+        items = [TextItem(str(v), [x - 6, 40, x + 6, 54]) for v, x in [(0, 100), (5, 192), (10, 285), (15, 377),
+                                                                       (20, 470)]]
+        items.append(TextItem("FEET", [30, 58, 80, 70]))
+        bars = S._bars_from_items(items, items, "layer")
+        assert len(bars) == 1 and bars[0].unit == "ft" and abs(bars[0].px_per_unit - 18.5) < 0.2
+        b = S.snap(path, bars[0])
+        assert "+drawn" in b.source and abs(b.px_per_unit - 20.0) < 0.15, (stepped, b.notes)
+        assert abs(S.to_units(200, b) - 10.0) < 0.1 and abs(S.meters(200, b) - 3.048) < 0.03
+
+
+def test_scalebar_rejects_rows_that_are_not_bars():
+    from stoa.solvers.raster import scalebar as S
+    from stoa.solvers.raster.textlayer import TextItem
+
+    # room numbers in a row (no 0, no linear spacing) and a single number are not bars
+    items = [TextItem(str(v), [x, 40, x + 20, 54]) for v, x in [(101, 100), (102, 300), (104, 350)]]
+    items += [TextItem("FEET", [10, 40, 50, 54])]
+    assert S._bars_from_items(items, items, "layer") == []
+    items = [TextItem(str(v), [x, 40, x + 12, 54]) for v, x in [(0, 100), (10, 200), (20, 420)]]
+    assert S._bars_from_items(items, items, "layer") == []  # not linear
+    # a FEET and a METERS bar with the units swapped by proximity: the px ratio 3.28 fixes them
+    ft = S.Bar("m", 15.65, [(0, 0, [0, 0, 1, 1]), (20, 313, [0, 0, 1, 1])], [0, 0, 313, 12], 0.5, "layer")
+    m = S.Bar("ft", 51.35, [(0, 0, [0, 30, 1, 31]), (5, 257, [0, 30, 1, 31])], [0, 30, 257, 42], 0.5, "layer")
+    S._resolve_ft_m([ft, m])
+    assert (ft.unit, m.unit) == ("ft", "m") and S.consistency([ft, m])[0].endswith("✓")
+
+
+def test_room_area_flood_fill_keeps_corner_fixtures_and_finds_the_label(tmp_path):
+    import numpy as np
+    from PIL import Image
+
+    from stoa.solvers.raster import measure as M
+    from stoa.solvers.raster.textlayer import TextItem, TextLayer
+
+    a = np.full((200, 300), 255, np.uint8)
+    a[20:160, 20:220] = 0
+    a[26:154, 26:214] = 255  # one room, interior 188 x 128 px, 6 px walls
+    a[26:48, 50:52] = 0  # a shower tray in the corner, drawn with thin lines
+    a[46:48, 26:52] = 0
+    a[80:88, 100:101] = a[80:88, 110:111] = a[84:85, 100:124] = 0  # the label's own thin strokes
+    a[40:120, 230:232] = 0  # a stray line outside
+    p = tmp_path / "room.png"
+    Image.fromarray(a).save(p)
+    full = 188 * 128 / 40 ** 2  # 15.04 m2 at 40 px per m (6 px walls = 0.15 m; 2 px fixture lines = 5 cm)
+    r = M.room_area(str(p), [100, 80, 124, 88], 40.0, **M.FILL)
+    plain = M.room_area(str(p), [100, 80, 124, 88], 40.0, door_m=0.0)
+    assert r and abs(r["m2"] / full - 1) < 0.04, r
+    assert plain["m2"] < r["m2"]  # without the hull the bathtub corner is lost
+    tl = TextLayer(path=str(p), size=(300, 200), items=[TextItem("1.01", [100, 80, 124, 88]),
+                                                         TextItem("Bad", [100, 90, 124, 98])])
+    assert M.find_label(tl, "What is the net floor area of room 1.01 ('Bad') in m²?").text == "1.01"
+    assert M.find_label(tl, "Wie gross ist der Raum «Bad»?").text == "Bad"
+    assert M.find_label(tl, "What is the area of room 2.02?") is None
+
+
+def test_swiss_png_without_twin_goes_to_text_mode(monkeypatch):
+    import stoa.solvers.raster as R
+
+    q = "What is the net floor area of room 1.19 ('Corridoio') in m²?"
+    monkeypatch.setattr(R, "_siblings", lambda p: {".png": p, ".pdf": p[:-4] + ".pdf", ".dxf": p[:-4] + ".dxf"})
+    assert not R.RasterSolver()._text_mode("data/swiss_dwellings/x.png", q)  # dxf answers it
+    assert R.RasterSolver(twins=0)._text_mode("data/swiss_dwellings/x.png", q)
+    monkeypatch.setattr(R, "_siblings", lambda p: {".png": p})
+    assert R.RasterSolver()._text_mode("data/swiss_dwellings/x.png", q)
+    assert not R.RasterSolver()._text_mode("data/cubicasa5k/x.png", q)

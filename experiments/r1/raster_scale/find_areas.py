@@ -41,7 +41,12 @@ def upscale(img: Image.Image, scale: float = 2.0, max_side: int = 2400) -> Image
     return img.resize((int(img.width * s), int(img.height * s)), Image.LANCZOS) if s != 1 else img
 
 
-def parse(text: str, w: int, h: int) -> list[dict]:
+UNITLESS = re.compile(r"(?<![\d.,])(\d{1,3}[.,]\d)(?![\d.,])")
+
+
+def parse(text: str, w: int, h: int, unitless: bool = False) -> list[dict]:
+    """unitless=True also accepts a bare one-decimal number (Finnish plans often print 'MH 11.7' without m²),
+    1-200 m², as a fallback the caller uses only when no item carried a unit."""
     out = []
     for m in ITEM.finditer(text):
         try:
@@ -52,6 +57,10 @@ def parse(text: str, w: int, h: int) -> list[dict]:
             continue
         t = m.group(2)
         n = NUM.search(t)
+        if not n and unitless:
+            n = UNITLESS.search(t)
+            if n and not 1.0 <= float(n.group(1).replace(",", ".")) <= 200:
+                n = None
         if not n:
             continue
         box = [b[0] / 1000 * w, b[1] / 1000 * h, b[2] / 1000 * w, b[3] / 1000 * h]

@@ -119,9 +119,11 @@ function compareHtml(a: Answer) {
 
 /** R1's calibrated 90% range for counts ("interval90: [lo, hi]" in the trace): shown under the value when lo < hi. */
 function rangeHtml(a: Answer) {
-  const m = (a.trace ?? []).map((l) => l.match(/interval90:\s*\[\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*\]/)).find((x) => x);
-  if (!m || typeof a.value !== "number" || Number(m[1]) >= Number(m[2])) return "";
-  return `<span class="range" title="Calibrated 90% range: on held-out drawings the true count lies in this range 9 times in 10">90% range ${esc(m[1])}–${esc(m[2])}</span>`;
+  // "interval90: [lo, hi]" (R1's count range) or any other level, e.g. "interval80: [58.7, 121.5]" (area estimate)
+  const m = (a.trace ?? []).map((l) => l.match(/interval(\d{2}):\s*\[\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*\]/)).find((x) => x);
+  if (!m || typeof a.value !== "number" || Number(m[2]) >= Number(m[3])) return "";
+  const lvl = Number(m[1]);
+  return `<span class="range" title="Calibrated ${lvl}% range: on held-out drawings the true value lies in this range ${lvl}% of the time">${lvl}% range ${esc(m[2])}–${esc(m[3])}</span>`;
 }
 
 /** Why a yes/no answer is yes or no, in one line under it: the compared quantity and the threshold, read from the
@@ -133,6 +135,14 @@ export function yesNoBasis(a: Answer): string {
   const NUM = String.raw`(-?\d[\d,]*(?:\.\d+)?)`;
   const lines = [...(a.assumptions ?? []), ...(a.trace ?? []).filter((l) => /yes|no\b|→/i.test(l))];
   for (const l of lines) {
+    // W4's composer: "combine: bedroom 2 > bathroom 1 → yes"
+    const c = l.match(new RegExp(String.raw`combine:\s*([A-Za-z_ ]{2,30}?)\s+${NUM}\s*${OP}\s*([A-Za-z_ ]{2,30}?)\s+${NUM}\s*(?:→|->)\s*(?:yes|no)`, "i"));
+    if (c) {
+      const [, wa, xa, op, wb, xb] = c;
+      const pl = (w: string, n: string) => `${n} ${w.trim().replace(/_/g, " ")}${Number(n) === 1 ? "" : "s"}`;
+      const sym = ({ ">=": "≥", "<=": "≤", "==": "=", "!=": "≠" } as Record<string, string>)[op] ?? op;
+      return `<span class="range basis" title="${esc(l)}">${esc(pl(wa, xa))} ${esc(sym)} ${esc(pl(wb, xb))}</span>`;
+    }
     const m = l.match(new RegExp(String.raw`quantity\s*\(\s*${NUM}\s*([^)]*)\)\s*${OP}\s*${NUM}`, "i"))
       ?? l.match(new RegExp(String.raw`${NUM}\s*(m2|m²|m3|m³|m|count|%)?\s*${OP}\s*${NUM}\s*(?:→|->|=>|:)\s*(?:yes|no|true|false)`, "i"));
     if (!m) continue;
@@ -189,6 +199,32 @@ function evLabel(ev: Evidence[], g: { idx: number[]; first: number }, n: number,
   const files = new Set(items.map((x) => x.file.split("/").pop()));
   const notIn = items.some((x) => /^NOT in the answer:/.test(x.note ?? ""));
   return `<li class="ev-item${notIn ? " contrast" : ""}" data-i="${g.idx.find((i) => ev[i].bbox) ?? g.first}" title="${esc([...files].join(" · "))}"><span class="n">${n}</span><span class="t">${step}${esc(note.replace(/\s*\|\s*projected: not drawn on this plan\s*$/i, ""))}${projected ? `<span class="proj" title="Not drawn on this plan (cut at 1.2 m): box = the element's footprint from the IFC model">projected</span>` : ""}</span><span class="w">${where}</span></li>`;
+}
+
+/** A free-text answer about an IFC model whose element types were counted in the browser (main.ts sets a.checked):
+ *  the counts the model itself gives, each checked against the answer. Shown before the language model's wording,
+ *  which is folded when every count matches (it may hedge, e.g. "not listed in the model facts", while the counts
+ *  it then gives are right). */
+function checkedHtml(a: Answer, text: string) {
+  const rows = a.checked ?? [];
+  const lines = text.split(/\n+/).filter((l) => l.trim()).length;
+  const ok = (r: (typeof rows)[number]) => !r.notInAnswer && (r.said === null || r.said === r.model);
+  const allOk = rows.every(ok);
+  const named = rows.filter((r) => !r.notInAnswer);
+  const counted = named.filter((r) => r.said !== null);
+  const mark = (r: (typeof rows)[number]) => (r.notInAnswer ? `<span class="bad">✗ not in the answer</span>`
+    : r.said === null ? `<span class="muted">named, no count</span>`
+      : r.said === r.model ? `<span class="ok">✓ answer says ${r.said}</span>` : `<span class="bad">✗ answer says ${r.said}</span>`);
+  const total = rows.reduce((s, r) => s + r.model, 0);
+  const said = counted.reduce((s, r) => s + (r.said ?? 0), 0);
+  const foot = rows.length > 1 ? `<tfoot><tr><td>Total</td><td class="num">${total}</td><td>${counted.length === rows.length
+    ? (said === total ? `<span class="ok">✓ answer says ${said}</span>` : `<span class="bad">✗ answer says ${said}</span>`) : ""}</td></tr></tfoot>` : "";
+  return `<span class="rich-lbl">Counted in the IFC model · ${rows.length} type${rows.length > 1 ? "s" : ""}</span>
+    <div class="rich-body">
+      <table class="checked"><tbody>${rows.map((r) => `<tr class="${r.notInAnswer ? "contrast" : ""}"><td>${esc(r.name)}</td><td class="num">${r.model}</td><td>${mark(r)}</td></tr>`).join("")}</tbody>${foot}</table>
+      <div class="checked-src">${allOk && counted.length ? `Every count in the answer matches the model.` : allOk ? "" : "The model and the answer differ (✗)."} Counted in your browser from the loaded model: no model call.</div>
+      <details class="llm-words"${allOk ? "" : " open"}><summary>The language model's text answer · ${lines} line${lines === 1 ? "" : "s"}</summary><div class="value text rich">${richText(text)}</div></details>
+    </div>`;
 }
 
 /** Long text answers (often "- item" lists from the model fact card): a compact list, folded after 8 lines. */
@@ -407,6 +443,7 @@ export function secondOpinionHtml(a: Answer, b: Answer, ms: number) {
   const verdict = b.value === null || b.value === undefined ? `<b>No answer</b> from ${esc(modelName(b))}`
     : `<b>${same ? "✓ Second opinion agrees" : "≠ Second opinion differs"}</b> ${esc(modelName(b))} says <b>${esc(fmtValue(b))}${unit ? ` ${esc(unit)}` : ""}</b>`;
   return `<div class="xcheck second ${same ? "ok" : "bad"}">${verdict}
+    ${b.replayed ? `<small class="replayed" title="${esc(b.replayed)}">⟲ recorded ${esc(b.recorded_at ?? "")} · hosted API busy right now</small>` : ""}
     <small>${wall.toFixed(1)} s · ${((c.api_tokens_in ?? c.llm_tokens_in ?? 0) + (c.api_tokens_out ?? c.llm_tokens_out ?? 0)).toLocaleString()} tok · ${esc(fmtEur(costUsd({ ...c, wall_seconds: wall })))}</small>
     ${raw ? `<details><summary>its reasoning</summary><p>${esc(raw.replace(/\s*\|\s*/g, " ").slice(0, 900))}</p></details>` : ""}</div>`;
 }
@@ -482,10 +519,11 @@ export function renderCard(el: HTMLElement, a: Answer, opts: CardOpts) {
   el.className = `card answer ${a.value === null ? "refused" : ""}`;
   el.innerHTML = `
     <div class="value-row${rich ? " rich" : ""}">
-      ${rich ? `<span class="rich-lbl">Text answer · ${String(a.value).split(/\n+/).filter((l) => l.trim()).length} line(s)</span><div class="value text rich">${richText(String(a.value))}</div>`
+      ${rich && a.checked?.length ? checkedHtml(a, String(a.value))
+        : rich ? `<span class="rich-lbl">Text answer · ${String(a.value).split(/\n+/).filter((l) => l.trim()).length} line(s)</span><div class="value text rich">${richText(String(a.value))}</div>`
         : `<div class="value ${isText ? "text" : ""} ${isText && String(a.value).length > 40 ? "long" : ""}">${esc(fmtValue(a))}${unit ? `<span class="unit">${esc(unit)}</span>` : ""}${rangeHtml(a)}${yesNoBasis(a)}</div>`}
-      <div class="conf ${confClass}" title="Calibrated confidence">
-        <div class="conf-num">${conf}%</div><div class="conf-bar"><i style="width:${conf}%"></i></div><div class="conf-lbl">confidence</div>
+      <div class="conf ${confClass}" title="${a.checked?.length ? "The pipeline's calibrated confidence in its text answer, before the browser counted the types it names in the model (table)" : "Calibrated confidence"}">
+        <div class="conf-num">${conf}%</div><div class="conf-bar"><i style="width:${conf}%"></i></div><div class="conf-lbl">${a.checked?.length ? "before the check" : "confidence"}</div>
       </div>
     </div>
     ${scopeWarning(a)}

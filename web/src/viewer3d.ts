@@ -573,7 +573,8 @@ export class Viewer3D {
       if (!guids.length) continue;
       guids.forEach((g) => taken.add(g));
       const esc = n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      const m = text.match(new RegExp(`${esc}[^\\n\\d]{0,24}?(\\d+)(?![\\d.,]*\\s*(mm|cm|m\\b|m²|m2|"|in\\b|ft))`, "i"));
+      // the count after the name, skipping a size in the type name ('Sink Vanity-Round:19" (6)', '42" x 19" (2)')
+      const m = text.match(new RegExp(`${esc}[^\\n]{0,30}?(?<![\\d.,])(?<!x\\s?)(\\d+)(?![\\d.,]*\\s*(mm|cm|m\\b|m²|m2|"|''|in\\b|ft|x\\s*\\d))`, "i"));
       out.push({ name: n, guids, said: m ? Number(m[1]) : null });
     }
     // Omissions: when the named types are fixtures of one kind (sanitary, furniture, lighting), other families of that

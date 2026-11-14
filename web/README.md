@@ -28,6 +28,10 @@ API cache (`DEMO_WARM=0` skips that; `fixtures/recorded.json` is not changed). T
 - `/api/kg` (knowledge graph): the API's `GET /kg` if it has one; otherwise the dev server runs W1's
   `stoa.kg.links(path)` itself with `$JUNCTION_VENV/bin/python` from the repo root (`STOA_KG_REPO=<checkout>`
   to use another checkout); if that fails too, it links files by name only (the panel title says "files only").
+- Hosted second opinions (NVIDIA Nemotron) are rate-limited and can hang for minutes: the dev server waits
+  `STOA_HOSTED_TIMEOUT_S` (default 45) seconds, then shows that model's answer from `fixtures/recorded.json`, marked
+  "⟲ recorded HH:MM · hosted API busy right now" (or "hosted model busy" when there is no recording). The API keeps
+  the call running and caches it, so the next click is live.
 - `npm run build` type-checks and builds to `dist/`. `npm run preview` serves the build with the same
   `/api` middleware (no separate server needed).
 
@@ -58,7 +62,10 @@ and shows a one-line note:
    total room area on '1.korrus' does 'KORIDOR (119)' take?" → 7.34 %.
 6. A free-text question about a model (4351_arc.ifc, "what plumbing fixtures are in this building and their counts?"):
    the solver's text cites no elements, so the browser checks it against the loaded IFC model by element name
-   (`findNamed` in `src/viewer3d.ts`, no model call). With the 03:29 answer ("Toilet-Domestic-3D: 9, Urinal-Wall-3D: 4")
+   (`findNamed` in `src/viewer3d.ts`, no model call). On night cc1ca5b (W1 0003c33) the answer names all four types
+   ('Toilet-Domestic-3D: 9', 'Urinal-Wall-3D: 4', 'Sink Vanity-Round:19" (6)', 'Sink Kitchen-Double:42" (2)') and the
+   card says "✓ all 4 types the answer counts match the model", the 21 fixtures orange in 3D (the LLM still opens with
+   "not listed in the model facts" and conf 0.3; told W1). With the 03:29 answer ("Toilet-Domestic-3D: 9, Urinal-Wall-3D: 4")
    the named fixtures turn orange, both counts ✓, and "the model also has Sink Vanity-Round ×6, Sink Kitchen-Double ×2
    … not mentioned ✗" (purple) — exactly what the gold adds. With night 8f02b13's answer ("no plumbing fixtures are
    listed", a fact-card regression, told W1) the card shows "✗ the model has Urinal-Wall-3D ×4, Toilet-Domestic-3D ×9,
@@ -66,12 +73,13 @@ and shows a one-line note:
 7. Swiss floor plan: doors counted on the DXF layer, boxed on the PDF (36).
 8. Same floor, asked in German, doors and windows together → 64. The card shows "Understood as: count · door +
    window · German" and the plan (sum of 2 sub-questions, each clickable); both parts are cross-checked.
-9. CubiCasa scan (colorful-4539), asked in Finnish: bedrooms → 3 from the fine-tuned 8B vision model (LoRA cc-v2);
-   W3's raster label reader (one local-VLM call per drawing, shared by all its questions) reads 3 'MH' labels, so the
-   pipeline cross-checks "vlm_lora 3 = raster 3 ✓", raises the confidence (86 %) and boxes each counted label.
-10. CubiCasa scan (high_quality_architectural-14797): "how many saunas?" → the fine-tuned LoRA says 0 (78 %), the label
-   reader read 1, so the card shows "✗ Sources disagree" and no boxes. The tour clicks **Show where · read the room
-   labels**: the reader's box lands on "LH 2,7" (löylyhuone = sauna room) — one glance shows the sauna (gold: 1). For
+9. CubiCasa scan (colorful-4539), asked in Finnish: bedrooms → 3 from the fine-tuned 8B vision model (LoRA cc-v2),
+   92 %. Since night 58073d5 (W4 90c5a24, cost $0.31 → $0.02 per 1k) the pipeline no longer runs the label reader on
+   every LoRA answer, so the answer comes without boxes; the tour clicks **Show where · read the room labels**: W3's
+   raster label reader finds the 3 'MH' labels, the card adds "✓ label reader (raster) finds 3" and boxes each one.
+10. CubiCasa scan (high_quality_architectural-14797): "how many saunas?" → the fine-tuned LoRA says 0 (82 %) with no
+   boxes. The tour clicks **Show where**: the reader's box lands on "LH 2,7" (löylyhuone = sauna room) and the card
+   shows "✗ label reader (raster) finds 1 sauna label (answer 0)" — one glance shows the sauna (gold: 1). For
    symbol counts (windows, doors, WC seats, sinks) the same button asks R1's CubiCasa5K detector (`raster_cc5k`, cached,
    no GPU) and the credit line adds its weights' licence (CC BY-NC 4.0); e.g. high_quality_architectural-816 doors:
    answer 7, detector marks 9 (gold 9; that drawing is in CC5K's training list).

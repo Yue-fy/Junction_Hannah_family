@@ -519,10 +519,14 @@ async function showAnswer(a: Answer, roundTripMs: number) {
     const missed = named.filter((n) => n.missed);
     if (!said.length && !missed.length) return;
     const checks = said.filter((n) => n.said !== null).map((n) => `${n.name} ${n.guids.length}${n.said === n.guids.length ? " ✓" : ` ✗ (answer says ${n.said})`}`);
+    // 3+ counted types that all match: one summary check line (the card shows two lines at most)
+    const counted = said.filter((n) => n.said !== null);
+    const allOk = counted.length >= 3 && counted.every((n) => n.said === n.guids.length);
     const ev = said.flatMap((n) => n.guids.map((g, i) => ({
       file: askedPath, ifc_guid: g,
-      note: `named in the answer: ${n.name} (${i + 1} of ${n.guids.length})${i === 0 && n.said !== null
-        ? `; cross-check: the model has ${n.guids.length} '${n.name}', the answer says ${n.said} ${n.said === n.guids.length ? "✓" : "✗"}` : ""}`,
+      note: `named in the answer: ${n.name} (${i + 1} of ${n.guids.length})${i !== 0 || n.said === null ? ""
+        : allOk ? (n === counted[0] ? `; cross-check: all ${counted.length} types the answer counts match the model: ${counted.map((c) => `${c.guids.length} '${c.name}'`).join(", ")} ✓` : "")
+        : `; cross-check: the model has ${n.guids.length} '${n.name}', the answer says ${n.said} ${n.said === n.guids.length ? "✓" : "✗"}`}`,
     }) as Answer["evidence"][number]));
     // same kind of fixture in the model but not in the answer: shown as a ✗ check, its elements listed after the named ones
     const miss = missed.map((n) => `${n.name} ×${n.guids.length}`).join(", ");
@@ -532,6 +536,8 @@ async function showAnswer(a: Answer, roundTripMs: number) {
     }) as Answer["evidence"][number])));
     await showAnswer({
       ...a, evidence: [...ev, ...a.evidence],
+      checked: [...said.map((n) => ({ name: n.name, model: n.guids.length, said: n.said })),
+        ...missed.map((n) => ({ name: n.name, model: n.guids.length, said: null, notInAnswer: true }))],
       trace: [...(a.trace ?? []), `checked against the model by element name (in the browser, no model call): ${said.length ? `named in the answer ${said.map((n) => `${n.name} ×${n.guids.length}`).join(", ")}` : "the answer names no element type of the model"}${checks.length ? `; counts: ${checks.join(", ")}` : ""}${miss ? `; same kind, not named: ${miss}` : ""}`],
       missing: [...(a.missing ?? []), ...(miss ? [`the answer does not mention ${miss} (same kind of fixture in the model)`] : [])],
       assumptions: [...(a.assumptions ?? []), said.length ? "highlighted elements are matched by the family/type names the answer uses; the solver did not cite them"
