@@ -28,6 +28,7 @@ _LARGER = re.compile(r"by how (?:many|much) (?:m²|m2|square metres|square meter
 _SMALLER = re.compile(r"by how (?:many|much) (?:m²|m2|square metres|square meters|ft²)? ?is (?P<a>.+?) smaller than (?P<b>.+?)(?:\s*\(|\?|$)", re.I)
 _WHICH_LARGEST = re.compile(r"\bwhich\b.*\b(largest|biggest|smallest|greatest)\b", re.I)
 _OF_LARGEST = re.compile(r"\bof the (largest|biggest|smallest) of\b", re.I)
+_CMP2 = re.compile(r"\b(?P<w>more|fewer|less|as many)\s+(?P<a>[^?,;]+?)\s+(?:than|as)\s+(?P<b>[^?,;.]+)", re.I)
 _EXISTS = re.compile(r"^\s*(does|do|is there|are there|has|have|onko|gibt es|y a-t-il|c'è|har)\b", re.I)
 _ROOM_NOS = re.compile(r"\brooms?\s+([A-Z]{0,2}\d+(?:\.\d+)+)(?:\s*\((['‘«„\"][^)]*)\))?", re.I)
 _AT_LEAST = re.compile(r"\b(at least|more than|over|mindestens|au moins|v[äa]hint[äa][äa]n)\s+(\d+|one|two|three|four|five|"
@@ -43,7 +44,7 @@ COMPONENTS = {"shower_bathtub": ["shower", "bathtub"]}
 
 @dataclass
 class Plan:
-    op: str  # sum | diff | argmax | argmin | max | min | exists | atleast (note = n)
+    op: str  # sum | diff | argmax | argmin | max | min | exists | atleast (note = n) | gt | lt | ge (yes/no)
     subs: list[str]
     labels: list[str] = field(default_factory=list)
     unit: str | None = None
@@ -80,6 +81,20 @@ def decompose(source: str, question: str) -> Plan | None:
         return None  # "doors and windows of apartment C": dxf scopes apartments itself; else the agent asks per part
     qn = _QUOTED.sub(" <q> ", q)
     quoted = [next(g for g in m.groups() if g).strip() for m in _QUOTED.finditer(q)]
+
+    # comparison of two counts asked yes/no (R1 03:46): "Does this apartment have more bedrooms (MH) than bathrooms?"
+    # was read as "is there a bedroom?" by the exists branch below
+    if base.task in ("yesno", "text"):
+        mc = _CMP2.search(_NEGATION.sub(" ", re.sub(r"\([^)]*\)", " ", qn)))
+        if mc:
+            ta = [t for _, t in _targets_in(mc.group("a")) if t not in ("apartment", "room")]
+            tb = [t for _, t in _targets_in(mc.group("b")) if t not in ("apartment", "room")]
+            if ta and tb and ta[0] != tb[0]:
+                sa = _sub_for(source, ta[0], Intent("count", ta[0], "drawing", "count"))
+                sb = _sub_for(source, tb[0], Intent("count", tb[0], "drawing", "count"))
+                if sa and sb:
+                    op = {"more": "gt", "fewer": "lt", "less": "lt", "as many": "ge"}[mc.group("w").lower()]
+                    return Plan(op, [sa, sb], [ta[0], tb[0]], None)
 
     # exists: "Does this apartment have a sauna?"
     if base.task in ("yesno", "text") and _EXISTS.search(q):
@@ -194,6 +209,12 @@ def combine(plan: Plan, values: list) -> tuple[object, str]:
         return ("yes" if yes else "no"), f"{lab[0]} count = {values[0]} {'≥' if yes else '<'} {k} → {'yes' if yes else 'no'}"
     if any(n is None for n in nums):
         return None, "a part has no numeric value"
+    if plan.op in ("gt", "lt", "ge"):
+        a, b = nums[0], nums[1]
+        yes = a > b if plan.op == "gt" else a < b if plan.op == "lt" else a >= b
+        sym = {"gt": ">", "lt": "<", "ge": "≥"}[plan.op]
+        return ("yes" if yes else "no"), (f"{lab[0]} {values[0]} {sym if yes else 'not ' + sym} {lab[1]} {values[1]} → "
+                                         f"{'yes' if yes else 'no'}")
     if plan.op == "sum":
         v = sum(nums)
         expr = " + ".join(f"{lab[i]} {values[i]}" for i in range(len(values))) + f" = {_fmt(v, plan.unit)}"
