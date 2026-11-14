@@ -12,7 +12,7 @@ re-asks a dataset question in another wording / language / scope word / file loc
     # record existing runs as a manifest (no evals): probe=RUN.jsonl pairs
     python3 experiments/F/probe_suite.py manifest --tag X apt_wording=/path/run.jsonl ...
 
-Manifests: $JUNCTION_SHARED/artifacts/F/probe_suite/<tag>.json. Default baseline: BASELINE below (night 1a4e2af, c227).
+Manifests: $JUNCTION_SHARED/artifacts/F/probe_suite/<tag>.json. Default baseline: BASELINE below (night 637a6df, the freeze candidate, c227).
 """
 from __future__ import annotations
 
@@ -29,7 +29,7 @@ from pathlib import Path
 SHARED = Path(os.environ.get("JUNCTION_SHARED", "/home/fangy4/work/projects/junction-shared"))
 PROBE_DIR = SHARED / "artifacts" / "F"
 SUITE_DIR = PROBE_DIR / "probe_suite"
-BASELINE = SUITE_DIR / "night-1a4e2af.json"
+BASELINE = SUITE_DIR / "night-637a6df.json"  # the 11:40 freeze candidate (c227); night-1a4e2af = the 10:13 build
 # biggest first so the streams finish together
 PROBES = ["apt_wording", "apt_wording_cc", "apt_wording_ml", "neutral_path", "comp_ml", "apt_wording_syn",
           "apt_wording_typo", "comp_ml_cc", "apt_wording_ml2", "this_plan", "this_plan_nh", "whole_top", "whole_top_nh",
