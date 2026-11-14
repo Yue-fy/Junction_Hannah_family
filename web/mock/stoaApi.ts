@@ -234,11 +234,18 @@ function bench() {
     }
   });
   const full = (r: LbRow) => !r.limit && !r.sources && !r.types && !r.grep && !r.handled_only && !r.metrics.errors;
-  // The pipeline row comes from S0's integration runs on `night` when there is one (agents also log runs of
-  // uncommitted work); baselines take the latest full run of anyone.
+  // The pipeline rows come from the integration runs of S0 and F (both measure `night`-equivalent commits; other agents
+  // also log runs of uncommitted work), all on ONE commit when possible: the commit of the latest full S0/F dev run
+  // (since D14, S0 skips duplicate dev/hard runs and F's runs are the reference). Baselines: latest full run of anyone.
+  const integ = (r: LbRow) => r.agent === "S0" || r.agent === "F";
+  const anchor = rows.filter((r) => r.solver === "pipeline" && r.split === "dev" && r.n >= 1500 && full(r) && integ(r)).at(-1)?.commit;
+  const pickPipeline = (ok: LbRow[]) => {
+    const mine = ok.filter(integ);
+    return mine.filter((r) => anchor && r.commit === anchor).at(-1) ?? mine.at(-1) ?? ok.at(-1);
+  };
   const pick = (solver: string, split: string, minN: number) => {
     const ok = rows.filter((r) => r.solver === solver && r.split === split && r.n >= minN && full(r));
-    return (solver === "pipeline" ? ok.filter((r) => r.agent === "S0").at(-1) : undefined) ?? ok.at(-1);
+    return solver === "pipeline" ? pickPipeline(ok) : ok.at(-1);
   };
   const summary = (r: LbRow | undefined) => {
     if (!r) return null;
@@ -274,13 +281,16 @@ function bench() {
     return (args.length === 1 && String(r.solver_args?.cc5k) === "0") || (args.length === 0 && !/cc5k|lora/i.test(r.note ?? ""));
   };
   const test = rows.filter((r) => r.solver === "pipeline" && r.split === "test" && r.agent === "S0" && r.n >= 500 && full(r) && clean(r)).at(-1);
-  out.test = { pipeline: summary(test) };
+  // the same sealed test without R2's counting LoRA (run_test.sh "test-lora0": cc5k=0 + lora=0, same commit): shows what the
+  // small fine-tuned model adds on data nobody has seen
+  const lora0 = test && rows.filter((r) => r.solver === "pipeline" && r.split === "test" && r.agent === "S0" && full(r)
+    && r.commit === test.commit && (/test-lora0\b/.test(r.note ?? "") || String(r.solver_args?.lora ?? "") === "0")).at(-1);
+  out.test = { pipeline: summary(test), ...(lora0 ? { no_lora: summary(lora0) } : {}) };
   // novel question kinds (operators no template covers): hard2 = developed on; hard2q = held-out rewording (D10, now
   // "worn"); hard2r = F's sealed fresh draw in a fourth wording (D12, the clean one). Aggregates only.
   for (const split of ["hard2", "hard2q", "hard2r"]) {
-    const r = rows.filter((x) => x.solver === "pipeline" && x.split === split && x.n >= 200 && full(x));
-    // S0's integration run on the night commit first; F's (often an experimental branch) only when S0 has none
-    out[split] = { pipeline: summary(r.filter((x) => x.agent === "S0").at(-1) ?? r.filter((x) => x.agent === "F").at(-1) ?? r.at(-1)) };
+    // the integration run on the same commit as dev/hard first (F logs a base and a candidate commit side by side)
+    out[split] = { pipeline: summary(pick("pipeline", split, 200)) };
   }
   return { from: "leaderboard", generated: new Date().toISOString(), runs: out };
 }
@@ -307,7 +317,7 @@ function mockAsk(body: { path: string; question: string; solver?: string; solver
   const want = solverKey(body.solver, body.solver_args);
   const fx = fixtures().find((f) => f.path === body.path && norm(f.question) === norm(body.question)
     && solverKey(f.solver, f.solver_args) === want);
-  if (fx) return { ...fx.answer, trace: [...((fx.answer.trace as string[]) ?? []),
+  if (fx) return { ...fx.answer, recorded_at: fx.recorded_at, trace: [...((fx.answer.trace as string[]) ?? []),
     fx.recorded_at ? `(mock API: replay of the live answer recorded ${fx.recorded_at})` : "(mock API: precomputed fixture)"] };
   return {
     value: null, unit: null, confidence: 0, evidence: [], solver: "mock",
@@ -335,22 +345,33 @@ function readBody(req: http.IncomingMessage): Promise<Buffer> {
 
 let liveDownUntil = 0;
 /** Forward to the live API. Resolves null when it is unreachable (→ mock). */
-function forward(req: http.IncomingMessage, url: string, body: Buffer): Promise<{ status: number; headers: http.IncomingHttpHeaders; body: Buffer } | null> {
+function forward(req: http.IncomingMessage, url: string, body: Buffer, waitMs = 600_000): Promise<{ status: number; headers: http.IncomingHttpHeaders; body: Buffer } | null> {
   if (Date.now() < liveDownUntil) return Promise.resolve(null);
   return new Promise((resolve) => {
     const u = new URL(url, LIVE);
+    let late = false;
     const r = http.request(u, { method: req.method, headers: { "content-type": req.headers["content-type"] ?? "application/json" }, timeout: 600_000 }, (resp) => {
       const chunks: Buffer[] = [];
       resp.on("data", (c) => chunks.push(c));
       resp.on("end", () => resolve({ status: resp.statusCode ?? 500, headers: resp.headers, body: Buffer.concat(chunks) }));
     });
     r.on("error", () => {
+      if (late) return; // we stopped waiting; the API itself is fine
       liveDownUntil = Date.now() + 5000;
       resolve(null);
     });
+    // stop WAITING after waitMs (the request is left running, so the API still finishes and caches the answer)
+    if (waitMs < 600_000) setTimeout(() => { late = true; resolve(null); }, waitMs);
     r.end(body);
   });
 }
+
+const liveUp = () => Date.now() >= liveDownUntil;
+
+/** Hosted second opinions (NVIDIA, rate-limited and sometimes hanging for minutes, F 04:33): wait this long, then show
+ * that model's recorded answer, labelled as such, instead of a spinner in front of the jury. */
+const HOSTED_WAIT_MS = Number(process.env.STOA_HOSTED_TIMEOUT_S ?? 45) * 1000;
+const isHosted = (b: { solver_args?: Record<string, unknown> }) => /nvidia|hosted|api/i.test(String(b.solver_args?.backend ?? ""));
 
 async function handle(req: Connect.IncomingMessage, res: http.ServerResponse, next: Connect.NextFunction) {
   if (!req.url?.startsWith("/api/")) return next();
@@ -367,7 +388,28 @@ async function handle(req: Connect.IncomingMessage, res: http.ServerResponse, ne
       return;
     }
     const body = req.method === "POST" ? await readBody(req) : Buffer.alloc(0);
-    const live = route === "/bench" ? null : await forward(req, route + url.search, body);
+    const askBody = route === "/ask" && req.method === "POST" ? (() => { try { return JSON.parse(body.toString() || "{}"); } catch { return {}; } })() : null;
+    const hosted = !!askBody && isHosted(askBody);
+    const live = route === "/bench" ? null : await forward(req, route + url.search, body, hosted ? HOSTED_WAIT_MS : 600_000);
+    if (hosted) {
+      let ans: { value?: unknown } | null = null;
+      try {
+        ans = live && live.status === 200 ? JSON.parse(live.body.toString()) : null;
+      } catch {
+        ans = null;
+      }
+      if ((!ans || ans.value === null || ans.value === undefined) && liveUp()) {
+        const r = mockAsk(askBody) as Record<string, unknown>;
+        const why = !live ? `did not answer within ${HOSTED_WAIT_MS / 1000} s` : "returned no answer (rate-limited?)";
+        if (r.value !== null && r.value !== undefined && r.recorded_at)
+          return send(res, 200, { ...r, replayed: `hosted API busy: it ${why}; this is its answer recorded ${String(r.recorded_at)}. The live call keeps running and is cached when it lands.` }, "live");
+        if (!live) // no recording to fall back on: say so (not the offline mock: the API itself is up)
+          return send(res, 200, { value: null, unit: null, confidence: 0, evidence: [], solver: "vlm_direct",
+            trace: [`backend=${String(askBody.solver_args?.backend)}`, `hosted model ${why}; the call keeps running on the API and is cached when it lands`],
+            assumptions: [], missing: ["hosted model busy (rate limit): ask again in a minute"],
+            cost: { llm_tokens_in: 0, llm_tokens_out: 0, gpu_seconds: 0, api_calls: 1, llm_calls: 0, wall_seconds: HOSTED_WAIT_MS / 1000 } }, "live");
+      }
+    }
     const optional = ["/questions", "/kg", "/files", "/health"].includes(route);
     if (live && route === "/kg" && live.status === 200) {
       // stoa.kg links only siblings for some sources (opening_design, cubicasa): add the drawing set by folder.

@@ -69,6 +69,8 @@ def _typed(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+NOT_FOUND_RE = re.compile(r"^\s*(unknown|not found|not (?:listed|specified|available|shown|given)|n/?a|none|no data|"
+                          r"no (?:such|matching) \w+|cannot (?:be )?determined?)\s*\.?\s*$", re.I)
 CODE = r"(?:[A-Z]{1,3}-?\d{1,2}[A-Z]?|[A-Z]{2,3})"
 CODE_RE = re.compile(rf"^{CODE}$")
 CODES_ANSWER = re.compile(rf"^\s*{CODE}(?:\s*(?:&|,|/|\band\b)\s*{CODE})*\s*$")
@@ -126,6 +128,9 @@ def _explain_codes(value: str, question: str, rows, legend) -> tuple[str, list[t
     return out, found
 
 
+# count nouns that name no thing ("how many items in total"): never evidence that the table is missing
+GENERIC_RE = re.compile(r"(items?|things?|objects?|elements?|units?|pieces?|total|numbers?|instances?|occurrences?|"
+                        r"times|each|every|overall|altogether)", re.I)
 KINDS_RE = re.compile(r"\b(types?|kinds?|marks?|different|distinct|unique|rows?|entries|lines?|records?|styles?|"
                       r"models?|categories|variants?)\b", re.I)
 
@@ -241,6 +246,10 @@ class ScheduleSolver(BaseSolver):
                          "so the typed value is kept")
         if res.get("value") is None or (isinstance(res["value"], float) and res["value"] != res["value"]):
             return Answer.abstain(self.name, f"table QA gave no answer ({res.get('error') or 'NaN'})", trace)
+        if isinstance(res["value"], str) and NOT_FOUND_RE.match(res["value"]):
+            # "Unknown" / "Not found" is a refusal dressed as a value: say so, so the cascade can try another reader
+            return Answer.abstain(self.name, f"the rows the question needs were not found in the tables rebuilt from "
+                                             f"the PDF text (table QA said {res['value']!r})", trace)
         value, unit = res["value"], res.get("unit")
         unit = UNIT_MAP.get(str(unit).lower().replace(".", "").strip(), unit) if unit else unit
         if isinstance(value, bool):
@@ -296,6 +305,29 @@ class ScheduleSolver(BaseSolver):
                            "(needs symbol detection on the drawing)")
         if value == 0 and not evidence:
             conf = min(conf, 0.2)
+        elif value == 0 and unit == "count":
+            conf = min(conf, 0.35)  # "none" from a rebuilt table is weak evidence (a misread column also gives 0)
+            missing.append("the count is 0: no row matched, which can also mean the column was misread")
+        if n_rows_used and tableqa._rows_mention_ids(question, res.get("used", []), tables, "row_id", path) is False:
+            conf = min(conf, 0.3)  # the question names an id (P13, 115.A) that none of the cited rows contains
+            missing.append("none of the rows the answer used contains the identifier named in the question")
+        named = [w for w in re.findall(r"(\w+)\s+schedules?\b", question.lower()) if w not in ("the", "a", "this")]
+        known = " ".join([t.title for t in tabs] + [str(c) for df in tables.values() for c in df.columns] +
+                         [str(v) for n, df in tables.items() if n != "notes" for v in df.head(60).to_numpy().ravel()]).lower()
+        hm = re.search(r"how many\s+(.*?)(?:\b(?:are|is|does|do|have|has|use|uses|in|on|of|with|that|which)\b|[?,(]|$)",
+                       question, re.I)
+        counted = [w for w in re.findall(r"[a-z]{4,}", hm.group(1).lower())
+                   if not KINDS_RE.fullmatch(w) and not GENERIC_RE.fullmatch(w)] if hm else []
+        if named and not any(w.rstrip("s") in known for w in named):
+            conf = min(conf, 0.3)  # e.g. "pier schedule" but no pier table was rebuilt from this sheet
+            missing.append(f"no '{named[0]} schedule' table could be rebuilt from the PDF text (it may be drawn among "
+                           "detail drawings); the answer comes from other text")
+        elif counted and not any(w.rstrip("s")[:5] in known for w in counted):
+            conf = min(conf, 0.3)  # "how many pier types": no rebuilt table mentions piers
+            missing.append(f"no rebuilt table mentions '{' '.join(counted)}'; the answer comes from other text")
+        if isinstance(value, str) and value.strip().upper() in tableqa.id_tokens(question, path):
+            conf = min(conf, 0.2)  # the answer only repeats an identifier from the question
+            missing.append(f"the answer {value!r} repeats the question's identifier; the table row was not found")
         return Answer(value=value, unit=unit, confidence=conf, evidence=evidence, trace=trace, solver=self.name,
                       assumptions=["tables rebuilt from the PDF text layer (row/column alignment); the model wrote "
                                    "the query, the numbers come from the extracted rows"],

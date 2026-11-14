@@ -1,0 +1,22 @@
+If each door costs 450 euros, how much do the doors on '1.korrus' cost in total, in euros?
+If every window needs 2 curtains, how many curtains are needed on '1.korrus'?
+Which storey has the most doors?
+Which slabs are used on the 1.korrus floor, with type quantities?
+Which floor has the fewest windows?
+Doors cost €320 each. What is the total cost of the doors on '2.korrus'?
+What would the windows on '3.korrus' cost at 600 EUR per window?
+How many doors are on '1.korrus' if we add 3 more?
+How many cubic feet of wall are there on '1.korrus'?
+What is the door-to-window ratio on '1.korrus'?
+Does '1.korrus' have at least 50 windows?
+Is the wall volume on '1.korrus' less than 300 m³?
+How many doors are there on '1.korrus' and '2.korrus' combined?
+What is the total net floor area of all spaces on '1.korrus', in square feet?
+How many walls are there on '1.korrus', minus 10?
+What is the floor area of the largest room on the 2nd floor?
+In which year was the building built, 1990 or 2005?
+How many doors per storey are there on average in the building?
+PATH bsc-gymzaal-amersfoort_example-project-location.ifc
+What is the average net floor area per room (space) on '00 Begane grond', in m²?
+How many of the rooms 'gymzaal (18)', 'gymzaal (16)', 'toilet (10)' and 'kleedkamer (20)' on '00 Begane grond' have a net floor area of more than 143 m²?
+How many rooms on '00 Begane grond' are larger than 10 m²?
