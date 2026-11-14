@@ -3,6 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<script>/* behind a path prefix (e.g. /workbench) the relative URLs need a trailing slash */
+if (!location.pathname.endsWith("/")) location.replace(location.pathname + "/" + location.search + location.hash);</script>
 <title>Expert Workbench</title>
 <link rel="icon" href="data:,">
 <link rel="stylesheet" href="static/style.css">
@@ -56,6 +58,7 @@
         <button class="v unk" data-v="cant_tell">? Can't tell <kbd>3</kbd></button>
       </div>
       <textarea id="audit-comment" rows="2" placeholder="Optional comment: what is wrong, what you would check, what is missing…"></textarea>
+      <input id="audit-correct" type="text" placeholder="Optional: the right answer is… (e.g. 6, or 53.4 m2)">
       <div id="audit-last" class="last"></div>
       <div class="nav">
         <button id="audit-prev" class="ghost">← Previous</button>
