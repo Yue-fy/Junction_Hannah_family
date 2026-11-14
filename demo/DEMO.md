@@ -80,7 +80,8 @@ By source on sealed test: Swiss vector plans 98 % areas / 100 % counts; IFC mode
   compute it in code or lower the confidence (derived probe 29.5 % → 56.8 %, and 100 % right when confident).
 - **Red team** (`redteam/REPORT.md`, 174 adversarial questions built from answers we had right):
   rewording, casing, distractor numbers: 0 of 56 answers changed; typos and prompt injections changed 7, all at
-  confidence ≤ 0.42 (flagged); rotated / grayscale / JPEG / half-resolution copies: 30/30; objects that don't exist:
+  confidence ≤ 0.42 (flagged) — but one injection obeyed once a VLM saw the question (99 at 0.71), so don't claim
+  "injection-proof"; rotated / grayscale / JPEG / half-resolution copies: 30/30; objects that don't exist:
   8/8 "0"; questions a drawing can't answer: all at confidence ≤ 0.40; asking the same 173 questions twice changed 1
   free-text answer. **What broke:** asked about a storey, model or room that doesn't exist (or a real room number with
   the wrong name), the vector and IFC paths answered *something else* at 0.96–0.99 confidence. The IFC solver even
