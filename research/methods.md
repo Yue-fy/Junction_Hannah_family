@@ -603,3 +603,9 @@ label or nothing). Same cached LLM calls otherwise. Scores: v1 24/29, v2 12/14, 
 one balcony answer flipped from living room to bedroom, LLM wobble) → **43/54 (80%) vs pipeline 27/54, +29.6 pts
 [+18.5, +40.7], McNemar 19 vs 3 p = 0.0009; vs vlm_direct 17 vs 3 p = 0.003**; v3 alone 3 vs 0 (p = 0.25).
 Read: a robust direction over 14 plans, a size between ~+15 and +40 points; v3 is too small to confirm on its own.
+NEGATIVE (same cycle): splitting a sheet into its separate drawings (two floors side by side; components of the
+dilated footprint ≥ 15%: 6007 and 4828 split 52/48 and 57/43, single plans 99–100%) and prefixing each room line
+with [A]/[B] + "the ground floor normally has the entrance and kitchen" fixed no probe answer and broke 2 on the one
+two-storey v3 plan (4828, whose segmentation also merges TYÖH + KHH + LH into one region). Kept in the graph dict
+(`parts`, `room['part']`), off in graph_text (show_parts=False). Per-floor questions need a floor label reader
+('1 KRS' / '2 KRS', 'upper floor') and better segmentation first; n = 2 plans is too few to tune on.

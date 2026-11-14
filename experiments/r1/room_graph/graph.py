@@ -359,6 +359,30 @@ def room_graph(path: str, labels: list | None = None, live: bool = True, printed
             if len(mt.get("printed", [])) >= 2 and not mt.get("merged"):
                 mt["merged"] = {mt["cls"]: len(mt["printed"])}
 
+    # ---- separate drawings on one sheet (two floors side by side): components of the dilated footprint holding
+    # >= 15% of it (6007 / 4828: two parts of 52/48% and 57/43%; single plans: one part of 99-100%)
+    k = max(3, int(0.02 * max(H, W)))
+    foot = cv2.dilate((rooms > 0).astype(np.uint8), cv2.getStructuringElement(cv2.MORPH_RECT, (k, k)))
+    n_p, lab_p, st_p, _ = cv2.connectedComponentsWithStats(foot, connectivity=8)
+    tot = float(st_p[1:, cv2.CC_STAT_AREA].sum()) if n_p > 1 else 0.0
+    big = [i for i in range(1, n_p) if tot and st_p[i, cv2.CC_STAT_AREA] >= 0.15 * tot]
+    parts = []
+    if len(big) >= 2:
+        wide = (max(st_p[i, 0] + st_p[i, 2] for i in big) - min(st_p[i, 0] for i in big)) >= \
+               (max(st_p[i, 1] + st_p[i, 3] for i in big) - min(st_p[i, 1] for i in big))
+        big.sort(key=lambda i: st_p[i, 0] if wide else st_p[i, 1])
+        name = {}
+        for j, i in enumerate(big):
+            x, y, w_, h_ = (int(v) for v in st_p[i, :4])
+            letter = chr(65 + j)
+            name[i] = letter
+            parts.append({"part": letter, "bbox": [x, y, x + w_, y + h_],
+                          "where": (["left", "right"] if wide else ["top", "bottom"])[min(j, 1)] if len(big) == 2
+                          else f"{j + 1} of {len(big)}"})
+        for mt in meta.values():
+            cx, cy = mt["centroid"]
+            mt["part"] = name.get(int(lab_p[min(H - 1, max(0, cy)), min(W - 1, max(0, cx))]))
+
     # ---- areas -------------------------------------------------------------------------------------------------
     out_rooms = []
     for i in sorted(meta, key=lambda j: -meta[j]["px"]):
@@ -376,13 +400,16 @@ def room_graph(path: str, labels: list | None = None, live: bool = True, printed
     return {"path": _rel(path), "size": [W, H], "wall_px": round(wall, 1), "rooms": out_rooms, "doors": doors,
             "windows": windows, "scale": ({k: sc[k] for k in ("px_per_m", "px_per_m_80", "area_factor_80",
                                                                 "n_doors", "assumptions", "missing")} if sc else None),
-            "unassigned": dict(unassigned), "notes": notes, "printed_total": printed_total,
+            "unassigned": dict(unassigned), "notes": notes, "printed_total": printed_total, "parts": parts,
             "source": "pretrained CubiCasa5K multi-task model (Kalervo et al. 2019, CC BY-NC 4.0) segmentation; "
                       "geometry rules in experiments/r1/room_graph/graph.py"}
 
 
-def graph_text(g: dict) -> str:
-    """Compact, LLM-readable summary (one line per room) for an agent tool or the answer card."""
+def graph_text(g: dict, show_parts: bool = False) -> str:
+    """Compact, LLM-readable summary (one line per room) for an agent tool or the answer card.
+
+    show_parts=True prefixes rooms with their drawing ([A]/[B], two floors side by side). Off by default: on the
+    probe it changed 2 answers on the one two-storey v3 plan for the worse and fixed none (methods 8i)."""
     if not g:
         return "no room graph (plan not segmented)"
     anyp = any(r.get("printed") for r in g["rooms"]) or bool(g.get("printed_total"))
@@ -390,6 +417,11 @@ def graph_text(g: dict) -> str:
              f"'estimated' areas come from door widths and can be off by 50%"
              + ("; this plan prints areas, so a room without a printed area may be outside the apartment or a "
                 "segmentation fragment" if anyp else "") + "):"]
+    if g.get("parts") and show_parts:
+        lines.append(f"This sheet shows {len(g['parts'])} separate drawings, usually the floors of one building "
+                     "(the ground floor normally has the main entrance and the kitchen): "
+                     + "; ".join(f"[{p['part']}] = {p['where']} drawing, box {p['bbox']}" for p in g["parts"])
+                     + ". Each room line starts with its drawing.")
     for r in g["rooms"]:
         fx = ", ".join(f"{len(v)} {k}{'s' if len(v) > 1 else ''}" for k, v in r["fixtures"].items())
         if r.get("printed"):
@@ -401,7 +433,8 @@ def graph_text(g: dict) -> str:
         name = f" '{r['label']}'" if r.get("label") else ""
         if r.get("cls_cc5k"):
             name += f" (segmentation said {r['cls_cc5k']})"
-        lines.append(f"- {r['id']} {r['cls']}{name}{area}; {len(r['windows'])} window(s); "
+        part = f"[{r['part']}] " if r.get("part") and show_parts else ""
+        lines.append(f"- {part}{r['id']} {r['cls']}{name}{area}; {len(r['windows'])} window(s); "
                      f"doors to: {', '.join(r['door_to']) or 'none'}; open to: {', '.join(r['open_to']) or 'none'}; shares walls with: {', '.join(r['wall_to']) or 'none'}"
                      + (f"; fixtures: {fx}" if fx else "")
                      + (f"; WARNING holds {', '.join(f'{n} {k} labels' for k, n in r['merged'].items())} (probably "
