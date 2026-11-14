@@ -7,6 +7,8 @@ mapped back to ORIGINAL image pixels, so they can be used directly as Evidence(b
 from __future__ import annotations
 
 import collections
+import concurrent.futures as cf
+import contextvars
 import json
 import math
 import os
@@ -128,7 +130,7 @@ def parse_labels(text: str, w: int, h: int) -> tuple[list[Item], bool]:
 
 
 def read_labels(img: Image.Image, key: str, backend: str = "local", target_px: int = 0,
-                max_tokens: int = 1500) -> tuple[list[Item], CallLog, bool]:
+                max_tokens: int = 1500, tiled_fix: bool = True) -> tuple[list[Item], CallLog, bool]:
     """Room labels of one drawing (cached per process; R1's on-disk outputs reused when present)."""
     def run():
         log = CallLog()
@@ -148,6 +150,7 @@ def read_labels(img: Image.Image, key: str, backend: str = "local", target_px: i
             log = CallLog(text, r.prompt_tokens or 0, r.completion_tokens or 0, r.latency_s)
             if r.finish_reason == "length":
                 log.notes.append("label list truncated (max_tokens)")
+        first_out = log.tokens_out  # truncation is judged on the first (one-shot) call only
         items, looped = parse_labels(text, img.width, img.height)
         if looped:  # R1 (inbox 00:22): a retry with repetition_penalty 1.15 fixes 26 of 28 loops on dev
             try:
@@ -164,10 +167,86 @@ def read_labels(img: Image.Image, key: str, backend: str = "local", target_px: i
                 log.notes.append(f"loop retry failed: {type(e).__name__}")
         if looped:
             log.notes.append("LOOP: one label text repeated > 6 times; label counts unreliable")
+        truncated = any("truncated" in n for n in log.notes) or first_out >= max_tokens - 10
+        if tiled_fix and (truncated or looped):
+            # The one-shot list ran out of tokens / looped (24% of TRAIN drawings). Re-read in 2x2 tiles and take
+            # the classes where that helped on those TRAIN drawings (experiments/w3/tiled_labels.py, n=119):
+            # bedrooms 48 -> 58%, balconies 58 -> 70%; WC rooms (77 -> 75) and saunas (52 -> 53) keep the one-shot.
+            try:
+                t_items, t_log = read_labels_tiled(img, backend, max_tokens=max_tokens)
+                log.tokens_in += t_log.tokens_in
+                log.tokens_out += t_log.tokens_out
+                log.seconds += t_log.seconds
+                take = {"bedroom", "balcony"}
+                items = [i for i in items if i.cls not in take] + [i for i in t_items if i.cls in take]
+                log.notes.append(f"tiled re-read (one-shot list {'looped' if looped else 'truncated'}): bedroom/"
+                                 f"balcony labels from the {len(t_items)} tiled items")
+            except Exception as e:  # noqa: BLE001
+                log.notes.append(f"tiled re-read failed: {type(e).__name__}")
         return items, log
 
-    (items, log), hit = _cached(("labels", key, backend), run)
+    (items, log), hit = _cached(("labels", key, backend, tiled_fix), run)
     return items, log, hit
+
+
+def read_labels_tiled(img: Image.Image, backend: str = "local", grid: int = 2, overlap: float = 0.15,
+                      max_tokens: int = 1500) -> tuple[list[Item], CallLog]:
+    """Room labels read tile by tile (grid x grid, overlapping), for drawings whose one-shot list loops or hits
+    max_tokens. Each tile gets the same prompt at ~2x; items are mapped back to original pixels and duplicates in
+    the overlaps (same text, centres closer than ~3% of the image) are dropped."""
+    log = CallLog(notes=[f"tiled label reading {grid}x{grid}"])
+    W, H = img.size
+    tw, th = int(W / grid * (1 + overlap)), int(H / grid * (1 + overlap))
+    boxes = []
+    for gy in range(grid):
+        for gx in range(grid):
+            x0 = min(max(0, int(gx * W / grid - overlap * W / grid / 2)), max(0, W - tw))
+            y0 = min(max(0, int(gy * H / grid - overlap * H / grid / 2)), max(0, H - th))
+            boxes.append((x0, y0, min(W, x0 + tw), min(H, y0 + th)))
+    merged: list[Item] = []
+    tol = 0.03 * max(W, H)
+
+    def read_tile(b):
+        x0, y0, x1, y1 = b
+        tile = img.crop((x0, y0, x1, y1))
+        notes, t_in, t_out, secs = [], 0, 0, 0.0
+        r = llm.chat(LABEL_PROMPT, images=[_r1_image(tile)], backend=backend, max_tokens=max_tokens,
+                     max_pixels=6_000_000, cache=True)
+        _charge(r)
+        t_in, t_out, secs = r.prompt_tokens or 0, r.completion_tokens or 0, r.latency_s
+        items, looped = parse_labels(r.text, tile.width, tile.height)
+        if looped or r.finish_reason == "length":
+            r = llm.chat(LABEL_PROMPT, images=[_r1_image(tile)], backend=backend, max_tokens=max_tokens,
+                         max_pixels=6_000_000, cache=True, extra_body={"repetition_penalty": 1.15})
+            _charge(r)
+            t_in += r.prompt_tokens or 0
+            t_out += r.completion_tokens or 0
+            items2, looped2 = parse_labels(r.text, tile.width, tile.height)
+            if not looped2:
+                items, looped = items2, False
+            notes.append(f"tile {x0},{y0}: retry {'ok' if not looped2 else 'still looping'}")
+        if looped:  # keep the tile's items but drop the text that repeats
+            top = collections.Counter(i.text for i in items).most_common(1)[0][0]
+            items = [i for i in items if i.text != top]
+        return b, items, notes, t_in, t_out, secs
+
+    with cf.ThreadPoolExecutor(len(boxes)) as ex:  # tiles in parallel (latency), cost meter kept per thread
+        ctxs = [contextvars.copy_context() for _ in boxes]  # copied HERE, in the caller's thread
+        results = list(ex.map(lambda cb: cb[0].run(read_tile, cb[1]), zip(ctxs, boxes)))
+    for (x0, y0, x1, y1), items, notes, t_in, t_out, secs in results:
+        log.notes += notes
+        log.tokens_in += t_in
+        log.tokens_out += t_out
+        log.seconds = max(log.seconds, secs)
+        for i in items:
+            i.x += x0
+            i.y += y0
+            if hasattr(i, "box"):
+                i.box = [i.box[0] + x0, i.box[1] + y0, i.box[2] + x0, i.box[3] + y0]  # type: ignore[attr-defined]
+            if any(m.text == i.text and abs(m.x - i.x) < tol and abs(m.y - i.y) < tol for m in merged):
+                continue
+            merged.append(i)
+    return merged, log
 
 
 POINT_PROMPT = (

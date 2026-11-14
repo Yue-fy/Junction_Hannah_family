@@ -3,7 +3,8 @@
 #   bash experiments/s0/run_test.sh "S0 sealed test 1"
 # Runs, all on the same commit and logged to the leaderboard:
 #   test  cc5k=0  (clean headline)          test  default (cc5k=1 if the pipeline knows it; labelled inflated, D8)
-#   dev, hard, hard2 (development), hard2q (clean held-out, aggregates only, D10), hard2p ("partly seen")
+#   dev, hard, hard2 (development), hard2q (held-out, aggregates only, D10), hard2p ("partly seen"),
+#   hard2r (sealed fresh draw, D12)
 # then the scorecard of the clean test run. Writes logs to $JUNCTION_SHARED/logs/S0/test-<tag>-*.log.
 set -u
 TAG="${1:-S0 sealed test}"
@@ -39,9 +40,10 @@ run hard hard
 run hard2 hard2
 run hard2q hard2q   # held out: aggregates only, never quote wordings (D10)
 run hard2p hard2p   # partly seen
+run hard2r hard2r --judge local   # D12: sealed fresh draw (F), milestones only, aggregates only
 pred() { tr '\r' '\n' < "$L/test-$STAMP-$1.log" | sed -n 's/^predictions: //p' | tail -1; }
 CLEAN=$(pred test-cc5k0)
 DEV=$(pred dev)
 echo "scorecard: test=$CLEAN dev=$DEV"
-"$P" -m stoa.eval.scorecard "$CLEAN" --hard "$(pred hard)" --gen "$(pred hard2)" --gen "$(pred hard2q)" --out "$L/scorecard-$STAMP.md" 2>&1 | tail -40
+"$P" -m stoa.eval.scorecard "$CLEAN" --hard "$(pred hard)" --gen "$(pred hard2)" --gen "$(pred hard2q)" --gen "$(pred hard2r)" --out "$L/scorecard-$STAMP.md" 2>&1 | tail -40
 echo "done $C; scorecard in $L/scorecard-$STAMP.md"

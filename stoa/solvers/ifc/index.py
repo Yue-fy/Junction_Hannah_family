@@ -19,6 +19,7 @@ from __future__ import annotations
 import hashlib
 import os
 import pickle
+import re
 import sys
 import threading
 import time
@@ -27,7 +28,7 @@ from pathlib import Path
 
 from stoa.data import abspath
 
-INDEX_VERSION = 6
+INDEX_VERSION = 7  # 7: dims (door/window OverallWidth/Height), material layers with thickness
 
 # classes whose geometry we compute (quantities are asked about them or the viewer highlights them)
 GEOM_CLASSES = (
@@ -77,6 +78,8 @@ class Element:
     geo: Geo | None = None
     axis_length: float | None = None  # m, length of the 'Axis' representation (walls), if modelled
     materials: list[str] | None = None  # material names (layers/constituents/profiles), max 6
+    dims: dict[str, float] | None = None  # m: OverallWidth / OverallHeight (doors, windows)
+    layers: list[tuple[str, float]] | None = None  # material layer set: (material name, thickness m), outside first
 
 
 @dataclass
@@ -118,6 +121,42 @@ def effective_class(cls: str, type_cls: str | None) -> str:
             "IfcBuildingElementProxyType", "IfcTypeObject", "IfcTypeProduct", "IfcElementType"):
         return type_cls[:-4]
     return cls
+
+
+def strip_id(s: str | None) -> str | None:
+    """'Basic Wall:Exterior - Brick on CMU:139714' -> 'Basic Wall:Exterior - Brick on CMU' (Revit element ids);
+    'A:A' (Revit family:type with the same text twice) -> 'A'."""
+    if not s:
+        return s
+    s = re.sub(r"(:\d+)+$", "", s.strip()) or s.strip()
+    parts = s.split(":")
+    if len(parts) == 2 and parts[0].strip() == parts[1].strip():
+        s = parts[0].strip()
+    return s
+
+
+def type_key_fn(els: list[Element]):
+    """How to name an element's type in a breakdown. IFC-Bench answers (and people) use the name the authoring tool
+    shows: a shared element Name when names are type-like (ArchiCAD '22_Wall_DD-ytong', Revit 'Basic Wall:Exterior -
+    Brick on CMU' once the element id is stripped), else the IfcTypeObject name, else ObjectType. Names are type-like
+    when >= 70% of the elements share their name with >= 2 others (per-instance names such as 'Boden-2OG-1' x2 or
+    'EG-A-05-3' are not)."""
+    import collections
+
+    n = len(els)
+    names = [strip_id(e.name) for e in els]
+    cnt = collections.Counter(x for x in names if x)
+    shared = sum(1 for x in names if x and cnt[x] >= 3)
+    if n >= 3 and shared >= 0.7 * n:
+        def by_name(e: Element) -> str:
+            return strip_id(e.name) or strip_id(e.type_name) or strip_id(e.object_type) or "(untyped)"
+        by_name.how = "the element Name shared by its instances (Revit element ids stripped)"
+        return by_name
+
+    def by_type(e: Element) -> str:
+        return strip_id(e.type_name) or strip_id(e.object_type) or strip_id(e.name) or "(untyped)"
+    by_type.how = "the element's IfcTypeObject name (else ObjectType/Name)"
+    return by_type
 
 
 # --- cache -----------------------------------------------------------------------------------------------
@@ -309,6 +348,32 @@ def _materials(el) -> list[str] | None:
     return names[:6] or None
 
 
+def _layers(el, scale: float) -> list[tuple[str, float]] | None:
+    import ifcopenshell.util.element as ue
+
+    try:
+        m = ue.get_material(el, should_skip_usage=True)
+    except Exception:  # noqa: BLE001
+        return None
+    if m is None or not m.is_a("IfcMaterialLayerSet"):
+        return None
+    out = [((ly.Material.Name if ly.Material else "") or "", float(ly.LayerThickness or 0.0) * scale)
+           for ly in m.MaterialLayers]
+    return out or None
+
+
+def _dims(el, scale: float) -> dict[str, float] | None:
+    d = {}
+    for a in ("OverallWidth", "OverallHeight"):
+        v = getattr(el, a, None)
+        if v is not None:
+            try:
+                d[a] = float(v) * scale
+            except (TypeError, ValueError):
+                pass
+    return d or None
+
+
 def _mesh_stats(verts, faces):
     import numpy as np
     from shapely import make_valid
@@ -402,7 +467,10 @@ def build_index(path: str, geometry: bool = True, geom_classes=GEOM_CLASSES, thr
             eff_cls=effective_class(cls, t.is_a() if t is not None else None),
             storey=storey, parent=parent, qto=qto, props=props,
             axis_length=_axis_length(el, scale) if el.is_a("IfcWall") or el.is_a("IfcMember") or el.is_a("IfcBeam") else None,
-            materials=_materials(el) if not el.is_a("IfcSpace") else None)
+            materials=_materials(el) if not el.is_a("IfcSpace") else None,
+            dims=_dims(el, scale) if (el.is_a("IfcDoor") or el.is_a("IfcWindow")) else None,
+            layers=_layers(el, scale) if (el.is_a("IfcWall") or el.is_a("IfcSlab") or el.is_a("IfcRoof")
+                                          or el.is_a("IfcCovering")) else None)
     if geometry:
         _add_geometry(f, elements, geom_classes, threads)
     return IfcIndex(path=path, schema=f.schema, unit_scale=scale, project_name=proj.Name if proj else None,

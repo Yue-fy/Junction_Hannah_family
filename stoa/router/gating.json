@@ -17,6 +17,16 @@
     "vlm_direct": 8.48e-05,
     "vlm_lora": 6.1e-05
    },
+   "lora_vs_raster": {
+    "agree": [
+     29,
+     32
+    ],
+    "disagree": [
+     6,
+     8
+    ]
+   },
    "n": 40
   },
   "cubicasa5k|count:bathroom:drawing": {
@@ -35,6 +45,16 @@
     "raster": 0.0,
     "vlm_direct": 9.88e-05,
     "vlm_lora": 5.71e-05
+   },
+   "lora_vs_raster": {
+    "agree": [
+     33,
+     36
+    ],
+    "disagree": [
+     4,
+     4
+    ]
    },
    "n": 40
   },
@@ -55,6 +75,16 @@
     "vlm_direct": 3.11e-05,
     "vlm_lora": 6.59e-05
    },
+   "lora_vs_raster": {
+    "agree": [
+     29,
+     33
+    ],
+    "disagree": [
+     5,
+     7
+    ]
+   },
    "n": 40
   },
   "cubicasa5k|count:door:drawing": {
@@ -73,6 +103,16 @@
     "raster": 0.0,
     "vlm_direct": 2.43e-05,
     "vlm_lora": 6.31e-05
+   },
+   "lora_vs_raster": {
+    "agree": [
+     2,
+     5
+    ],
+    "disagree": [
+     13,
+     35
+    ]
    },
    "n": 40
   },
@@ -93,6 +133,16 @@
     "vlm_direct": 0.0001618,
     "vlm_lora": 6.05e-05
    },
+   "lora_vs_raster": {
+    "agree": [
+     39,
+     40
+    ],
+    "disagree": [
+     0,
+     0
+    ]
+   },
    "n": 40
   },
   "cubicasa5k|count:sauna:drawing": {
@@ -111,6 +161,16 @@
     "raster": 0.0012442,
     "vlm_direct": 0.0001203,
     "vlm_lora": 6.76e-05
+   },
+   "lora_vs_raster": {
+    "agree": [
+     33,
+     33
+    ],
+    "disagree": [
+     6,
+     7
+    ]
    },
    "n": 40
   },
@@ -131,6 +191,16 @@
     "vlm_direct": 3.04e-05,
     "vlm_lora": 6.29e-05
    },
+   "lora_vs_raster": {
+    "agree": [
+     23,
+     30
+    ],
+    "disagree": [
+     3,
+     10
+    ]
+   },
    "n": 40
   },
   "cubicasa5k|count:sink:drawing": {
@@ -149,6 +219,16 @@
     "raster": 0.001253,
     "vlm_direct": 2.82e-05,
     "vlm_lora": 6.23e-05
+   },
+   "lora_vs_raster": {
+    "agree": [
+     22,
+     28
+    ],
+    "disagree": [
+     7,
+     12
+    ]
    },
    "n": 40
   },
@@ -169,6 +249,16 @@
     "vlm_direct": 2.58e-05,
     "vlm_lora": 5.95e-05
    },
+   "lora_vs_raster": {
+    "agree": [
+     36,
+     36
+    ],
+    "disagree": [
+     3,
+     4
+    ]
+   },
    "n": 40
   },
   "cubicasa5k|count:wc:drawing": {
@@ -187,6 +277,16 @@
     "raster": 0.0012855,
     "vlm_direct": 2.42e-05,
     "vlm_lora": 5.86e-05
+   },
+   "lora_vs_raster": {
+    "agree": [
+     27,
+     30
+    ],
+    "disagree": [
+     7,
+     10
+    ]
    },
    "n": 40
   },
@@ -207,6 +307,16 @@
     "vlm_direct": 2e-05,
     "vlm_lora": 5.58e-05
    },
+   "lora_vs_raster": {
+    "agree": [
+     32,
+     35
+    ],
+    "disagree": [
+     3,
+     5
+    ]
+   },
    "n": 40
   },
   "cubicasa5k|count:window:drawing": {
@@ -225,6 +335,16 @@
     "raster": 0.0,
     "vlm_direct": 3.08e-05,
     "vlm_lora": 6.97e-05
+   },
+   "lora_vs_raster": {
+    "agree": [
+     1,
+     4
+    ],
+    "disagree": [
+     5,
+     36
+    ]
    },
    "n": 40
   },
