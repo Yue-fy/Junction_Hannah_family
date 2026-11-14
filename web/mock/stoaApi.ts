@@ -508,6 +508,31 @@ function askUpload(b: { path: string; question?: string; solver?: string; solver
   p.catch(() => uploadAnswers.delete(key));
   return p;
 }
+/** Knowledge graph of an upload: W1's stoa.kg.links on the absolute path (a sheet uploaded with its model is
+ * 'ifc_models' since F 749e5c3, so it gets the model, storeys and rooms), with the temp folder renamed to the
+ * browser's upload/<id>. Empty for a lone file the graph knows nothing about. Cached per path (content-named folder). */
+const uploadKgCache = new Map<string, Promise<Record<string, unknown>>>();
+function uploadKg(virtual: string, abs: string) {
+  if (!uploadKgCache.has(virtual)) {
+    const folder = path.dirname(abs);
+    const vdir = virtual.split("/").slice(0, -1).join("/");
+    const rename = (x: unknown): unknown => typeof x === "string" ? (x.startsWith(folder) ? vdir + x.slice(folder.length) : x)
+      : Array.isArray(x) ? x.map(rename) : x && typeof x === "object" ? Object.fromEntries(Object.entries(x).map(([k, v]) => [k, rename(v)])) : x;
+    uploadKgCache.set(virtual, new Promise((resolve) => {
+      execFile(PY, ["-c", KG_PY, abs], { cwd: KG_REPO, timeout: 120_000, maxBuffer: 64 << 20, env: { ...process.env, STOA_DATA: DATA } },
+        (err, stdout) => {
+          try {
+            if (err) throw err;
+            resolve(rename(JSON.parse(stdout)) as Record<string, unknown>);
+          } catch (e) {
+            uploadKgCache.delete(virtual);
+            resolve({ path: virtual, nodes: [], checks: [], files: [], kg_error: String((e as Error).message ?? e).split("\n").filter(Boolean).slice(-1)[0] });
+          }
+        });
+    }));
+  }
+  return uploadKgCache.get(virtual)!;
+}
 /** Requests about an uploaded file, answered here (never forwarded: the API would refuse the path). */
 async function handleUpload(req: Connect.IncomingMessage, res: http.ServerResponse, route: string, url: URL): Promise<boolean> {
   if (route === "/upload" && req.method === "POST") {
@@ -543,7 +568,10 @@ async function handleUpload(req: Connect.IncomingMessage, res: http.ServerRespon
     return true;
   }
   if (route === "/questions") return send(res, 200, { questions: [] }, "disk"), true; // the browser offers general ones
-  if (route === "/kg") return send(res, 200, { path: p, nodes: [], checks: [], files: [] }, "disk"), true;
+  if (route === "/kg") {
+    const abs = uploadAbs(p!);
+    return send(res, 200, abs ? await uploadKg(p!, abs) : { path: p, nodes: [], checks: [], files: [] }, "kg"), true;
+  }
   if (route === "/rooms") return send(res, 404, { detail: "room graph: CubiCasa dataset plans only" }, "disk"), true;
   if (route === "/ask" && req.method === "POST") {
     const raw = await readBody(req);
