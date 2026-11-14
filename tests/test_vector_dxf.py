@@ -441,3 +441,87 @@ def test_dxf_price_times_count_and_outdoor_exclusion():
     assert _same_number("1,200", 1200) and _same_number("1.200", 1200) and not _same_number("12", 1200)
     assert _outdoor_only_exclusion("What is the net floor area of apartment A in m², excluding balconies, loggias and terraces?")
     assert not _outdoor_only_exclusion("What is the area of all rooms excluding apartment A?")
+
+
+def test_dxf_tableqa_substitute_class_guard():
+    """Q 09:20: 'How many escalators are shown?' -> code counted kind == 'door' (13 @0.45): flagged."""
+    from stoa.solvers.vector.dxf_solver import _substitute_kind
+    assert _substitute_kind("How many escalators are shown on this floor plan?",
+                            "answer = len(objects[objects['kind'] == 'door'])") == "door"
+    assert _substitute_kind("Wie viele Türen gibt es?", "answer = len(objects[objects.kind == 'door'])") is None
+    assert _substitute_kind("How many sanitary fixtures are there?",
+                            "answer = len(objects[objects['kind'].isin(['toilet', 'washbasin'])])") is None
+    assert _substitute_kind("How many sinks?", "answer = len(objects[objects['kind'] == 'washbasin'])") is None
+
+
+def test_pdftext_pairs_paren_label_with_its_dimension(tmp_path):
+    """'35' - 0"' above the dimension line and '(FRONT YARD SETBACK)' below it (~1 line height apart) are one group;
+    an unrelated line at the same gap is not joined."""
+    import pymupdf
+
+    from stoa.solvers.vector.pdftext import text_groups
+
+    doc = pymupdf.open()
+    page = doc.new_page(width=800, height=600)
+    for x, y, t in ((300, 100, "35' - 0\""), (262, 120, "(FRONT YARD SETBACK)"), (300, 300, "CONCRETE"),
+                    (290, 320, "SIDEWALK EDGE")):
+        page.insert_text((x, y), t, fontsize=9)
+    p = tmp_path / "s.pdf"
+    doc.save(str(p))
+    texts = [g.text for g in text_groups(str(p))]
+    assert "35' - 0\" / (FRONT YARD SETBACK)" in texts, texts
+    assert "CONCRETE" in texts and "SIDEWALK EDGE" in texts, texts
+
+
+def test_sheettext_lookup_expands_partial_dimension(monkeypatch):
+    """The model answered '0"' (the inches part) for "10' - 0\" REAR SETBACK": the whole printed dimension is the answer."""
+    import json as _json
+    from types import SimpleNamespace
+
+    import stoa.llm
+    from stoa.solvers.vector import sheettext
+
+    reply = {"op": "lookup", "items": [{"row": 7, "label": "REAR SETBACK", "value": "0"}], "answer": "0\"", "unit": "none"}
+    monkeypatch.setattr(stoa.llm, "chat", lambda *a, **k: SimpleNamespace(text=_json.dumps(reply)))
+    rows = [{"id": 7, "view": None, "text": "10' - 0\" REAR SETBACK"}, {"id": 8, "view": None, "text": "SIDE YARD (0ft)"}]
+    res = sheettext.ask("What rear setback is shown on the site plan?", rows, context="sheet A000 - SITE PLAN")
+    assert res["value"] == "10' - 0\"", res
+
+
+def test_schedule_assembly_multiplier_is_deterministic():
+    """D22: 'every N-wide window assembly consists of N ESDH3066 units' = sum of k x Count over the k-WIDE rows."""
+    import pandas as pd
+
+    from stoa.solvers.vector.schedule_solver import _assembly_total
+
+    df = pd.DataFrame({"row_id": [0, 1, 2], "Mark": ["QQ", "SS", "VV"],
+                       "Type": ["1-WIDE (TEMP ALL) ESDH3066", "2-WIDE (TEMP LOW) ESDH3066", "3-WIDE ESDH3066"],
+                       "Count": [16, 118, 9]})
+    q = "If every N-wide window assembly consists of N ESDH3066 window units, how many ESDH3066 units are needed?"
+    total, rows, formula = _assembly_total(q, {"t2_window_schedule": df, "notes": pd.DataFrame()})
+    assert total == 16 + 2 * 118 + 3 * 9 and rows == [0, 1, 2], formula
+    assert _assembly_total("How many windows of type SS are scheduled?", {"t2": df}) is None
+    assert _assembly_total("If every N-wide assembly consists of N XYZ999 units, how many units?", {"t2": df}) is None
+
+
+def test_room_net_prefers_printed_area_when_polygon_disagrees():
+    """Totals follow the printed room areas when the DXF polygon is > 2% off (site1677 Treppenhaus 35.38 vs printed 29.03)."""
+    from shapely.geometry import box
+
+    from stoa.solvers.vector.floor import Room
+
+    r = Room(idx=0, poly=box(0, 0, 1, 1), bbox=(0, 0, 1, 1), area=35.38, number="2.10", name="Treppenhaus",
+             printed_area=29.03)
+    assert r.net == 29.03
+    r.printed_area = 35.2  # within 2%: the polygon stays
+    assert r.net == 35.38
+    r.printed_area = None
+    assert r.net == 35.38
+
+
+def test_dxf_plan_vs_dxf_question_words():
+    from stoa.solvers.vector.dxf_solver import DxfSolver as D
+
+    q = "Do this floor plan and its DXF file agree on the number of doors?"
+    assert D.AGREE_Q.search(q) and D.DXF_Q.search(q)
+    assert not D.DXF_Q.search("How many doors are shown on this floor plan?")
