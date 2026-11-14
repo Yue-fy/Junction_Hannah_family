@@ -93,14 +93,14 @@ headless chromium, numbers from `redteam/REPORT.md`). **Say only this (≈ 22 s,
 > "We tried to break it ourselves: over a thousand adversarial questions — rewordings, nine languages, rotated scans,
 > rooms that don't exist, renamed files, a judge's own upload. Every confident mistake had one cause: we checked the
 > number, not that it answered what was asked. Each bar is a round of fixes; the tall ones on the right are this
-> morning's new attacks. On the first 600, all 398 confident answers are right — and it never just refuses."
+> morning's new attacks. On the first 600, all 397 confident answers are right — and it never just refuses."
 (The bars from 09:28 on count only the newest families — uploads, links, lists, rankings, renamed files, relative
 storeys — on builds where every older family is at 0: 14 / 12 / 19 / 18, then 10 and 5 with the 10:47 / 10:54 owner
-heads, 6 on the final candidate b656826: CubiCasa uploads (5) and one agent confidence flake (297 at 0.95 or 0.145). Redraw after the final
+heads, 6 on b656826, **5 on the final night 637a6df: all five are CubiCasa uploads without the style (bug 26)**. Redraw after the final
 build: `python3 experiments/q/bar_count.py MAIN_RUN [V27_RUN] --v26 V26_RUN` gives the bar.)
-(Numbers by stage build — say the line for the build on stage: **night b656826 (11:04, final candidate):
-"… all 398 confident answers are right, and no confident answer to a trick question"** (run
-`…-110445-…-all-b656826-0aa9`; 433 of 433 on v1–v20); pre-merge #11: "… all 396"; pre-merge #10: "… all 398"; night 6025963: "… all 402" (`…-103834-…-all-6025963-f05a`);
+(Numbers by stage build — say the line for the build on stage: **the final night 637a6df (11:13):
+"… all 397 confident answers are right, and no confident answer to a trick question"** (run
+`…-111324-…-all-637a6df-538a`; 432 of 432 on v1–v20); b656826: "… all 398"; pre-merge #11: "… all 396"; pre-merge #10: "… all 398"; night 6025963: "… all 402" (`…-103834-…-all-6025963-f05a`);
 41188a4: "… all 379"; **7a78559 (09:50): "… all 378"** (run `…-094023-…-all-7a78559-2466`; 413 of 413 on
 v1–v20); 0ffd81b: "… all 364" (run `…-092751-…-all-0ffd81b-ba15`); be57171 / 31397eb: "609 … all 360"; bb94fe4 (test 2):
 "494 … 283 of 290"; c1d6149: "564 … 338 of 339"; 62754aa: "609 … 337 of 339". "Never just refuses": 0 of 647
@@ -174,8 +174,8 @@ On older builds more of these break: see the git history of this file (08:20 and
   **On the 11:15 build (pre-merge #11) also right:** "How many doors are on the floor above this one?" (42), "… the
   floor below this one?" (0 — the foundation), "Which floor has no MAGAMISTUBA?" (1.korrus), "Which floor has the
   biggest room?" (1.korrus), "Quale piano ha il maggior numero di porte?" (frigento: Piano 1). **Steer away from:**
-  "How many windows does the floor with the most doors have?" (agent: 297 at 0.95 or 0.145 — flaky).
-  ("The storey directly above this one" → 60 is right on b656826.) Also "How big is the laundry room?" (870 at 0.30) and "the same area as room X" (returns X's area). If one
+  nothing new from tonight's families on 637a6df ("the storey directly above this one" → 60; "How many windows does
+  the floor with the most doors have?" is capped, no longer 297 at 0.95). Also "How big is the laundry room?" (870 at 0.30) and "the same area as room X" (returns X's area). If one
   of these comes up, open the evidence and say it: "the trace shows what it computed — this is a known failure, it's
   on the failure slide."
 - Esplanades rooms are labelled in Estonian; English room words work and the card says which labels it used:

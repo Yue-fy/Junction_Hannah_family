@@ -6,7 +6,10 @@ Builds on F's `hard` (translations/paraphrases/compositions/ft²) and `hard2` (n
 don't. The first 205 rows start from dev questions the pipeline had **right at conf ≥ 0.8**, so a failure there is
 caused by the perturbation, not by the drawing.
 
-## Now (11:13) — the short version
+## Now (11:21) — the short version
+- **Final night 637a6df: v1–v18 397/397 at conf ≥ 0.8 right, 0 false premises at ≥ 0.8; all 1015 rows 607/616; the
+  259 IFC questions on renamed files 213/213 at ≥ 0.8; 1 won / 0 lost vs b656826; demo pre-flight 23/23 unchanged.
+  The only confident misses left on tonight's 27 families: 5 CubiCasa uploads (bug 26).**
 - **Final candidate night b656826: v1–v18 398/398 at conf ≥ 0.8 right, 0 false premises at ≥ 0.8; all 1015 rows
   608/618; the 259 IFC questions on renamed files 213/213 at ≥ 0.8; 11 won / 2 lost vs 6025963 (both < 0.8); demo
   pre-flight 23/23 unchanged.** Every family written tonight is at 0 confident misses except CubiCasa uploads (5, bug
@@ -980,7 +983,15 @@ v21 "3rd floor level" (21.92 at 0.85 → 22'-5" at 0.65), the plan-without-IFC "
 → 50 at 0.97; Italian "Quante finestre … non sono disegnate …?" → 55 at 0.88), both caught by W4's 87eaf64 shape guard
 or not (pre-merge check #10 below).
 
-## Night b656826 (11:04, S0 cycle 43 round 2) — the final candidate
+## Night 637a6df (11:13, S0 cycle 43 round 3) — the final night
+Runs `20261114-111324-pipeline-all-637a6df-538a` (1015 rows), `-111324-…-v26_hash-637a6df-41e6`, demo pre-flight
+`-111324-…-live_questions-0abb` (23/23 unchanged). **v1–v18 397/397 at ≥ 0.8 right, 0 false premises at ≥ 0.8;
+v1–v20 432/432; 1015 rows 607/616; renamed-file IFC rows 242/251, 213/213 at ≥ 0.8. vs b656826 1 won / 0 lost; vs
+6025963 11 won / 1 lost (< 0.8).** The agent's 297 at 0.95 is gone (W4 3e08025 caps it). **Left at ≥ 0.8 on all 27
+families: 5 CubiCasa upload rows (bug 26)** (+ the same plan's 4 dataset-path / styled controls: the LoRA reads 2
+bedrooms, gold 3). Chart bar 5. Cost vs b656826 flat (LLM calls/Q 1.129 → 1.147, tokens in/Q 2,360 → 2,399).
+
+## Night b656826 (11:04, S0 cycle 43 round 2) — the candidate before round 3
 Runs `20261114-110445-pipeline-all-b656826-0aa9` (1015 rows), `-110445-…-v26_hash-b656826-3fa1` (renamed files),
 `-110445-…-v2527-b656826-ae94` (v25 + v27 alone), demo pre-flight `-110655-…-live_questions-1903` (23/23 unchanged).
 **v1–v18 398/398 at ≥ 0.8 right, 0 false premises at ≥ 0.8; v1–v20 433/433; 1015 rows 608/618; renamed-file IFC rows
