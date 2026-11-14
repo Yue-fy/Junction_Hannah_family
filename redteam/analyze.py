@@ -68,8 +68,8 @@ def risk_coverage(rows):
     return aurc / max(n, 1), pts
 
 
-YES = re.compile(r"^\W*(yes|kyllä|joo|ja|jah|jo|oui|sì|si|true)\b", re.I)
-NO = re.compile(r"^\W*(no|ei|nej|nein|non|false)\b", re.I)
+YES = re.compile(r"^\W*(yes|kyllä|joo|ja|jah|jo|oui|sì|sí|si|true)\b", re.I)
+NO = re.compile(r"^\W*(no|ei|nej|nein|non|nee|nei|false)\b", re.I)
 
 
 def yesno_ok(value, gold):

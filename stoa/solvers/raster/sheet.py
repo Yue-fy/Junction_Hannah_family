@@ -103,7 +103,7 @@ def vlm_kinds(path: str, backend: str = "local", max_side: int = 1024) -> dict |
 
 def cached_layer(path: str) -> T.TextLayer | None:
     """The text layer if it was read before (memory or disk); never triggers a 20-60 s cold read."""
-    key = f"{path}|local|1100"
+    key = f"{path}{T.file_tag(path)}|local|1100"  # = text_layer's memory key
     if key in T._mem:
         return T._mem[key]
     if T._disk_key(path, 1100, "local").exists():

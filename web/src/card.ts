@@ -198,6 +198,57 @@ export function multiPart(a: Answer): { v: string; u: string; q: string }[] | nu
   });
 }
 
+/** Split at `sep` outside parentheses ("2.korrus (MAGAMISTUBA (23-2)); 3.korrus (…)" → 2 items; "no (…; …)" → 1). */
+function splitTop(s: string, sep: string): string[] {
+  const out: string[] = [];
+  let depth = 0, cur = "";
+  for (const ch of s) {
+    if (ch === "(") depth++;
+    else if (ch === ")") depth = Math.max(0, depth - 1);
+    if (ch === sep && depth === 0) { out.push(cur); cur = ""; } else cur += ch;
+  }
+  return [...out, cur].map((x) => x.trim()).filter(Boolean);
+}
+const normKey = (s: string) => ` ${s.toLowerCase().normalize("NFC").replace(/[^\p{L}\p{N}]+/gu, " ").trim()} `;
+
+export interface SetRow { name: string; detail: string; ev: number; where: string; other: boolean }
+/** Set answers (W1's IFC lists, kg_qa lookups): "4 rooms with area > 50 m2: KORIDOR (119) (63.84 m2); …",
+ * "2.korrus (60 rooms); 3.korrus (60 rooms)", "2.korrus (MAGAMISTUBA (23-2)); …" → an optional header and one row
+ * per item, each linked to the evidence that names it (room label / storey in the note, or the storey's sheet), so a
+ * click shows that item. Needs ≥ 2 items of the form "name (detail)"; other text answers return null. */
+export function setAnswer(a: Answer, currentFile = ""): { head: string; rows: SetRow[] } | null {
+  if (typeof a.value !== "string" || a.value.includes("\n")) return null;
+  let v = a.value.trim();
+  let head = "";
+  const h = v.match(/^([^:;()]{3,80}):\s+(.+)$/);
+  if (h) { head = h[1].trim(); v = h[2]; }
+  const items = splitTop(v, ";");
+  if (items.length < 2 || items.length > 60) return null;
+  const parsed = items.map((it) => it.match(/^(.{1,60}?)\s*\(((?:[^()]|\([^()]*\))+)\)$/));
+  if (parsed.some((m) => !m)) return null;
+  const ev = a.evidence ?? [];
+  const hay = ev.map((e) => normKey(`${e.note ?? ""} ${e.file.split("/").pop() ?? ""}`));
+  const m2 = (s: string) => s.replace(/\bm2\b/g, "m²").replace(/\bm3\b/g, "m³");
+  const rows = parsed.map((m) => {
+    const name = m![1].trim(), detail = m![2].trim();
+    const keys = [normKey(name), normKey(detail)].filter((k) => k.trim().length >= 2);
+    const hits = keys.map((k) => ev.map((_, i) => i).filter((i) => hay[i].includes(k))).find((x) => x.length) ?? [];
+    const pick = hits.find((i) => ev[i].bbox && ev[i].file === currentFile) ?? hits.find((i) => ev[i].bbox) ?? hits[0] ?? -1;
+    const has2D = hits.some((i) => ev[i].bbox), has3D = hits.some((i) => ev[i].ifc_guid)
+      || hits.some((i) => ev[i].bbox && ev.some((e) => e.ifc_guid && !e.bbox && e.ifc_guid === ev[i].ifc_guid));
+    return { name: m2(name), detail: m2(detail), ev: pick, where: has2D && has3D ? "2D + 3D" : has2D ? "2D" : has3D ? "3D" : "",
+      other: pick >= 0 && !!ev[pick].bbox && ev[pick].file !== currentFile };
+  });
+  return { head: m2(head), rows };
+}
+
+function setHtml(s: { head: string; rows: SetRow[] }) {
+  const linked = s.rows.filter((r) => r.ev >= 0).length;
+  return `<span class="rich-lbl"${linked ? ` title="Click an item to see it on the drawing / in the model"` : ""}>List · ${s.rows.length} item${s.rows.length === 1 ? "" : "s"}${linked ? " · click to see" : ""}</span>
+    <div class="value set">${s.head ? `<div class="set-head">${esc(s.head)}</div>` : ""}
+    ${s.rows.map((r) => `<div class="set-row${r.ev >= 0 ? " linked" : ""}"${r.ev >= 0 ? ` data-i="${r.ev}"` : ""} title="${r.ev >= 0 ? `${esc(r.name)}: ${esc(r.detail)}. Click to show it${r.other ? " (opens the sheet that draws it)" : ""}` : "No evidence names this item"}"><span class="sn">${esc(r.name)}</span><span class="sd">${esc(r.detail)}</span><span class="w">${r.where}${r.other ? " ↗" : ""}</span></div>`).join("")}</div>`;
+}
+
 export function yesNoBasis(a: Answer): string {
   if (typeof a.value !== "boolean" && (typeof a.value !== "string" || !/^(yes|no|true|false|ja|nein|oui|non|kyllä|ei|si|sì)$/i.test(a.value.trim()))) return "";
   const OP = String.raw`(>=|<=|≥|≤|>|<|==|=|!=|≠)`;
@@ -634,6 +685,7 @@ export function renderCard(el: HTMLElement, a: Answer, opts: CardOpts) {
   const unit = unitLabel(a.unit);
   const isText = typeof a.value === "string";
   const rich = isText && (String(a.value).length > 120 || String(a.value).includes("\n"));
+  const set = isText && !multiPart(a) && !a.checked?.length ? setAnswer(a, opts.currentFile) : null;
   const ev = a.evidence ?? [];
   const groups = groupEvidence(ev);
   const shown = groups.slice(0, 80);
@@ -641,8 +693,9 @@ export function renderCard(el: HTMLElement, a: Answer, opts: CardOpts) {
 
   el.className = `card answer ${a.value === null ? "refused" : ""}`;
   el.innerHTML = `
-    <div class="value-row${rich ? " rich" : ""}">
-      ${rich && a.checked?.length ? checkedHtml(a, String(a.value))
+    <div class="value-row${rich || set ? " rich" : ""}">
+      ${set ? setHtml(set)
+        : rich && a.checked?.length ? checkedHtml(a, String(a.value))
         : rich ? `<span class="rich-lbl">Text answer · ${String(a.value).split(/\n+/).filter((l) => l.trim()).length} line(s)</span><div class="value text rich">${richText(String(a.value))}</div>`
         : multiPart(a) ? `<div class="value parts">${multiPart(a)!.map((r) => `<div class="part"><span class="pv">${esc(r.v)}${r.u ? `<span class="unit">${esc(unitLabel(r.u))}</span>` : ""}</span><span class="pq">${esc(r.q)}</span></div>`).join("")}</div>`
         : `<div class="value ${isText ? "text" : ""} ${isText && String(a.value).length > 40 ? "long" : ""}">${esc(fmtValue(a))}${unit ? `<span class="unit">${esc(unit)}</span>` : ""}${rangeHtml(a)}${yesNoBasis(a)}</div>`}
@@ -675,6 +728,10 @@ export function renderCard(el: HTMLElement, a: Answer, opts: CardOpts) {
       <ul class="evidence">${shown.map((g, n) => evLabel(ev, g, n + 1, opts.describeGuid, asks, /kg_qa/.test(a.solver ?? "") ? [100, 120, 160] : [])).join("")}${groups.length > shown.length ? `<li class="more">+ ${groups.length - shown.length} more</li>` : ""}</ul></details>
   `;
   el.querySelectorAll<HTMLElement>(".ev-item").forEach((li) => li.addEventListener("click", () => opts.onEvidence(Number(li.dataset.i))));
+  el.querySelectorAll<HTMLElement>(".set-row[data-i]").forEach((r) => r.addEventListener("click", () => {
+    el.querySelectorAll(".set-row").forEach((x) => x.classList.toggle("sel", x === r));
+    opts.onEvidence(Number(r.dataset.i));
+  }));
   el.querySelectorAll<HTMLElement>(".subq").forEach((b) => {
     b.addEventListener("click", () => opts.onAsk?.(b.dataset.q!));
     b.addEventListener("keydown", (e) => e.key === "Enter" && opts.onAsk?.(b.dataset.q!));

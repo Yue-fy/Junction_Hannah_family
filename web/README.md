@@ -144,6 +144,17 @@ rooms the question names (printed code such as '(OH)' first, else every region o
 from R1's room graph, no model call. A ✓/✗ line only with a verdict: the answer names a marked room, a door of the
 marked room leads to the room the answer names (that room is boxed too), or a count equals the number of rooms.
 
+**Set answers** (lists: "Which rooms on '1.korrus' are larger than 50 m²?", "On which floors is there a room called
+MAGAMISTUBA?", "Which floors have more than 55 rooms?"; `setAnswer` in `src/card.ts`): a value of the form
+"[header: ]name (detail); name (detail); …" is shown as a header plus one row per item (name, value, 2D/3D). A
+row click shows that item: its box on this sheet, or the sheet that draws it (↗) is opened, and it is framed in 3D.
+Rows are linked to evidence by the room label / storey name in the note or the storey's sheet name.
+
+**Harder questions** (example menu, top group on ifc_models plans and Swiss PDFs): question kinds no dataset template
+covers, each checked end to end through the API: a room list by area, "do the plan and the model agree on the
+windows on S?", "how many windows on S are in the model but not drawn?", a given door price, doors + windows on S
+(S = the plan's storey from the knowledge graph); Swiss: doors minus windows, a German sum, the total room area.
+
 **Compared candidates** (ranked answers such as "which storey has the most doors?"): when the trace has one value
 per candidate and an "argmax/argmin over …" line, the card shows a bar per candidate with the chosen one highlighted.
 

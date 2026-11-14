@@ -1,35 +1,35 @@
 # Red team report (agent Q) — can we break the pipeline?
 
-**704 adversarial questions** (`redteam/questions.jsonl`, built by `redteam/build.py`, analysed by `redteam/analyze.py`),
-in twenty-one families written one after another tonight; each new family was aimed at the mechanism the last one exposed.
+**957 adversarial questions** (`redteam/questions.jsonl`, built by `redteam/build.py`, analysed by `redteam/analyze.py`),
+in twenty-four families written one after another tonight; each new family was aimed at the mechanism the last one exposed.
 Builds on F's `hard` (translations/paraphrases/compositions/ft²) and `hard2` (new operators) and covers what those
 don't. The first 205 rows start from dev questions the pipeline had **right at conf ≥ 0.8**, so a failure there is
 caused by the perturbation, not by the drawing.
 
-## Now (09:25) — the short version
-- **Latest night 31397eb (= be57171 on every row): on the 609 questions v1–v18, 360 of 360 scored answers at confidence
-  ≥ 0.8 are right**; 3 false premises still answered confidently ("whole building" on a single-floor plan). **Pre-merge
-  #9 (31397eb + the 09:10–09:20 owner heads): 364 of 364 right and 0 confident false premises — the first build tonight
-  with no confident miss on v1–v18**; 11 won / 2 lost (both below 0.5). Cost $0.15 per 1,000 adversarial questions.
-- **Three new families this hour (95 questions, written before any run), 12 confident misses on night, 9 on #9:**
-  v19 *list answers* — plain "which rooms are larger / smaller than X m²" lists are right on 4 IFC models in EN/ET/DE;
-  a room type or the counted thing is dropped at 0.90–0.92 (bug 22, W1). v20 *link questions in new wordings* — night
-  6/19; with W4's route to R1's kg_qa (#9) 13/19, but "how many of the model's windows does this drawing not show?" →
-  297 at 0.98 (W1) and two sheet answers that deny the sheet their own evidence shows (bug 23, R1). v21 *sheet text
-  without the "On sheet X of Y" hint* — 41/57 night, 44/57 on #9 (2 confident misses: a dimension-string row, a
-  label echo; W2).
+## Now (10:00) — the short version
+- **Latest night 0ffd81b (S0 cycle 39: every owner head of 09:25): on the 609 questions v1–v18, 364 of 364 answers at
+  confidence ≥ 0.8 are right and 0 false premises get a confident answer — the pre-merge #9 prediction held.** On all
+  704 rows v1–v21: 407 of 409 confident answers right (the 2 misses are W2's known sheet-text rows); v19 lists 19/19,
+  v20 link wordings 19/19 (were 6/19). 21 won / 0 lost vs night 31397eb. $0.18 per 1,000 adversarial questions.
+- **Three new families this hour (253 questions, written before any run):** v22 *the demo's upload* — a judge's own
+  file: an IFC uploaded alone 7/7, the 'Nordic apartment plan' style = the dataset path exactly; a plain PNG upload
+  loses the CubiCasa per-concept gate, and at dev size (800 questions) **confident misses double, 24 → 46**, while
+  accuracy moves 607 → 594 (bug 26, W4). v23 *links, round 3* — 18/21, but a "fewer than" question gets the "agree?"
+  polarity and "which sheet shows the ground floor?" names the current sheet (bug 25, R1); **"ground floor" /
+  "Erdgeschoss" on a 1.OG sheet → the 1.OG wall count at 0.98** (bug 24, W1). v24 *lists, round 2* (duplex model,
+  ties, "all but") — 9/11, 0 confident misses.
 - **Stoa point 3:** 0 bare refusals in 647 answers; every wrong answer carries an assumption or a "missing" line —
   but 108 of those lines are process notes ("no located evidence from this solver"), not what the documents lack.
 - **Fixed tonight, verified on the same rows:** false premises (7/24 confident → 0/24, and the one-floor "whole
-  building" on #9), storeys in everyday words, "whole building" in 9 languages, "1,200 euros", "how many floors",
+  building"), storeys in everyday words, "whole building" in 9 languages, "1,200 euros" (IFC), "how many floors",
   "how many X and how many Y" in every language, storey heights and distances, size comparisons, twin-less PNG areas,
-  plan-vs-model "do they agree?" (v17 2/9 → 7/9 night → 9/9 with kg_qa). Every owner commit since 08:14 was checked
-  before or right after S0 merged it (pre-merge #3–#9).
+  plan-vs-model links (v17 2/9 → 9/9, v20 6/19 → 19/19), list answers (v19 4 confident misses → 0). Every owner
+  commit since 08:14 was checked before or right after S0 merged it (pre-merge #3–#9).
 - **Holds:** rewording, typos, injections, rotated/gray/low-res images, HABS scans in other languages and rotated,
-  plans handed over as a lone PDF. **Weak but not confident:** door/window counts on PNG-only plans.
-- Demo: the 21 script/tour questions give the same answers on bb94fe4, c1d6149, 62754aa and be57171; two new demo
-  questions work ("Do the floor plan and the IFC model agree on the number of windows?" → "no: 55 vs 52 drawn",
-  "Which rooms are larger than 50 m²?") — `demo/LIVE-CHECK.md`.
+  plans handed over as a lone PDF, an IFC model uploaded under another name. **Weak but not confident:** door/window
+  counts on PNG-only plans, a plan sheet uploaded without its model (0/5, mean conf 0.30, one 0-stairs at 0.89).
+- Demo: the 23 script/tour questions give the same answers on bb94fe4, c1d6149, 62754aa, be57171 and 0ffd81b
+  (`demo/LIVE-CHECK.md`).
 
 ## Verdict (08:20, night bb94fe4 = the test-2 build) — the detailed version
 1. **What holds.** Rewording, casing, extra context, distractor numbers, typos, prompt injection, rotated / gray /
@@ -841,6 +841,65 @@ unit U120 → U111. The hinted version has its own confident miss: "elevation of
 (gold 22'-5" = 22.42 ft; no hint: right). A judge will not type the sheet title, so the no-hint numbers are the ones
 that count.
 
+## Night 0ffd81b (09:28) = 31397eb + every owner head of 09:25 (S0 cycle 39 round 1)
+Run `20261114-092751-pipeline-all-0ffd81b-ba15` (704 rows v1–v21): **609 rows 95.4 % scored, 364 of 364 at ≥ 0.8
+right, 0 false premises at ≥ 0.8** (= pre-merge #9 exactly); 647 rows 397/397 at ≥ 0.8; 704 rows 94.1 % scored,
+407 of 409 at ≥ 0.8 right; $0.179 per 1,000. **vs 31397eb: 21 won, 0 lost** — the 3 single-floor "whole building" rows
+→ 0.50, all 8 list/link rows of bug 22/23 and the "297 windows not drawn" row (now "3" at 0.80). vs #9: 13 won, 1 lost
+(the dxf "1,200 euros" row flakes again, 91,200 at 0.45, gold 43,200; D20 → W2). v19 19/19, v20 19/19, v21 44/57 with
+the same 2 confident misses as #9 (W2's table-QA rows). Demo pre-flight: 23 rows, every answer unchanged
+(`demo/LIVE-CHECK.md`).
+
+## v22 (09:40): the demo's "＋ Your own drawing" upload — 216 Qs (W5 asked for it)
+The hidden set is "different drawings". W5's upload stores a visitor's file as `<tmp>/stoa-uploads/<sha256[:12]>/<name>`
+(or under `…/data/cubicasa5k/` with the optional style "Nordic apartment plan"). Same bytes, renamed `plan.png` /
+`model.ifc` / `plan.pdf`, each question also asked on the dataset path in the same run (control). Run
+`20261114-093009-pipeline-v22-3690`.
+
+| variant | rows | right | at ≥ 0.8 (right) | note |
+|---|---:|---:|---:|---|
+| 8 CubiCasa dev plans, dataset path | 64 | 33 | 27 (25) | control |
+| same, plain upload | 64 | 38 | 35 (30) | all vlm_lora: the per-concept gate is skipped |
+| same, upload with style | 64 | 33 | 27 (25) | identical to the control, row for row |
+| duplex IFC, dataset path / uploaded as model.ifc | 7 / 7 | 7 / 7 | 7 / 7 | |
+| smiley-west 1.OG sheet, dataset path / without its IFC | 5 / 5 | 5 / 0 | 5 / 1 (0) | plan-only: vlm_direct, mean conf 0.30 |
+
+**At dev size** (all 800 CubiCasa dev questions, `experiments/q/upload_dev.py`, run
+`20261114-093334-pipeline-upload_dev-94cc`): plain upload **607 → 594 right (32 won / 45 lost); answers at ≥ 0.8 450 at
+94.7 % → 565 at 91.9 %, i.e. confident misses 24 → 46; the 0.5–0.8 band empties (176 → 0 rows)**. On 8 plans the
+upload looked better (38 vs 33); 800 questions say the opposite — the small sample also suggested the LoRA beats
+raster_cc5k on windows (5 of 6), and at dev size raster_cc5k wins 40 vs 27 of 108.
+
+### 24. A storey role in the question loses to the sheet's storey (HIGH, confident) — owner W1 (`ifc` storey resolution)
+On the smiley-west 1.OG sheet, "How many walls are there on the ground floor?", "Count the walls at ground level." and
+German "Wie viele Wände hat das Erdgeschoss?" → **70 at 0.98** (1.OG's walls); gold EG 81. ("Erdgeschoss" IS the storey
+name EG spelled out.) "In the basement" → 60 right at 0.53. F's 09:24 probe saw the same wording go to the whole model
+(281); now it goes to the sheet. On the EG sheet "the floor shown on this sheet" → 81 at 0.98 (right).
+
+### 25. Link answers: a comparative gets the "agree?" polarity; "which sheet shows X" names the current sheet (HIGH, confident) — owner R1 (`kg_qa`)
+v23 (21 link questions in FR/SV/ES/IT/NL and new English wordings, run `20261114-093203-pipeline-v23-7517`): 18/21, 3
+confident misses at 0.85: "Does this plan show fewer windows than the IFC model has on the same storey?" → "**no** (IFC
+model 55 windows, plan draws 52 …)" — its own numbers say yes; "Which storey does this sheet show, and does its door
+count match the model?" → "1.korrus" (the second half dropped); on the 1.OG sheet "Which sheet shows the ground floor?"
+→ "plan-03-1-og (storey '1.OG')" = the open sheet (gold plan-02-eg). Right but with wrong numbers: "Are there windows in
+the 3D model that this sheet does not draw?" → "yes (model 60 vs drawn 53)" (1.korrus is 55 vs 52). Held: FR/ES "same
+number of doors?" → yes, SV windows → no, IT "how many model windows aren't drawn" → 3, NL plan-sheet count 4, warmond
+14 sheets / "is there a section?", esplanades "is there an elevation?" → no, Swiss "is there an IFC?" → no (0.45).
+
+### 26. An uploaded PNG loses the per-concept gate, so its confidence goes UP (HIGH for the hidden set) — owners W4 (pipeline gate), R2 (LoRA)
+The dataset path calibrates the LoRA per concept (and sends showers/bathtubs mostly to the prior); a file outside
+`data/cubicasa5k/` gets raw LoRA confidence. Showers/bathtubs: 14 → 80 answers at ≥ 0.8 (9 wrong); sinks 16 → 28.
+Suggested: on an unknown source keep the concept's gate rate as a cap (conf = min(raw, gate rate)); the style path
+shows the gate itself transfers (64/64 identical).
+
+## v24 (09:55): list answers, round 2 — 11 Qs on the duplex model (W1 asked: other models, "all but")
+Gold = the dataset's net areas of all 10 rooms per storey. 9/11, **0 confident misses**: thresholds in EN/DE, "which
+bathrooms in this model are larger than 4 m²?", "except the bedrooms" (right, 0.40), "on which levels is there a
+bedroom?" → Level 2. Missed at low confidence: "Which room on 'Level 1' has the same floor area as 'Kitchen (A103)'?"
+→ 12.954 (its own area; 0.40) and "Apart from the living rooms and kitchens, which rooms … larger than 10 m²?" →
+Kitchen (A103) (0.30). "What is the largest room on 'Level 2'?" → one of four bedrooms tied at 22.04, without saying
+it is a tie (0.90).
+
 ## "You know what you don't know — but refusing is not useful" (Stoa point 3), audited on be57171 (09:15)
 All 622 answers of run `…-090509-…-v19b-a85a` (+ 25 v19b/v20 rows: same picture), by confidence band:
 
@@ -890,8 +949,8 @@ stayed 3 but moved confidence band (0.75 → 0.35 / 0.92).
 - Rotated, grayscale, heavily compressed and half-resolution copies of a plan: 30/30 right, at the same confidence.
 
 ## Re-run
-`questions.jsonl` now has 704 rows: v1 (174) + v2 (31) + v3 Swiss compositions (42) + v4 CubiCasa compositions (36) +
-v5 natural references (70) + v6 judge questions on the demo drawings (21) + v7 scope words in 9 languages (36) + v8 scope premises (8) + v9 Finnish judge (14) + v10 scan follow-ups (8) + v11 number formats (10) + v12 Estonian labels (5) + v13 lone PDF/PNG (8) + v14 two-part / comparisons / heights / which (31) + v15 bug-18 probe (22) + v16 Swiss dev plans alone as PNG/PDF (48) + v17 linking (9) + v18 scans (36) + v19 lists (19) + v20 link wordings (19) + v21 sheet text without the hint (57) = 704; earlier rows are byte-identical across builds (checked with cmp), so runs on the first 205 /
+`questions.jsonl` now has 957 rows: v1 (174) + v2 (31) + v3 Swiss compositions (42) + v4 CubiCasa compositions (36) +
+v5 natural references (70) + v6 judge questions on the demo drawings (21) + v7 scope words in 9 languages (36) + v8 scope premises (8) + v9 Finnish judge (14) + v10 scan follow-ups (8) + v11 number formats (10) + v12 Estonian labels (5) + v13 lone PDF/PNG (8) + v14 two-part / comparisons / heights / which (31) + v15 bug-18 probe (22) + v16 Swiss dev plans alone as PNG/PDF (48) + v17 linking (9) + v18 scans (36) + v19 lists (19) + v20 link wordings (19) + v21 sheet text without the hint (57) + v22 uploads (216) + v23 links round 3 + storey roles (26) + v24 lists round 2 (11) = 957; earlier rows are byte-identical across builds (checked with cmp), so runs on the first 205 /
 283 rows compare directly (`python3 $JUNCTION_SHARED/artifacts/Q/subset_stats.py <run> 283`). Build with
 `PYTHONHASHSEED=0 PYTHONPATH=.`; v5 calls the ifc solver for its gold (deterministic, < 1 s per row).
 ```

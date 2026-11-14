@@ -265,7 +265,11 @@ class RasterSolver(BaseSolver):
         lab = labelled_query(question or "")
         if lab or cls in ROOM_CLASSES:
             return self._sheet_veto(path, question or "", self._text_count(path, cls, lab, trace, question))
-        twinless = not self.twins or not ({".pdf", ".dxf", ".ifc"} & set(_siblings(path)))
+        # a twin only helps where a vector solver reads it for this image: dxf takes a PNG path on swiss_dwellings
+        # only, pdf_vector .pdf paths only. A PNG+PDF pair outside the dataset (Q's lone16 folder) went to vlm_direct
+        # (0/8) while raster abstained "because dxf/pdf_vector count it"
+        twinless = not self.twins or not ({".pdf", ".dxf", ".ifc"} & set(_siblings(path))) or \
+            source_of(path) not in TEXT_OFF
         if cls == "door" and self.doors and twinless:  # with a twin, dxf/pdf_vector count exactly: no text layer here
             ans = self._door_arcs(path, trace)
             if ans is not None:
