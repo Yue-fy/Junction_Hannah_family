@@ -25,10 +25,15 @@ sets.append(("hardL_open", [(r["question"], en[r["meta"]["base_qid"]], r["meta"]
 l4 = [json.loads(x) for x in (S / "artifacts/R2/lang4.jsonl").open()]
 l4en = {json.loads(x)["qid"].split("-")[0]: json.loads(x)["question"] for x in (S / "artifacts/R2/lang4_en.jsonl").open()}
 sets.append(("lang4", [(r["question"], l4en[r["qid"].split("-")[0]], r["meta"]["lang"]) for r in l4]))
-extra = [("Ile belek jest w modelu 'BIM-Speed Gdynia'?", "How many beams are there in the model 'BIM-Speed Gdynia'?", "pl")]
+extra = [("Ile belek jest w modelu 'BIM-Speed Gdynia'?", "How many beams are there in the model 'BIM-Speed Gdynia'?", "pl"),
+         ("Ile belek znajduje się w modelu „BIM-Speed Gdynia - semi-detached house Ruchu Oporu 18”?",
+          "How many beams are there in the model 'BIM-Speed Gdynia - semi-detached house Ruchu Oporu 18'?", "pl")]
+tk = [json.loads(x) for x in (S / "artifacts/F/trigger_known.jsonl").open()]
 sets.append(("belek", extra))
 
-PROMPTS = {"A (no glossary)": L._TR_SYSTEM_BASE, "B2 (default since 04:52)": L._TR_SYSTEM}
+PROMPTS = {"A (no glossary)": L._TR_SYSTEM_BASE, "B2 (English terms)": L._TR_SYSTEM,
+           "B3 (B2 + source-language hints; default since 05:00)": L._TR_SYSTEM + L._TR_GLOSSARY}
+L._TR_GLOSSARY = ""  # the loop below sets the whole system prompt
 
 
 def key(q: str):
@@ -57,4 +62,4 @@ for name, items in sets:
             for t, (q, e, lg), m in zip(tr, items, match):
                 if not m:
                     print(f"    MISS {lg}: {t.text[:90]}  | en: {e[:70]}  | {key(t.text)} vs {key(e)}")
-L._TR_SYSTEM = PROMPTS["B2 (default since 04:52)"]
+L._TR_SYSTEM = PROMPTS["B2 (English terms)"]
