@@ -44,7 +44,7 @@ Exact statistics filters are combined with AND. MCC values must be four-digit st
 
 ## Coach
 
-### Tool-calling agent (WP1)
+### Tool-calling agent and text history (WP1–WP2)
 
 `POST /api/agent` is a read-only route and does not require `confirmed`. It accepts the same common customer/account/month fields as `/api/coach`, plus:
 
@@ -58,7 +58,13 @@ Exact statistics filters are combined with AND. MCC values must be four-digit st
 }
 ```
 
-`message` must be nonempty text up to 2,000 characters; `locale` is `en`, `fi` or `sv`. WP1 accepts an omitted or empty `history`. A nonempty history is explicitly rejected until WP2 implements its bounded replay contract. The existing 64 KiB HTTP body limit is sufficient. Unknown fields and customer/account mismatches fail validation before a model call.
+`message` must be nonempty text up to 2,000 characters; `locale` is `en`, `fi` or `sv`. `history` is optional and defaults to `[]`. It accepts at most eight messages, each with exactly `role` (`user` or `coach`) and nonblank `text` of at most 600 Unicode characters. Oversized histories, other roles, extra fields, non-text values and embedded tool metadata return a validation error before a model call. The existing 64 KiB HTTP body limit accommodates the frontend's bounded UTF-8 payload.
+
+The agent converts historical `user` / `coach` roles into provider `user` / `model` roles, redacts identifiers and appends the current message. Only text is replayed: previous tool calls, results, thought signatures and action proposals are not accepted as history. Every request starts with fresh tool evidence. Numbers quoted in history remain permitted by the numeric provenance check as conversational inputs; this does not establish them as fresh ledger facts.
+
+The frontend exposes `createAPI(customerId).agent(message, {month, locale, conversation})`. It derives the history from existing conversation records, filters customer/month/language mismatches, sends the last eight visible user/coach messages and clips each to 600 Unicode code points. It never serializes transaction references, charts, structured responses or internal state. The currently displayed transcript is left intact. Existing new-question, persona/month and language resets clear the source history; the helper stores no additional copy.
+
+Agent requests have a 40-second client timeout to accommodate the 25-second server budget. Other requests retain their 10-second default; `get` and `post` accept an optional `{timeout}` override. WP6 will connect this helper to `askCoach` together with the agent response renderer and existing stale-response guards. Until then, the visible page continues using `/api/coach`, whose request contract is unchanged.
 
 The response `data` contains:
 

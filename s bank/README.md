@@ -6,9 +6,11 @@ The prototype runs locally by default. It uses no real customer data, makes no p
 
 **Current status:** V2 has four primary pages—Home, Spending, Coach and Goals—with one spending ring, a full conversation page, title-only wishes and three guided customer stories. Coach now answers in prose first, keeps calculations behind supporting disclosures, and distinguishes everyday purchase plans from historical questions. It remains a local prototype; rendered desktop/mobile acceptance and live Gemini remain unverified. See the [conversation and logic audit](docs/CONVERSATION_REPAIR_ACCEPTANCE.md).
 
-### Agent backend (WP1)
+### Agent backend and conversation memory (WP1–WP2)
 
-`POST /api/agent` adds a function-calling backend for DeepSeek and Gemini with read-only calculation tools, a numeric provenance check and an automatic offline fallback. `/api/coach` and the current web conversation retain their existing behavior. Multi-turn agent memory (WP2) and the mobile agent chat (WP6) are separate follow-on packages.
+`POST /api/agent` adds a function-calling backend for DeepSeek and Gemini with read-only calculation tools, a numeric provenance check and an automatic offline fallback. It accepts up to eight previous user/coach text messages, each at most 600 characters. Previous tool results are not replayed; the model calls tools again for fresh account facts. `/api/coach` and the current web conversation retain their existing behavior until WP6 connects the mobile agent chat.
+
+The frontend request helper `createAPI(customerId).agent(message, {month, locale, conversation})` extracts only visible text from the matching customer/month/language, drops older messages and clips text without changing the displayed conversation. New-question and scope-change resets clear the source conversation. This helper is ready for the WP6 page integration; it does not persist transcripts.
 
 The server loads `s bank/.env` at startup without overriding existing shell variables. Configure `DEEPSEEK_API_KEY` and optionally `DEEPSEEK_MODEL` (default `deepseek-flash`). DeepSeek takes priority when its key is present; otherwise the agent uses `GEMINI_API_KEY` and `GEMINI_MODEL` (default `gemini-3-flash-preview`). This file is ignored by Git. Model selection is configurable, but another model's availability and latency must be verified against the same tool loop. No SDK or backend dependency is required.
 

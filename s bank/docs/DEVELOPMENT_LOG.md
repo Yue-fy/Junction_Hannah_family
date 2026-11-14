@@ -155,6 +155,15 @@ This log records implementation progress, decisions, verification evidence, and 
 - WP2 memory and WP6 mobile UI remain pending the user's per-package confirmation. The existing website still calls `/api/coach`; the new backend is available directly through `/api/agent`.
 - Final WP1 verification: 400 tests discovered, 399 passed and one optional browser integration skipped (16.119 seconds). All S-Coach JavaScript and Python syntax checks passed; whitespace checks passed. There are 39 new tests, and no existing test was removed or weakened.
 
+### Coach agent conversation memory — WP2 (2026-11-14)
+
+- Added strict history validation at the existing API body boundary: at most eight `{role, text}` messages, `user` / `coach` roles only, nonblank text up to 600 Unicode characters, and no extra fields. The agent replays sanitized text before the latest message; previous tool calls/results are not accepted or retained between requests.
+- Added the frontend `createAPI.agent` request helper. It extracts visible text from the matching customer/month/language, retains the most recent eight messages and clips at Unicode code-point boundaries without truncating the on-screen conversation. Structured tool output and metadata never enter this payload. Existing new-question and scope-change reset paths were exercised through the real client harness.
+- Added a 40-second agent request timeout alongside the unchanged 10-second default for other API calls, plus optional per-call timeout overrides. The endpoint switch and renderer remain in WP6, as assigned by the implementation brief; the existing page does not yet call the new helper.
+- Seven new regressions cover consecutive public API requests, provider role mapping, fresh evidence, history-number recognition, redaction, malformed/oversized payloads, Unicode limits, scoped client serialization, reset behavior and timer cleanup. Full regression: 407 tests discovered, 406 passed, one optional browser integration skipped (16.293 seconds). No existing test was removed or weakened.
+- Independent read-only review found no Critical, Important or actionable Minor issues. It did not substitute for live-provider testing or the separate full-suite run. WP6 page integration and broader follow-up quality remain outside this package's acceptance.
+- Live DeepSeek verification used a fresh temporary synthetic ledger. A restaurant question returned EUR 225.70 in 2.49 seconds; the follow-up "What about groceries then?" sent the prior two text messages, queried groceries for the same September period and returned EUR 100.00 in 2.97 seconds. Both responses had `source: agent` with fresh category evidence. This is one two-turn smoke check, not a general conversational evaluation. Python, JavaScript and whitespace checks also passed.
+
 ## Current status
 
 - Product design: frozen for implementation.
@@ -162,7 +171,7 @@ This log records implementation progress, decisions, verification evidence, and 
 - P0 code: redesigned; supported semantic scopes and integrated interaction checks pass.
 - P1 code: safe-to-spend, observed investment-cash-flow, goals, forecast, VAT, and selected financing context are implemented and verified.
 - Adaptive/localized UI: new responsive structure and interaction tests pass; fresh rendered phone/tablet/desktop acceptance pending.
-- Live agent: two DeepSeek synthetic smoke checks passed; Gemini generation is quota-blocked. Broader evaluation and web integration remain pending; deterministic fallback supports the existing bounded questions.
+- Live agent: DeepSeek synthetic amount, scenario and two-turn follow-up checks passed; Gemini generation is quota-blocked. Broader evaluation and web integration remain pending; deterministic fallback supports the existing bounded questions.
 - Runbook and technical reference: reconciled with redesigned behavior, supported definitions and remaining bounds.
 - Dependencies added: none.
 - Publication scope: one local commit per work package, then pause for user confirmation. No new push or PR was requested.
