@@ -1,36 +1,36 @@
 {
  "from": "snapshot",
- "generated": "2026-11-14T01:58:23.774Z",
+ "generated": "2026-11-14T03:11:27.489Z",
  "runs": {
   "dev": {
    "pipeline": {
-    "run_id": "20261114-031320-pipeline-dev-bb98",
+    "run_id": "20261114-045943-pipeline-dev-e6cd",
     "solver": "pipeline",
     "split": "dev",
-    "time": "2026-11-14T03:17:43",
-    "commit": "d764334",
-    "agent": "F",
-    "note": "F gate night+W4+R1 d764334 dev",
+    "time": "2026-11-14T05:03:10",
+    "commit": "753eccb",
+    "agent": "S0",
+    "note": "S0 c18c gate night 753eccb",
     "n": 2215,
-    "weighted_acc": 0.8172,
-    "accuracy": 0.885,
-    "macro_accuracy": 0.9466,
-    "usd_per_1k_q": 0.182,
-    "latency_p50_s": 0.17,
-    "latency_p95_s": 4.005,
-    "evidence_rate": 0.7047,
+    "weighted_acc": 0.8342,
+    "accuracy": 0.898,
+    "macro_accuracy": 0.9674,
+    "usd_per_1k_q": 0.039,
+    "latency_p50_s": 0.303,
+    "latency_p95_s": 3.479,
+    "evidence_rate": 0.7454,
     "refusal_rate": 0,
     "by_tier": {
      "deterministic": {
-      "share": 0.6221,
-      "n": 1378,
-      "accuracy": 0.9783,
+      "share": 0.6014,
+      "n": 1332,
+      "accuracy": 0.9231,
       "coverage": 1
      },
      "local": {
-      "share": 0.3779,
-      "n": 837,
-      "accuracy": 0.7147,
+      "share": 0.3986,
+      "n": 883,
+      "accuracy": 0.8564,
       "coverage": 1
      }
     },
@@ -38,33 +38,33 @@
     "calibration": {
      "n": 2000,
      "n_missing_conf": 0,
-     "accuracy": 0.885,
-     "mean_conf": 0.8708,
-     "ece": 0.0195,
-     "brier": 0.055,
-     "auroc": 0.9246,
-     "aurc": 0.0192,
-     "e_aurc": 0.0123,
-     "hi_conf_share": 0.7795,
-     "hi_conf_acc": 0.9801
+     "accuracy": 0.898,
+     "mean_conf": 0.8765,
+     "ece": 0.0271,
+     "brier": 0.0551,
+     "auroc": 0.9453,
+     "aurc": 0.0114,
+     "e_aurc": 0.0059,
+     "hi_conf_share": 0.82,
+     "hi_conf_acc": 0.9787
     },
     "cost_mean": {
-     "llm_tokens_in": 1417.899323,
-     "llm_tokens_out": 225.973815,
+     "llm_tokens_in": 819.443341,
+     "llm_tokens_out": 14.087585,
      "api_tokens_in": 0,
      "api_tokens_out": 0,
-     "llm_calls": 0.880361,
+     "llm_calls": 0.419413,
      "api_calls": 0,
-     "gpu_seconds": 6.815393,
-     "wall_seconds": 0.853353,
-     "usd": 0.000182,
-     "gpu_seconds_billed": 0.282687
+     "gpu_seconds": 0.049952,
+     "wall_seconds": 0.746436,
+     "usd": 3.9e-05,
+     "gpu_seconds_billed": 0.046861
     },
     "by_source": {
      "cubicasa5k": {
       "n": 800,
-      "correct": 587,
-      "accuracy": 0.73375
+      "correct": 607,
+      "accuracy": 0.75875
      },
      "ifc_models": {
       "n": 354,
@@ -73,8 +73,8 @@
      },
      "opening_design": {
       "n": 46,
-      "correct": 39,
-      "accuracy": 0.8478260869565217
+      "correct": 45,
+      "accuracy": 0.9782608695652174
      },
      "swiss_dwellings": {
       "n": 800,
@@ -226,33 +226,33 @@
   },
   "hard": {
    "pipeline": {
-    "run_id": "20261114-031744-pipeline-hard-bb4a",
+    "run_id": "20261114-045855-pipeline-hard-fc62",
     "solver": "pipeline",
     "split": "hard",
-    "time": "2026-11-14T03:18:35",
-    "commit": "d764334",
-    "agent": "F",
-    "note": "F gate night+W4+R1 d764334 hard",
+    "time": "2026-11-14T04:59:42",
+    "commit": "753eccb",
+    "agent": "S0",
+    "note": "S0 c18c gate night 753eccb",
     "n": 711,
-    "weighted_acc": 0.7469,
-    "accuracy": 0.8445,
-    "macro_accuracy": 0.9446,
-    "usd_per_1k_q": 0.206,
-    "latency_p50_s": 0.429,
-    "latency_p95_s": 1.412,
-    "evidence_rate": 0.6835,
+    "weighted_acc": 0.7517,
+    "accuracy": 0.8474,
+    "macro_accuracy": 0.9456,
+    "usd_per_1k_q": 0.016,
+    "latency_p50_s": 0.277,
+    "latency_p95_s": 0.914,
+    "evidence_rate": 0.7426,
     "refusal_rate": 0,
     "by_tier": {
      "deterministic": {
-      "share": 0.4782,
-      "n": 340,
-      "accuracy": 0.988,
+      "share": 0.4768,
+      "n": 339,
+      "accuracy": 0.9339,
       "coverage": 1
      },
      "local": {
-      "share": 0.5218,
-      "n": 371,
-      "accuracy": 0.709,
+      "share": 0.5232,
+      "n": 372,
+      "accuracy": 0.7662,
       "coverage": 1
      }
     },
@@ -260,78 +260,81 @@
      "composition": {
       "n": 211,
       "scored_n": 188,
-      "correct": 136,
-      "accuracy": 0.7234,
+      "no_gold_n": 0,
+      "correct": 135,
+      "accuracy": 0.7181,
       "coverage": 1,
-      "acc_when_answered": 0.7234,
-      "evidence_rate": 0.6256,
-      "evidence_2d_rate": 0.6256,
-      "evidence_count_match": 0.4493,
-      "evidence_count_n": 69,
+      "acc_when_answered": 0.7181,
+      "evidence_rate": 0.8104,
+      "evidence_2d_rate": 0.8104,
+      "evidence_count_match": 0.3063,
+      "evidence_count_n": 111,
       "refusal_rate": 0,
       "text_n": 23,
       "text_fuzzy": 0.8261,
-      "usd_per_q": 0.000188
+      "usd_per_q": 1.9e-05
      },
      "paraphrase": {
       "n": 250,
       "scored_n": 250,
+      "no_gold_n": 0,
       "correct": 220,
       "accuracy": 0.88,
       "coverage": 1,
       "acc_when_answered": 0.88,
-      "evidence_rate": 0.724,
-      "evidence_2d_rate": 0.704,
-      "evidence_count_match": 0.945,
-      "evidence_count_n": 109,
+      "evidence_rate": 0.696,
+      "evidence_2d_rate": 0.676,
+      "evidence_count_match": 1,
+      "evidence_count_n": 102,
       "refusal_rate": 0,
-      "usd_per_q": 0.000176
+      "usd_per_q": 1e-05
      },
      "translation": {
       "n": 250,
       "scored_n": 250,
-      "correct": 225,
-      "accuracy": 0.9,
+      "no_gold_n": 0,
+      "correct": 228,
+      "accuracy": 0.912,
       "coverage": 1,
-      "acc_when_answered": 0.9,
-      "evidence_rate": 0.692,
-      "evidence_2d_rate": 0.688,
-      "evidence_count_match": 0.9091,
-      "evidence_count_n": 77,
+      "acc_when_answered": 0.912,
+      "evidence_rate": 0.732,
+      "evidence_2d_rate": 0.728,
+      "evidence_count_match": 1,
+      "evidence_count_n": 87,
       "refusal_rate": 0,
-      "usd_per_q": 0.00025
+      "usd_per_q": 1.8e-05
      }
     },
     "calibration": {
      "n": 688,
      "n_missing_conf": 0,
-     "accuracy": 0.8445,
-     "mean_conf": 0.771,
-     "ece": 0.0753,
-     "brier": 0.0785,
-     "auroc": 0.9338,
-     "aurc": 0.0242,
-     "e_aurc": 0.0113,
-     "hi_conf_share": 0.6206,
-     "hi_conf_acc": 0.993
+     "accuracy": 0.8474,
+     "mean_conf": 0.7956,
+     "ece": 0.0527,
+     "brier": 0.0652,
+     "auroc": 0.9518,
+     "aurc": 0.0201,
+     "e_aurc": 0.0077,
+     "hi_conf_share": 0.6483,
+     "hi_conf_acc": 0.991
     },
     "cost_mean": {
-     "llm_tokens_in": 1352.139241,
-     "llm_tokens_out": 275.309423,
+     "llm_tokens_in": 359.053446,
+     "llm_tokens_out": 2.517581,
      "api_tokens_in": 0,
      "api_tokens_out": 0,
-     "llm_calls": 1.296765,
+     "llm_calls": 0.587904,
      "api_calls": 0,
-     "gpu_seconds": 8.283208,
-     "wall_seconds": 0.571747,
-     "usd": 0.000206,
-     "gpu_seconds_billed": 0.329391
+     "gpu_seconds": 0.016882,
+     "wall_seconds": 0.384413,
+     "usd": 1.6e-05,
+     "gpu_seconds_billed": 0.016874
     },
     "by_source": {
      "cubicasa5k": {
       "n": 283,
-      "correct": 178,
-      "accuracy": 0.6289752650176679
+      "correct": 180,
+      "accuracy": 0.6360424028268551
      },
      "ifc_models": {
       "n": 135,
@@ -699,21 +702,21 @@
   },
   "hard2": {
    "pipeline": {
-    "run_id": "20261114-031836-pipeline-hard2-1156",
+    "run_id": "20261114-045826-pipeline-hard2-6784",
     "solver": "pipeline",
     "split": "hard2",
-    "time": "2026-11-14T03:19:14",
-    "commit": "d764334",
-    "agent": "F",
-    "note": "F gate night+W4+R1 d764334 hard2",
+    "time": "2026-11-14T04:58:55",
+    "commit": "753eccb",
+    "agent": "S0",
+    "note": "S0 c18c gate night 753eccb",
     "n": 256,
     "weighted_acc": 0.8329,
     "accuracy": 0.9206,
     "macro_accuracy": 0.9617,
-    "usd_per_1k_q": 0.484,
-    "latency_p50_s": 0.553,
-    "latency_p95_s": 3.23,
-    "evidence_rate": 0.7852,
+    "usd_per_1k_q": 0.024,
+    "latency_p50_s": 0.366,
+    "latency_p95_s": 1.549,
+    "evidence_rate": 0.7383,
     "refusal_rate": 0,
     "by_tier": {
      "deterministic": {
@@ -733,44 +736,45 @@
      "reasoning": {
       "n": 256,
       "scored_n": 189,
+      "no_gold_n": 0,
       "correct": 174,
       "accuracy": 0.9206,
       "coverage": 1,
       "acc_when_answered": 0.9206,
-      "evidence_rate": 0.7852,
-      "evidence_2d_rate": 0.7852,
-      "evidence_count_match": 0.3488,
-      "evidence_count_n": 43,
+      "evidence_rate": 0.7383,
+      "evidence_2d_rate": 0.7383,
+      "evidence_count_match": 0.2619,
+      "evidence_count_n": 42,
       "refusal_rate": 0,
       "text_n": 67,
       "text_fuzzy": 0.9254,
-      "usd_per_q": 0.000484
+      "usd_per_q": 2.4e-05
      }
     },
     "calibration": {
      "n": 189,
      "n_missing_conf": 0,
      "accuracy": 0.9206,
-     "mean_conf": 0.7877,
-     "ece": 0.133,
-     "brier": 0.0902,
-     "auroc": 0.8307,
-     "aurc": 0.0182,
-     "e_aurc": 0.0147,
-     "hi_conf_share": 0.5026,
+     "mean_conf": 0.8184,
+     "ece": 0.1022,
+     "brier": 0.0766,
+     "auroc": 0.8646,
+     "aurc": 0.0151,
+     "e_aurc": 0.0117,
+     "hi_conf_share": 0.6243,
      "hi_conf_acc": 1
     },
     "cost_mean": {
-     "llm_tokens_in": 2227.6875,
-     "llm_tokens_out": 689.175781,
+     "llm_tokens_in": 550.875,
+     "llm_tokens_out": 2.152344,
      "api_tokens_in": 0,
      "api_tokens_out": 0,
-     "llm_calls": 2.089844,
+     "llm_calls": 0.8125,
      "api_calls": 0,
-     "gpu_seconds": 19.755597,
-     "wall_seconds": 1.190382,
-     "usd": 0.000484,
-     "gpu_seconds_billed": 0.778281
+     "gpu_seconds": 0.0342,
+     "wall_seconds": 0.662426,
+     "usd": 2.4e-05,
+     "gpu_seconds_billed": 0.024181
     },
     "by_source": {
      "cubicasa5k": {
@@ -793,33 +797,33 @@
   },
   "hard2q": {
    "pipeline": {
-    "run_id": "20261114-031242-pipeline-hard2q-e2c4",
+    "run_id": "20261114-043919-pipeline-hard2q-0103",
     "solver": "pipeline",
     "split": "hard2q",
-    "time": "2026-11-14T03:13:14",
-    "commit": "d764334",
+    "time": "2026-11-14T04:40:05",
+    "commit": "cc1ca5b",
     "agent": "F",
-    "note": "F gate night+W4+R1 d764334 hard2q",
+    "note": "F held-out gate: night cc1ca5b (cycle 17 round 2) default",
     "n": 256,
-    "weighted_acc": 0.5895,
-    "accuracy": 0.7989,
-    "macro_accuracy": 0.9025,
-    "usd_per_1k_q": 0.439,
-    "latency_p50_s": 0.223,
-    "latency_p95_s": 4.23,
-    "evidence_rate": 0.7461,
+    "weighted_acc": 0.6031,
+    "accuracy": 0.8042,
+    "macro_accuracy": 0.905,
+    "usd_per_1k_q": 0.09,
+    "latency_p50_s": 0.188,
+    "latency_p95_s": 5.567,
+    "evidence_rate": 0.7656,
     "refusal_rate": 0,
     "by_tier": {
      "deterministic": {
-      "share": 0.4258,
-      "n": 109,
+      "share": 0.4102,
+      "n": 105,
       "accuracy": 1,
       "coverage": 1
      },
      "local": {
-      "share": 0.5742,
-      "n": 147,
-      "accuracy": 0.5824,
+      "share": 0.5898,
+      "n": 151,
+      "accuracy": 0.6022,
       "coverage": 1
      }
     },
@@ -827,52 +831,51 @@
      "reasoning-reworded-q": {
       "n": 256,
       "scored_n": 189,
-      "correct": 151,
-      "accuracy": 0.7989,
+      "no_gold_n": 0,
+      "correct": 152,
+      "accuracy": 0.8042,
       "coverage": 1,
-      "acc_when_answered": 0.7989,
-      "evidence_rate": 0.7461,
-      "evidence_2d_rate": 0.7461,
-      "evidence_count_match": 0.4054,
-      "evidence_count_n": 37,
+      "acc_when_answered": 0.8042,
+      "evidence_rate": 0.7656,
+      "evidence_2d_rate": 0.7656,
+      "evidence_count_match": 0.4444,
+      "evidence_count_n": 45,
       "refusal_rate": 0,
       "text_n": 67,
       "text_fuzzy": 0.5821,
-      "text_judge": 0.6866,
-      "text_judged_n": 67,
-      "usd_per_q": 0.000439
+      "usd_per_q": 9e-05
      }
     },
     "calibration": {
      "n": 189,
      "n_missing_conf": 0,
-     "accuracy": 0.7989,
-     "mean_conf": 0.7329,
-     "ece": 0.1211,
-     "brier": 0.1305,
-     "auroc": 0.7899,
-     "aurc": 0.087,
-     "e_aurc": 0.0648,
+     "accuracy": 0.8042,
+     "mean_conf": 0.7528,
+     "ece": 0.1314,
+     "brier": 0.1406,
+     "auroc": 0.7316,
+     "aurc": 0.0993,
+     "e_aurc": 0.0782,
      "hi_conf_share": 0.5079,
      "hi_conf_acc": 0.9271
     },
     "cost_mean": {
-     "llm_tokens_in": 2177.175781,
-     "llm_tokens_out": 629.9375,
+     "llm_tokens_in": 822.96875,
+     "llm_tokens_out": 100.730469,
      "api_tokens_in": 0,
      "api_tokens_out": 0,
-     "llm_calls": 1.972656,
+     "llm_calls": 0.914062,
      "api_calls": 0,
-     "gpu_seconds": 18.366583,
-     "wall_seconds": 0.645716,
-     "usd": 0.000439,
-     "gpu_seconds_billed": 0.717022
+     "gpu_seconds": 1.87397,
+     "wall_seconds": 0.665281,
+     "usd": 9e-05,
+     "gpu_seconds_billed": 0.133644
     },
     "by_source": {
      "cubicasa5k": {
       "n": 50,
-      "correct": 21,
-      "accuracy": 0.42
+      "correct": 22,
+      "accuracy": 0.44
      },
      "ifc_models": {
       "n": 34,
@@ -888,7 +891,100 @@
    }
   },
   "hard2r": {
-   "pipeline": null
+   "pipeline": {
+    "run_id": "20261114-035900-pipeline-hard2r-6f03",
+    "solver": "pipeline",
+    "split": "hard2r",
+    "time": "2026-11-14T04:00:31",
+    "commit": "95f2277",
+    "agent": "S0",
+    "note": "S0 sealed test 1 @ 95f2277: hard2r",
+    "n": 256,
+    "weighted_acc": 0.5234,
+    "accuracy": 0.6296,
+    "macro_accuracy": 0.5078,
+    "usd_per_1k_q": 0.445,
+    "latency_p50_s": 0.349,
+    "latency_p95_s": 15.428,
+    "evidence_rate": 0.6914,
+    "refusal_rate": 0,
+    "by_tier": {
+     "deterministic": {
+      "share": 0.3008,
+      "n": 77,
+      "accuracy": 0.6667,
+      "coverage": 1
+     },
+     "local": {
+      "share": 0.6992,
+      "n": 179,
+      "accuracy": 0.6053,
+      "coverage": 1
+     }
+    },
+    "by_kind": {
+     "reasoning-reworded-r": {
+      "n": 256,
+      "scored_n": 189,
+      "correct": 119,
+      "accuracy": 0.6296,
+      "coverage": 1,
+      "acc_when_answered": 0.6296,
+      "evidence_rate": 0.6914,
+      "evidence_2d_rate": 0.6484,
+      "evidence_count_match": 0.3818,
+      "evidence_count_n": 55,
+      "refusal_rate": 0,
+      "text_n": 67,
+      "text_fuzzy": 0.6119,
+      "text_judge": 0.7463,
+      "text_judged_n": 67,
+      "usd_per_q": 0.000445
+     }
+    },
+    "calibration": {
+     "n": 189,
+     "n_missing_conf": 0,
+     "accuracy": 0.6296,
+     "mean_conf": 0.6799,
+     "ece": 0.1482,
+     "brier": 0.1945,
+     "auroc": 0.7315,
+     "aurc": 0.1911,
+     "e_aurc": 0.111,
+     "hi_conf_share": 0.3651,
+     "hi_conf_acc": 0.8406
+    },
+    "cost_mean": {
+     "llm_tokens_in": 2943.734375,
+     "llm_tokens_out": 564.265625,
+     "api_tokens_in": 0,
+     "api_tokens_out": 0,
+     "llm_calls": 2.429688,
+     "api_calls": 0,
+     "gpu_seconds": 13.51075,
+     "wall_seconds": 2.588051,
+     "usd": 0.000445,
+     "gpu_seconds_billed": 0.682009
+    },
+    "by_source": {
+     "cubicasa5k": {
+      "n": 50,
+      "correct": 27,
+      "accuracy": 0.54
+     },
+     "ifc_models": {
+      "n": 34,
+      "correct": 14,
+      "accuracy": 0.4117647058823529
+     },
+     "swiss_dwellings": {
+      "n": 105,
+      "correct": 78,
+      "accuracy": 0.7428571428571429
+     }
+    }
+   }
   }
  }
 }
