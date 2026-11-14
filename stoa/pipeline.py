@@ -126,6 +126,20 @@ def _echoes_question(value, question: str) -> bool:
                for t in re.findall(r"(?<![\w.])\d+(?:[.,]\d+)?(?![\w.])", q))
 
 
+def _question_numbers(question: str) -> list[float]:
+    q = re.sub(r"'[^']*'|\"[^\"]*\"|«[^»]*»|„[^“”]*[“”]", " ", question)
+    return [float(t.replace(",", ".")) for t in re.findall(r"(?<![\w.])\d+(?:[.,]\d+)?(?![\w.])", q)]
+
+
+def _code_applied_all(question: str, trace) -> bool:
+    """ifc's own arithmetic ('outer operation: factor 450 EUR per door' / 'per door') is trusted only when that line
+    uses EVERY number of the question: "35 € per door plus 10 € of brushes" -> 'factor 35' alone gave 1610 @ 0.92."""
+    # (its op line echoes the rest of the phrase, "factor 35 EUR per door plus 10 euros of bru", so matching numbers
+    # against it is not proof: one stated number at most, else the agent does the arithmetic)
+    ops = [str(t) for t in trace if re.match(r"outer operation: (?:factor|per)\b", str(t))]
+    return bool(ops) and len(_question_numbers(question)) <= 1
+
+
 def _tokens(s: str) -> set[str]:
     return set(re.findall(r"[^\W_]+", str(s).lower()))
 
@@ -840,8 +854,8 @@ class Pipeline(BaseSolver):
             total = total.add(_cost_of(a))
             if a.value is None:
                 continue
-            if derived and not any(str(t).startswith("table QA code") or re.match(r"outer operation: (?:factor|per)\b", str(t))
-                                   for t in a.trace) and a.confidence >= self.raw_accept:
+            if derived and not any(str(t).startswith("table QA code") for t in a.trace) and \
+                    not _code_applied_all(question, a.trace) and a.confidence >= self.raw_accept:
                 # W1 04:15: ifc applies rates/prices in code ("outer operation: factor 450 EUR per door" / "per door";
                 # 26/26 right on derived.jsonl) -> trusted; its 'add N' is not ("15 metres of wall per day" -> "add 15"
                 # -> 19 at 0.92, gold 5.9 days), so add/remove stay capped for the agent
@@ -948,7 +962,10 @@ class Pipeline(BaseSolver):
         if not _fits(intent.task, a_u):
             ans.trace.append(f"{n_u} answered {a_u.value} {a_u.unit} to a {intent.task} question: ignored")
             return ans
-        same = _agree(ans.value, a_u.value, intent.task)
+        x, y = _num(ans.value), _num(a_u.value)
+        # the 2% tolerance is for measured sizes; a price/rate/text answer must match exactly (1620 EUR is not 1610)
+        same = _agree(ans.value, a_u.value, intent.task) if intent.task in ("count", "area", "length", "volume") else (
+            abs(x - y) <= 1e-6 * max(1.0, abs(y)) if x is not None and y is not None else _agree(ans.value, a_u.value, "text"))
         note = (f"cross-check: agent {ans.value} = {n_u} {a_u.value} ✓" if same
                 else f"cross-check: agent {ans.value} ≠ {n_u} {a_u.value}")
         ans.trace.append(note)
