@@ -88,6 +88,23 @@ def door_width(rec: dict) -> tuple[float | None, int]:
     return (float(st.median(ls)), len(ls)) if ls else (None, 0)
 
 
+def door_variants(rec: dict) -> dict:
+    """Pre-chosen alternatives to the median (compared once on the full set, not tuned)."""
+    bx = rec.get("counts", {}).get("doors", {}).get("boxes", [])
+    ls = sorted(max(b[2] - b[0], b[3] - b[1]) for b in bx)
+    asp = sorted(max(b[2] - b[0], b[3] - b[1]) for b in bx
+                 if max(b[2] - b[0], b[3] - b[1]) >= 2 * max(1, min(b[2] - b[0], b[3] - b[1])))
+    out = {}
+    if len(ls) >= 2:
+        out["door_q40"] = q(ls, .4)
+        k = len(ls) // 4
+        mid = ls[k:len(ls) - k] or ls
+        out["door_iqm"] = sum(mid) / len(mid)
+    if len(asp) >= 2:
+        out["door_aspect2"] = float(st.median(asp))
+    return out
+
+
 def q(xs, p):
     xs = sorted(xs)
     if not xs:
@@ -160,7 +177,8 @@ def main() -> None:
         totals = [m for _, m in uniq]
         dw, nd = door_width(counts.get(d["path"], {}))
         wt = wall_thickness(rooms)
-        rows.append({"path": d["path"], "size": d["size"], "style": stem.rsplit("-", 1)[0], "fit": fit_half(d["path"]),
+        dv = door_variants(counts.get(d["path"], {}))
+        rows.append({**dv, "cc5k_list": counts.get(d["path"], {}).get("cc5k_list"), "path": d["path"], "size": d["size"], "style": stem.rsplit("-", 1)[0], "fit": fit_half(d["path"]),
                      "per_room": per_room, "s_room": s_room, "spread": spread, "s_tot": s_tot,
                      "totals": totals, "interior_px": interior_px, "door_px": dw, "n_doors": nd, "wall_px": wt})
 
@@ -197,6 +215,9 @@ def main() -> None:
         "wall": lambda r: r["wall_px"],
         "door+wall": lambda r: math.sqrt(r["door_px"] * r["wall_px"]) if r["door_px"] and r["wall_px"] else None,
         "const": lambda r: 1.0,
+        "door_q40": lambda r: r.get("door_q40") if r["n_doors"] >= a.min_doors else None,
+        "door_iqm": lambda r: r.get("door_iqm") if r["n_doors"] >= a.min_doors else None,
+        "door_aspect2": lambda r: r.get("door_aspect2"),
     }
     calib = {}
     for name, fn in feats.items():
@@ -222,13 +243,24 @@ def main() -> None:
         const_m = math.exp(c)
         calib[name] = {"const": const_m, "log_resid_80": [lo, hi], "n": len(usable),
                        "area_err_p50": q(aerr, .5), "within10_area": sum(e <= .1 for e in aerr) / len(aerr),
+                       "within2_area": sum(e <= .02 for e in aerr) / len(aerr),
                        "within20_area": sum(e <= .2 for e in aerr) / len(aerr), "coverage80_crossfit": cov}
         chk = res
-        unit = {"door": "m door width", "wall": "m wall thickness", "door+wall": "", "const": "px/m"}[name]
+        unit = {"door": "m door width", "wall": "m wall thickness", "const": "px/m"}.get(name, "")
         print(f"{name:9s} constant {const_m if name != 'const' else 1 / const_m:.3f} {unit} | cross-fit n={len(chk)}: "
               f"area err p50 {100 * q(aerr, .5):.1f}%  within 10% {100 * sum(e <= .1 for e in aerr) / len(aerr):.0f}%  "
-              f"within 20% {100 * sum(e <= .2 for e in aerr) / len(aerr):.0f}%  | 80% interval from fit: area x"
-              f"[{math.exp(-2 * hi):.2f}, {math.exp(-2 * lo):.2f}], cross-fit coverage {100 * cov:.0f}%")
+              f"within 20% {100 * sum(e <= .2 for e in aerr) / len(aerr):.0f}%  | 80% band, true area = est x"
+              f"[{math.exp(2 * lo):.2f}, {math.exp(2 * hi):.2f}], cross-fit coverage {100 * cov:.0f}%")
+
+    # ---- D8 leak check: is the door-scale error different on plans CC5K saw in pretraining (train list)?
+    if "door" in calib:
+        c = math.log(calib["door"]["const"])
+        for lst in ("train", "val", "test"):
+            e = [abs(math.exp(-2 * math.log(r["door_px"] / math.exp(c) / r["truth"])) - 1) for r in ok
+                 if r["cc5k_list"] == lst and r["door_px"] and r["n_doors"] >= a.min_doors]
+            if e:
+                print(f"door-scale area err on CC5K-{lst} plans: n={len(e)} p50 {100 * q(e, .5):.1f}% "
+                      f"within 20% {100 * sum(x <= .2 for x in e) / len(e):.0f}%")
 
     # ---- the 'typical apartment' guess (what a VLM does with no scale): median printed total of the other half
     tots = [r for r in ok if r["truth_kind"] == "total" and r["door_px"] and r["n_doors"] >= a.min_doors]
@@ -243,6 +275,25 @@ def main() -> None:
                 v = sum(r["totals"])
                 g_err.append(abs(g / v - 1))
                 d_err.append(abs(r["interior_px"] / (r["door_px"] / math.exp(c)) ** 2 / v - 1))
+        # shrinkage: log-blend of the door estimate and the typical apartment (weight w on the door estimate)
+        for w in (0.5, 0.7, 0.85, "var"):
+            b_err, ws = [], []
+            for half in (True, False):
+                fit = [r for r in tots if r["fit"] == half]
+                g = st.median([sum(r["totals"]) for r in fit])
+                c = st.median([math.log(r["door_px"] / r["truth"]) for r in fit])
+                if w == "var":
+                    vd = st.pvariance([-2 * math.log(r["door_px"] / math.exp(c) / r["truth"]) for r in fit])
+                    vg = st.pvariance([math.log(g / sum(r["totals"])) for r in fit])
+                    wh = vg / (vg + vd)
+                    ws.append(round(wh, 2))
+                else:
+                    wh = w
+                for r in (r for r in tots if r["fit"] != half):
+                    de = r["interior_px"] / (r["door_px"] / math.exp(c)) ** 2
+                    b_err.append(abs(math.exp(wh * math.log(de) + (1 - wh) * math.log(g)) / sum(r["totals"]) - 1))
+            print(f"  blend w={w}{ws if ws else ''}: err p50 {100 * q(b_err, .5):.1f}%, within 10% {100 * sum(e <= .1 for e in b_err) / len(b_err):.0f}%,"
+                  f" within 20% {100 * sum(e <= .2 for e in b_err) / len(b_err):.0f}%")
         print(f"apartment total area, {len(tots)} plans (cross-fit): typical-apartment guess err p50 "
               f"{100 * q(g_err, .5):.1f}% (within 10% {100 * sum(e <= .1 for e in g_err) / len(g_err):.0f}%) vs door "
               f"scale p50 {100 * q(d_err, .5):.1f}% (within 10% {100 * sum(e <= .1 for e in d_err) / len(d_err):.0f}%, "
@@ -258,31 +309,55 @@ def main() -> None:
         d = calib["door"]
         out = {"w0_m": round(d["const"], 4), "log_resid_80": [round(d["log_resid_80"][0], 4), round(d["log_resid_80"][1], 4)],
                "n_fit": d["n"], "within10_area_check": round(d["within10_area"], 3),
+               "within2_area_check": round(d["within2_area"], 3),
                "within20_area_check": round(d["within20_area"], 3), "area_err_p50_check": round(d["area_err_p50"], 4),
                "coverage80_crossfit": round(d["coverage80_crossfit"], 3), "min_doors": a.min_doors,
                "source": "experiments/r1/raster_scale/raster_scale.py on TRAIN cubicasa plans with printed areas"}
         Path(__file__).with_name("calib.json").write_text(json.dumps(out, indent=1) + "\n")
         print("wrote", Path(__file__).with_name("calib.json"), out)
 
-    # ---- end-to-end: each printed room's area from its CC5K region and the door scale (fit constant from FIT half)
-    fit = [r for r in ok if r["fit"] and r["door_px"]]
-    c = st.median([math.log(r["door_px"] / r["truth"]) for r in fit])
-    errs, errs_true = [], []
-    for r in rows:
-        if r["fit"] or not r["door_px"]:
+    # ---- end-to-end: each printed ROOM's area = its CC5K region px / s², with a ROOM constant w0_room fitted on the
+    # other half's printed rooms (regions are smaller than printed net areas, so the apartment constant is biased).
+    def room_w(r, p):  # implied door opening (m) for one printed room
+        return r["door_px"] / math.sqrt(p["px"] / p["m2"])
+    pool = [r for r in rows if r["door_px"] and r["n_doors"] >= a.min_doors and r["per_room"]]
+    errs, inband, seg = [], 0, []
+    for half in (True, False):
+        fit = [math.log(room_w(r, p)) for r in pool if r["fit"] == half for p in r["per_room"]]
+        if len(fit) < 10:
             continue
-        s = r["door_px"] / math.exp(c)
-        for p in r["per_room"]:
-            errs.append(abs(p["px"] / s ** 2 / p["m2"] - 1))
-            if r.get("truth"):
-                errs_true.append(abs(p["px"] / r["truth"] ** 2 / p["m2"] - 1))
+        c = st.median(fit)
+        lo, hi = q([x - c for x in fit], .1), q([x - c for x in fit], .9)
+        for r in pool:
+            if r["fit"] == half:
+                continue
+            s_est = r["door_px"] / math.exp(c)
+            for p in r["per_room"]:
+                ratio = p["px"] / s_est ** 2 / p["m2"]  # est / printed
+                errs.append(abs(ratio - 1))
+                inband += math.exp(2 * lo) <= 1 / ratio <= math.exp(2 * hi)  # true/est = exp(2r)
+                if r.get("truth_kind") == "total":  # segmentation-only error at the plan's (non-circular) true scale
+                    seg.append(abs(p["px"] / r["truth"] ** 2 / p["m2"] - 1))
     if errs:
-        print(f"end-to-end room area (CHECK half, {len(errs)} printed rooms): door scale -> err p50 {100 * q(errs, .5):.1f}%, "
-              f"within 10% {100 * sum(e <= .1 for e in errs) / len(errs):.0f}%, within 20% "
-              f"{100 * sum(e <= .2 for e in errs) / len(errs):.0f}%")
-    if errs_true:
-        print(f"  segmentation-only error (true scale of the same plan; optimistic, the room is part of its own "
-              f"truth): p50 {100 * q(errs_true, .5):.1f}%")
+        allw = [math.log(room_w(r, p)) for r in pool for p in r["per_room"]]
+        print(f"end-to-end printed ROOM areas (cross-fit, {len(errs)} rooms on {len(pool)} plans; room constant "
+              f"{math.exp(st.median(allw)):.3f} m): err p50 {100 * q(errs, .5):.1f}%, within 10% "
+              f"{100 * sum(e <= .1 for e in errs) / len(errs):.0f}%, within 20% {100 * sum(e <= .2 for e in errs) / len(errs):.0f}%, "
+              f"printed value inside the 80% band {100 * inband / len(errs):.0f}%")
+        if a.write_calib:
+            cp = Path(__file__).with_name("calib.json")
+            d = json.loads(cp.read_text()) if cp.exists() else {}
+            cw = st.median(allw)
+            d.update({"w0_room_m": round(math.exp(cw), 4), "log_resid_80_room":
+                      [round(q([x - cw for x in allw], .1), 4), round(q([x - cw for x in allw], .9), 4)],
+                      "n_rooms": len(allw), "room_err_p50_check": round(q(errs, .5), 4),
+                      "room_within20_check": round(sum(e <= .2 for e in errs) / len(errs), 3),
+                      "room_within2_check": round(sum(e <= .02 for e in errs) / len(errs), 3),
+                      "room_band80_coverage_check": round(inband / len(errs), 3)})
+            cp.write_text(json.dumps(d, indent=1) + "\n")
+    if seg:
+        print(f"  of which segmentation error alone (plans whose truth is a printed TOTAL, n={len(seg)} rooms): "
+              f"p50 {100 * q(seg, .5):.1f}%, within 20% {100 * sum(e <= .2 for e in seg) / len(seg):.0f}%")
 
 
 if __name__ == "__main__":

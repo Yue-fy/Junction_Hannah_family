@@ -52,8 +52,12 @@ def _rel(path: str) -> str:
     return p[i:] if i >= 0 else p
 
 
-def door_scale(path: str, min_doors: int = 2) -> dict | None:
-    """px per metre from the median CC5K door opening, or None (not a cached plan, or fewer than min_doors)."""
+def door_scale(path: str, min_doors: int = 2, room: bool = False) -> dict | None:
+    """px per metre from the median CC5K door opening, or None (not a cached plan, or fewer than min_doors).
+
+    room=False: constant + band fitted on printed APARTMENT totals (use for whole-plan areas and lengths).
+    room=True: constant + band fitted on printed ROOM areas vs single CC5K regions (wider: region matching is noisy).
+    """
     rec = _counts().get(_rel(path))
     if not rec:
         return None
@@ -62,8 +66,10 @@ def door_scale(path: str, min_doors: int = 2) -> dict | None:
         return None
     c = _calib()
     w_px = float(st.median(max(b[2] - b[0], b[3] - b[1]) for b in boxes))
-    s = w_px / c["w0_m"]
-    lo, hi = c["log_resid_80"]  # log(s_est / s_true) band on FIT plans
+    w0 = c["w0_room_m"] if room else c["w0_m"]
+    s = w_px / w0
+    lo, hi = c["log_resid_80_room"] if room else c["log_resid_80"]  # log(s_est / s_true) band, cross-fit checked
+    hit2 = c["room_within2_check"] if room else c["within2_area_check"]
     return {
         "px_per_m": round(s, 2),
         "px_per_m_80": [round(s / math.exp(hi), 2), round(s / math.exp(lo), 2)],
@@ -72,9 +78,10 @@ def door_scale(path: str, min_doors: int = 2) -> dict | None:
         "n_doors": len(boxes),
         "door_px": w_px,
         "boxes": boxes,
-        "confidence": c.get("within10_area_check", 0.0),
-        "assumptions": [f"no scale printed; assumed the median door opening is {c['w0_m']:.2f} m "
-                        f"(fitted on {c['n_fit']} plans with printed room areas), {len(boxes)} doors measured"],
+        "confidence": round(max(0.02, hit2), 3),  # P(area within the 2% scoring tolerance), measured
+        "assumptions": [f"no scale printed; assumed the median door opening is {w0:.2f} m "
+                        f"(fitted on {c['n_rooms'] if room else c['n_fit']} printed {'rooms' if room else 'apartment areas'}"
+                        f" of training plans), {len(boxes)} doors measured"],
         "missing": ["a scale bar, dimension strings or printed room areas"],
     }
 
@@ -125,11 +132,11 @@ def estimate_area(path: str, target: str = "apartment") -> dict | None:
     reports each region separately (the caller picks one when the question names it). Returns None if the plan is
     not cached or has fewer than 2 detected doors. Evidence: the measured regions and the doors used for scale.
     """
-    sc = door_scale(path)
+    cls = None if target == "apartment" else ROOM_WORDS.get(target.lower(), target.lower())
+    sc = door_scale(path, room=cls is not None)
     if not sc:
         return None
     regs = room_regions(path)
-    cls = None if target == "apartment" else ROOM_WORDS.get(target.lower(), target.lower())
     use = [r for r in regs if cls is None or r["cls"] == cls]
     if not use:
         return None

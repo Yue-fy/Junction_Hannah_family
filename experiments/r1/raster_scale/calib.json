@@ -1,0 +1,25 @@
+{
+ "w0_m": 0.8203,
+ "log_resid_80": [
+  -0.1634,
+  0.222
+ ],
+ "n_fit": 52,
+ "within10_area_check": 0.327,
+ "within2_area_check": 0.019,
+ "within20_area_check": 0.596,
+ "area_err_p50_check": 0.1739,
+ "coverage80_crossfit": 0.827,
+ "min_doors": 2,
+ "source": "experiments/r1/raster_scale/raster_scale.py on TRAIN cubicasa plans with printed areas",
+ "w0_room_m": 0.8742,
+ "log_resid_80_room": [
+  -0.1785,
+  0.4113
+ ],
+ "n_rooms": 130,
+ "room_err_p50_check": 0.2221,
+ "room_within20_check": 0.454,
+ "room_within2_check": 0.023,
+ "room_band80_coverage_check": 0.754
+}

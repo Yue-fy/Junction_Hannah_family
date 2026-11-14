@@ -66,7 +66,7 @@ def main():
         print(f"{'':28s} (drawings needing a read: {100 * nd:.0f}%)")
 
 
-if __name__ == "__main__" and "--boot" not in sys.argv:
+if __name__ == "__main__" and "--boot" not in sys.argv and "--blends" not in sys.argv:
     main()
 
 
@@ -105,3 +105,29 @@ def bootstrap(path, reps=1000, seed=0):
 
 if __name__ == "__main__" and "--boot" in sys.argv:
     bootstrap(sys.argv[1])
+
+
+def blends(path):
+    """Reader-free hedges: mean / min of the LoRA's own confidence and the key's train hit rate."""
+    rows = [json.loads(l) for l in open(path)]
+    KEY = re.compile(r"^vlm_lora: \S+ count \(conf ([0-9.]+)")
+    OWN = re.compile(r"^\[vlm_lora\] p\(answer digits\) = [0-9.e-]+ -> confidence ([0-9.]+)")
+    own, key, post, y = [], [], [], []
+    for r in rows:
+        if r.get("source") != "cubicasa5k" or "vlm_lora" not in r.get("solver", ""):
+            continue
+        o = next((float(m.group(1)) for t in r["trace"] for m in [OWN.match(t)] if m), None)
+        k = next((float(m.group(1)) for t in r["trace"] for m in [KEY.match(t)] if m), None)
+        if o is None or k is None:
+            continue
+        own.append(o); key.append(k); post.append(r["confidence"]); y.append(1 if r["correct"] else 0)
+    print(f"{path.split('/')[-1]}: {len(y)} LoRA answers")
+    summary("today (key x reader)", post, y, 1)
+    summary("own", own, y, 0)
+    summary("key hit rate only", key, y, 0)
+    summary("mean(own, key)", [(a + b) / 2 for a, b in zip(own, key)], y, 0)
+    summary("min(own, key)", [min(a, b) for a, b in zip(own, key)], y, 0)
+
+
+if __name__ == "__main__" and "--blends" in sys.argv:
+    blends(sys.argv[1])
