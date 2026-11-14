@@ -2231,6 +2231,8 @@ class IfcSolver(BaseSolver):
                          f"average = {tot.value} / {cnt.value}"], f"average = total {it.metric} / number of {it.kind} elements")
 
         if it.mod == "share":
+            from stoa.solvers.ifc.parse import _kind_hits
+
             if others and storeys:  # "share of storey S's area that room R takes"
                 part, t1 = sub(others + [n for n, _ in storeys])
                 whole, t2 = sub([n for n, _ in storeys], total=True, kind="space" if it.metric == "area" else it.kind)
@@ -2244,6 +2246,29 @@ class IfcSolver(BaseSolver):
                 part, t1 = sub([n for n, _ in storeys])
                 whole, t2 = sub([n for n, _ in storeys], ctx_extra={"no_room_type": True}, kind="space")
                 wdesc = f"all rooms on '{storeys[0][0]}'"
+            elif storeys and re.search(r"\b(openings?|wall openings?|offnungen|openingen|ouvertures|aperture)\b",
+                                       qfo_ := fold(_QUOTED_RX.sub(" ", ctx.get("question", "")))) and \
+                    ({"door", "window"} & set(qk_ := [h[2] for h in _kind_hits(qfo_) if h[2] != "storey"])):
+                # "What share of the openings on S are windows?": openings = doors + windows on S (as people say it),
+                # not the model's windows (W1 c6 probe: 28 / 110 windows in the model = 25.5% at 0.89)
+                pk = next(k for k in qk_ if k in ("door", "window"))
+                sn_ = [n for n, _ in storeys]
+                part, t1 = sub(sn_, kind=pk, kinds=[pk], metric="count")
+                dd, _t = sub(sn_, kind="door", kinds=["door"], metric="count")
+                ww, _t = sub(sn_, kind="window", kinds=["window"], metric="count")
+                op_, _t = sub(sn_, kind="opening", kinds=["opening"], metric="count")
+                if any(not isinstance(a_.value, (int, float)) for a_ in (part, dd, ww)) or not (dd.value + ww.value):
+                    return None
+                tot_ = dd.value + ww.value
+                pct = float(part.value) / float(tot_) * 100.0
+                ans_ = done(pct, "%", [part, dd, ww], [f"{pk}s {part.value}", f"openings = doors {dd.value} + windows "
+                                                      f"{ww.value} = {tot_}", f"share = {part.value} / {tot_} x 100 = {pct:.2f}%"],
+                            f"share of {pk}s among the openings (doors + windows) on '{sn_[0]}'", 0.95)
+                ans_.confidence = min(ans_.confidence, 0.6)
+                if isinstance(op_.value, (int, float)) and op_.value:
+                    ans_.missing.append(f"which openings are meant: doors + windows = {tot_}; the model's IfcOpeningElement "
+                                        f"voids on '{sn_[0]}' = {op_.value} (share {float(part.value) / op_.value * 100:.1f}%)")
+                return ans_
             elif storeys:  # "share of the model's doors on storey S"
                 part, t1 = sub([n for n, _ in storeys], scope="storey")
                 whole, t2 = sub([], scope="model")

@@ -140,3 +140,20 @@ def test_number_of_levels_matches_ifc_bench_gold(solver, model, gold):
 def test_grouped_numbers_in_thresholds(solver):
     q = "How many doors on '1.korrus' are wider than {} mm?"
     assert solver.solve(ESPL, q.format("1,000")).value == solver.solve(ESPL, q.format("1000")).value
+
+
+WARM1 = "data/ifc_models/bimspeed-warmond_ar_plan-03-1-level.pdf"
+
+
+@pytest.mark.skipif(not abspath(WARM1).exists(), reason="dataset not available")
+def test_derived_fresh_wordings(solver):
+    s = solver.solve
+    doors = s(WARM1, "How many doors are on '1. Level'?").value
+    wins = s(WARM1, "How many windows are on '1. Level'?").value
+    a = s(WARM1, "If every door on '1. Level' gets a lock costing 1,050 euros, what do the locks cost altogether?")
+    assert a.value == pytest.approx(doors * 1050)
+    assert s(WARM1, "If 25% of the doors on '1. Level' are replaced, how many doors is that?").value == pytest.approx(doors / 4)
+    assert s(WARM1, "If 25% of the doors on '1. Level' are removed, how many doors remain?").value == pytest.approx(doors * 0.75)
+    a = s(WARM1, "What share of the openings on '1. Level' are windows, in percent?")
+    assert a.value == pytest.approx(100 * wins / (wins + doors), abs=0.01) and a.confidence <= 0.6
+    assert s(WARM1, "Each door weighs 35 kg. What is the total weight of the doors on '1. Level'?").unit == "kg"
