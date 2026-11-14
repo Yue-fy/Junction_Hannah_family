@@ -113,7 +113,8 @@ _FUN = {"min": min, "max": max, "round": round, "abs": abs, "sum": lambda *a: su
 
 
 # numbers a calculation may use without a tool result: small factors, percent, unit conversions (ft, ft²)
-_CONST = {0.0, 1.0, 2.0, 3.0, 4.0, 10.0, 100.0, 1000.0, 0.3048, 3.28084, 3.2808, 10.7639, 10.764, 0.092903, 0.0929}
+_CONST = {0.0, 1.0, 2.0, 3.0, 4.0, 10.0, 100.0, 1000.0, 0.3048, 3.28084, 3.2808, 10.7639, 10.764, 0.092903, 0.0929,
+          60.0, 24.0, 7.0, 12.0, 52.0, 365.0, 3600.0, 1440.0, 0.0254, 39.37, 2.54}  # + time units, inch
 
 
 def calc(expr: str) -> float:

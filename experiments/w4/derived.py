@@ -200,8 +200,92 @@ def build2(seed: int = SEED) -> list[dict]:
     return out
 
 
+def build3(seed: int = SEED) -> list[dict]:
+    """`derived3` (cycle 72, written before any run, NOT tuned on): unit conversions, time constants with a unit change,
+    a relative difference between apartments, per-unit rates on ifc, a price per apartment."""
+    rng = random.Random(seed + 17)
+    sog = split_of_group()
+    dev_groups = {g for g, s in sog.items() if s == "dev"}
+    cm = concept_map()
+    all_qs = load_questions()
+    by_qid = {q.qid: q for q in all_qs}
+    facts = collections.defaultdict(dict)
+    for q in all_qs:
+        if q.source not in ("cubicasa5k", "swiss_dwellings", "ifc_models") or drawing_group(q.path) not in dev_groups:
+            continue
+        if by_qid.get(cm.get(q.qid, q.qid), q).qid != q.qid:
+            continue
+        f = parse(q)
+        if f and isinstance(q.answer, (int, float)):
+            facts[q.path][f] = q.answer
+    cands = collections.defaultdict(list)
+    for path in sorted(facts):
+        F = facts[path]
+        g = lambda *k: F.get(tuple(k))  # noqa: E731
+        if "cubicasa5k" in path:
+            wc, ba = g("cubi", "wc_seats"), g("cubi", "bathrooms")
+            if wc and ba:
+                cands["wc-per-bath"].append(_row(path, "On this plan, how many toilet seats are there per bathroom "
+                                                       "(washrooms, not separate WC rooms)?", round(wc / ba, 3), "",
+                                                 "area", "wc-per-bath", "cubicasa5k"))
+        elif "swiss_dwellings" in path:
+            apts = sorted((f[1], v) for f, v in F.items() if f[0] == "swiss_apt_area")
+            if len(apts) >= 2:
+                (a1, v1), (a2, v2) = rng.sample(apts, 2)
+                if v1 > v2:
+                    cands["apt-pct"].append(_row(path, f"By what percentage is apartment {a1} larger than apartment "
+                                                       f"{a2} (net floor area)?", round(100 * (v1 - v2) / v2, 3), "%",
+                                                 "area", "apt-pct", "swiss_dwellings"))
+            n = g("swiss", "apartments")
+            if n:
+                cands["mailboxes"].append(_row(path, "Every apartment on this floor gets a new letterbox for 60 CHF. "
+                                                     "What do the letterboxes cost in total?", 60 * n, "CHF", "area",
+                                               "mailboxes", "swiss_dwellings"))
+            for f, v in F.items():
+                if f[0] == "swiss_label_count" and v and rng.random() < 0.5:
+                    cands["clean-minutes"].append(_row(
+                        path, f"Cleaning one room labelled '{f[1]}' takes 20 minutes. How many hours does cleaning all "
+                              f"of them on this floor take?", round(v * 20 / 60, 3), "h", "area", "clean-minutes",
+                        "swiss_dwellings"))
+                    break
+        else:
+            area = {f[1]: v for f, v in F.items() if f[0] == "ifc_storey_area"}
+            doors = {f[2]: v for f, v in F.items() if f[0] == "ifc_plan_count" and f[1] == "doors"}
+            length = {f[1]: v for f, v in F.items() if f[0] == "ifc_wall_length"}
+            for st, v in area.items():
+                if v:
+                    cands["sqft"].append(_row(path, f"How many square feet do all the rooms on '{st}' cover together?",
+                                              round(v * 10.7639, 2), "ft2", "area", "sqft", "ifc_models"))
+            for st, v in length.items():
+                if v and doors.get(st):
+                    cands["wall-per-door"].append(_row(path, f"What length of wall is there per door on '{st}', in "
+                                                             f"metres?", round(v / doors[st], 3), "m", "area",
+                                                       "wall-per-door", "ifc_models"))
+    out = []
+    for recipe in sorted(cands):
+        rows = cands[recipe]
+        rng.shuffle(rows)
+        seen = collections.Counter()
+        for r in rows:
+            if seen[r["path"]] >= 2:
+                continue
+            seen[r["path"]] += 1
+            r["meta"]["kind"] = "derived3"
+            out.append(r)
+            if sum(seen.values()) >= 8:
+                break
+    return out
+
+
 if __name__ == "__main__":
     import sys
+
+    if sys.argv[1:] == ["3"]:
+        rows = build3()
+        out3 = OUT.with_name("derived3.jsonl")
+        out3.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows))
+        print(len(rows), "rows ->", out3, collections.Counter(r["meta"]["recipe"] for r in rows))
+        sys.exit(0)
 
     if sys.argv[1:] == ["2"]:
         rows = build2()
