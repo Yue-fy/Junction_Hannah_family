@@ -7,6 +7,8 @@ import type { Answer, FileInfo, KgRoom, RoomGraph } from "./types";
 import { roomKind, roomName, roomShown, Viewer2D } from "./viewer2d";
 import type { Viewer3D } from "./viewer3d"; // loaded lazily: web-ifc + three are ~4 MB
 import tourSteps from "../fixtures/tour.json";
+import { diffQuestion, diffsHtml, heroHtml, heroLoadingHtml, initialView, landingHtml, numbered, projectDifferences, projectOf, PROJECTS, saveView, type Difference, type View } from "./customer";
+import type { Project } from "./projects";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -472,7 +474,11 @@ async function openFile(f: FileInfo, question = "", keep: Answer | null = null, 
   $("fileTitle").textContent = f.path.split("/").pop()!;
   $("fileMeta").textContent = f.source === "upload" ? uploadMeta(f) : `${f.source} · ${f.n_questions} questions`;
   $("credit").innerHTML = creditLine(f);
+  projectChrome(f);
   if (!keep) {
+    $("hero").hidden = true;
+    $("hero").innerHTML = "";
+    document.body.classList.remove("answered");
     markAnswerCheck($("linked"), undefined, undefined);
     $("xbanner").hidden = true;
     $("elsewhere").hidden = true;
@@ -494,7 +500,7 @@ async function openFile(f: FileInfo, question = "", keep: Answer | null = null, 
   });
   $<HTMLSelectElement>("storey").hidden = true;
   if (v3d && state.ifc && v3d.file === state.ifc) fillStoreys(); // same model, other sheet: follow its storey
-  if (!keep) setMode(is3DOnly ? "3d" : state.ifc ? "split" : "2d");
+  if (!keep) setMode(is3DOnly ? "3d" : state.ifc && !isCustomer() ? "split" : "2d");
   else setMode(is3DOnly ? "3d" : state.mode === "3d" && state.ifc ? "split" : state.ifc ? state.mode : "2d");
 
   void loadExamples(f);
@@ -572,12 +578,20 @@ async function loadExamples(f: FileInfo) {
     const interleaved: typeof uniq = [];
     for (let k = 0; interleaved.length < uniq.length; k++)
       for (const l of byType.values()) if (l[k]) interleaved.push(l[k]);
+    const proj = isCustomer() ? projectOf(f.path) : undefined;
+    if (proj) {
+      chips.innerHTML = proj.chips.map((q) => `<button type="button" class="chip" title="${esc(q)}">${esc(q)}</button>`).join("");
+      chips.querySelectorAll<HTMLButtonElement>(".chip").forEach((b, i) => b.addEventListener("click", () => {
+        $<HTMLTextAreaElement>("question").value = proj.chips[i];
+        void runAsk();
+      }));
+    }
     const general = f.source === "upload" ? (f.ext === ".ifc" ? IFC_QUESTIONS : f.siblings?.[".ifc"] ? SHEET_MODEL_QUESTIONS
       : f.style ? APARTMENT_QUESTIONS : UPLOAD_QUESTIONS) : GENERIC_QUESTIONS;
     const pick = qs.length ? [...english.filter((q) => q.has_fixture), ...interleaved.filter((q) => !q.has_fixture)].slice(0, 4)
       : general.map((question) => ({ question, type: "", unit: null }));
-    chips.innerHTML = pick.map((q) => `<button type="button" class="chip" title="${esc(q.question)}">${esc(q.question.length > 64 ? q.question.slice(0, 61) + "…" : q.question)}</button>`).join("");
-    chips.querySelectorAll<HTMLButtonElement>(".chip").forEach((b, i) => b.addEventListener("click", () => {
+    if (!proj) chips.innerHTML = pick.map((q) => `<button type="button" class="chip" title="${esc(q.question)}">${esc(q.question.length > 64 ? q.question.slice(0, 61) + "…" : q.question)}</button>`).join("");
+    if (!proj) chips.querySelectorAll<HTMLButtonElement>(".chip").forEach((b, i) => b.addEventListener("click", () => {
       $<HTMLTextAreaElement>("question").value = pick[i].question;
       void runAsk();
     }));
@@ -694,6 +708,8 @@ async function runAsk() {
   card.className = "card loading";
   card.innerHTML = `<div class="spinner"></div><p>Answering… <b class="elapsed"></b> <small>cheapest solver first (rules → local model → hosted model)</small><small class="slow" hidden><br>Still working: no rule answers this directly, so the local vision model is reading the drawing or the reasoning agent is planning steps. The first read of a large scan can take a few minutes; after that it is cached.</small></p>`;
   $<HTMLButtonElement>("askBtn").disabled = true;
+  $("hero").hidden = false;
+  $("hero").innerHTML = heroLoadingHtml(q);
   const t0 = performance.now();
   // a live question can take long (first text-layer read of a scan, the agent's steps): show it is still going
   const tick = window.setInterval(() => {
@@ -701,6 +717,8 @@ async function runAsk() {
     const el = card.querySelector<HTMLElement>(".elapsed");
     if (!el) return window.clearInterval(tick);
     el.textContent = s >= 2 ? `${Math.floor(s)} s` : "";
+    const he = $("hero").querySelector<HTMLElement>(".elapsed");
+    if (he) he.textContent = s >= 2 ? `${Math.floor(s)} s${s >= 15 ? " · the first read of a new drawing takes longer" : ""}` : "";
     const slow = card.querySelector<HTMLElement>(".slow");
     if (slow && s >= 15) slow.hidden = false;
   }, 1000);
@@ -711,6 +729,7 @@ async function runAsk() {
   } catch (e) {
     card.className = "card error";
     card.innerHTML = `<p><b>Request failed.</b> ${esc(e)}</p>`;
+    $("hero").innerHTML = `<div class="hero-error"><b>Sorry, that did not work.</b> <small>${esc(e)}</small></div>`;
   } finally {
     window.clearInterval(tick);
     $<HTMLButtonElement>("askBtn").disabled = false;
@@ -763,8 +782,10 @@ async function showAnswer(a: Answer, roundTripMs: number) {
     },
   });
   v2d.setEvidence(a.evidence);
+  v2d.setNumbers(numbered(a.evidence));
   v2d.frameEvidence();
   showElsewhere(a);
+  renderHero(a, roundTripMs);
   // only a storey-scoped count is the same fact as a drawing-vs-model pill (model-wide totals are not)
   const st = a.intent?.filters?.storey ? String(a.intent.filters.storey) : undefined;
   markAnswerCheck($("linked"), a.intent?.task === "count" && st ? a.intent.target : undefined, st);
@@ -896,6 +917,7 @@ document.addEventListener("keydown", (e) => {
   }
 });
 $("tourBtn").addEventListener("click", async () => {
+  $("landing").hidden = true;
   tourStep = tourBack ? Math.max(0, tourStep - 1) : (tourStep + 1) % TOUR.length;
   tourBack = false;
   const t = TOUR[tourStep];
@@ -919,11 +941,134 @@ $("tourBtn").addEventListener("click", async () => {
   if (t.locate) document.querySelector<HTMLButtonElement>("#card .locate-btn")?.click();
 });
 
+// --- customer view (default) / expert view ------------------------------------------------------------------
+let view: View = initialView();
+const isCustomer = () => view === "customer";
+function applyView(v: View) {
+  view = v;
+  saveView(v);
+  document.body.dataset.view = v;
+  $("viewToggle").textContent = v === "customer" ? "Expert view" : "Simple view";
+  ($("how") as HTMLDetailsElement).open = v === "expert";
+  const names: Record<string, [string, string]> = { "2d": ["Drawing", "Plan"], "3d": ["3D model", "3D"], split: ["Side by side", "Side by side"] };
+  document.querySelectorAll<HTMLButtonElement>("#modes button").forEach((b) => (b.textContent = names[b.dataset.mode!][v === "customer" ? 1 : 0]));
+  $<HTMLTextAreaElement>("question").placeholder = v === "customer" ? "Ask anything about this project…" : "e.g. How many doors are shown on the floor plan?";
+  if (state.file) {
+    projectChrome(state.file);
+    void loadExamples(state.file);
+  }
+  if (state.answer) renderHero(state.answer, 0);
+  const url = new URL(location.href);
+  url.searchParams.set("view", v);
+  history.replaceState(null, "", url);
+}
+$("viewToggle").addEventListener("click", () => {
+  applyView(isCustomer() ? "expert" : "customer");
+  if (isCustomer() && !state.file) showLanding(true);
+  else if (!isCustomer()) showLanding(false);
+});
+
+function showLanding(on: boolean) {
+  const el = $("landing");
+  el.hidden = !on;
+  if (!on) return;
+  el.innerHTML = landingHtml();
+  el.querySelector<HTMLButtonElement>("[data-act=tour]")?.addEventListener("click", () => {
+    showLanding(false);
+    $("tourBtn").click();
+  });
+  el.querySelector<HTMLButtonElement>("[data-act=expert]")?.addEventListener("click", () => {
+    showLanding(false);
+    applyView("expert");
+    if (!state.file) void fileInfo(DEMO[0]).then((f) => f && openFile(f));
+  });
+  el.querySelectorAll<HTMLButtonElement>(".proj-card").forEach((b) => b.addEventListener("click", () => {
+    if (b.dataset.project === "upload") return $<HTMLInputElement>("uploadInput").click();
+    const p = PROJECTS.find((x) => x.id === b.dataset.project);
+    if (p) void openProject(p);
+  }));
+}
+$("projectsBtn").addEventListener("click", () => showLanding(true));
+$("askMore").addEventListener("click", () => document.body.classList.remove("answered"));
+
+async function fileInfo(path: string): Promise<FileInfo | undefined> {
+  return state.files.find((x) => x.path === path)
+    ?? (await listFiles("", path, 5).catch(() => [])).find((x) => x.path === path)
+    ?? (await listFiles(path.split("/")[1], path, 5, false).catch(() => [])).find((x) => x.path === path);
+}
+async function openProject(p: Project, sheet = 0, question = "") {
+  const f = await fileInfo(p.sheets[sheet].path);
+  if (!f) return;
+  showLanding(false);
+  await openFile(f, question);
+  if (question) await runAsk();
+}
+
+/** Customer view chrome for the open file: project name, its sheets as tabs, the one-line credit, differences. */
+let diffsFor = "";
+let diffs: Difference[] = [];
+function projectChrome(f: FileInfo) {
+  const p = projectOf(f.path);
+  $("projHead").hidden = !isCustomer();
+  $("projName").textContent = p?.name ?? (f.source === "upload" ? "Your drawing" : f.title || f.path.split("/").pop()!);
+  $("projPlace").textContent = p ? `${p.place} · ${p.contents}` : f.source === "upload" ? "your upload, kept only on this computer" : "";
+  const tabs = $("sheetTabs");
+  tabs.hidden = !isCustomer() || !p || p.sheets.length < 2;
+  tabs.innerHTML = p ? p.sheets.map((s) => `<button type="button" role="tab" class="${s.path === f.path ? "on" : ""}" data-path="${esc(s.path)}">${esc(s.label)}</button>`).join("") : "";
+  tabs.querySelectorAll<HTMLButtonElement>("button").forEach((b) => b.addEventListener("click", () => {
+    const i = p!.sheets.findIndex((s) => s.path === b.dataset.path);
+    if (i >= 0 && b.dataset.path !== state.file?.path) void openProject(p!, i);
+  }));
+  $("credit").innerHTML = isCustomer() && p ? esc(p.credit) : creditLine(f);
+  // differences: once per project (the knowledge graph of every floor plan, cached by the dev server)
+  const el = $("diffs");
+  if (!isCustomer() || !p) {
+    el.hidden = true;
+    return;
+  }
+  if (diffsFor === p.id) {
+    el.hidden = !diffs.length;
+    return;
+  }
+  diffsFor = p.id;
+  diffs = [];
+  el.hidden = true;
+  void projectDifferences(p, (path) => knowledgeGraph(path).catch(() => null)).then((d) => {
+    if (diffsFor !== p.id) return;
+    diffs = d;
+    el.innerHTML = diffsHtml(d, p);
+    el.hidden = !d.length || !isCustomer();
+    el.querySelectorAll<HTMLButtonElement>(".diff-go").forEach((b) => b.addEventListener("click", () => {
+      const x = diffs[Number(b.dataset.diff)];
+      const i = p.sheets.findIndex((s) => s.path === x.sheet);
+      if (i >= 0) void openProject(p, i, diffQuestion(x));
+    }));
+  });
+}
+
+function renderHero(a: Answer, roundTripMs: number) {
+  const el = $("hero");
+  el.hidden = false;
+  document.body.classList.add("answered");
+  const p = state.file ? projectOf(state.file.path) : undefined;
+  el.innerHTML = heroHtml(a, {
+    question: $<HTMLTextAreaElement>("question").value.trim(), file: state.file?.path ?? "", roundTripMs,
+    sheetLabel: (path) => p?.sheets.find((s) => s.path === path)?.label ?? "",
+  });
+  el.querySelectorAll<HTMLButtonElement>("[data-ev]").forEach((b) => b.addEventListener("click", () => focusEvidence(Number(b.dataset.ev))));
+}
+
 // --- boot ---------------------------------------------------------------------------------------------------
 (async () => {
   await refreshFiles();
   const params = new URLSearchParams(location.search);
   const want = params.get("file");
+  applyView(view);
+  if (isCustomer() && !want) {
+    showLanding(true);
+    (window as unknown as { __ready: boolean }).__ready = true;
+    return;
+  }
   let f = want ? state.files.find((x) => x.path === want) : state.files[0];
   if (want && !f) f = (await listFiles("", want, 5)).find((x) => x.path === want)
     ?? (await listFiles(want.split("/")[1], want, 5, false)).find((x) => x.path === want); // files without questions
