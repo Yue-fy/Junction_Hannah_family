@@ -117,3 +117,23 @@ def test_dimension_scope_and_counts(path, q, n):
 
     a = IfcSolver(plan2d="0", llm="0").solve(path, q)
     assert a.value == n and a.confidence >= 0.8
+
+
+ESPL_IFC = "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc"
+
+
+@need
+@pytest.mark.parametrize("path,q,want", [
+    (ESPL, "How big is room 119?", 63.841),  # W5 10:34: the storey total 870.288 @ 0.95
+    (ESPL, "What is the area of corridor 119 on floor 1?", 63.841),
+    (ESPL_IFC, "Which floor has no MAGAMISTUBA?", "1.korrus"),  # Q v25: the floors WITH one @ 0.9
+    (ESPL, "Of the floors that have rooms, which one has the fewest?", "1.korrus"),  # was a room @ 0.9
+    (ESPL, "What is the total area of the three largest rooms on '1.korrus'?", 232.887),  # was the list
+    (ESPL, "Which three rooms on '1.korrus' are the largest?",
+     "FUAJEE-TREPIKODA (101) (90.64 m²); KORIDOR (105) (78.40 m²); KORIDOR (119) (63.84 m²)"),
+])
+def test_v25_rankings_and_room_numbers(path, q, want):
+    from stoa.solvers.ifc.solver import IfcSolver
+
+    a = IfcSolver(plan2d="0", llm="0").solve(path, q)
+    assert a.value == want and a.confidence >= 0.8
