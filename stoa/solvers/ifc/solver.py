@@ -2306,7 +2306,13 @@ class IfcSolver(BaseSolver):
                            r"\bnell.?edificio\b|\btout le batiment\b|\bl.?ensemble du batiment\b|\bhela (byggnaden|huset)\b|"
                            r"\bhele (bygningen|huset)\b|\bkoko (rakennukse\w*|rakennus|talo\w*)\b|\bkogu (hoone\w*|maja\w*)\b|"
                            r"\b(calym|caly|cały) budyn\w*\b|\bcele(m)? budov\w*\b|\btodo o edificio\b|\begesz epulet\w*\b|"
-                           r"\bintreag\w* cladir\w*\b|\bwhole of the (building|house)\b")
+                           r"\bintreag\w* cladir\w*\b|\bwhole of the (building|house)\b|"
+                           # F 10:22: 'How many doors are in this building?' on the foundation sheet = 0 (sheet storey;
+                           # gold 16): 'this' + building is the building, not 'this plan'
+                           r"\bthis (building|house|model|project)\b(?!.s)|\b(dieses|diesem) (gebaude|haus|modell)\b|"
+                           r"\bdit gebouw\b|\bdeze woning\b|\b(ce|cet) (batiment|edifice|immeuble)\b|\beste edificio\b|"
+                           r"\bquesto edificio\b|\b(tassa|tama|taman) rakennu\w*\b|\b(selles|see|selle) hoone\w*\b|"
+                           r"\bw tym budynku\b|\bi denna byggnad\b|\bi den har byggnaden\b|\bv teto budove\b")
 
     _STOREY_WORD = re.compile(r"\b(top|highest|uppermost|lowest|bottom|ground|first|second|third|fourth|fifth|\d+(?:st|nd|rd|"
                               r"th)?)\s+(floor|storey|story|level)\b|\b(basement|cellar|attic|loft|ground[- ]floor|"

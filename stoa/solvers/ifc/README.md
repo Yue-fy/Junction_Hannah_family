@@ -199,3 +199,32 @@ Later in cycle 7 (all probes written before fixing; outputs in `$JUNCTION_SHARED
   sum); the original wording is split when the translation lost the second question.
 - `factcard.answer_free_text` uses `llm.text_backend()` (S0 D21; inert unless `STOA_TEXT_BACKEND=local2`).
 Every step: ifc_models train/dev/hard/hard2 0 answers changed; 0 of 3,882 dataset IFC questions match the new patterns.
+- **Unnamed sheets** (F 09:39: uploads 'A101.pdf', hashed copies answered 'this floor plan' for the whole model):
+  `plan_storey` falls back to the sheet's title line ('… — Floor plan: Intermediate level 1'), then to a majority vote
+  of the SVG twin's GlobalId tags (≥ 80% one storey and ≥ 50% of its rooms). F this_plan_nh 326/326.
+- **Rankings and top-N lists** (W5 09:47): 'Which floor has the most rooms?' ranks by count (was by room area); 'the
+  three largest rooms' is a rule list with every room as evidence.
+
+## Plan <-> model comparatives, a deterministic link reader, 'this building' (cycle 8, 10:13–10:45)
+Probes written before fixing: `experiments/w1/probes/c8_cmp.{txt,jsonl}` (22 rows with gold), `c8_building.txt`.
+- **Comparatives** (`_plan_vs_model`, Q 10:09): the side named right after 'than' (als/kuin/que/dan/än/…) is the
+  reference, the other is the subject wherever it stands ('Are there fewer windows on this drawing than in the
+  model?' was 'no' @ 0.85). Comparative words in en/de/fi/fr/es/nl/sv/pl/et/it (German/Finnish went to the fact-card
+  LLM: 'Nein'/'Ei' @ 0.30). 'How many more / by how many / exceed' -> the difference as a count (was 'yes' @ 0.85 /
+  297 @ 0.50). 'as many … as' = agree. 'Does the plan differ / is there a discrepancy' answers yes when they differ
+  (it gave the 'agree?' answer). 'Are there windows the sheet does not draw?' -> yes/no, not the count.
+- **Sheet totals** in de/nl/fi ('insgesamt … Schnitte und Aufrisse' 4 -> 10); floor-plan words veto 'in total' only
+  when no section/elevation word is named.
+- **`plan_vs_model(path, question)`** (exported from `stoa.solvers.ifc`): only this deterministic reading, 0 LLM,
+  None when the question is not a plan<->model question, never raises. For the pipeline's link route, which ran ifc
+  only for some kg_qa trigger reasons. `experiments/w1/pvm_check.py` on every link row of R1's probe_kg/probe_para,
+  Q's red team and c8: fires on 150 of 354, comparable shape 127/127 right; where it disagrees with kg_qa (4 rows),
+  it is right 4/4.
+- **KG cross-check on the asked storey** (`stoa/kg/graph.py::_crosscheck`): a count whose evidence lies on one storey
+  other than the sheet's is checked on that storey ('walls on the ground floor' on the 1.OG sheet: ✗ vs 70 -> ✓ vs EG
+  81; pipeline 0.68 -> 0.98).
+- **'this building / dieses Gebäude / ce bâtiment / dit gebouw / tässä rakennuksessa …' = the whole model** on a plan
+  sheet (F 10:22: 'How many doors are in this building?' on the foundation sheet = 0, gold 16); a storey word still
+  wins ('this building's ground floor', 'the basement of this building'). F whole_top 326/326 (pipeline 311/326).
+- Dutch 'plattegrond' no longer matches the slab stem 'platte' (`parse._STEM_NOT`).
+Every step: ifc_models train/dev/hard/hard2 0 of 2,051 answers changed; pipeline dev/hard ifc 0 changed.

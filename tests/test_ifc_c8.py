@@ -78,3 +78,22 @@ def test_not_a_link_question_is_none():
 def test_dutch_plattegrond_is_not_a_slab():
     assert parse("Toont deze plattegrond minder ramen dan het IFC-model?").kind == "window"
     assert parse("Wie viele Bodenplatten gibt es?").kind == "slab"
+
+
+GDY_F = "data/ifc_models/bimspeed-gdynia_ruchu-oporu-18_plan-01-foundation.pdf"
+
+
+@need
+@pytest.mark.skipif(not abspath(GDY_F).exists(), reason="gdynia not available")
+@pytest.mark.parametrize("q,n", [
+    ("How many doors are in this building?", 16),  # F 10:22: was 0 (the foundation sheet's storey)
+    ("Wie viele Türen hat dieses Gebäude?", 16),
+    ("Hoeveel deuren heeft dit gebouw?", 16),
+    ("How many doors does this building's ground floor have?", 6),  # a storey word still wins
+    ("How many doors are on this floor plan?", 0),
+])
+def test_this_building_is_the_whole_model(q, n):
+    from stoa.solvers.ifc.solver import IfcSolver
+
+    a = IfcSolver(plan2d="0", llm="0").solve(GDY_F, q)
+    assert a.value == n
