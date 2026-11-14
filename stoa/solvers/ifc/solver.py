@@ -791,13 +791,33 @@ class IfcSolver(BaseSolver):
             if it.metric == "count":
                 qg = fold(ctx.get("question", ""))
                 sts = idx.storeys
-                if re.search(r"\b(above (ground|grade)|oberirdisch\w*|bovengronds\w*|maanpaall\w*)\b", qg):
-                    sts = [st for st in idx.storeys if st.elevation is None or st.elevation > -0.01]
-                    assumptions.append("above ground = storeys with elevation >= 0 (incl. a roof level if modelled)")
-                elif re.search(r"\b(below (ground|grade)|underground|basements?|unterirdisch\w*|ondergronds\w*|"
+                elevs = [st.elevation for st in idx.storeys if st.elevation is not None]
+                # elevations relative to a site datum (hitos: 17.3 .. 40.3 m): 'ground' is not elevation 0, so name the
+                # below-ground levels by their names (basement / foundation words) and say so
+                datum = bool(elevs) and min(elevs) > 0.5 and not any(abs(z) < 0.5 for z in elevs)
+                below_name = re.compile(r"\b(kjeller|keller\w*|kelder\w*|basement\w*|cellar|sous[- ]sol|kellari|"
+                                        r"fundament\w*|foundation\w*|untergeschoss|souterrain|interrato|seminterrato|"
+                                        r"piwnica|podziemi\w*|kelder|b\d+|u\d+|ug\d*|-\d+)\b")
+                if re.search(r"\b(above[- ](ground|grade)|oberirdisch\w*|bovengronds\w*|maanpaall\w*)\b", qg):
+                    if datum:
+                        sts = [st for st in idx.storeys if not below_name.search(fold(st.name or ""))]
+                        assumptions.append("storey elevations are relative to a datum, not to the ground; above ground = "
+                                           "storeys not named as basement/foundation")
+                        conf = min(conf, 0.6 / 0.85)
+                    else:
+                        sts = [st for st in idx.storeys if st.elevation is None or st.elevation > -0.01]
+                        assumptions.append("above ground = storeys with elevation >= 0 (incl. a roof level if modelled)")
+                elif re.search(r"\b(below[- ](ground|grade)|underground|basements?|unterirdisch\w*|ondergronds\w*|"
                                r"kelder\w*|keller\w*)\b", qg):
-                    sts = [st for st in idx.storeys if st.elevation is not None and st.elevation < -0.01]
-                    assumptions.append("below ground = storeys with elevation < 0")
+                    if datum:
+                        sts = [st for st in idx.storeys if below_name.search(fold(st.name or ""))]
+                        assumptions.append(f"storey elevations are relative to a datum ({min(elevs):.2f}..{max(elevs):.2f} "
+                                           "m), not to the ground; below ground = storeys named as basement/foundation")
+                        missing.append("the ground level: the model gives no storey at elevation 0")
+                        conf = min(conf, 0.6 / 0.85)
+                    else:
+                        sts = [st for st in idx.storeys if st.elevation is not None and st.elevation < -0.01]
+                        assumptions.append("below ground = storeys with elevation < 0")
                 if len(buildings_of(idx)) > 1:
                     mb = main_building(idx)
                     sts = [st for st in sts if st.building == mb]
@@ -1423,6 +1443,24 @@ class IfcSolver(BaseSolver):
     def _repair_intent(self, path: str, idx: IfcIndex, it: Intent, question: str, trace: list[str]) -> None:
         """Small parse repairs for wordings the templates never use (W1 probes, cycle 4)."""
         qf = fold(_QUOTED_RX.sub(" ", question))
+        # "on all storeys above 'kjeller'", "below '2.etg'": the storeys strictly above/below the named one, summed
+        # (W1 c5: answered the named storey itself at 0.97)
+        if len(it.names) == 1 and it.kind not in (None, "storey") and not it.mod:
+            mr = re.search(r"\b(above|over|higher than|below|under|beneath|lower than|oberhalb|uber|unterhalb|unter|boven|"
+                           r"onder)\s+(?:the\s+)?(?:storey|story|floor|level|geschoss|verdieping)?\s*['\"‘’“”„«»]",
+                           fold(question))
+            ms_ = match_storey(idx, it.names[0]) if mr else None
+            if ms_ is not None and ms_.score >= 90 and ms_.obj.elevation is not None:
+                up = mr.group(1) in ("above", "over", "higher than", "oberhalb", "uber", "boven")
+                z0 = ms_.obj.elevation
+                rng = [st for st in own_storeys(idx) if st.elevation is not None
+                       and ((st.elevation > z0 + 0.01) if up else (st.elevation < z0 - 0.01))]
+                if len(rng) >= 1:
+                    it.names = [st.name for st in rng] if len(rng) > 1 else [rng[0].name]
+                    if len(rng) > 1:
+                        it.op = "sum"
+                    trace.append(f"storeys {'above' if up else 'below'} '{ms_.obj.name}' ({z0:.2f} m): "
+                                 + ", ".join(st.name for st in rng))
         # "in the whole building" asked on a plan sheet, no storey named: the whole model, not the sheet's storey
         # (asked on the .ifc itself, the scope is already the whole model)
         if (Path(path).suffix.lower() != ".ifc" and it.scope != "model" and not it.names and it.mod != "share" and it.kind != "storey"
@@ -2304,6 +2342,14 @@ class IfcSolver(BaseSolver):
         trace.append(f"breakdown by {it.group_by}: {len(groups)} groups")
         assumptions.append(f"type = {getattr(type_key, 'how', 'type name')}" if it.group_by == "type"
                            else "storey = the element's spatial container")
+        if it.group_by == "type" and re.search(r"\bhow many (different |distinct |unique )?(\w+ ){0,2}(types|kinds)\b|"
+                                              r"\bnumber of (different |distinct |unique )(\w+ ){0,2}(types|kinds)\b", q) \
+                and not re.search(r"\bof each\b|\beach type\b|\bper type\b", q):
+            # "How many different door types are used?": the number of types, the breakdown is the evidence
+            trace.append(f"count of distinct types: {len(groups)}")
+            assumptions.append("breakdown: " + "; ".join(lines[2:12])[:400])
+            return Answer(value=len(groups), unit="count", confidence=conf * 0.8, evidence=ev, trace=trace,
+                          solver=self.name, assumptions=assumptions, missing=missing)
         return Answer(value="\n".join(lines), unit=None, confidence=conf * 0.85, evidence=ev, trace=trace,
                       solver=self.name, assumptions=assumptions, missing=missing)
 
