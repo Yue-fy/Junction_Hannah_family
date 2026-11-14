@@ -126,7 +126,7 @@ class RasterSolver(BaseSolver):
 
     def __init__(self, gate: str = "", backend: str = "local", target_px: int | str = 2_000_000,
                  text: int | str = 1, offdomain: int | str = 1, twins: int | str = 1, doors: int | str = 1,
-                 windows: int | str = 1, prescan: int | str = 1, **kwargs):
+                 windows: int | str = 1, prescan: int | str = 1, doorscale: int | str = 0, **kwargs):
         super().__init__(**kwargs)
         self.backend = backend
         self.target_px = int(target_px)
@@ -136,6 +136,7 @@ class RasterSolver(BaseSolver):
         self.doors = bool(int(doors))  # off-domain door counts from drawn swing arcs (doorarcs.py); 0 = abstain
         self.windows = bool(int(windows))  # off-domain window counts from 4-line wall symbols (windows.py); 0 = abstain
         self.prescan = bool(int(prescan))  # scale-free window pre-scan before the text layer; 0 = always read the bar
+        self.doorscale = bool(int(doorscale))  # 1 = windows without a metric bar use the door-arc scale (off tonight)
         self.gate = load_gate()
         for part in filter(None, (gate or "").split(",")):
             c, m = part.split(":")
@@ -373,12 +374,25 @@ class RasterSolver(BaseSolver):
                          "another way)")
             return None
         bar = self._metric_bar(img_path, trace, "window symbols", "the wall/window sizes in pixels are unknown")
+        conf, scale_src = WS.CONF, None
         if bar is None:
+            if not self.doorscale:
+                return None
+            from stoa.solvers.raster import doorarcs as DA
+
+            px_m, n_arcs = DA.scale_from_arcs(T._abspath(img_path))
+            if px_m is None:
+                trace.append(f"window symbols: no scale bar and only {n_arcs} door arcs to estimate a scale from")
+                return None
+            conf = WS.CONF_DOORSCALE
+            scale_src = (f"scale {px_m:.1f} px per m estimated from the median radius of {n_arcs} door swing arcs, "
+                         f"assuming a standard door leaf of {DA.DOOR_LEAF_M} m (no scale bar on the drawing)")
+        else:
+            px_m = bar.px_per_m
+        if px_m < WS.MIN_PX_PER_M:
+            trace.append(f"window symbols: {px_m:.1f} px/m is too coarse (1:200; the window lines merge)")
             return None
-        if bar.px_per_m < WS.MIN_PX_PER_M:
-            trace.append(f"window symbols: {bar.px_per_m:.1f} px/m is too coarse (1:200; the window lines merge)")
-            return None
-        dets = WS.detect(T._abspath(img_path), bar.px_per_m)
+        dets = WS.detect(T._abspath(img_path), px_m)
         if not dets:  # 0 of 160 Swiss dev/TRAIN floors have no window: another symbol convention, not "0 windows"
             trace.append("window symbols: none of the known 4-line kind found (this drawing may draw windows "
                          "differently)")
@@ -387,15 +401,17 @@ class RasterSolver(BaseSolver):
                        note=f"window {k + 1}: 4-line window symbol in a {'horizontal' if d['dir'] == 'h' else 'vertical'}"
                             f" wall")
               for k, d in enumerate(dets)]  # one box per counted window, nothing else (boxes = the answer)
-        where = f" at {[round(v) for v in bar.box]} px" if bar.box else ""
-        trace.append(f"window symbols: {len(dets)} (scale {bar.px_per_m:.1f} px/m)")
-        return Answer(value=len(dets), unit="count", confidence=WS.CONF, evidence=ev, solver=self.name, trace=trace,
+        where = f" at {[round(v) for v in bar.box]} px" if bar is not None and bar.box else ""
+        trace.append(f"window symbols: {len(dets)} (scale {px_m:.1f} px/m{', from door arcs' if scale_src else ''})")
+        return Answer(value=len(dets), unit="count", confidence=conf, evidence=ev, solver=self.name, trace=trace,
                       assumptions=["a window = a wall stretch >= 0.3 m drawn as 4 thin parallel lines (wall faces + "
                                    "glass), as in Swiss-style renders; a window split by a mullion counts as two; "
                                    "other window symbols are missed",
-                                   f"scale {bar.px_per_m:.1f} px per m from the drawing's scale bar{where}"],
+                                   scale_src or f"scale {px_m:.1f} px per m from the drawing's scale bar{where}"],
                       missing=["a vector twin (DXF/PDF) of this plan for an exact count: the image alone matched the "
-                               "exact count on 10 of 32 held-out TRAIN floors"])
+                               "exact count on 10 of 32 held-out TRAIN floors"]
+                      + (["a scale bar or a dimension string to fix the scale (door-arc scale within 10% of the bar on "
+                          "71 of 97 Swiss dev floors)"] if scale_src else []))
 
     def _text_count(self, path: str, cls: str | None, label: str | None, trace: list[str],
                     question: str | None = None) -> Answer:
