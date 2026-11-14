@@ -126,3 +126,9 @@ def test_threshold_confidence_is_lower_when_the_detector_straddles_the_threshold
     straddle = cx.threshold_confidence("wc", 2, 1, 2)
     assert same is not None and straddle is not None and same > straddle
     assert cx.threshold_confidence("shower_bathtub", 1, 1, 2) is None
+
+
+def test_raster_cc5k_abstains_on_doors_of_foreign_styles():
+    from stoa.solvers.raster_cc5k import RasterCC5KSolver
+    a = RasterCC5KSolver().solve("data/swiss_dwellings/site1_bldg1_floor1.png", "How many doors are drawn on this floor plan?")
+    assert a.value is None and "does not transfer" in " ".join(a.trace)
