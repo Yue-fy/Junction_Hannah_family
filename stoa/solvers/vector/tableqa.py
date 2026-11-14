@@ -28,11 +28,32 @@ SAFE_BUILTINS = {k: __builtins__[k] if isinstance(__builtins__, dict) else getat
     "set", "sorted", "str", "sum", "tuple", "zip", "isinstance", "print")}
 
 
+# what the drawings call the rooms of a kind (bedrooms are mostly plain "Zimmer"/"Pièce"/"Stanza" in Swiss plans)
+CONCEPT_LABELS = {"bathroom": ["Bad", "Bain", "Bagno", "Badezimmer", "Dusche", "WC", "Douche"],
+                  "kitchen": ["Küche", "Cuisine", "Cucina", "Kochen"],
+                  "bedroom": ["Zimmer", "Schlafzimmer", "Pièce", "Chambre", "Chambre à coucher", "Stanza", "Camera",
+                              "Camera da letto"],
+                  "balcony": ["Balkon", "Balcon", "Balcone", "Loggia", "Terrasse", "Terrazza", "Sitzplatz"]}
+
+
+def _sides(poly) -> tuple[float, float]:
+    """Length and width of a room = sides of its minimum rotated rectangle (exact for rectangular rooms)."""
+    try:
+        xs = list(poly.minimum_rotated_rectangle.exterior.coords)
+        a = ((xs[0][0] - xs[1][0]) ** 2 + (xs[0][1] - xs[1][1]) ** 2) ** 0.5
+        b = ((xs[1][0] - xs[2][0]) ** 2 + (xs[1][1] - xs[2][1]) ** 2) ** 0.5
+        return round(max(a, b), 2), round(min(a, b), 2)
+    except Exception:  # noqa: BLE001
+        return float("nan"), float("nan")
+
+
 def floor_tables(fm: FloorModel) -> dict[str, pd.DataFrame]:
     rooms = []
     for r in fm.rooms:
+        length, width = _sides(r.poly)
         rooms.append(dict(room_id=r.idx, number=r.number, name=r.name, area_m2=round(r.area, 2),
                           apartment=r.unit, outdoor=r.outdoor, shaft=r.shaft, printed_area_m2=r.printed_area,
+                          perimeter_m=round(r.poly.length, 2), length_m=length, width_m=width,
                           n_doors=0, n_windows=0, n_toilets=0, n_washbasins=0, n_bathtubs=0, n_showers=0))
     by_id = {d["room_id"]: d for d in rooms}
     objects = []
@@ -53,10 +74,16 @@ def floor_tables(fm: FloorModel) -> dict[str, pd.DataFrame]:
     apts = []
     for u in fm.units:
         rs = [r for r in fm.rooms if r.unit == u.label]
-        apts.append(dict(apartment=u.label, n_rooms_numbered=sum(1 for r in rs if r.number),
-                         n_rooms_indoor=sum(1 for r in rs if r.number and not r.outdoor and not r.shaft),
-                         net_area_m2=round(sum(r.area for r in rs if r.number and not r.outdoor), 2),
-                         outdoor_area_m2=round(sum(r.area for r in rs if r.outdoor), 2)))
+        row = dict(apartment=u.label, n_rooms_numbered=sum(1 for r in rs if r.number),
+                   n_rooms_indoor=sum(1 for r in rs if r.number and not r.outdoor and not r.shaft),
+                   net_area_m2=round(sum(r.area for r in rs if r.number and not r.outdoor), 2),
+                   outdoor_area_m2=round(sum(r.area for r in rs if r.outdoor), 2))
+        for c in ("bathroom", "kitchen", "bedroom", "balcony"):  # rooms of a kind, by the drawing's labels
+            labs = {x.lower() for x in CONCEPT_LABELS[c]}
+            row[f"n_{c}s"] = sum(1 for r in rs if r.number and (r.name or "").lower() in labs)
+        row["n_doors"] = sum(1 for o in objects if o["kind"] == "door" and o["apartment"] == u.label)
+        row["n_windows"] = sum(1 for o in objects if o["kind"] == "window" and o["apartment"] == u.label)
+        apts.append(row)
     net = [r for r in fm.rooms if r.number and not r.outdoor and not r.shaft]
     floor = [dict(net_area_m2=round(sum(r.area for r in net), 2), n_rooms_numbered_indoor=len(net),
                   n_apartments=len(fm.units), outdoor_area_m2=round(sum(r.area for r in fm.rooms if r.number and r.outdoor), 2))]
@@ -72,11 +99,14 @@ rooms: one row per room polygon. room_id (int, key), number (str like "2.05" or 
   Zimmer/Schlafzimmer=bedroom, Bad/Bain/Bagno=bathroom, Küche/Cuisine/Cucina=kitchen, Korridor/Couloir=corridor,
   Wohnen/Essen/Séjour=living, Balkon/Balcon=balcony, Reduit=storage, Treppenhaus=stairs, or None), area_m2 (float,
   net floor area), apartment (letter like "A" or None), outdoor (bool), shaft (bool: shaft/void), printed_area_m2 (area printed on the plan
-  or None), n_doors, n_windows (doors/windows touching the room), n_toilets, n_washbasins, n_bathtubs, n_showers.
+  or None), perimeter_m (outline length), length_m / width_m (long / short side of the room's bounding rectangle,
+  exact for rectangular rooms), n_doors, n_windows (doors/windows touching the room), n_toilets, n_washbasins,
+  n_bathtubs, n_showers.
 objects: object_id, kind (door|window|toilet|washbasin|bathtub|shower), rooms (comma-separated room numbers it
   touches), apartment.
 apartments: apartment (letter), n_rooms_numbered (incl. balconies), n_rooms_indoor (what "how many rooms" means),
-  net_area_m2 (numbered indoor rooms), outdoor_area_m2.
+  net_area_m2 (numbered indoor rooms), outdoor_area_m2, n_bathrooms, n_kitchens, n_bedrooms (rooms labelled
+  Zimmer/Pièce/Stanza/Schlafzimmer…), n_balconies (incl. loggias/terraces), n_doors, n_windows (objects assigned to it).
 floor: one row: net_area_m2 (the floor's total net floor area), n_rooms_numbered_indoor, n_apartments, outdoor_area_m2.
 Conventions: "net floor area" of an apartment = its numbered rooms, excluding outdoor ones (= apartments.net_area_m2);
 of the floor = numbered rooms that are neither outdoor nor shafts (= floor.net_area_m2). A "room" is a row with a
