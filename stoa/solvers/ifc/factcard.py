@@ -101,6 +101,19 @@ def fact_card(idx: IfcIndex, it: Intent | None = None, max_lines: int = 160, sto
         fr = collections.Counter(v for e in group for k, v in e.props.items() if k.endswith(".FireRating") and v)
         if fr:
             L.append(f"  {c} fire ratings: " + ", ".join(f"{v} x{n}" for v, n in fr.most_common(6)))
+        sizes = collections.Counter(f"{e.dims['OverallWidth']:.2f}x{e.dims['OverallHeight']:.2f}" for e in group
+                                    if getattr(e, "dims", None) and len(e.dims) == 2)
+        if sizes:
+            ws = [e.dims["OverallWidth"] for e in group if getattr(e, "dims", None) and "OverallWidth" in e.dims]
+            L.append(f"  {c} sizes W x H m: " + ", ".join(f"{k} x{n}" for k, n in sizes.most_common(8))
+                     + f"; width min {min(ws):.3f} max {max(ws):.3f} mean {sum(ws) / len(ws):.3f} m")
+        lay: dict[str, str] = {}
+        for e in group:
+            if getattr(e, "layers", None) and tk(e) not in lay and len(lay) < 6:
+                lay[tk(e)] = " / ".join(f"{nm or '?'} {th * 1000:.0f}" for nm, th in e.layers) + \
+                    f" = {sum(th for _, th in e.layers) * 1000:.0f} mm"
+        if lay:
+            L.append(f"  {c} layer build-up by type (mm): " + "; ".join(f"{k}: {v}" for k, v in lay.items()))
         mats = collections.Counter(m for e in group for m in (getattr(e, "materials", None) or []))
         if mats:
             L.append(f"  {c} materials: " + ", ".join(f"{m} x{n}" for m, n in mats.most_common(6)))
