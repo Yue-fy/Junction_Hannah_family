@@ -71,16 +71,20 @@ def _sheet_kinds(question: str) -> set[str]:
     q = question.lower()
     want = set()
     if re.search(r"\b(floor ?plans?|plans?|grundriss\w*|pohjapiirustu\w*|pohj\w*|planritning\w*|piant\w*|"
-                 r"plattegrond\w*|plan d'étage|plans d'étage)\b", q):
+                 r"plattegrond\w*|plan d'étage|plans d'étage|planer|plannen|planos|plaan\w*)\b", q):
         want.add("plan")
     if re.search(r"\b(sections?|sectional|schnitt\w*|leikkau\w*|coupes?|sektion\w*|snitt\w*|sezion\w*|doorsnede\w*|"
                  r"lõike\w*|secci\w*|corte\w*)\b", q):
         want.add("section")
-    if re.search(r"\b(elevations?|ansicht\w*|julkisivu\w*|façades?|facades?|fasad\w*|prospett\w*|gevel\w*)\b", q):
+    if re.search(r"\b(elevations?|ansicht\w*|julkisivu\w*|façades?|facades?|fasad\w*|prospett\w*|gevel\w*|"
+                 r"elevaci\w*|alzad\w*)\b", q):
         want.add("elevation")
     if re.search(r"\b(in total|all|altogether|insgesamt|alle|yhteensä|kaikki|au total|tous|totalt|alla|in totale|"
-                 r"tutti|totaal|kokku)\b", q) and re.search(r"\b(sheets?|drawings?|blätter|piirustu\w*|feuilles?)\b", q):
+                 r"tutti|totaal|kokku)\b", q) and re.search(r"\b(sheets?|drawings?|blätter|piirustu\w*|feuilles?|"
+                                                           r"blad\w*|lehte\w*|lehti|hojas?|fogli|tavole)\b", q):
         want |= {"plan", "section", "elevation"}
+    elif want == {"plan", "section", "elevation"}:
+        pass  # an enumeration 'plans, sections and elevations' (paraphrases: 'total number of sheets — including …')
     elif "plan" in want and want & {"section", "elevation"}:
         want.discard("plan")  # 'plans de coupe', 'section plans', 'Schnittpläne': the specific kind wins
     return want
@@ -135,6 +139,12 @@ def is_link_question(question: str) -> dict:
         why.append("room -> storey/sheet")
     if not why and re.search(_MODEL2, q) and re.search(_PLAN2, q):
         why.append("plan and model named")
+    if not why and re.search(_MODEL, q) and re.search(
+            r"\b(than|as|als|kuin|que|än|di|dan)\s+(are|is|were|sind|on|sont|är|sono|zijn|son)?\s*(drawn|shown|"
+            r"gezeichnet|dargestellt|piirretty|näytetty|dessinée?s?|représentée?s?|ritade?|visade?|disegnat\w*|"
+            r"getekend|dibujad\w*)\b", q):
+        # r1v5 'Has the BIM model got more windows on this level than are drawn here?' (no sheet noun)
+        why.append("model vs drawn")
     if not why and re.search(_SET, q):
         why.append("drawing set")
     if not why and re.search(_SHEET3, q) and not re.search(r"\b(scale|maßstab|mittakaava|échelle|scala|skala|schaal|"
@@ -430,7 +440,9 @@ def _solve_one(path: str, question: str, backend: str = "local", llm_question: s
     counting = bool(re.search(r"\b(how many|how much|count|number of|wie viele|anzahl|kuinka monta|montako|combien|"
                               r"nombre de|quant[ie]|numero di|hur många|antal|hoeveel|aantal|mitu|kui palju|cuánt[oa]s|"
                               r"número de)\b", ql))
-    yesno = bool(re.match(_YESNO, ql)) or (not counting and op == "diff")
+    # 'Can you tell me how many …' is a count, not a yes/no (paraphrase: -> 'yes (model 20 vs drawn 10)' @0.8)
+    ql_y = re.sub(r"^(can|could|would|will) you (please )?(tell me|say|count|give me|list|show me|find)\s+", "", ql)
+    yesno = bool(re.match(_YESNO, ql_y)) or (not counting and op == "diff")
     trace_fix = None
     cmp_ = _compare_sides(ql) if (yesno and not counting) else None
     # 'the same storey / floor' names the storey, it is not 'agree' (Q v23: 'fewer windows than the IFC model has on
@@ -489,7 +501,9 @@ def _solve_one(path: str, question: str, backend: str = "local", llm_question: s
             if own:
                 cited = [own, *[r for r in cited if r is not cs[0]]]
                 trace.append(f"kg_qa: storey role {role_why}: {cs[0]['id']} -> {own['id']}")
-    if role and op in ("lookup_sheet", "lookup_storey", "none") and not re.search(_ROOMW, ql) and not named:
+    if role and not counting and not re.search(_ROOMW, ql) and not named and (
+            op in ("lookup_sheet", "lookup_storey") or (op == "none" and (re.search(_WHICH_SHEET, ql) or re.search(
+                _SHEET3, ql)))):  # W1 c8: 'How many walls on the ground floor?' must not become a sheet lookup
         srow = next(r for r in rows if r["id"][0] == "S" and r["storey"] == role)
         if {r.get("storey") for r in cited} != {role}:
             trace.append(f"kg_qa: storey role {role_why}: {[r['id'] for r in cited]} -> {srow['id']}")
@@ -615,6 +629,10 @@ def _solve_one(path: str, question: str, backend: str = "local", llm_question: s
     elif op == "exists":
         value, conf = ("yes" if cited else "no"), 0.7
         ev = [e for r in cited if (e := evid(r, r["text"][:80]))]
+    if counting_q and value is not None and op in ("lookup_storey", "lookup_sheet", "list_storeys"):
+        # W1 c8 'How many walls are there on the ground floor?' -> 'EG' @0.85 (a storey lookup): a count needs a number
+        trace.append(f"kg_qa: count question answered with '{value}' (op {op}) -> no answer")
+        value, conf = None, 0.0
     if value is None and not missing:
         missing.append("the linked sheet set / model facts do not answer this question")
     cost = Cost(llm_tokens_in=m.llm_tokens_in, llm_tokens_out=m.llm_tokens_out, gpu_seconds=m.gpu_seconds,
