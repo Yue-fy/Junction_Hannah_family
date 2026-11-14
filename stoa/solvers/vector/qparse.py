@@ -145,6 +145,14 @@ ROOM_NOUN = (r"\brooms?\b|\bzimmer\b|\br[äa]ume?\b|\bpi[èe]ces?\b|\blocaux\b|\
 APT_NOUN = r"\b(?:apartments?|flats?|units?|dwellings?|wohnung(?:en)?|wohneinheit(?:en)?|appartements?|logements?|appartament[oi]|lägenhet(?:er)?|woning(?:en)?)\b"
 SIZE_W = (r"\barea\b|fl[äa]che|surface|superficie|oppervlak|\bsize\b|gr[öo](?:ss|ß)e\b|taille|dimensione|m²|m2\b|"
           r"square|sq\.?\s*(?:m|ft)|how\s+(?:large|big)|wie\s+gro|quanto\s+[èe]\s+grande|hoe\s+groot")
+DIFF_BETWEEN = (r"difference\s+(?:\w+\s+){0,4}?between|unterschied\s+(?:\w+\s+){0,4}?zwischen|diff[ée]rence\s+"
+                r"(?:\w+\s+){0,4}?entre|differenza\s+(?:\w+\s+){0,4}?(?:tra|fra)|verschil\s+(?:\w+\s+){0,4}?tussen|"
+                r"skillnad\w*\s+(?:\w+\s+){0,4}?mellan|diferencia\s+(?:\w+\s+){0,4}?entre")
+COMMON_W = (r"common\s+(?:areas?|parts?|spaces?|rooms?)|shared\s+(?:areas?|spaces?|rooms?)|circulation\s+areas?|"
+            r"(?:belong|belongs|belonging)\s+to\s+no\s+(?:apartment|unit|flat)|not\s+(?:in|part\s+of|assigned\s+to)\s+any\s+"
+            r"(?:apartment|unit|flat)|outside\s+(?:all|any|the)\s+(?:apartments|units|flats)|allgemein(?:fl[äa]che|r[äa]ume|e\s+"
+            r"fl[äa]che)\w*|gemeinschaft\w*|parties?\s+communes?|espaces?\s+communs?|parti\s+comuni|spazi\s+comuni|"
+            r"keiner\s+wohnung|aucun\s+appartement|nessun\s+appartamento")
 SIZE_ONLY = (r"\bsize\b|\bfloor\s*space\b|\bfloor\s*area\b|how\s+much\s+(?:floor\s+)?space|\bspace\s+(?:does|do|is)\b|"
              r"gr[öo](?:ss|ß)e\b|wie\s+gro|taille|dimensione|quanto\s+[èe]\s+grande|hoe\s+groot|storlek|hur\s+stor")
 TEXT_Q = (r"^\s*(?:which|welche[rs]?|lequel|laquelle|quale|in\s+which|welk[e]?|vilk(?:en|et))\b|"
@@ -183,6 +191,7 @@ class Query:
     gross: bool = False  # "gross floor area"
     threshold: float | None = None  # for op count_gt / count_lt / count_ge
     consumed: list[str] = field(default_factory=list)  # regexes of question parts the parse handled (for covered())
+    absolute: bool = False  # "the difference between A and B": |A - B| (symmetric wording)
 
     def describe(self) -> str:
         parts = []
@@ -295,7 +304,7 @@ def parse(question: str, vocab: list[str] | None = None, room_numbers: set[str] 
         if nums or (apts and not re.search(ROOM_NOUN, ql) and not labels):
             pass  # "largest of room 2.04" / "the largest apartment B" -> ordinary paths below
         else:
-            labs: list[str] | None = [lab for lab, _ in labels] or None
+            labs: list[str] | None = [lab for lab, _ in labels] or [lab for lab, _ in bare_labels(q, vocab)] or None
             note = "any numbered indoor room"
             if labs is None:
                 for c, (words, clabs) in CONCEPTS.items():
@@ -307,6 +316,11 @@ def parse(question: str, vocab: list[str] | None = None, room_numbers: set[str] 
             t = Term("rooms", labs, sup.start(), note=note, scope=[a for a, _ in apts] or None)
             return Query("area" if asks_size else "text", sop, [t], (unit if asks_size else None), notes,
                          include_outdoor=inc0, consumed=cons)
+    # common areas: numbered indoor rooms in NO apartment ("belong to no apartment", "common areas", "shared")
+    if (is_area or re.search(SIZE_W, ql)) and not apts and not nums and not is_count and re.search(COMMON_W, ql):
+        return Query("area", "sum", [Term("area_room", "<all>", 0, note="numbered indoor rooms in no apartment",
+                                          scope=[None])], unit, notes, include_outdoor=inc0,
+                     consumed=[COMMON_W, NEG_APT_W, APT_NOUN])
     # averages / thresholds over ALL apartments ("average apartment size", "apartments larger than 60 m²")
     if re.search(APT_NOUN, ql) and not apts and not nums and not labels:
         if re.search(MEAN_W, ql) and (is_area or re.search(SIZE_W, ql)) and not re.search(PER_W, ql):
@@ -347,8 +361,13 @@ def parse(question: str, vocab: list[str] | None = None, room_numbers: set[str] 
             labels = bare_labels(q, vocab) or labels
         scoped_label = apts and (labels or concept_terms) and not re.search(NEG_APT_W, ql) and \
             not re.search(SHARE_W, ql) and not re.search(TIMES_W, ql) and len(apts) == 1
+        two_apt_label = len(apts) == 2 and (labels or concept_terms) and len(labels or concept_terms) == 1 and \
+            not re.search(NEG_APT_W, ql) and not re.search(SHARE_W, ql)
         if nums:
             terms = [Term("area_room", n, p) for n, p in nums]
+        elif two_apt_label:
+            l0 = (labels or [(t.arg, t.pos) for t in concept_terms])[0][0]
+            terms = [Term("area_label", l0, p, note="per apartment", scope=[a]) for a, p in apts]
         elif scoped_label:
             # "the kitchen in apartment A": the label's rooms inside that apartment, not the whole apartment
             terms = [Term("area_label", lab, p, scope=[a for a, _ in apts]) for lab, p in labels] or \
@@ -380,6 +399,12 @@ def parse(question: str, vocab: list[str] | None = None, room_numbers: set[str] 
         elif len(terms) == 2 and re.search(PCTDIFF_W, ql):
             op = "pctdiff_less" if re.search(PCTLESS_W, ql) else "pctdiff"
             consumed += [PCTDIFF_W, SHARE_W]
+        elif len(apts) == 1 and re.search(SHARE_W, ql) and (labels or concept_terms):
+            lab = [Term("area_label", l, p, scope=[apts[0][0]]) for l, p in labels] or \
+                  [Term("area_label", t.arg, t.pos, note=t.note, scope=[apts[0][0]]) for t in concept_terms]
+            terms = lab[:1] + [Term("area_apartment", apts[0][0], 10**6)]
+            op = "pct"
+            consumed.append(SHARE_W)
         elif apts and re.search(SHARE_W, ql):
             terms = [Term("area_apartment", a, p) for a, p in apts[:1]] + [Term("area_total", None, 10**6)]
             op = "pct"
@@ -387,6 +412,8 @@ def parse(question: str, vocab: list[str] | None = None, room_numbers: set[str] 
         elif len(terms) == 2 and re.search(TIMES_W, ql):
             op, rev = "ratio", False
             consumed.append(TIMES_W)
+        elif len(terms) == 2 and op == "diff" and re.search(DIFF_BETWEEN, ql):
+            consumed.append(r"\bbetween\b|\bzwischen\b|\bentre\b|\btra\b|\bfra\b|\btussen\b|\bmellan\b")
         elif re.search(MEAN_W, ql):
             op = "mean"
             consumed.append(MEAN_W)
@@ -411,7 +438,8 @@ def parse(question: str, vocab: list[str] | None = None, room_numbers: set[str] 
             unit_out = None
         elif op in ("pct", "pctdiff", "pctdiff_less"):
             unit_out = "%"
-        qr = Query(qtype, op, terms, unit_out, notes, include_outdoor=inc, gross=gross, consumed=consumed)
+        qr = Query(qtype, op, terms, unit_out, notes, include_outdoor=inc, gross=gross, consumed=consumed,
+                   absolute=op == "diff" and len(terms) == 2 and bool(re.search(DIFF_BETWEEN, ql)))
         if op in ("pct", "pctdiff", "pctdiff_less") or (op == "diff" and consumed):
             qr.terms.sort(key=lambda t: t.pos)
             return qr
@@ -485,7 +513,9 @@ UNCOVERED = re.compile(
     r"\b(which|welche[rs]?|lequel|laquelle|quale\s+(?:dei|delle)|average|mean|median|durchschnitt|moyenne|media|per\s+(?:apartment|unit|flat|room|dwelling|floor|storey|wohnung|logement|appartement)|each|jede[rs]?|"
     r"chaque|ogni|ratio|percent|percentage|proportion|share|anteil|with\s+(?:a|an|no|more|at)|without\s+(?:a|an|any|windows?|doors?)|that\s+ha(?:ve|s)|"
     r"ha(?:ve|s)\s+(?:a|an|no|any|more|at\s+least|\d+)\b|contain\w*|adjacent|next\s+to|neighbo\w+|between|at\s+least|at\s+most|is\s+there|are\s+there\s+any|do\s+any|"
-    r"mit\s+(?:einem|einer|mehr)|ohne\s+(?:fenster|t[üu]r)|avec\s+(?:un|une|plus)|sans\s+(?:fen|porte)|senza)\b|%|(?:more|less|larger|smaller)\s+than\s+\d",
+    r"mit\s+(?:einem|einer|mehr)|ohne\s+(?:fenster|t[üu]r)|avec\s+(?:un|une|plus)|sans\s+(?:fen|porte)|senza|"
+    r"perimeters?|umfang|p[ée]rim[èe]tre|perimetro|lengths?|l[äa]nge|longueur|lunghezza|long(?:er|est)?\s+side|"
+    r"width|breite|largeur|larghezza|wide|dimensions?|abmessung\w*|how\s+long)\b|%|(?:more|less|larger|smaller)\s+than\s+\d",
     re.I)
 
 

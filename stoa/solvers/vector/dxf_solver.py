@@ -125,6 +125,10 @@ def _opcheck(question: str, backend: str = "local") -> str | None:
     return m.group(1) if m else None
 
 
+WHICH_APT = (r"^\s*(?:which|what|in\s+which|welche[rs]?|in\s+welcher|quel(?:le)?|dans\s+quel|quale|in\s+quale|welk(?:e)?)\s+"
+             r"(?:apartment|flat|unit|dwelling|wohnung|wohneinheit|appartement|logement|appartamento|woning)\b")
+
+
 def _echo(question: str, value) -> str | None:
     """The table-QA answer is just an entity (or number) the question itself names, and the only one of its kind
     there (so 'which is larger, apartment A or B' -> 'apartment A' is not an echo)."""
@@ -556,13 +560,18 @@ class DxfSolver(BaseSolver):
         if qr.qtype == "text" and len(parts) == 1 and qr.terms[0].kind == "rooms":
             r = parts[0].room
             value = f"room {r.number}" + (f" ({r.name})" if r.name else "") if r.number else (r.name or r.label())
+            if r.unit and re.search(WHICH_APT, question, re.I):  # "which apartment has the largest balcony"
+                value = f"apartment {r.unit}"
+                trace.append(f"the question asks for the apartment: room {r.number} is in apartment {r.unit}")
             trace.append(f"{qr.op}: {r.label()} with {r.area:.2f} m²")
             unit = None
         elif qr.qtype == "text" and qr.op in ("max", "min"):
             pairs = [(v, t) for v, t in zip(vals, qr.terms) if v is not None]
             v, t = (max if qr.op == "max" else min)(pairs, key=lambda vt: vt[0])
             value = str(t.arg if not isinstance(t.arg, list) else t.arg[0])
-            if t.kind == "area_apartment":
+            if t.kind == "area_label" and t.scope and len(t.scope) == 1:  # "which apartment has the bigger kitchen"
+                value = f"apartment {t.scope[0]}"
+            elif t.kind == "area_apartment":
                 value = f"apartment {value}"
             elif t.kind in ("area_room", "rooms"):
                 r = getattr(p, "room", None) if t.kind == "rooms" else next((r for r in fm.rooms if r.number == t.arg), None)
@@ -613,6 +622,9 @@ class DxfSolver(BaseSolver):
         elif qr.op == "diff":
             value = known[0] - sum(known[1:])
             trace.append(f"difference: {' - '.join(str(round(v, 2)) for v in known)} = {value:.2f}")
+            if qr.absolute and value < 0:
+                value = -value
+                trace.append("'difference between' is symmetric: reported as a positive number")
         else:
             value = sum(known)
             if len(known) > 1:
