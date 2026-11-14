@@ -37,6 +37,8 @@ export function costTier(c: Cost): "deterministic" | "local" | "api" {
 }
 
 const UNIT_LABEL: Record<string, string> = { m2: "m²", m3: "m³", ft2: "ft²", count: "", m: "m", EUR: "€", eur: "€", USD: "$", usd: "$" };
+/** Unit for display: known units from the table, free-text ones (W4: "m2/door", "CHF", "h") with m2/m3/ft2 prettified. */
+const unitLabel = (u: string | null | undefined) => !u ? "" : UNIT_LABEL[u] ?? u.replace(/\b(m|ft|cm|mm)([23])\b/g, (_, b, e) => b + (e === "2" ? "²" : "³")).replace(/\bEUR\b/g, "€");
 
 const esc = (s: unknown) => String(s ?? "").replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
@@ -98,7 +100,7 @@ function compareHtml(a: Answer) {
   const arg = tr.map((l) => l.match(/\barg(max|min) over (\w+)/)).find((x) => x);
   if (!arg || typeof a.value !== "string") return "";
   const rows = tr.map((l) => l.match(/^\[\w+\]\s*([^:\[\]]{1,60}?):\s*(-?\d+(?:\.\d+)?)\s*(count|m2|m²|m3|m³|m|%|EUR)\b/))
-    .filter((m): m is RegExpMatchArray => !!m).map((m) => ({ name: m[1].trim(), v: Number(m[2]), unit: m[3] === "count" ? "" : (UNIT_LABEL[m[3]] ?? m[3]) }));
+    .filter((m): m is RegExpMatchArray => !!m).map((m) => ({ name: m[1].trim(), v: Number(m[2]), unit: m[3] === "count" ? "" : unitLabel(m[3]) }));
   const pick = String(a.value).trim();
   if (rows.length < 2 || !rows.some((r) => r.name === pick)) return "";
   const max = Math.max(...rows.map((r) => Math.abs(r.v)), 1e-9);
@@ -276,7 +278,7 @@ function intentHtml(a: Answer, run: AgentRun | null) {
     const f = Object.entries(it.filters ?? {}).filter(([, v]) => v !== null && v !== "" && v !== false)
       .map(([k, v]) => `${esc(k.replace(/_/g, " "))} <i>${esc(v === true ? "yes" : v)}</i>`);
     bits.push(...(f.length ? f : it.scope ? [`scope <i>${esc(it.scope)}</i>`] : []));
-    if (it.unit && it.unit !== "count") bits.push(`in ${esc(UNIT_LABEL[it.unit] ?? it.unit)}`);
+    if (it.unit && it.unit !== "count") bits.push(`in ${esc(unitLabel(it.unit))}`);
   }
   const lang = it?.lang && it.lang !== "en" ? `<span class="lang" title="The question was parsed into the same language-neutral intent as its English twin">${esc(LANG[it.lang] ?? it.lang)}</span>` : "";
   const plan = a.plan && a.plan.sub_questions?.length
@@ -316,7 +318,7 @@ function modelName(b: Answer) {
 
 export function secondOpinionHtml(a: Answer, b: Answer, ms: number) {
   const same = sameAnswer(a, b);
-  const unit = b.unit ? UNIT_LABEL[b.unit] ?? b.unit : "";
+  const unit = unitLabel(b.unit);
   const c: Cost = b.cost ?? {};
   const wall = c.wall_seconds && c.wall_seconds > 0 ? c.wall_seconds : ms / 1000;
   const raw = (b.trace ?? []).find((l) => /^raw:/.test(l))?.replace(/^raw:\s*/, "") ?? "";
@@ -387,7 +389,7 @@ export function renderCard(el: HTMLElement, a: Answer, opts: CardOpts) {
   const run = agentRun(a.trace);
   const asks = agentAsks(a);
   const checks = crossChecks(a, asks);
-  const unit = a.unit ? UNIT_LABEL[a.unit] ?? a.unit : "";
+  const unit = unitLabel(a.unit);
   const isText = typeof a.value === "string";
   const rich = isText && (String(a.value).length > 120 || String(a.value).includes("\n"));
   const ev = a.evidence ?? [];
