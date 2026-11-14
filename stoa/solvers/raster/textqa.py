@@ -245,7 +245,9 @@ def _room_area_answer(img_path: str, question: str, tl: T.TextLayer, bars: list,
 # labelled printed 11/17 (a room whose name was not read drops out), filled 18/31.
 UNIT_CONF = {"printed": 0.85, "some": 0.5, "filled": 0.3, "partial": 0.2}
 SUM_CONF = {"unit": UNIT_CONF, "floor": {"printed": 0.85, "some": 0.6, "filled": 0.1, "partial": 0.1},
-            "labelled": {"printed": 0.6, "some": 0.5, "filled": 0.5, "partial": 0.2}}
+            "labelled": {"printed": 0.75, "some": 0.6, "filled": 0.6, "partial": 0.15}}
+# a gap in the room numbering (labels the text layer missed) makes a sum 'partial': floor 0/10, labelled 1/8, unit 2/6
+# within 2% with a gap; without: labelled printed 10/12, filled 18/28 (run 20261114-084758-...-75fe)
 
 
 def _sum_scope(question: str, tl: T.TextLayer) -> bool:
@@ -291,7 +293,8 @@ def _unit_area_answer(img_path: str, question: str, tl: T.TextLayer, bars: list,
             ev.append(Evidence(file=img_path, page=0, bbox=rm["measured"]["box"], bbox_space="image_px",
                                note=f"{name}: no printed area; flood-filled outline {rm['measured']['m2']:.2f} m²"))
     n, nm = len(r["rooms"]), len(r["measured"])
-    kind = "partial" if r["unmeasured"] else "printed" if nm == 0 else "some" if nm <= 2 and nm < n else "filled"
+    kind = "partial" if r["unmeasured"] or r["gaps"] else "printed" if nm == 0 else "some" if nm <= 2 and nm < n \
+        else "filled"
     conf = SUM_CONF[r["scope"] if not r["name"] else "labelled"][kind]
     if r["scope"] == "unit":
         assumptions = [f"apartment {r['letter']} = the area enclosed by the coloured dash-dot unit boundary around the "
@@ -319,6 +322,9 @@ def _unit_area_answer(img_path: str, question: str, tl: T.TextLayer, bars: list,
                            "2 of 25 test floors")
         missing.append(f"printed areas for {nm} room(s): a flood-filled room is within 5% for {100 * W['5%']:.0f}% of "
                        f"held-out rooms; whole units with filled rooms were within 5% for 38 of 56 (all filled)")
+    if r["gaps"]:
+        missing.append(f"room number(s) {', '.join(r['gaps'][:8])} were not read (a gap in the numbering): if they "
+                       "belong to the asked rooms, the sum is too small by their areas")
     if r["unmeasured"]:
         missing.append("no area for " + ", ".join(u["id"] or "?" for u in r["unmeasured"])
                        + " (neither printed nor measurable): the sum is too small by their areas")
@@ -358,7 +364,8 @@ def _compare_units(img_path: str, question: str, tl: T.TextLayer, bars: list, cm
 
     def kind(r):
         n, nm = len(r["rooms"]), len(r["measured"])
-        return "partial" if r["unmeasured"] else "printed" if nm == 0 else "some" if nm <= 2 and nm < n else "filled"
+        return "partial" if r["unmeasured"] or r["gaps"] else "printed" if nm == 0 else "some" if nm <= 2 and nm < n \
+            else "filled"
     conf = min(UNIT_CONF[kind(r)] for r in res.values())
     # a sum is within 5% for 69/99 units: two units closer than that can swap
     conf = round(conf if margin >= 0.1 else min(conf, 0.5) if margin >= 0.05 else min(conf, 0.3), 2)

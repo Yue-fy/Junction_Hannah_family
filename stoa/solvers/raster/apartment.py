@@ -127,6 +127,24 @@ _TOTAL_LINE = re.compile(r"total|gesamt|summe|yht|yhteensä|asuinpinta|wohnfl|nu
 _NUMBERED_Q = re.compile(r"numbered|nummeriert|numérotées?|numerat[ei]|numeroid", re.I)
 
 
+def numbering_gaps(layer: T.TextLayer) -> list[str]:
+    """Room numbers missing from a sequential numbering ('2.01'..'2.31' read without '2.04', '2.24'): rooms whose label
+    the text layer did not read. Their areas are missing from any sum (floor sums with a gap: 0/10 within 2%)."""
+    by: dict[str, set[int]] = {}
+    for it in layer.items:
+        t = it.text.strip()
+        if _ROOM_ID.match(t):
+            a, b = t.split(".")
+            if b.isdigit():
+                by.setdefault(a, set()).add(int(b))
+    out = []
+    for a, nums in by.items():
+        if len(nums) >= 3:
+            w = max(len(f"{n}") for n in nums)
+            out += [f"{a}.{n:0{max(2, w)}d}" for n in range(min(nums), max(nums) + 1) if n not in nums]
+    return out
+
+
 def labelled_name(question: str) -> str | None:
     m = _LABELLED.search(question)
     return m.group(1).strip() if m else None
@@ -203,7 +221,14 @@ def room_set(path: str, layer: T.TextLayer, question: str, px_per_m: float | Non
     if not rooms:
         return None
     total = sum(r["area"]["value"] if r["area"] else r["measured"]["m2"] for r in rooms)
+    gaps = numbering_gaps(layer)
+    if scope == "unit":  # only gaps inside the unit's own number range (units are numbered in runs: 2.10-2.16)
+        mine = [r["id"] for r in rooms + dropped + unmeasured if r["id"]]
+        pref = {i.split(".")[0] for i in mine}
+        lo, hi = (min(mine), max(mine)) if mine else ("", "")
+        gaps = [g for g in gaps if g.split(".")[0] in pref and lo < g < hi]
     out = {"scope": scope, "letter": letter, "name": name, "label": lab, "value": round(total, 2), "rooms": rooms,
+           "gaps": gaps,
            "dropped": dropped, "unmeasured": unmeasured, "measured": measured, "region_box": None, "region_m2": None}
     if comp is not None:
         ys, xs = np.nonzero(comp)
