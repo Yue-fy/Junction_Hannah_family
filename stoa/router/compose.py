@@ -31,14 +31,28 @@ _EACH = re.compile(r"\b(respectively|separately|each separately|one by one|for e
                    r"respectivement|rispettivamente|vastaavasti|var för sig|respectivamente|elk afzonderlijk)\b", re.I)
 _FIXTURES = {"sink", "washbasin", "wc", "bathtub", "shower", "shower_bathtub", "window", "door", "stair"}
 _ROOM_KINDS = {"kitchen", "bathroom", "bedroom", "wc_room", "sauna", "balcony", "apartment"}
-_MORE_THAN = re.compile(r"how many more (?P<a>.+?) than (?P<b>.+?)(?: are| is| does| do| on| in|\?|$)", re.I)
+# F 08:52: IT "Di quanti m² il locale 1.06 è più grande del locale 1.04?" -> dxf answered 'room 1.06' @ 0.99 (13/13)
+_LARGER_ML = [re.compile(p, re.I) for p in (
+    r"di quant[io] (?:m²|m2|metri quadrati|mq)? ?(?:il |la |lo |l')?(?P<a>.+?) è più grande (?:del|della|dello|dell'|di) ?(?P<b>.+?)(?:\s*\(|\?|$)",
+    r"um wie viele? (?:m²|m2|quadratmeter)? ?ist (?:der |die |das )?(?P<a>.+?) grö(?:ß|ss)er als (?:der |die |das )?(?P<b>.+?)(?:\s*\(|\?|$)",
+    r"de combien de (?:m²|m2|mètres carrés)? ?(?:le |la |l')?(?P<a>.+?) est-(?:il|elle) plus grande? que (?:le |la |l')?(?P<b>.+?)(?:\s*\(|\?|$)",
+)]
+_MORE_THAN = re.compile(
+    r"how many more (?P<a>.+?) than (?P<b>.+?)(?: are| is| does| do| on| in|\?|$)"
+    # F 08:52: FR "Combien de portes de plus que de fenêtres …" was SUMMED (English 'plus'), 23/23 wrong @ 0.976
+    r"|combien d[e'] ?(?P<a2>.+?) de plus que (?:de |d'|les? |la )?(?P<b2>.+?)(?: y a| sont| sur| dans|\?|$)"
+    r"|quant[ie] (?P<a3>.+?) in più (?:rispetto (?:a|al|alla|allo|ai|agli|alle)|che|di) (?P<b3>.+?)(?: ci sono| sono| su| in|\?|$)"
+    r"|wie viele (?P<a4>.+?) mehr als (?P<b4>.+?)(?: gibt| sind| hat| auf| im| in|\?|$)"
+    r"|hoeveel (?P<a5>.+?) meer dan (?P<b5>.+?)(?: zijn| staan| op| in|\?|$)"
+    r"|hur många fler (?P<a6>.+?) än (?P<b6>.+?)(?: finns| är| på| i|\?|$)"
+    r"|montako (?P<a7>.+?) enemmän kuin (?P<b7>.+?)(?: on|\?|$)", re.I)
 _LARGER = re.compile(r"by how (?:many|much) (?:m²|m2|square metres|square meters|ft²)? ?is (?P<a>.+?) (?:larger|bigger|greater) than (?P<b>.+?)(?:\s*\(|\?|$)", re.I)
 _SMALLER = re.compile(r"by how (?:many|much) (?:m²|m2|square metres|square meters|ft²)? ?is (?P<a>.+?) smaller than (?P<b>.+?)(?:\s*\(|\?|$)", re.I)
 _WHICH_LARGEST = re.compile(r"\bwhich\b.*\b(largest|biggest|smallest|greatest)\b", re.I)
 _OF_LARGEST = re.compile(r"\bof the (largest|biggest|smallest) of\b", re.I)
 _CMP2 = re.compile(r"\b(?P<w>more|fewer|less|as many)\s+(?P<a>[^?,;]+?)\s+(?:than|as)\s+(?P<b>[^?,;.]+)", re.I)
 _EXISTS = re.compile(r"^\s*(does|do|is there|are there|has|have|onko|gibt es|y a-t-il|c'è|har)\b", re.I)
-_ROOM_NOS = re.compile(r"\brooms?\s+([A-Z]{0,2}\d+(?:\.\d+)+)(?:\s*\((['‘«„\"][^)]*)\))?", re.I)
+_ROOM_NOS = re.compile(r"\b(?:rooms?|r[äa]ume?|zimmer|local[ei]|stanz[ae]|pi[eè]ces?|huonee(?:t|n)?|rum(?:met)?)\s+([A-Z]{0,2}\d+(?:\.\d+)+)(?:\s*\((['‘«„\"][^)]*)\))?", re.I)
 _AT_LEAST = re.compile(r"\b(at least|more than|over|mindestens|au moins|v[äa]hint[äa][äa]n)\s+(\d+|one|two|three|four|five|"
                        r"six|zwei|drei|deux|trois|kaksi|kolme)\b", re.I)
 _NUMWORD = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "zwei": 2, "drei": 3, "deux": 2, "trois": 3,
@@ -120,21 +134,23 @@ def decompose(source: str, question: str) -> Plan | None:
 
     # diff of counts: "how many more doors than windows"
     m = _MORE_THAN.search(qn)
-    if m and base.task == "count":
-        ta, tb = _targets_in(m.group("a")), _targets_in(m.group("b"))
+    if m and base.task in ("count", "text", "unknown", "other"):
+        ga = next(g for g in (m.group(k) for k in ("a", "a2", "a3", "a4", "a5", "a6", "a7")) if g)
+        gb = next(g for g in (m.group(k) for k in ("b", "b2", "b3", "b4", "b5", "b6", "b7")) if g)
+        ta, tb = _targets_in(ga), _targets_in(gb)
         if ta and tb:
             sa, sb = _sub_for(source, ta[0][1], base), _sub_for(source, tb[0][1], base)
             if sa and sb:
                 return Plan("diff", [sa, sb], [ta[0][1], tb[0][1]], "count")
 
     # diff of areas: "By how many m² is room 1.06 larger than room 1.04"
-    m = _LARGER.search(q) or _SMALLER.search(q)
+    m = _LARGER.search(q) or _SMALLER.search(q) or next((x for x in (rx.search(q) for rx in _LARGER_ML) if x), None)
     if m:
         ra, rb = _ROOM_NOS.search(m.group("a")), _ROOM_NOS.search(m.group("b"))
         if ra and rb and source == "swiss_dwellings":
             subs = [canonical(source, parse(f"What is the net floor area of room {r.group(1)} in m²?")) for r in (ra, rb)]
             if all(subs):
-                op = "diff" if m.re is _LARGER else "rdiff"
+                op = "rdiff" if m.re is _SMALLER else "diff"
                 return Plan(op, subs, [f"room {ra.group(1)}", f"room {rb.group(1)}"], "m2")
 
     # argmax / max over named rooms on a storey (ifc_models style)
@@ -185,7 +201,9 @@ def decompose(source: str, question: str) -> Plan | None:
             if len(ts) >= 2 and all(subs):
                 return Plan("list", subs, list(ts), "count")
     # sum of counts: "doors and windows in total", "toilets, washbasins and bathtubs altogether"
-    if base.task == "count" and (_TOGETHER.search(q) or re.search(r"\b(and|plus)\b", qn, re.I)):
+    # ('plus' is French 'more' in "de plus que", "plus de … que", "en plus": not a sum cue)
+    if base.task == "count" and (_TOGETHER.search(q) or re.search(r"\band\b|(?<!de )(?<!en )\bplus\b(?! de| que| d')",
+                                                                   qn, re.I)):
         clause = qn
         mc = re.search(r"\bcounting (.+)", qn, re.I)  # "sanitary fixtures ..., counting toilet seats, sinks ..."
         if mc:

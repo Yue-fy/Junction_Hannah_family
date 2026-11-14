@@ -668,3 +668,45 @@ NEGATIVE (exploratory, same cycle): per-floor questions on two-storey sheets can
 the OCR text layer finds one on 1 of 4 two-storey probe sheets ('1 KRS' on 6007; none on 4828, 5046, 9976). A floor
 split needs layout cues (entrance door, stair position, which part holds the kitchen), not text. Latency note for the
 demo: a cold text layer took 6–165 s per plan with the GPU saturated (1–2 tiles, up to 2,500 tokens out per tile).
+**Addendum (cycle 244): the combined build.** night-W4 4d4187f (per_room route before the composer) merged with
+night-W3 ac981b3 (text mode for CubiCasa non-count Qs) and night-R1: 54/78 overall, but area 9/23 with 15 at conf ≥
+0.7 and only 6 right (9 confident-wrong: room_graph's in-atomic area fallback '19.5 m²' / 'bedroom' @ 0.70, W3 text
+mode's wrong printed number for 'largest bedroom' / 'sauna' / sums @ 0.75). Applying `area_crosscheck` offline
+(`xcheck_sim.py`, graph values from the logged traces, plus a new cap for non-numeric answers to area questions):
+conf ≥ 0.7 on 4 (all right), area AUROC 0.56 → 0.76, accuracy unchanged. W3's text mode and my text-layer graph read
+the same OCR layer, so their agreement is not fully independent; still 4/4 agreements were right here.
+
+### 8k. Questions ABOUT the links: a project knowledge graph that answers, not only cross-checks (measured)
+Stoa point 4 says linking data earns points; Q's red team (v17, KNOWLEDGE 08:47) showed the obvious follow-up
+questions a judge asks after seeing "drawing 46 = model 46 ✓" all fail: "do the plan and the model agree on the
+windows of '1.korrus'?" → a bare 55, "how many windows are in the model but not drawn?" → 297 @ 0.98 (whole model),
+"how many floor plan sheets?" → 1, "which sheet shows the server room?" → "no sheet information".
+Method (`experiments/r1/kg_qa/kgqa.py`, read-only over W1's `stoa.kg.project_graph`): the project graph becomes
+numbered fact rows — F = files (plan / section / elevation sheets with their storey, model, discipline models, same
+building in ifc_bench), S = storeys (elevation, plan sheet or NONE, model door/window/room counts), C = W1's
+cut-plane comparison per storey (model, cut by the 1.2 m plane, drawn on the sheet's SVG twin, drawn from other
+storeys; "UNKNOWN" when the twin tags no such class), R = rooms (name, storey, area, plan, pdf_pt box; only rooms
+sharing a token with the question are shown). Sheet counts / 'is there a section' are answered in Python with no
+model call; everything else is ONE local text call returning {op, rows, a, b} (count_rows, lookup_storey /
+lookup_sheet, agree, diff, greater, list_storeys, exists, none) and Python computes the value from the cited rows
+(W2's 'point at rows' method). Yes/no questions never get a diff (op is coerced). Agree answers carry the reason:
+"no (IFC model 55 windows on '1.korrus', plan draws 52; the other 3 lie entirely above/below the plan's 1.2 m section
+plane, so the drawing is consistent with the model)". Evidence = the room's box on its sheet, or the sheet files.
+Trigger `is_link_question()` (en/de/fi/fr/sv/it/nl forms: plan-vs-model agreement words, 'how many <sheet noun>',
+'which <sheet noun> shows', storeys without a plan / without rooms, 'another dataset', 'on which floor is <room>'):
+**0 fires on all 127,044 dataset questions and on every open split** (dev, hard, hard2, hardL, smoke, train,
+train_gate, unused, cc5k_heldout); recall 20/21 on the fresh probe, 8/8 on v17's link rows.
+Probe (`probe_kg.jsonl`, 21 Qs on 6 non-test IFC projects in EN/DE/FI/FR; gold from file names, the IFC index and
+the SVG twins' data-guid counts, independent of stoa.kg; committed 798069f before any run). Wrapper `pipeline_kg`
+(Pipeline + kg_qa when the trigger fires on ifc_models/ifc_bench; no value → the normal pipeline):
+| probe | pipeline | pipeline_kg | conf ≥ 0.8 (pipeline → kg) | tokens/Q |
+|---|---|---|---|---|
+| fresh probe_kg (21) | 4/21 | **20/21** (16 won / 0 lost, McNemar p < 0.0001) | 4 @ 0 right → 17 @ 17 right | 4,332 → 1,970 |
+| Q v17 (9, used while building) | 2/9 | **9/9** (7 / 0) | 2 @ 1 right → 9 @ 9 right | 3,325 → 2,223 |
+Runs: 20261114-085547-pipeline-probe_kg-f75d / -090314-pipeline_kg-probe_kg-6ea6; -085617-pipeline-v17-0ec1 /
+-090327-pipeline_kg-v17-1eeb (pipeline = merge-tree archive of W4 4d4187f + W3 ac981b3 + R1; pipeline_kg = night-R1).
+stoa.eval leaves text answers unscored, so `compare.py` scores with the probe's regexes. Honest limits: one author
+wrote both the probe and the system (wording bias; the trigger is a regex list), n is small, IFC only (Swiss
+PDF↔DXF↔PNG and raster↔IFC links are not covered), and the one miss is "does the 'UG2' plan show doors the model
+does not assign to 'UG2'?" (drawn_other). Note the gdynia/warmond plan twins tag only IfcSpace: there the C rows
+say UNKNOWN and kg_qa answers with conf 0.2 + a 'missing' line instead of claiming agreement.
