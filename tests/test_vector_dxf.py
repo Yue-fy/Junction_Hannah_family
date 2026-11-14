@@ -441,3 +441,51 @@ def test_dxf_price_times_count_and_outdoor_exclusion():
     assert _same_number("1,200", 1200) and _same_number("1.200", 1200) and not _same_number("12", 1200)
     assert _outdoor_only_exclusion("What is the net floor area of apartment A in m², excluding balconies, loggias and terraces?")
     assert not _outdoor_only_exclusion("What is the area of all rooms excluding apartment A?")
+
+
+def test_dxf_tableqa_substitute_class_guard():
+    """Q 09:20: 'How many escalators are shown?' -> code counted kind == 'door' (13 @0.45): flagged."""
+    from stoa.solvers.vector.dxf_solver import _substitute_kind
+    assert _substitute_kind("How many escalators are shown on this floor plan?",
+                            "answer = len(objects[objects['kind'] == 'door'])") == "door"
+    assert _substitute_kind("Wie viele Türen gibt es?", "answer = len(objects[objects.kind == 'door'])") is None
+    assert _substitute_kind("How many sanitary fixtures are there?",
+                            "answer = len(objects[objects['kind'].isin(['toilet', 'washbasin'])])") is None
+    assert _substitute_kind("How many sinks?", "answer = len(objects[objects['kind'] == 'washbasin'])") is None
+
+
+def test_pdftext_pairs_paren_label_with_its_dimension(tmp_path):
+    """'35' - 0"' above the dimension line and '(FRONT YARD SETBACK)' below it (~1 line height apart) are one group;
+    an unrelated line at the same gap is not joined."""
+    import pymupdf
+
+    from stoa.solvers.vector.pdftext import text_groups
+    from stoa.solvers.vector.schedule_solver import _sheet_context
+
+    doc = pymupdf.open()
+    page = doc.new_page(width=800, height=600)
+    for x, y, t in ((300, 100, "35' - 0\""), (262, 120, "(FRONT YARD SETBACK)"), (300, 300, "CONCRETE"),
+                    (290, 320, "SIDEWALK EDGE")):
+        page.insert_text((x, y), t, fontsize=9)
+    p = tmp_path / "s.pdf"
+    doc.save(str(p))
+    texts = [g.text for g in text_groups(str(p))]
+    assert "35' - 0\" / (FRONT YARD SETBACK)" in texts, texts
+    assert "CONCRETE" in texts and "SIDEWALK EDGE" in texts, texts
+    assert _sheet_context("data/opening_design/Sports_Complex/Sheets - Current Set/A-100-A - Site Plan.pdf") == \
+        "sheet A-100-A - Site Plan of the Sports Complex drawings"
+
+
+def test_sheettext_lookup_expands_partial_dimension(monkeypatch):
+    """The model answered '0"' (the inches part) for "10' - 0\" REAR SETBACK": the whole printed dimension is the answer."""
+    import json as _json
+    from types import SimpleNamespace
+
+    import stoa.llm
+    from stoa.solvers.vector import sheettext
+
+    reply = {"op": "lookup", "items": [{"row": 7, "label": "REAR SETBACK", "value": "0"}], "answer": "0\"", "unit": "none"}
+    monkeypatch.setattr(stoa.llm, "chat", lambda *a, **k: SimpleNamespace(text=_json.dumps(reply)))
+    rows = [{"id": 7, "view": None, "text": "10' - 0\" REAR SETBACK"}, {"id": 8, "view": None, "text": "SIDE YARD (0ft)"}]
+    res = sheettext.ask("What rear setback is shown on the site plan?", rows, context="sheet A000 - SITE PLAN")
+    assert res["value"] == "10' - 0\"", res

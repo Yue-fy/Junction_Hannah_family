@@ -194,6 +194,18 @@ def _complex(question: str, res: dict) -> bool:
     return len(stm) >= 4 or bool(COMPLEX_Q.search(question))
 
 
+def _sheet_context(path: str) -> str:
+    """'sheet A-100-A - Site Plan of the Sports Complex drawings' from the file path: the words a person would add
+    ("On sheet A020 (Life Safety) of ...") and that steer retrieval to the right view (Q 09:25: with that hint 44/51,
+    without 40/51; judges won't type the sheet title)."""
+    p = Path(path)
+    stem = re.sub(r"^.*?\bSheet\s*-\s*", "", p.stem)  # 'The Downtowner_ARCH - Sheet - A000 - SITE PLAN ...'
+    parts = p.parts
+    proj = parts[parts.index("opening_design") + 1].replace("_", " ") if "opening_design" in parts and \
+        parts.index("opening_design") + 1 < len(parts) - 1 else ""
+    return f"sheet {stem}" + (f" of the {proj} drawings" if proj else "")
+
+
 def _clean(name: str) -> str:
     return re.sub(r"\W+", "_", name).strip("_").lower()[:30] or "table"
 
@@ -460,6 +472,18 @@ class ScheduleSolver(BaseSolver):
         if isinstance(value, str) and value.strip().upper() in tableqa.id_tokens(question, path):
             conf = min(conf, 0.2)  # the answer only repeats an identifier from the question
             missing.append(f"the answer {value!r} repeats the question's identifier; the table row was not found")
+        used_notes = [i for i in res.get("used", []) if isinstance(i, int) and i >= 900000]
+        if used_notes and len(used_notes) == len(res.get("used", [])):
+            # Q 09:23: on a schedule sheet a question about the plan's notes was read from the `notes` lines by
+            # table-QA code at 0.85 ("FIBER CEMENT CLAPBOARD -" for its colour): free-text lines are the sheet-text
+            # reader's level (0.65), not a schedule row's
+            conf = min(conf, 0.65)
+            trace.append("answer read from free-text note lines only (not schedule rows) -> confidence <= 0.65")
+        if isinstance(value, str):
+            aw = set(re.findall(r"[a-z0-9]+", value.lower()))
+            if aw and aw <= set(re.findall(r"[a-z0-9]+", question.lower())):
+                conf = min(conf, 0.2)  # a label, not its value
+                missing.append(f"the answer {value!r} only repeats words of the question (a label, not its value)")
         return Answer(value=value, unit=unit, confidence=conf, evidence=evidence, trace=trace, solver=self.name,
                       assumptions=assumptions, missing=missing)
 
@@ -483,7 +507,7 @@ class ScheduleSolver(BaseSolver):
         trace = [f"sheet text: {len(groups)} text groups (tags, notes, title block) + {rid - 700000} rows of small "
                  "named tables"]
         try:
-            res = sheettext.ask(question, rows, backend=self.backend)
+            res = sheettext.ask(question, rows, backend=self.backend, context=_sheet_context(path))
         except Exception as e:  # noqa: BLE001
             return Answer.abstain(self.name, f"sheet text QA failed: {type(e).__name__}: {e}", trace)
         trace += res["trace"]
