@@ -468,6 +468,12 @@ def route(path: str, intent: Intent | None = None) -> list[str]:
             # a raster plan of an unseen style with no vector/IFC twin (the hidden set's "different" drawings): R2's
             # LoRA beats the base VLM on plain counts there (swiss PNG twins, 200 dev Qs: cc-v3 57.5%, cc-v2 46.0%,
             # base 40.5%) while raster's count methods are CubiCasa-specific; vlm_lora refuses operator questions
+            if src == "unknown" and intent is not None and intent.task == "count" and intent.target == "window":
+                # W3 10:35 / 10:58: an uploaded image's window count -> W3's wall-symbol detector first (all 100 Swiss
+                # dev floors as PNG: 34/100 exact vs the LoRA 10/100, a box per window); it abstains for free on
+                # non-render styles (clean-render gate + pre-scan before its text layer, night-W3 9464a6b), and the
+                # LoRA answers as before
+                out.append("raster")
             out.append("vlm_lora")
         out.append("raster")
         if src == "cubicasa5k":  # R2's counting LoRA (cc-v2): gated per concept on train_gate (it never saw those)
