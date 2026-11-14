@@ -274,7 +274,11 @@ function bench() {
     return (args.length === 1 && String(r.solver_args?.cc5k) === "0") || (args.length === 0 && !/cc5k|lora/i.test(r.note ?? ""));
   };
   const test = rows.filter((r) => r.solver === "pipeline" && r.split === "test" && r.agent === "S0" && r.n >= 500 && full(r) && clean(r)).at(-1);
-  out.test = { pipeline: summary(test) };
+  // the same sealed test without R2's counting LoRA (run_test.sh "test-lora0": cc5k=0 + lora=0, same commit): shows what the
+  // small fine-tuned model adds on data nobody has seen
+  const lora0 = test && rows.filter((r) => r.solver === "pipeline" && r.split === "test" && r.agent === "S0" && full(r)
+    && r.commit === test.commit && (/test-lora0\b/.test(r.note ?? "") || String(r.solver_args?.lora ?? "") === "0")).at(-1);
+  out.test = { pipeline: summary(test), ...(lora0 ? { no_lora: summary(lora0) } : {}) };
   // novel question kinds (operators no template covers): hard2 = developed on; hard2q = held-out rewording (D10, now
   // "worn"); hard2r = F's sealed fresh draw in a fourth wording (D12, the clean one). Aggregates only.
   for (const split of ["hard2", "hard2q", "hard2r"]) {
