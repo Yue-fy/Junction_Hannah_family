@@ -2544,10 +2544,14 @@ class IfcSolver(BaseSolver):
             pool = [e for e in idx.elements.values() if e.cls in _GENERIC_CLASSES]
             els = scoped([e for e in pool if pat.search(fold(f"{e.name or ''} {e.type_name or ''} {e.object_type or ''}"))])
             if els:
+                hit = sorted({m_.group(1) for e in els if (m_ := pat.search(fold(f"{e.name or ''} {e.type_name or ''} "
+                                                                                    f"{e.object_type or ''}")))})
+                label = {"sanitary": "sanitary fixtures", "light": "light fixtures"}.get(kind, kind.replace("_", " ") + "s")
                 trace.append(f"no {'/'.join(KIND_CLASSES.get(kind, ()))} in the model; {len(els)} proxy/generic "
                              f"elements named like '{words[0]}'")
-                assumptions.append(f"{kind}s = proxy/generic elements whose name says '{words[0]}' (the model has no "
-                                   f"{'/'.join(KIND_CLASSES.get(kind, ()))})")
+                assumptions.append(f"{label} = proxy/generic elements whose family/type name says "
+                                   + ", ".join(f"'{w}'" for w in hit[:6])
+                                   + f" (the model has no {'/'.join(KIND_CLASSES.get(kind, ()))})")
             return els
         return []
 
@@ -2583,6 +2587,7 @@ class IfcSolver(BaseSolver):
             groups, members = merged, merged_m
         total = sum(sum(v) for v in groups.values())
         noun = (it.kinds[0] if it.kinds else it.kind or "element").replace("_", " ")
+        noun = {"sanitary": "sanitary fixture", "light": "light fixture"}.get(noun, noun)
         plural = (noun[:-1] + "ies" if noun.endswith("y") and noun[-2:-1] not in "aeiou"
                   else noun + "es" if noun.endswith(("s", "x", "ch", "sh")) else noun + "s")
         fmt = (lambda x: f"{int(round(x))}") if value_of is None else (lambda x: f"{x:.2f} {unit or ''}".strip())

@@ -113,3 +113,15 @@ def test_roof_level_with_a_space_is_not_a_floor(solver):
     assert a.value == 2 and any("with them: 4" in m for m in a.missing)
     a = solver.solve(DUPLEX, "Are there fewer windows on 'Level 1' than on 'Level 2'?")
     assert a.value.startswith("yes")
+
+
+ARC4351 = "data/ifc_bench/4351_arc.ifc"
+
+
+@pytest.mark.skipif(not abspath(ARC4351).exists(), reason="dataset not available")
+def test_plumbing_fixtures_listed_from_the_model(solver):
+    # W5/Q 04:47: the fact-card LLM opened with 'Plumbing fixtures are not listed' and then listed them
+    a = solver.solve(ARC4351, "What plumbing fixtures are in this building and their respective counts?")
+    assert isinstance(a.value, str) and "21" in a.value and "Toilet-Domestic-3D: 9" in a.value
+    assert "Urinal-Wall-3D: 4" in a.value and len(a.evidence) == 21 and a.cost.llm_calls == 0
+    assert solver.solve(ARC4351, "How many plumbing fixtures are there?").value == 21

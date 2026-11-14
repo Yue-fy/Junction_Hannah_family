@@ -105,7 +105,8 @@ def material_family(word: str) -> str | None:
 
 # multilingual stems (matched at word starts on accent-folded lowercase text)
 _LEX: list[tuple[str, tuple[str, ...]]] = [
-    ("sanitary", ("sanitary fixture", "sanitary terminal", "sanitarobjekt", "sanitaerobjekt", "aparatos sanitario",
+    ("sanitary", ("sanitary fixture", "sanitary terminal", "plumbing fixture", "sanitary ware", "sanitaryware",
+                  "bathroom fixture", "sanitary appliance", "sanitarobjekt", "sanitaerobjekt", "aparatos sanitario",
                   "aparato sanitario", "sanitair", "sanitet", "sanitar", "toilets and", "wc and")),
     ("light", ("light fixture", "lighting fixture", "luminaire", "leuchte", "luminaria", "lamp", "armatur",
                "verlichtingsarmatu", "valgusti", "oprawy oswietl", "corpuri de iluminat")),
@@ -479,6 +480,15 @@ def parse(question: str) -> Intent:
             it.metric, it.kind, it.attr = "length", "storey", "height"
     if re.search(r"\b(types?|typen|tipos?|typer|tuubid|typy|tipuri)\b", t) and not names:
         it.group_by = "type"
+    if kind not in (None, "storey", "space") and not names and re.search(
+            r"\b(respective (counts?|numbers?|quantit\w*)|their (counts?|numbers?|quantit\w*)|with (their )?(counts?|"
+            r"quantit\w*|numbers?)|how many of each|of each (kind|type|sort)|each kind|which kinds?|what kinds?)\b", t):
+        # "What plumbing fixtures are in this building and their respective counts?" (W5/Q 04:47, 4351 demo step 6):
+        # a list by type with counts, from the model, instead of the fact-card LLM ('not listed ... Estimate: ...')
+        it.group_by = "type"
+        if metric == "text":
+            metric = it.metric = "count"
+
     if re.search(r"\b(by|per|for each|each|on each|across( all)?)\b.{0,12}\b(level|floor|storey|story|geschoss|etage)s?\b"
                  r"|\b(level|floor|storey)[- ]by[- ](level|floor|storey)\b|\bbreakdown\b.{0,20}\b(level|floor|storey)", t):
         it.group_by = "storey"
