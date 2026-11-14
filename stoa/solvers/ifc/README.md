@@ -243,3 +243,61 @@ Every step: ifc_models train/dev/hard/hard2 0 of 2,051 answers changed; pipeline
 red-team rows on ifc alone: 93.8 -> 96.4%, 5 won / 0 lost, wrong at >= 0.8: 5 -> 0.
 Open: Italian 'Quale piano ha il maggior numero di porte?' (Q v25: 27 @ 0.97), 'Welche 3 Räume …' right at 0.30
 (number guard), 'of the levels that have windows' leaves out roof levels that hold windows (esplanades 'Katus': 2).
+
+## After the noon reveal: how to adapt the ifc solver (playbook, cycle 9, 11:10)
+For whoever handles Stoa's new IFC examples during the day. The pipeline-wide steps (ad-hoc split, `ask.py`,
+compare runs) are in `stoa/router/README.md`; this section covers the IFC part only.
+
+**1. Look at a question in 10 seconds.** Write the questions in a text file (a `PATH <file under data/ifc_models/>`
+line switches the model or sheet; `#` lines are comments), then run
+`PYTHONPATH=. $JUNCTION_VENV/bin/python experiments/w1/probe.py FILE` (ifc alone, 0.1 s per question) or
+`SOLVER=pipeline … experiments/w1/probe_any.py FILE` (what the demo shows). Each line shows conf, value, the question,
+and the last 3 trace lines. Before you fix anything, write the gold next to each question in the file, taken from the
+model (the dataset-template wording on the same model is a reliable oracle: "What is the area of 'NAME (code)'?",
+"How many doors are on the floor plan of 'STOREY'?", every one 100% on train/dev/hard/hard2).
+
+**2. Find the step that answered, from the trace.** `IfcSolver.solve` runs these steps in order:
+`ungroup_question` (1,000 -> 1000) -> `rewrite_of_the_floors` + `quote_room_refs` (room numbers and unique unquoted
+room names get quotes) -> `_plan_vs_model` (plan<->model comparisons, 0 LLM) -> `_core` (rules: `parse.parse` ->
+`_repair_intent` -> `_roles` (storey/room names) -> `_answer` / `_compose` / `_outer` / `_dims_answer` /
+`_superlative` / `_relation`; guards cap confidence at the end) -> `_cross_language` (non-English: translate + second
+`_core`) -> `_multi_part` (two questions in one) -> `_llm_stage` (fact-card LLM for free text) -> `_add_2d`.
+| Trace says | Step / where to look |
+|---|---|
+| `storey from the plan file: …` / `the question is about storey …` | `plan_storey` / `_roles` (storey resolution) |
+| `room 'X' -> IfcSpace …` | `_roles` + `resolve.match_space` |
+| `room type 'toilet' from the model's room labels` | room-type block in `_answer` (`arith.ROOM_TYPES`) |
+| `N elements of IfcX in storey …` | `_answer` count/sum core; kinds in `parse.KIND_CLASSES` |
+| `scope: 'whole building' -> whole model` | `parse` scope words / `IfcSolver._BUILDING` |
+| `guard: …` / `confidence 0.3` | the guards at the end of `_core` (unused number, unresolved name, …) |
+| `language: …` / `language check: …` | `_cross_language` (the English reading agreed, won or lost) |
+| `fact card (first lines): …` | `_llm_stage` -> `_llm_fallback` / `factcard.py` (free text) |
+| `2D link: k/n evidence elements drawn on …` | `_add_2d` (boxes on the sheet) |
+
+**3. Fix generically, in the step that misread the question.** A new wording of a known operation goes in `parse.py`
+(word lists are multilingual: add the word in every language the list has) or in `_repair_intent`; a new operation goes
+in `_compose` / `arith.detect` (arithmetic in code from atomic `_answer` parts, so evidence is kept). If you can't fix
+the wording, cap it: add a guard that sets confidence <= 0.3 with a `missing` note. A wrong answer at 0.3 costs little;
+a wrong answer at >= 0.8 is what the judges see.
+
+**4. Check nothing else moved:** `experiments/w1/regress.sh [examples.jsonl]` (ifc train/dev/hard/hard2 + pipeline
+dev/hard on ifc_models, ~2 min, each diffed against the freeze baseline). Then `$JUNCTION_VENV/bin/python -m pytest -q`.
+Tonight's rule for every commit: 0 unintended changes out of 2,051 + 495 rows.
+
+**Last answer-changing fix (daf7b4f, 11:06)**: `quote_room_refs` also quotes an unquoted room LongName that exactly
+one space carries (a hyphen/digit/dot in it, not a storey name, only when the question has no quotes): 'How big is
+the INVA-WC?' was the sum of all 13 toilets @ 0.85 -> 5.96 m² @ 0.97. Probe `experiments/w1/probes/c9_natural.txt`
+(20 chip-style wordings: 2 won, 18 unchanged), tests `tests/test_ifc_c9.py`; 0 of 2,051 + 495 rows changed.
+
+**5. Known gaps at the freeze (11:10)**, all at low confidence unless marked:
+- 'Where is room 103?' -> the storey's room count @ 0.3 (the 'where' path wants 'Which floor is X on?').
+- 'Welche 3 Räume …' right but @ 0.30 (the number guard misses the German top-k number).
+- 'of the levels that have windows' leaves out roof levels that hold windows (esplanades 'Katus': 2).
+- 'floors above ground level' on a sheet capped at 0.5, not answered as a set of floors; 'the floors above the
+  ground floor' resolves to one storey.
+- 'Which floor has the most rooms larger than 30 m²' ranks storeys by area (@ 0.73).
+- Average door width uses OverallWidth (IFC-Bench gold looks nominal: digital_hub 1.00 vs our 1.059).
+- Electrical switches on IFC-Bench (gold 109 vs our 489, proxies named like switches), sixty5 sanitary 10 vs 8.
+- Nested superlatives: 'How many windows does the floor with the most doors have?' -> ifc 297 (whole model) @ 0.30;
+  the pipeline's agent can lift it to 0.95 by agreeing with that unsure answer (W4 told, 11:09). A fix belongs in
+  `_compose`: rank storeys by the inner kind (the which-floor ranking exists), then answer the outer kind there (gold 55).
