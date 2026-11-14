@@ -448,6 +448,17 @@ transfer to other raster styles (swiss PNG 3%, Revit 0–12%), so this is for cu
 Leak note (D8): the CC5K maps on our TRAIN plans are from a model that saw most of them in pretraining; the truth is
 printed text, not CC5K labels. Error on the few plans from CC5K's own val/test lists: CC5K-test plans 11.0% (n 13), val 18.3% (n 6), train 17.0% (n 133): no sign of inflation.
 
+### 8g. Scale of a historical scan, two ways (exploratory, small n)
+HABS scans were resized to ≤ 3000 px, so the DPI is lost and a printed "1/4" = 1'-0"" alone gives no px/ft.
+`experiments/r1/scan_scale/scan_scale.py` (CPU, W3's cached text layer) gets px/ft twice: (A) the scale note ×
+the standard sheet size found from the aspect ratio (24 × 36 in → 1.5, 19 × 24 in → 1.263; px per paper inch = long
+side / 36 or 24), and (B) a graphic scale bar (tick labels in one row next to FEET/METERS: least squares, or one
+merged OCR item "0 10 20 30 60 90 ft." spanning the bar). On 16 bars on 11 HABS sheets the two agree within 10% half
+the time (median gap 8.7%; 5.6% on the 9 sheets with one scale note); bars run a few % below the note estimate
+(scans include some margin). Failures: a junk label row, a ×2 mismatch, metric bars on multi-scale sheets. Use it
+as "≈ 42 ft (scale bar and 1/4" note agree within 5%)" with that agreement as the confidence, never as exact.
+Coverage: 50/148 scans have a known sheet aspect, 77 a scale note, 19 a usable bar.
+
 ### 8f. What the cubicasa second reader is worth (measured; cost cascade, 8b)
 The pipeline runs raster (VLM label reader) as a second opinion on every LoRA count and moves the confidence by
 agreement. That made cubicasa ~20× more expensive (S0 03:56: $0.02 → $0.42 per 1k). The values never change, so
@@ -479,3 +490,44 @@ per drawing and 64–97% of drawings have at least one question in any useful ba
   into the trace.
 - ifc_models: the PDFs were rendered from the IFC. Room names printed in the PDF ↔ `IfcSpace.Name/LongName`
   gives the same link, and the drawing count can be checked against the IFC count.
+
+### 8h. Room graph of a raster plan: per-room questions with evidence (measured without dataset labels)
+Why: a harder test can ask per-room questions the dataset never asks ("how many windows does the kitchen
+have?", "which rooms open onto the hall?", "is the WC next to a bedroom?", "area of the largest bedroom?").
+On CubiCasa-style rasters there is no twin and no IFC, so the plan itself must become a small graph
+(the in-drawing part of agenda item 1, linking: printed labels ↔ segmented regions ↔ symbols).
+
+Method (`experiments/r1/room_graph/graph.py`, cache-only, ~0.3 s per plan on CPU, no LLM): rooms = connected
+components of each CC5K room class (min size 2e-3 of the image for baths/WCs, 5e-3 balconies, the frozen
+1.2e-2 for bedrooms, 3e-3 otherwise); a region with a sauna bench is a sauna (CC5K has no sauna class).
+Icons use the FROZEN counting settings, so per-room counts sum to the drawing-level detector counts.
+Fixtures go to the room under them; a window goes to the interior room its wall ring (one wall thickness,
+measured from the wall map) touches most, and is 'exterior' if the ring also touches background/outdoor; a door
+links the two rooms its ring touches most, or one room + 'outside'; regions touching directly (no wall) are
+`open_to` (open-plan kitchen ↔ living); regions within 1.5 wall thicknesses are `wall_to`. Areas come from the
+door scale (8e, room constant, 80% band). Printed labels (cached VLM label read) name the regions; two labels of
+the same kind in one region are flagged `merged` (a thin partition the segmentation missed).
+`graph_text(g)` is a one-line-per-room summary for an agent tool or an answer card.
+
+Validation without dataset labels (`validate.py`; artifacts/R1/room_graph/validate.json):
+| Check | n | Result |
+|---|---:|---:|
+| Printed label ↔ region class (172 plans, VLM-read labels, independent of CC5K) | 1,117 labels | **92.1%** |
+| … bedroom (MH) / living (OH) / kitchen (K) / balcony (PARVEKE) | 169 / 119 / 144 / 60 | 97.0 / 95.8 / 93.1 / 98.3% |
+| … bath+WC (KH/PH/WC) / sauna / entry (ET/TK) / storage (VH/VAR) | 169 / 44 / 156 / 106 | 90.5 / 84.1 / 87.8 / 87.7% |
+| Bedroom named MH has ≥ 1 window (Finnish habitable rooms need one) | 155 | 91.6% |
+| Bath/WC named KH/PH/WC has a toilet or sink | 155 | 84.5% |
+| Kitchen named K/KEITTIÖ has a sink; sauna has a bench | 139 / 43 | 84.9 / 86.0% |
+| Named interior room has a door or open link | 835 | 95.3% |
+| Random 400 cached plans: doors linking two sides / windows assigned to a room | 3,045 / 2,852 | 94.1 / 97.0% |
+| … share of interior rooms reachable from outside (doors + open links) | 400 plans | mean 81%; all rooms 43% |
+| … plan has a door to outside or a balcony | 400 | 95.8% |
+First run (before two fixes): bath labels 63.5% (49 of 167 fell on no region: the room-count size threshold
+dropped small WCs) and sauna 6.8% (CC5K calls saunas 'undefined').
+Eye check of two overlays (high_quality_architectural-7607 and -3919): every detected door links the right rooms,
+every detected window is in the right room, entrance and balcony doors found; failures: two bedrooms merged into one
+region (flagged by the two MH labels), a washroom 'PS' called sauna because a bench icon touched it.
+Limits: the 8% of bedrooms with no window are missed windows (the detector's known window recall); disconnected
+graphs come from undetected doors; D8 (pretrained CC5K) → cc5k=1 path only; areas carry the door-scale band (8e).
+How to use: answer a per-room question from the graph with the region box + icon boxes as evidence, and quote the
+room's label; if the region is `merged`, say so and answer for the region ("these two bedrooms have 2 windows").

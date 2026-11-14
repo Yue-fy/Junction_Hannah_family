@@ -111,7 +111,11 @@ $JUNCTION_VENV/bin/python -m stoa.eval --list        # registered solvers + impo
   dxf/ifc). Develop on `hard2`; on `hard2p`/`hard2q` report aggregates only and never quote their questions.
   `hard2r` (01:55) = SEALED: a fresh draw of the hard2 recipes in a fourth wording (Spanish/Estonian/Polish + new
   English; `stoa/eval/hard2r.py`, templates outside git in `$JUNCTION_SHARED/sealed/F/`). Only F and S0 run it, at
-  milestones (test runs), aggregates only; it replaces hard2q as the clean held-out set. Load in code:
+  milestones (test runs), aggregates only; it replaces hard2q as the clean held-out set. `hard3` (03:52) = SEALED
+  derived quantities (prices, rates, constants applied to dev gold; F + S0 only). `hardL_open` / `hardL` (04:30) =
+  the SAME known-gold dev questions in 8 untuned languages (`stoa/eval/hardl.py`, hosted-Nemotron translations;
+  meta.lang / meta.base_qid): `hardL_open` (English bases + cs/hu/tr/ro) is open, `hardL` (nb/hr/el/lt) is held out
+  (F/S0, aggregates); paired language penalty with `experiments/F/hardl_paired.py EN_RUN RUN`. Load in code:
   `stoa.eval.splits.load_split("train")` → `list[Question]` with answers.
 - `--limit N` takes the same fixed random subset every run. `--grep REGEX` keeps questions matching the regex
   (case-insensitive), e.g. `--grep 'window|ikkun|fenster|fönster'` for one concept in every language.
@@ -135,7 +139,10 @@ $JUNCTION_VENV/bin/python -m stoa.eval --list        # registered solvers + impo
 - Other tools: `python -m stoa.eval.analyze RUN [--baseline RUN]` (loss tables, examples, calibration),
   `python -m stoa.eval.leaderboard [--split dev]` (latest full run per solver on the current split version),
   `python -m stoa.eval.gates CHEAP_RUN CHALLENGER_RUN` (per-concept gate table from `--split train_gate` runs),
-  `python -m stoa.eval.calibration RUN [RUN ...] [--by-source]` (calibration side by side).
+  `python -m stoa.eval.calibration RUN [RUN ...] [--by-source]` (calibration side by side),
+  `python -m stoa.eval.review RUN.jsonl [--out f.md] [--only-low 0.8]` (one readable section per question: answer,
+  confidence, solver, evidence, assumptions, missing, cost, trace; for gold-less files such as Stoa's examples;
+  refuses held-out/sealed runs).
   Extra splits: `train_gate` (960 train Qs for choosing gates/thresholds), `cc5k_heldout` (CC5K-pretrained
   models only), `hard` (generality), or any split file path.
 - **Ad-hoc question files** (e.g. the example questions Stoa shows on Saturday): `--split path/to/file.jsonl`, one

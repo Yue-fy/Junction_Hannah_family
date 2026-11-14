@@ -69,7 +69,7 @@
     "key": "area:room:room"
    }
   },
-  "recorded_at": "2026-11-14 04:12",
+  "recorded_at": "2026-11-14 04:29",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -1087,7 +1087,7 @@
     "key": "count:door:storey"
    }
   },
-  "recorded_at": "2026-11-14 04:12",
+  "recorded_at": "2026-11-14 04:29",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -2295,7 +2295,7 @@
     "key": "count:window:storey"
    }
   },
-  "recorded_at": "2026-11-14 04:12",
+  "recorded_at": "2026-11-14 04:29",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -6775,7 +6775,7 @@
     "key": "count:door:model"
    }
   },
-  "recorded_at": "2026-11-14 04:12",
+  "recorded_at": "2026-11-14 04:29",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -6903,7 +6903,7 @@
     "key": "text:door:storey"
    }
   },
-  "recorded_at": "2026-11-14 04:12",
+  "recorded_at": "2026-11-14 04:29",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -7477,7 +7477,7 @@
     "key": "count:door:drawing"
    }
   },
-  "recorded_at": "2026-11-14 04:12",
+  "recorded_at": "2026-11-14 04:29",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -8364,7 +8364,7 @@
     ]
    }
   },
-  "recorded_at": "2026-11-14 04:12",
+  "recorded_at": "2026-11-14 04:29",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -8449,7 +8449,7 @@
     "key": "count:bedroom:drawing"
    }
   },
-  "recorded_at": "2026-11-14 04:12",
+  "recorded_at": "2026-11-14 04:29",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -8497,7 +8497,7 @@
     "key": "count:sauna:drawing"
    }
   },
-  "recorded_at": "2026-11-14 04:12",
+  "recorded_at": "2026-11-14 04:29",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -8565,7 +8565,62 @@
     "key": "text:unknown:drawing"
    }
   },
-  "recorded_at": "2026-11-14 04:12",
+  "recorded_at": "2026-11-14 04:29",
+  "api": "http://127.0.0.1:8102"
+ },
+ {
+  "path": "data/finna/mfa.81125dbb-8b52-48e3-bc9d-1128e233ac93.jpg",
+  "question": "Mikä on piirustuksen mittakaava?",
+  "answer": {
+   "value": "1/500",
+   "unit": null,
+   "confidence": 0.75,
+   "evidence": [
+    {
+     "file": "data/finna/mfa.81125dbb-8b52-48e3-bc9d-1128e233ac93.jpg",
+     "page": 0,
+     "bbox": [
+      2429.9,
+      165.6,
+      2745.8,
+      184.5
+     ],
+     "bbox_space": "image_px",
+     "ifc_guid": null,
+     "note": "text 'ASEMAPIIRROS M.K. 1/500'"
+    }
+   ],
+   "trace": [
+    "intent: text door [drawing] (lang fi)",
+    "no train gate for this kind of question: general path by file type",
+    "raster: 1/500  (conf 0.75)",
+    "[raster] text layer: 49 texts in 6 tile(s); No scale note was found in the texts.",
+    "[raster] answer '1/500' from text lines [5] (literal match)"
+   ],
+   "solver": "pipeline/raster",
+   "assumptions": [],
+   "missing": [],
+   "cost": {
+    "llm_tokens_in": 26960,
+    "llm_tokens_out": 2122,
+    "gpu_seconds": 3.2004,
+    "api_calls": 0,
+    "api_tokens_in": 0,
+    "api_tokens_out": 0,
+    "llm_calls": 7,
+    "wall_seconds": 6.0996
+   },
+   "intent": {
+    "task": "text",
+    "target": "door",
+    "scope": "drawing",
+    "unit": null,
+    "filters": {},
+    "lang": "fi",
+    "key": "text:door:drawing"
+   }
+  },
+  "recorded_at": "2026-11-14 04:29",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -9677,7 +9732,7 @@
     "key": "area:room:room"
    }
   },
-  "recorded_at": "2026-11-14 04:12",
+  "recorded_at": "2026-11-14 04:29",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -9879,7 +9934,7 @@
     "key": "count:room:label"
    }
   },
-  "recorded_at": "2026-11-14 04:12",
+  "recorded_at": "2026-11-14 04:29",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -9947,7 +10002,7 @@
     "key": "text:unknown:drawing"
    }
   },
-  "recorded_at": "2026-11-14 04:12",
+  "recorded_at": "2026-11-14 04:29",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -10002,7 +10057,7 @@
     "key": "text:stair:drawing"
    }
   },
-  "recorded_at": "2026-11-14 04:12",
+  "recorded_at": "2026-11-14 04:29",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -10057,7 +10112,7 @@
     "key": "text:unknown:drawing"
    }
   },
-  "recorded_at": "2026-11-14 04:12",
+  "recorded_at": "2026-11-14 04:29",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -10097,7 +10152,7 @@
     "key": "count:bedroom:drawing"
    }
   },
-  "recorded_at": "2026-11-14 04:12",
+  "recorded_at": "2026-11-14 04:29",
   "api": "http://127.0.0.1:8102",
   "solver": "vlm_direct",
   "solver_args": {
@@ -10141,7 +10196,7 @@
     "key": "text:unknown:drawing"
    }
   },
-  "recorded_at": "2026-11-14 04:13",
+  "recorded_at": "2026-11-14 04:29",
   "api": "http://127.0.0.1:8102",
   "solver": "vlm_direct",
   "solver_args": {
@@ -10229,7 +10284,7 @@
     "key": "count:bedroom:drawing"
    }
   },
-  "recorded_at": "2026-11-14 04:13",
+  "recorded_at": "2026-11-14 04:29",
   "api": "http://127.0.0.1:8102",
   "solver": "raster"
  },
@@ -10289,7 +10344,7 @@
     "key": "count:sauna:drawing"
    }
   },
-  "recorded_at": "2026-11-14 04:13",
+  "recorded_at": "2026-11-14 04:29",
   "api": "http://127.0.0.1:8102",
   "solver": "raster"
  },
@@ -10452,7 +10507,7 @@
     "key": "count:door:drawing"
    }
   },
-  "recorded_at": "2026-11-14 04:13",
+  "recorded_at": "2026-11-14 04:29",
   "api": "http://127.0.0.1:8102",
   "solver": "raster_cc5k"
  }
