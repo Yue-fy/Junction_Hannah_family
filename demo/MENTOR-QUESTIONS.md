@@ -36,8 +36,11 @@ talks to Stoa can decide on the spot. Keep it to 10 minutes: ask 1–6 first.
 - **Why:** our deterministic solvers are near-perfect on the given question kinds (Swiss 98–100 %, IFC 97–100 %), but
   on our own sealed set of *new wordings of the same kinds* we were at 63 % micro (now 80 %), and on derived
   quantities (price × count etc.) at 35 % (now 62 %). We know where it breaks; we need to know which part to fix first.
-- **Why the folder question:** our router recognises the source from the path. A copy of a CubiCasa plan outside the
-  dataset folder is routed as "unknown raster" and loses the fine-tuned counter (red team, `redteam/REPORT.md`).
+- **Why the folder question:** our router recognises the source from the path. Measured at 09:35 on all 800 CubiCasa
+  dev questions: the same PNG saved outside the dataset folder is about as accurate (594 vs 607) but twice as often
+  confidently wrong (46 vs 24), because the per-concept calibration is skipped; a plan sheet without its IFC model
+  gets only the vision path (0/5). So "will the IFC / DXF come with the plan?" decides which path the hidden set
+  takes (red team v22, `redteam/REPORT.md` bug 26).
 - **Will questions name storeys, rooms and models exactly as the files do** (`'00 Begane grond'`, `room 3.09
   ('Küche')`), or the way a person talks ("the ground floor", "im Erdgeschoss", "the kitchen", "the whole
   building")? Is the question always about the sheet it is attached to, or can it ask about another storey / the

@@ -89,13 +89,16 @@ By source on sealed test 2: Swiss vector plans 99.0 %, IFC models 100 % (397/397
 
 ## 2:35–2:55 · Where it breaks, and why (slide 4 — the failure analysis)
 Slide image: `demo/redteam-rounds.png` (SVG next to it; regenerate with `python3 experiments/q/plot_rounds.py` and
-headless chromium, numbers from `redteam/REPORT.md`). **Say only this (≈ 20 s, 60 words):**
-> "We tried to break it ourselves: over 600 adversarial questions — rewordings, nine languages, rotated scans, rooms
-> that don't exist, questions no drawing can answer. Every confident mistake had one cause: we checked the number,
-> not that it answered what was asked. Each bar is a round of fixes. On the build we're showing, all 360 confident
-> answers are right — and it never just refuses."
-(Numbers by stage build — say the line for the build on stage: be57171 / 31397eb: "609 … all 360"; once the 09:10–09:20
-owner heads are merged (pre-merge #9): "609 … all 364, and no confident answer to a trick question"; bb94fe4 (test 2):
+headless chromium, numbers from `redteam/REPORT.md`). **Say only this (≈ 22 s, 65 words):**
+> "We tried to break it ourselves: almost 900 adversarial questions — rewordings, nine languages, rotated scans, rooms
+> that don't exist, a judge's own upload. Every confident mistake had one cause: we checked the number, not that it
+> answered what was asked. Each bar is a round of fixes; the last is this morning's new attacks. On the first 600,
+> all 364 confident answers are right — and it never just refuses."
+(The 09:40 bar = 14 confident misses from the three newest families — uploads, link wordings, storey roles — on the
+build where every older family is at 0. If the owners' fixes for bugs 24–26 merge before the pitch, re-run and redraw.)
+(Numbers by stage build — say the line for the build on stage: **night 0ffd81b (09:28) and later: "over 600 … all 364
+confident answers are right, and no confident answer to a trick question"** (measured, run `…-092751-…-all-0ffd81b-ba15`;
+also 407 of 409 on all 704 rows); be57171 / 31397eb: "609 … all 360"; bb94fe4 (test 2):
 "494 … 283 of 290"; c1d6149: "564 … 338 of 339"; 62754aa: "609 … 337 of 339". "Never just refuses": 0 of 647
 answers on be57171 are a bare refusal, and every wrong one carries an assumption or a "missing" line — see backup.)
 
@@ -137,7 +140,7 @@ new surface (storeys in everyday words, "whole building" in Swedish, "1,200 euro
   extra step. Fix in place: detect the unexplained operation, compute it in code or lower the confidence (derived
   probe 29.5 % → 56.8 %, 100 % right when confident). Test 2 measures it on the sealed sets (hard2r, hard3).
 
-### If a judge types their own question (measured 09:05 on night be57171, run `…-090509-…-v19b-a85a`; `redteam/REPORT.md` v6–v20)
+### If a judge types their own question (measured 09:28 on night 0ffd81b, run `…-092751-…-all-0ffd81b-ba15`; `redteam/REPORT.md` v6–v24)
 On older builds more of these break: see the git history of this file (08:20 and 08:37 versions).
 - **Esplanades IFC sheet — safe:** "How many rooms / columns are on this floor?" (50 / 37), "How many doors are on the
   ground floor?" (46, 0.98), "How many windows does the whole building have?" (297; also Finnish "koko
@@ -150,17 +153,21 @@ On older builds more of these break: see the git history of this file (08:20 and
   windows on '1.korrus'?" → "no: the model has 55, the plan draws 52 (3 lie wholly above/below the cut plane)" at 0.85
   with the 3 GUIDs; the same with doors → "yes: both 46"; "How many floor plan sheets are there for this building?" (5).
   **Lists:** "Which rooms on '1.korrus' are larger than 50 m²?" → 4 rooms with their areas at 0.92 (also "under 4 m²",
-  "between 20 and 25 m²", in Estonian/German).
+  "between 20 and 25 m²", in Estonian/German), and since 0ffd81b with a room type ("Which ELUTUBA+KÖÖK rooms are
+  smaller than 25 m²?" → 6-1), "Which floors have more than 55 rooms?" (2.–4.korrus), "On which floors is there a
+  MAGAMISTUBA?" (2.–5.korrus). **Links, since 0ffd81b:** "Which sheet shows the server room?" → plan-01-1-korrus (0.85),
+  "Does this drawing show every window that the model has?" → "no: 52 of 55", "How many windows on '1.korrus' are in
+  the model but not drawn on this plan?" → 3 (0.80), "On which floor is the laundry room (PESUKODA)?" → 1.korrus (0.85),
+  in French/Spanish/Swedish too ("Le plan et la maquette IFC ont-ils le même nombre de portes … ?" → yes).
   Right but shown as unsure (fine to type, the card says why): "How many floors does this building have?" (5, 0.60),
-  "How many doors are on the top floor?" (39, 0.53), "1.korrus and 2.korrus together" (88, 0.63), "How many windows
-  on '1.korrus' are in the model but not drawn on this plan?" (3, 0.59), "On which floor is the laundry room
-  (PESUKODA)?" (1.korrus, 0.30).
-  **Steer away from:** a list with a room type ("Which living rooms / ELUTUBA+KÖÖK rooms are smaller than 25 m²?" lists
-  every room at 0.92), "Which floors have more than 55 rooms?" (read as rooms > 55 m², 0.92), "On which floors is there
-  a MAGAMISTUBA?" (one room's area, 0.90) — bug 22, W1; "Does this drawing show every window that the model has?"
-  (297 at 0.30), "Which sheet shows the server room?" ("no sheet information"), "How big is the laundry room?" (870 at
-  0.30). If one of these comes up, open the evidence and say it: "the trace shows what it computed — this is a known
-  failure, it's on the failure slide."
+  "How many doors are on the top floor?" (39, 0.53), "1.korrus and 2.korrus together" (88, 0.63).
+  **Steer away from:** comparative link questions ("Does this plan show fewer windows than the IFC model?" → "no" at
+  0.85 while its own numbers say 52 < 55 — bug 25, R1), two questions in one link question ("Which storey does this
+  sheet show, and does its door count match?" answers only the storey), "How big is the laundry room?" (870 at 0.30),
+  "the same area as room X" (returns X's area). On the smiley-west model, "the ground floor" from another storey's
+  sheet answers that sheet's storey at 0.98 (bug 24, W1) — on Esplanades "ground floor" is right (46). If one of these
+  comes up, open the evidence and say it: "the trace shows what it computed — this is a known failure, it's on the
+  failure slide."
 - Esplanades rooms are labelled in Estonian; English room words work and the card says which labels it used:
   "How many kitchens are on this floor?" → 10 ('ELUTUBA+KÖÖK'), "How many toilets …?" → 13, "How big is the server
   room?" → 4.26 m². Typed without quotes, "how big is the corridor KORIDOR (119) on 1.korrus?" is now right (63.84 at
@@ -169,8 +176,8 @@ On older builds more of these break: see the git history of this file (08:20 and
   apartment B" (870), "by how many m² is B larger than A" (0.49), "Which apartment has the largest kitchen?" (A),
   "Is apartment A's kitchen bigger than apartment B's?" (yes, 0.87), "How many doors and how many windows are drawn
   on this floor plan?" ("door: 36; window: 28", 0.99 — now also in German, French, Italian and Finnish), "… in total?"
-  (64). **Avoid:** "How many doors are there in the whole building?" on this single-floor plan (answers the floor's 36
-  at 0.99 instead of saying the plan shows one floor; W2), two-part area questions ("how many 'Zimmer' in apartment C
+  (64). "How many doors are there in the whole building?" → 36 at 0.50 with "only floor 9385 of building 2082 is drawn"
+  (fine to show: it says what it can't know). **Avoid:** two-part area questions ("how many 'Zimmer' in apartment C
   and their total area"), "How big is the Küche?" (several kitchens: total at 0.50 with a per-room list), prices
   written "1,200 euros" on this plan (right about half the time, at 0.45).
 - **A Finnish judge:** "Kuinka monta huonetta tässä kerroksessa on?" 50, "Montako ikkunaa ensimmäisessä kerroksessa
@@ -182,6 +189,11 @@ On older builds more of these break: see the git history of this file (08:20 and
 - **CubiCasa plan:** "How big is this apartment?" gives an estimate at low confidence (0.05–0.40) with "no known
   scale" — a good moment to show "we know what we don't know". "How many bedrooms and how many bathrooms?" →
   "bedroom: 3; bathroom: 1" (0.92). Avoid "How many windows does this apartment have?" (11 at 0.30; gold 8).
+- **"＋ Your own drawing" (upload; red-team v22 + all 800 CubiCasa dev questions):** for an apartment plan image, tick
+  the style "Nordic apartment plan" — then every answer is the dataset path's (64/64 identical); without it the
+  answers are about as accurate but twice as often confidently wrong (24 → 46 of 800; bug 26). An .ifc uploaded alone
+  answers like ours (7/7). A plan sheet uploaded WITHOUT its .ifc gets only the vision path (0/5, low confidence):
+  ask the judge to drop the .ifc too.
 
 ## 2:55–3:00 · Close
 > "Answers you can verify in seconds, a confidence you can trust, and an honest list of what we don't know yet."

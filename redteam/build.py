@@ -1034,6 +1034,157 @@ def main():
             r_["meta"]["accept_re"] = gold_re(g)
             out.append(r_)
 
+    # ===== v22 (09:40): the demo's "＋ Your own drawing" upload (W5 09:21) = the hidden set's "different" drawings ===
+    # W5's middleware (web/mock/stoaApi.ts saveUpload) stores a visitor's file at <tmp>/stoa-uploads/<sha256[:12]>/<name>
+    # or, with the optional style 'Nordic apartment plan', at …/<sha>/data/cubicasa5k/<name>. A judge's own file has no
+    # dataset name, no template and no cache. Here: 8 CubiCasa dev plans (seeded), 1 IFC model (duplex, train) and 1
+    # IFC plan sheet WITHOUT its model (smiley-west 1.OG, dev), renamed plan.png / model.ifc / plan.pdf and saved the
+    # way the upload saves them, asked their own English dataset questions (gold = dataset); the same questions on the
+    # dataset path run in the same eval (control) → the upload penalty, paired per question.
+    import hashlib
+    up = IMG_DIR / "uploads22"
+
+    def save_upload(src_rel, name, style=""):
+        body = abspath(src_rel).read_bytes()
+        uid = hashlib.sha256(style.encode() + body).hexdigest()[:12]
+        d = up / uid / "data" / style if style else up / uid
+        d.mkdir(parents=True, exist_ok=True)
+        dst = d / name
+        if not dst.exists():
+            dst.write_bytes(body)
+        return dst
+    qs_by_path = defaultdict(list)
+    cc_dev = sorted({r["path"] for r in dev_ids if r["source"] == "cubicasa5k"})
+    random.Random(22).shuffle(cc_dev)
+    cc_dev = cc_dev[:8]
+    SMP = "data/ifc_models/kit-smiley-west_ac-20-smiley-west-10-bldg_plan-03-1-og.pdf"
+    DUP = "data/ifc_models/bsc-duplex_duplex-a-20110907.ifc"
+    with open(Path(os.environ.get("STOA_DATA", "")) / "questions.jsonl") as f:
+        for line in f:
+            d = json.loads(line)
+            if (d["path"] in cc_dev or d["path"] in (SMP, DUP)) and d["question"].isascii():
+                if all(d["question"] != e["question"] for e in qs_by_path[d["path"]]):
+                    qs_by_path[d["path"]].append(d)
+    for p in cc_dev:
+        variants = [(p, "cc-control"), (save_upload(p, "plan.png"), "cc-upload"),
+                    (save_upload(p, "plan.png", "cubicasa5k"), "cc-styled")]
+        for d in qs_by_path[p][:8]:
+            for path, kind in variants:
+                out.append(row(path, d["question"], d["answer"], d.get("unit"), d.get("type") or "count",
+                               f"upload22:{kind}", "same", note=f"{Path(p).name}: dataset gold"))
+    dup_q = [d for d in qs_by_path[DUP] if re.search(r"in the model '|'Living Room \(A102\)'|all rooms \(spaces\) on "
+                                                    r"'Level 1'|doors are shown on the floor plan of 'Level 1'",
+                                                    d["question"])][:9]
+    for path, kind in [(DUP, "ifc-control"), (save_upload(DUP, "model.ifc"), "ifc-upload")]:
+        for d in dup_q:
+            out.append(row(path, d["question"], d["answer"], d.get("unit"), d.get("type") or "count",
+                           f"upload22:{kind}", "same", note="duplex model: dataset gold"))
+    sm_q = [d for d in qs_by_path[SMP] if d["unit"] in ("count", "m")][:5]
+    for path, kind in [(SMP, "plan-control"), (save_upload(SMP, "plan.pdf"), "plan-only")]:
+        for d in sm_q:
+            out.append(row(path, d["question"], d["answer"], d.get("unit"), d.get("type") or "count",
+                           f"upload22:{kind}", "same",
+                           note="gold from the model; plan-only = the sheet uploaded without its IFC"))
+
+    # ===== v23 (09:50): link questions, third round, wordings neither R1 nor v17/v20 used (R1 09:33 asked for it) =====
+    # Same facts as v17/v20 (esplanades '1.korrus' 46 = 46 doors, 52 of 55 windows; smiley-west '1.OG' 50 = 50 doors;
+    # sheet sets from the file names: esplanades 5 plans and nothing else, smiley-west 4 plans, warmond 8 + 4 + 2) +
+    # links R1's kg_qa does not cover (Swiss DXF/PDF twins, a CubiCasa PNG with no model) + storey roles on the model
+    # (F 09:24: 'ground floor' = EG; gold = the dataset's per-storey wall counts KG 60 / EG 81).
+    SMEG = "data/ifc_models/kit-smiley-west_ac-20-smiley-west-10-bldg_plan-02-eg.pdf"
+    for path, q, g, typ, kind, rx, note in [
+        (E, "Is anything that the IFC model has on '1.korrus' missing from this floor plan?", "yes", "text",
+         "yesno:link23", None, "3 windows above/below the cut"),
+        (E, "Cross-check the door count of this plan against the BIM model. Do they match?", "yes", "text",
+         "yesno:link23", None, "46 = 46"),
+        (E, "Are there windows in the 3D model that this sheet does not draw?", "yes", "text", "yesno:link23", None,
+         "52 of 55"),
+        (E, "Does this plan show fewer windows than the IFC model has on the same storey?", "yes", "text",
+         "yesno:link23", None, "52 < 55"),
+        (E, "How many model windows are missing from this sheet?", 3, "count", "link23:count", None, "55 - 52"),
+        (E, "By how many doors does this plan differ from the IFC model?", 0, "count", "link23:count", None, "46 - 46"),
+        (E, "Le plan et la maquette IFC ont-ils le même nombre de portes au niveau « 1.korrus » ?", "yes", "text",
+         "yesno:link23-fr", None, "46 = 46"),
+        (E, "Stämmer antalet fönster på ritningen med IFC-modellen för våningen '1.korrus'?", "no", "text",
+         "yesno:link23-sv", None, "52 vs 55"),
+        (E, "¿Coinciden el plano y el modelo IFC en el número de puertas de '1.korrus'?", "yes", "text",
+         "yesno:link23-es", None, "46 = 46"),
+        (E, "Quante finestre del modello IFC non sono disegnate in questa pianta?", 3, "count", "link23:count-it", None,
+         "55 - 52"),
+        (SM, "Hoeveel plattegronden horen bij dit gebouw?", 4, "count", "link23:count-nl", None, "KG/EG/1.OG/2.OG"),
+        (SM, "Is the door count on this drawing the same as in the BIM model?", "yes", "text", "yesno:link23", None,
+         "sheet = 1.OG; 50 = 50"),
+        (E, "Which storey does this sheet show, and does its door count match the model?", None, "text", "link23:which",
+         r"(?is)^(?=.*1\.?\s*korrus)(?=.*(\byes\b|\bboth\b|46\D{1,40}46|=\s*46|match(es)? the model))",
+         "1.korrus; yes 46 = 46"),
+        (WM8, "How many sheets are there in total for this model, counting plans, elevations and sections?", 14,
+         "count", "link23:count", None, "8 + 4 + 2"),
+        (WM8, "Is there a section drawing for this building?", "yes", "text", "yesno:link23", None,
+         "section-east-west, section-north-south"),
+        (E, "Is there an elevation drawing of this building in the set?", "no", "text", "yesno:link23", None,
+         "esplanades: 5 plan sheets only"),
+        (SM, "Which sheet shows the ground floor?", None, "text", "link23:which", r"plan[- _]?0?2\b|02[- _]eg",
+         "plan-02-eg"),
+        (E, "Which drawing do I open to see the room 'SERVER (117)'?", None, "text", "link23:which",
+         r"plan[- _]?0?1\b", "SERVER only on 1.korrus = plan-01"),
+        (SW, "Is there an IFC model for this floor plan?", "no", "text", "yesno:link23", None,
+         "swiss_dwellings: DXF + PDF + PNG, no IFC"),
+        (SW, "Do this floor plan and its DXF file agree on the number of doors?", "yes", "text", "yesno:link23", None,
+         "the PDF is rendered from the DXF (same door leaves)"),
+        (CC, "Is there a 3D model or IFC file for this apartment?", "no", "text", "yesno:link23", None,
+         "CubiCasa: one PNG"),
+    ]:
+        r_ = row(path, q, g if g is not None else note, "count" if typ == "count" else None, typ, kind, "same",
+                 note=note)
+        if rx:
+            r_["meta"]["accept_re"] = rx
+            r_["meta"]["reject_re"] = (r"does not contain|no (sheet |drawing )?information|not include|cannot (be )?"
+                                       r"determine|no plan sheet|do(es)? not match|don't match|mismatch")
+        out.append(r_)
+    for path, q, g, kind in [
+        (SM, "How many walls are there on the ground floor?", 81, "storey23:ground"),
+        (SM, "Count the walls at ground level.", 81, "storey23:ground"),
+        (SM, "Wie viele Wände hat das Erdgeschoss?", 81, "storey23:ground-de"),
+        (SM, "How many walls are in the basement?", 60, "storey23:basement"),
+        (SMEG, "How many walls does the floor shown on this sheet have?", 81, "storey23:this-sheet"),
+    ]:
+        out.append(row(path, q, g, "count", "count", kind, "same", note="dataset: walls KG 60 / EG 81 / 1.OG 70"))
+
+    # ===== v24 (09:55): list answers, round 2 (W1 09:25 asked: other models, 'all but', more wordings) ===============
+    # Duplex (train) model, asked on its .ifc: gold = the dataset's net areas of all 10 rooms on 'Level 1' (A/B: Living
+    # 27.66, Kitchen 12.95, Foyer 15.59, Bathroom 1 3.16, Stair A105 / Room B105 3.8) and all 10 on 'Level 2' (Bedroom
+    # 1/2 22.04 ×4, Hallway 6.89 ×2, Bathroom 2 4.73 / 4.75, Utility 1.42 / 1.40). Includes ties and exclusions.
+    for q, items, not_items, kind, note in [
+        ("Which rooms on 'Level 1' are larger than 20 m²?", [r"A102", r"B102"], [r"A101|B101|Foyer", r"Kitchen"],
+         "list24:ifc", "two living rooms 27.66; next foyers 15.59"),
+        ("List all rooms on 'Level 2' except the bedrooms.", [r"A201", r"B201", r"A204", r"B204", r"A205", r"B205"],
+         [r"Bedroom|A202|A203|B202|B203"], "list24:all-but", "6 of 10"),
+        ("Which rooms on 'Level 2' are smaller than 5 m²?", [r"A204", r"B204", r"A205", r"B205"],
+         [r"Hallway|A201|B201", r"Bedroom"], "list24:ifc", "4.73 / 4.75 / 1.42 / 1.40; hallways 6.89"),
+        ("Which bathrooms in this model are larger than 4 m²?", [r"A204", r"B204"], [r"A104|B104"], "list24:type",
+         "Bathroom 2 4.73 / 4.75; Bathroom 1 3.16"),
+        ("Apart from the living rooms and kitchens, which rooms on 'Level 1' are larger than 10 m²?",
+         [r"A101", r"B101"], [r"A102|B102|Living", r"A103|B103|Kitchen", r"A104|B104|A105|B105"], "list24:all-but",
+         "foyers 15.59"),
+        ("Which room on 'Level 1' has the same floor area as 'Kitchen (A103)'?", [r"B103"], [r"A102|B102|A101|B101"],
+         "list24:same-as", "Kitchen B103 12.95"),
+        ("Welche Räume in 'Level 2' sind kleiner als 2 m²?", [r"A205", r"B205"], [r"A204|B204", r"A201|B201"],
+         "list24:de", "utilities 1.42 / 1.40"),
+        ("On which levels of this model is there a bedroom?", [r"Level 2"], [r"Level 1(?!\d)", r"\bRoof\b"],
+         "list24:storey", "bedrooms only on Level 2"),
+    ]:
+        r_ = row(DUP, q, "; ".join(items), None, "text", kind, "same", note=note)
+        r_["meta"]["items"] = items
+        r_["meta"]["not_items"] = not_items
+        out.append(r_)
+    r_ = row(DUP, "What is the largest room on 'Level 2'?", "Bedroom (22.04 m², four-way tie)", None, "text",
+             "list24:tie", "same", note="four bedrooms tie at 22.04")
+    r_["meta"]["accept_re"] = r"Bedroom|A202|A203|B202|B203"
+    out.append(r_)
+    for q, g in [("How many rooms on 'Level 2' are smaller than 5 m²?", 4),
+                 ("How many rooms on 'Level 1' are larger than 20 m²?", 2)]:
+        out.append(row(DUP, q, g, "count", "count", "list24:control", "same", note="count of the list"))
+
     with open(OUT, "w", encoding="utf-8") as f:
         for r in out:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
