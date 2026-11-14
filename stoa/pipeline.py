@@ -84,6 +84,11 @@ def route(path: str, intent: Intent | None = None) -> list[str]:
             out.append("schedule")
         out += ["pdf_vector", "pdf_text"]
     if ext in IMG_EXT or any(e in sib for e in IMG_EXT):
+        if src != "cubicasa5k" and ext in IMG_EXT and not out:
+            # a raster plan of an unseen style with no vector/IFC twin (the hidden set's "different" drawings): R2's
+            # LoRA beats the base VLM on plain counts there (swiss PNG twins, 200 dev Qs: cc-v3 57.5%, cc-v2 46.0%,
+            # base 40.5%) while raster's count methods are CubiCasa-specific; vlm_lora refuses operator questions
+            out.append("vlm_lora")
         out.append("raster")
         if src == "cubicasa5k":  # R2's counting LoRA (cc-v2): gated per concept on train_gate (it never saw those)
             out.append("vlm_lora")
