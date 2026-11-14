@@ -581,10 +581,11 @@ async function loadExamples(f: FileInfo) {
     for (let k = 0; interleaved.length < uniq.length; k++)
       for (const l of byType.values()) if (l[k]) interleaved.push(l[k]);
     const proj = isCustomer() ? projectOf(f.path) : undefined;
+    const pchips = proj ? (f.ext === ".ifc" && proj.modelChips ? proj.modelChips : proj.chips) : [];
     if (proj) {
-      chips.innerHTML = proj.chips.map((q) => `<button type="button" class="chip" title="${esc(q)}">${esc(q)}</button>`).join("");
+      chips.innerHTML = pchips.map((q) => `<button type="button" class="chip" title="${esc(q)}">${esc(q)}</button>`).join("");
       chips.querySelectorAll<HTMLButtonElement>(".chip").forEach((b, i) => b.addEventListener("click", () => {
-        $<HTMLTextAreaElement>("question").value = proj.chips[i];
+        $<HTMLTextAreaElement>("question").value = pchips[i];
         void runAsk();
       }));
     }

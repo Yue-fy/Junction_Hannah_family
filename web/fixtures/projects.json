@@ -42,7 +42,12 @@
       "How many windows in the whole building?"
     ],
     "credit": "Drawings and model: Esplan (esplan.ee), CC BY 4.0",
-    "kind": "building"
+    "kind": "building",
+    "modelChips": [
+      "How many doors are in the whole building?",
+      "How many rooms are on each floor?",
+      "How many windows in the whole building?"
+    ]
   },
   {
     "id": "swiss",

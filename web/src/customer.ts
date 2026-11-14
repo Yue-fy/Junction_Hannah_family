@@ -100,7 +100,7 @@ function wherePhrase(a: Answer, ctx: HeroCtx): string {
 }
 
 /** Big value + one plain sentence. Yes/no answers lead with Yes / No. */
-function headline(a: Answer, ctx: HeroCtx): { big: string; unit: string; sentence: string; text?: string; name?: boolean; next?: string[] } {
+function headline(a: Answer, ctx: HeroCtx): { big: string; unit: string; sentence: string; text?: string; name?: boolean; next?: string[]; nextLabel?: string } {
   const v = a.value;
   if (v === null || v === undefined) return { big: "No answer", unit: "", sentence: (a.missing ?? [])[0] ?? "We could not find this on the drawing." };
   if (typeof v === "boolean") return { big: v ? "Yes" : "No", unit: "", sentence: "" };
@@ -116,6 +116,14 @@ function headline(a: Answer, ctx: HeroCtx): { big: string; unit: string; sentenc
       const where = wherePhrase(a, ctx);
       return { big: rows[0][1], unit: "", name: true, sentence: `the ${sup[1].toLowerCase()} ${a.intent?.target === "room" || /room/i.test(ctx.question) ? "room" : "one"}${where ? ` ${where}` : ""}: ${rows[0][2]} ${u}`,
         next: rows.slice(1, 5).map((r) => `${r[1]} · ${r[2]} ${r[3].replace("m2", "m²")}`) };
+    }
+    // "Total spaces (whole model): 285\nBy storey:\n- 1.korrus: 50 (17.5%)…": the total big, the split as 'Next'
+    const tot = v.match(/^Total (\w+)[^:\n]*:\s*(\d+)\s*\n\s*By (storey|type)[^:\n]*:\s*\n([\s\S]+)$/i);
+    if (tot) {
+      const noun = NOUN[tot[1].toLowerCase().replace(/s$/, "")]?.[1] ?? tot[1].toLowerCase();
+      const per = tot[4].split("\n").map((l) => l.match(/^\s*-\s*(.+?):\s*(\d+)/)).filter((m): m is RegExpMatchArray => !!m);
+      return { big: tot[2], unit: "", sentence: `${noun} in the whole building${tot[3].toLowerCase() === "storey" ? ", by floor:" : ", by type:"}`,
+        next: per.map((m) => `${plainify(m[1]).replace(/^floor/, "Floor")}: ${m[2]}`), nextLabel: "" };
     }
     return { big: "", unit: "", sentence: "", text: plainify(v) };
   }
@@ -202,7 +210,7 @@ export function heroHtml(a: Answer, ctx: HeroCtx): string {
   return `
     ${h.big ? `<div class="hero-value"><span class="big${h.name ? " name" : ""}">${esc(h.big)}</span>${h.unit ? `<span class="unit">${esc(h.unit)}</span>` : ""}</div>` : ""}
     ${h.sentence ? `<div class="hero-sentence">${esc(h.sentence)}</div>` : ""}
-    ${h.next?.length ? `<div class="hero-next"><span>Next:</span> ${h.next.map(esc).join(" &nbsp;·&nbsp; ")}</div>` : ""}
+    ${h.next?.length ? `<div class="hero-next">${h.nextLabel === "" ? "" : "<span>Next:</span> "}${h.next.map(esc).join(" &nbsp;·&nbsp; ")}</div>` : ""}
     ${text}${setRows}
     <div class="hero-badges">
       <span class="conf ${c.cls}" title="Our calibrated confidence: ${Math.round((a.confidence ?? 0) * 100)} %">${esc(c.word)}</span>${c.hint ? `<span class="conf-hint">${esc(c.hint)}</span>` : ""}
@@ -215,7 +223,7 @@ export function heroHtml(a: Answer, ctx: HeroCtx): string {
     </div>
     ${shown.length ? `<div class="hero-where"><div class="hw-title">Where it comes from</div>
       ${shown.map((i, k) => `<button type="button" class="hw-item" data-ev="${i}"><span class="num">${circled(k)}</span><span class="lbl">${esc(place(i))} · ${esc(evidenceLabel(ev[i].note ?? ""))}</span></button>`).join("")}
-      ${more > 0 ? `<div class="hw-more">+ ${more} more, all marked ${ev.some((e) => e.bbox) ? "on the drawing" : "in the 3D model"}</div>` : ""}</div>` : ""}`;
+      ${more > 0 ? `<div class="hw-more">+ ${more} more, all marked ${/\.ifc$/i.test(ctx.file) || !ev.some((e) => e.bbox) ? "in the 3D model" : "on the drawing"}</div>` : ""}</div>` : ""}`;
 }
 
 /** The evidence items that get a number (①…⑤): the first ones with a place, one per element. */
