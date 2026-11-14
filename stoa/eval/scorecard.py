@@ -20,6 +20,15 @@ from stoa.eval.analyze import cluster_ci, find_baseline, load, resolve
 from stoa.eval.runner import SCORED_TYPES, summarize
 
 
+
+# what each generated split measures (stoa/eval/hard2.py, hard2p.py); hard2q is the only clean held-out one (D10)
+_GEN_NOTE = {
+    "hard2": "development set: operators never seen in questions.jsonl (teams tuned on it)",
+    "hard2p": "hard2 reworded (EN/DE/FR/FI); partly seen: some wordings were quoted to solver owners",
+    "hard2q": "CLEAN held-out: hard2 operators in a third wording (IT/NL/SV + new EN); aggregates only, no rules written from it (D10)",
+    "hard2r": "SEALED held-out (from 01:55): fresh draw of the hard2 recipes in a fourth wording (ES/ET/PL + new EN); milestone runs only",
+}
+
 def _pct(x, d=1):
     return "–" if x is None else f"{100 * x:.{d}f}%"
 
@@ -98,7 +107,7 @@ def scorecard(dev: str, hard: str | None = None, text: str | None = None, baseli
         split = resolve(g).stem.split("-pipeline-")[-1].split("-")[0] if "-pipeline-" in resolve(g).stem else resolve(g).stem
         out.append(f"| generality ({split}): scored / judged text / AUROC / conf ≥ 0.8 acc | {_pct(gm['accuracy'])} / "
                    f"{_pct(gt)} / " + (f"{gc['auroc']:.2f}" if gc.get("auroc") is not None else "–")
-                   + f" / {_pct(gc.get('hi_conf_acc'))} | – | n={len(gr)}; operators never seen in questions.jsonl |")
+                   + f" / {_pct(gc.get('hi_conf_acc'))} | – | n={len(gr)}; {_GEN_NOTE.get(split, 'generated from ground truth')} |")
     out += ["", "| source | n | accuracy | conf ≥ 0.8 share / acc | ECE | evidence in 2D | counts verifiable | $/1k |",
             "|---|---:|---:|---:|---:|---:|---:|---:|"]
     by_src = collections.defaultdict(list)

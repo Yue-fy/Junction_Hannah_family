@@ -338,6 +338,11 @@ class Pipeline(BaseSolver):
                 conf = ans.confidence
             trace.append(f"{name}: {ans.value} {ans.unit or ''} (conf {conf:.2f}"
                          + (", held-out hit rate" if name in rates else ", train hit rate" if name in acc else "") + ")")
+            if name == "vlm_lora" and gate and gate.get("lora_vs_raster"):
+                conf, extra = self._lora_vs_raster(path, ask, ans, gate["lora_vs_raster"], trace, conf)
+                total = total.add(extra)
+                answers.append((name, ans, conf))
+                break  # the LoRA's count stands; raster only sets the confidence and lends its boxes
             answers.append((name, ans, conf))
             if conf >= self.accept or self.agree == "never" or len(answers) >= 2:
                 break
@@ -369,6 +374,34 @@ class Pipeline(BaseSolver):
         best.trace = trace + [f"[{best.solver}] {t}" for t in best.trace[-8:]]
         best.solver = f"pipeline/{best.solver}"
         return best
+
+    def _lora_vs_raster(self, path: str, ask: str, ans: Answer, table: dict, trace: list[str], conf: float):
+        """The counting LoRA has no boxes and its own confidence is not trusted (F): ask raster the same question;
+        confidence = how often the LoRA was right on train_gate when raster agreed / disagreed (smoothed); when they
+        agree, raster's label boxes become the evidence."""
+        r = self._get("raster")
+        if r is None:
+            return conf, Cost()
+        try:
+            ra = r.solve(path, ask) if r.can_handle(path, ask) else None
+        except Exception:  # noqa: BLE001
+            ra = None
+        if ra is None or ra.value is None:
+            return conf, Cost()
+        if not isinstance(ra, Answer):
+            ra = Answer.model_validate(ra)
+        same = _agree(ans.value, ra.value, "count")
+        k, n = table["agree" if same else "disagree"]
+        c = round((k + 1) / (n + 2), 3)
+        if same:
+            note = f"cross-check: vlm_lora {ans.value} = raster {ra.value} ✓"
+            ans.evidence = [*ans.evidence, *[e.model_copy(update={"note": (e.note + "; " if e.note else "") + note})
+                                             for e in ra.evidence[:12]]]
+        else:
+            note = f"cross-check: vlm_lora {ans.value} ≠ raster {ra.value}"
+            ans.missing = [*ans.missing, f"raster counted {ra.value}, the LoRA {ans.value}"]
+        trace.append(f"{note} → conf {c:.2f} (LoRA right {k}/{n} on train_gate when raster {'agreed' if same else 'disagreed'})")
+        return c, _cost_of(ra)
 
     def _cc5k_order(self, key: str, order: list[str], rates: dict, trace: list[str]) -> list[str]:
         """D8: R1's pretrained CubiCasa5K model for symbol counts, gated on cc5k_heldout (never train_gate: the

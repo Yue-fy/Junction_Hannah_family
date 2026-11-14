@@ -90,6 +90,22 @@ OPCHECK_PROMPT = ("Classify the operation this floor-plan question asks for. Rep
                   + "\n".join(f"{k}: {v}" for k, v in OPCHECK_KINDS.items()) + "\nQuestion: {q}\nLetter:")
 
 
+def _rewrite_by_op(qr: qparse.Query, letter: str | None) -> qparse.Query | None:
+    """Apply the operation the LLM named to the apartment parts the rules found (None if they do not fit)."""
+    apts = [t for t in qr.terms if t.kind == "area_apartment"]
+    if qr.qtype != "area" or len(apts) != len(qr.terms):
+        return None
+    total = qparse.Term("area_total", None, 10 ** 6)
+    if letter == "G" and len(apts) == 1:  # floor total minus apartment X
+        return qparse.Query("area", "diff", [qparse.Term("area_total", None, -1), apts[0]], qr.unit, qr.notes,
+                            include_outdoor=qr.include_outdoor)
+    if letter == "C" and len(apts) == 2:  # ratio, first named / second named
+        return qparse.Query("area", "ratio", sorted(apts, key=lambda t: t.pos), None, qr.notes)
+    if letter == "D" and len(apts) == 1:  # share of the floor total in %
+        return qparse.Query("area", "pct", [apts[0], total], "%", qr.notes, include_outdoor=qr.include_outdoor)
+    return None
+
+
 def _known_template(question: str) -> bool:
     try:
         from stoa.router.prior import known_template
@@ -387,7 +403,7 @@ class DxfSolver(BaseSolver):
         vocab = fm.names() + KNOWN_NAMES
         qr = qparse.parse(question, vocab, room_numbers={r.number for r in fm.rooms if r.number})
         trace = [f"parsed: {qr.describe()}", *[f"parse note: {n}" for n in qr.notes]]
-        opcheck_cap = False
+        opcheck_cap = opcheck_rewrite = False
         if self.llm and not qparse.covered(question, qr):
             ans = self._tableqa(path, dxf_rel, fm, question, trace)
             if ans is not None:
@@ -402,7 +418,12 @@ class DxfSolver(BaseSolver):
                 (letter == "B" and not neg) or (letter == "G" and neg)))
             trace.append(f"operation check (LLM): '{letter}' = {OPCHECK_KINDS.get(letter, '?')}; rules applied "
                          f"{qr.op} -> {'agree' if ok else 'disagree'}")
-            if not ok:
+            if not ok and (rw := _rewrite_by_op(qr, letter)) is not None:
+                # the LLM named the operation; the rules compute it on the parts they already found
+                trace.append(f"rewritten by the operation check: {qr.describe()} -> {rw.describe()}")
+                qr = rw
+                opcheck_rewrite = True
+            elif not ok:
                 ans = self._tableqa(path, dxf_rel, fm, question, trace)
                 if ans is not None:
                     return ans
@@ -437,7 +458,11 @@ class DxfSolver(BaseSolver):
         conf = 1.0
         for p in parts:
             conf *= p.conf if p.value is not None else 0.2
-        if qparse.operator_unapplied(question, qr) or opcheck_cap:
+        if opcheck_rewrite:
+            conf = min(conf, 0.7)
+            assumptions.append("the operation (difference / ratio / share) was identified by a language model; "
+                               "the numbers come from the DXF rules")
+        elif qparse.operator_unapplied(question, qr) or opcheck_cap:
             conf = min(conf, 0.3)  # S0 D9: low enough that the pipeline's agent takes over
             missing.append("the question mentions an operation (average/ratio/share/threshold/per/'not in') that the "
                            "rule parser did not apply; the value may answer a simpler question")

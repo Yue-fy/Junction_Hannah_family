@@ -120,3 +120,14 @@ def test_dxf_sets_and_scopes():
     a = s.solve(P2, "What is the net floor area of apartment A in m², summing all its rooms except balconies, loggias, "
                     "terraces and other outdoor spaces?")
     assert abs(a.value - 105.93) < 0.02
+
+
+@needs_data
+def test_dxf_unknown_undotted_room_abstains():
+    # W4: "room 1" (no dot, not on this floor) was read as the floor total at conf 0.96
+    from stoa.solvers import get_solver
+
+    s = get_solver("dxf", llm=0)
+    a = s.solve(P2, "What is the net floor area of room 1 in m²?")
+    assert a.value is None and a.missing
+    assert abs(s.solve(P2, "What is the net floor area of room 2.05 ('Cuisine') in m²?").value - 9.84) < 0.02
