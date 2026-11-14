@@ -52,6 +52,7 @@ function fmtEur(usd: number) {
 
 function fmtValue(a: Answer) {
   if (a.value === null || a.value === undefined) return "—";
+  if (typeof a.value === "boolean") return a.value ? "yes" : "no"; // Python bool (int subclass) arrives as true/false
   if (typeof a.value === "number") {
     // thousands separators only from 10,000 up (years and model ids like 2011 stay as they are)
     const v = Math.abs(a.value) >= 10000 ? a.value.toLocaleString("en", { maximumFractionDigits: 2 })
@@ -124,7 +125,7 @@ function rangeHtml(a: Answer) {
  * solver's own assumption or trace line (W1 ifc: "yes/no: is the model quantity (46 count) > 40"; agent/calc lines
  * like "46 > 40 → yes"). Nothing is recomputed here; no line, no basis shown. */
 export function yesNoBasis(a: Answer): string {
-  if (typeof a.value !== "string" || !/^(yes|no|true|false|ja|nein|oui|non|kyllä|ei|si|sì)$/i.test(a.value.trim())) return "";
+  if (typeof a.value !== "boolean" && (typeof a.value !== "string" || !/^(yes|no|true|false|ja|nein|oui|non|kyllä|ei|si|sì)$/i.test(a.value.trim()))) return "";
   const OP = String.raw`(>=|<=|≥|≤|>|<|==|=|!=|≠)`;
   const NUM = String.raw`(-?\d[\d,]*(?:\.\d+)?)`;
   const lines = [...(a.assumptions ?? []), ...(a.trace ?? []).filter((l) => /yes|no\b|→/i.test(l))];
