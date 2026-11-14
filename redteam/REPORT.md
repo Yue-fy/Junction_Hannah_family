@@ -356,6 +356,31 @@ Over all 353 rows: scored answers at conf ≥ 0.8 right 221/234 (all 13 misses a
 **Held in v5:** yes/no without the "Answer yes or no." crutch 24/24 (EN/FI at 0.92–0.96 via compose `exists`, SV at
 0.75 after translation); unique room names 5/5; IFC areas by storey noun on the matching storey's own sheet right.
 
+## v6 (05:00): what a judge might type on our own demo drawings — 21 Qs, run `20261114-045501-pipeline-v6-b35d` (night dde6347)
+On stage a judge can type anything on the three tour drawings. Gold: esplanades from plain ifcopenshell storey
+containment (the dataset's convention per F's probe), Swiss and CubiCasa from the drawing's own dataset answers.
+Comparisons are asked as numbers so they score. Rows: `meta.kind = judge:*` (also in `$JUNCTION_SHARED/artifacts/Q/v6.jsonl`).
+
+| drawing | right | wrong at conf ≥ 0.8 | wrong below 0.8 |
+|---|---:|---:|---:|
+| esplanades IFC sheet `plan-01-1-korrus` (12 + 1 text) | 7 | **2** | 4 (+ 1 debatable text) |
+| Swiss `site1000_bldg2082_floor9385` (4) | 4 | 0 | 0 |
+| CubiCasa `colorful-4539` (3 + 1 flag) | 2 + flag ok | 0 | 1 (windows 6 vs 8 at 0.12) |
+
+- **Confidently wrong:** "Montako ikkunaa koko rakennuksessa on?" (FI, *whole building*) → **55 at 0.88**, the sheet's
+  storey (English "whole building" → 297 ✓): bug 13's mechanism with a scope word instead of a storey word. "How many
+  floors does this building have?" → **7 at 0.85**: counts the 'Vundament' (foundation) and 'Katus' (roof) storeys; a
+  person says 5 (the assumption says so, but the confidence doesn't).
+- **Wrong, flagged:** "top floor" → 'Katus' (roof, 0 doors) at 0.42; "doors on 1.korrus and 2.korrus together"
+  (unquoted) → 2.korrus only, 42 at 0.68 (bug 12's shape on storeys); floor-to-floor height → 6.7 m at 0.69 ("sum over
+  the named storeys"; gold 3.35 = elevation difference).
+- **Right:** rooms / columns on this floor 50 / 37 (0.98), doors on the ground floor 46 (0.98), windows in the whole
+  building 297 (0.70), rooms in the building 285, "how many more windows than doors on this floor" 9, windows on
+  '3.korrus' asked on the 1.korrus sheet 60; Swiss apartments 4, A + B 161.17 m², B in ft² 870.03, B − A 0.49 m²;
+  CubiCasa toilets 2, Finnish bedrooms in another wording 3, "How big is this apartment?" → 84 m² at **0.05** with
+  "raster image with no known scale: the size is an estimate" (exactly Stoa's ask).
+- Owners: W1 (all IFC rows, sent 05:00). Demo guidance for W5: `demo/DEMO.md` "If a judge types their own question".
+
 ## What held (worth saying in the pitch)
 - Paraphrase / casing / context / distractor numbers: **0 of 56 answers changed**. Typos and injections changed 7
   answers, **all of them at conf ≤ 0.42**, so the confidence flagged every one.
@@ -365,8 +390,8 @@ Over all 353 rows: scored answers at conf ≥ 0.8 right 221/234 (all 13 misses a
 - Rotated, grayscale, heavily compressed and half-resolution copies of a plan: 30/30 right, at the same confidence.
 
 ## Re-run
-`questions.jsonl` now has 353 rows: v1 (174) + v2 (31) + v3 Swiss compositions (42) + v4 CubiCasa compositions (36) +
-v5 natural references (70); earlier rows are byte-identical across builds (checked with cmp), so runs on the first 205 /
+`questions.jsonl` now has 374 rows: v1 (174) + v2 (31) + v3 Swiss compositions (42) + v4 CubiCasa compositions (36) +
+v5 natural references (70) + v6 judge questions on the demo drawings (21) = 374; earlier rows are byte-identical across builds (checked with cmp), so runs on the first 205 /
 283 rows compare directly (`python3 $JUNCTION_SHARED/artifacts/Q/subset_stats.py <run> 283`). Build with
 `PYTHONHASHSEED=0 PYTHONPATH=.`; v5 calls the ifc solver for its gold (deterministic, < 1 s per row).
 ```

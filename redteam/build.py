@@ -463,6 +463,44 @@ def main():
                         ("sv", "Har lägenheten en bastu?")):
             out.append(row(p, q, g, None, "text", f"yesno:{lang}", "same", note=f"saunas = {yn_gold[p]}"))
 
+    # ===== v6 (05:00): what a judge might type on OUR demo drawings (W5's tour) ==================================
+    # On stage a judge can type anything on the three demo drawings. Gold: esplanades from plain ifcopenshell (storey
+    # containment, = the dataset's convention per F's probe; doors 211 = dataset gold), Swiss/CubiCasa from the
+    # drawing's own dataset answers. Text answers are avoided (comparisons asked as numbers) except 'which floor'.
+    E = "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf"
+    SW = "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf"
+    CC = "data/cubicasa5k/colorful-4539.png"
+    judge = [
+        (E, "How many windows does the whole building have?", 297, "count", "count", "297 IfcWindow in the model"),
+        (E, "Montako ikkunaa koko rakennuksessa on?", 297, "count", "count", "297 IfcWindow (Finnish)"),
+        (E, "How many rooms are on this floor?", 50, "count", "count", "50 IfcSpace in '1.korrus' (the sheet)"),
+        (E, "How many rooms are there in the building?", 285, "count", "count", "285 IfcSpace"),
+        (E, "How many doors are on the top floor?", 39, "count", "count", "5.korrus 39 (Katus = roof, no doors)"),
+        (E, "How many doors are on the ground floor?", 46, "count", "count", "1.korrus (elev 0) 46"),
+        (E, "How many windows are on '3.korrus'?", 60, "count", "count", "quoted storey on another sheet: control"),
+        (E, "How many doors are on 1.korrus and 2.korrus together?", 88, "count", "count", "46 + 42, unquoted"),
+        (E, "How many columns are on this floor?", 37, "count", "count", "37 IfcColumn in '1.korrus'"),
+        (E, "How many more windows than doors are there on this floor?", 9, "count", "count", "55 - 46"),
+        (E, "What is the floor-to-floor height between '1.korrus' and '2.korrus', in metres?", 3.35, "m", "length",
+         "elevations 0 and 3350 mm"),
+        (E, "How many floors does this building have?", 5, "count", "count",
+         "1.-5.korrus; the model also has 'Vundament' (foundation) and 'Katus' (roof) storeys"),
+        (SW, "How many apartments are on this floor?", 4, "count", "count", "dataset: apartments (residential units) 4"),
+        (SW, "By how many square metres is apartment B larger than apartment A?", 0.49, "m2", "area",
+         "80.83 - 80.34 (dataset)"),
+        (SW, "What is the combined area of apartments A and B?", 161.17, "m2", "area", "80.83 + 80.34 (dataset)"),
+        (SW, "How many square feet is apartment B?", round(80.83 * FT2, 2), "ft2", "area", "80.83 m² in ft²"),
+        (CC, "How many windows does this apartment have?", 8, "count", "count", "dataset 8 (raster windows are hard)"),
+        (CC, "How many toilets are there?", 2, "count", "count", "dataset WC seats 2"),
+        (CC, "Montako makuuhuonetta asunnossa on?", 3, "count", "count", "dataset bedrooms 3 (other Finnish wording)"),
+    ]
+    for path, q, g, unit, typ, note in judge:
+        out.append(row(path, q, g, unit, typ, "judge:" + path.split("/")[1].split("_")[0], "same", note=note))
+    out.append(row(E, "Which floor has the fewest doors?", "5.korrus", None, "text", "judge:ifc-text", "same",
+                   note="doors 46/42/42/42/39"))
+    out.append(row(CC, "How big is this apartment in square metres?", None, None, "area", "judge:cubicasa", "flag",
+                   note="no scale on the plan: an estimate must say so"))
+
     with open(OUT, "w", encoding="utf-8") as f:
         for r in out:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")

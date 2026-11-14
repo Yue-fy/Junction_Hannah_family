@@ -108,6 +108,19 @@ By source on sealed test: Swiss vector plans 98 % areas / 100 % counts; IFC mode
   confidently (12 of 20 non-English rows). Same root cause, a new surface: the check verifies the number, not that it
   is about the storey that was asked. That is the honest state of the system. (Update if W1's fix lands.)
 
+### If a judge types their own question (measured 04:55 on dde6347, `redteam/REPORT.md` v6)
+- Esplanades IFC sheet — safe: "How many rooms / columns are on this floor?" (50 / 37), "How many doors are on the
+  ground floor?" (46), "How many windows does the whole building have?" (297), "How many more windows than doors are
+  there on this floor?" (9). Steer away from: storeys in everyday words on another sheet ("the basement", "im
+  Erdgeschoss"), "top floor" (picks the roof level), "how many floors" (says 7: counts foundation and roof), Finnish
+  "koko rakennuksessa" (answers this storey), floor-to-floor height. If one of these comes up, open the evidence and
+  say it: "the cross-check shows which storey it used — this is our known failure, on the failure slide."
+- Swiss plan — safe: apartments (4), "combined area of apartments A and B" (161.17 m²), "how many square feet is
+  apartment B" (870), "by how many m² is B larger than A" (0.49). Avoid "How big is the Küche?" on floors with several
+  kitchens (sums them, bug 14).
+- CubiCasa plan — "How big is this apartment?" gives ≈ 84 m² at confidence 0.05 with "no known scale: estimate" —
+  a good moment to show "we know what we don't know".
+
 ## 2:55–3:00 · Close
 > "Answers you can verify in seconds, a confidence you can trust, and an honest list of what we don't know yet."
 
