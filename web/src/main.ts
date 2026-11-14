@@ -529,8 +529,16 @@ function applyEvidence3D(a: Answer) {
   const guids = a.evidence.filter((e) => e.ifc_guid).map((e) => e.ifc_guid!);
   const storeyIds = new Set(guids.map((g) => v.storeyOfGuid(g)).filter((s): s is number => s !== null));
   const contrast = new Set(a.evidence.filter((e) => e.ifc_guid && /^NOT in the answer:/.test(e.note ?? "")).map((e) => e.ifc_guid!));
-  const n = v.highlight(guids, true, contrast);
-  if (storeyIds.size === 1) {
+  // whole-building answers (height = its highest element, W1 ifc): the one highlighted element only makes sense in the
+  // context of the whole model, so show every storey and frame the model rather than zooming onto that element
+  const whole = (a.assumptions ?? []).some((l) => /building height|whole (building|model)/i.test(l))
+    || (guids.length > 0 && a.evidence.filter((e) => e.ifc_guid).every((e) => /\b(highest|lowest|topmost|tallest)\b/i.test(e.note ?? "")));
+  const n = v.highlight(guids, !whole, contrast);
+  if (whole) {
+    v.setStorey(null);
+    $<HTMLSelectElement>("storey").value = "";
+    v.frameAll();
+  } else if (storeyIds.size === 1) {
     const s = [...storeyIds][0];
     v.setStorey(s);
     $<HTMLSelectElement>("storey").value = String(s);
