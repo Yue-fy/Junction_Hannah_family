@@ -612,7 +612,12 @@ async function showAnswer(a: Answer, roundTripMs: number) {
   // A free-text answer about a model with no element evidence ("Toilet-Domestic-3D: 9 units, Urinal-Wall-3D: 4"):
   // find the element types it names in the loaded model (in the browser, no model call), highlight them and check
   // the counts it gives against the model.
-  if (/\.ifc$/i.test(askedPath) && typeof a.value === "string" && !a.evidence.some((e) => e.ifc_guid)) {
+  // Also when the solver did cite elements but its text lists counts per type (W1 rules: "Toilet-Domestic-3D: 9" …):
+  // the browser's own IFC parser (web-ifc) recounts them, an independent second reading of the same model.
+  const cited = a.evidence.some((e) => e.ifc_guid);
+  const perType = typeof a.value === "string" ? (a.value.match(/[A-Za-z][^:\n]{2,80}:\s*\d+\b/g) ?? []).length : 0;
+  // (never twice: the re-rendered answer carries `checked`, and a cited answer would otherwise qualify again forever)
+  if (/\.ifc$/i.test(askedPath) && typeof a.value === "string" && !a.checked && (!cited || perType >= 2)) {
     await ensure3D();
     const v = v3d;
     if (state.answer !== a || !v || v.file !== askedPath) return;
@@ -637,13 +642,16 @@ async function showAnswer(a: Answer, roundTripMs: number) {
       file: askedPath, ifc_guid: g,
       note: `NOT in the answer: ${n.name} (${i + 1} of ${n.guids.length})${i === 0 && n === missed[0] ? `; cross-check: the model ${said.length ? "also " : ""}has ${miss} of ${said.length ? "the same kind" : "the kind the question asks about"} (purple in 3D), which the answer does not mention ✗` : ""}`,
     }) as Answer["evidence"][number])));
+    // the solver cited its elements: keep its evidence; the browser's recount is a check line, not new evidence
+    const recount = cited && counted.length ? [`cross-check: counted again in your browser with a second IFC parser (web-ifc): ${counted.length} type${counted.length > 1 ? "s" : ""}, ${counted.every((n) => n.said === n.guids.length) ? `${counted.reduce((t, n) => t + n.guids.length, 0)} elements, every count as the answer says ✓` : `${counted.filter((n) => n.said !== n.guids.length).map((n) => `'${n.name}' ${n.guids.length} vs ${n.said}`).join(", ")} ✗`}`] : [];
     await showAnswer({
-      ...a, evidence: [...ev, ...a.evidence],
+      ...a, evidence: cited ? [...a.evidence, ...ev.filter((e) => /^NOT in the answer:/.test(e.note ?? ""))] : [...ev, ...a.evidence],
       checked: [...said.map((n) => ({ name: n.name, model: n.guids.length, said: n.said })),
         ...missed.map((n) => ({ name: n.name, model: n.guids.length, said: null, notInAnswer: true }))],
-      trace: [...(a.trace ?? []), `checked against the model by element name (in the browser, no model call): ${said.length ? `named in the answer ${said.map((n) => `${n.name} ×${n.guids.length}`).join(", ")}` : "the answer names no element type of the model"}${checks.length ? `; counts: ${checks.join(", ")}` : ""}${miss ? `; same kind, not named: ${miss}` : ""}`],
+      trace: [...(a.trace ?? []), ...recount, `checked against the model by element name (in the browser, no model call): ${said.length ? `named in the answer ${said.map((n) => `${n.name} ×${n.guids.length}`).join(", ")}` : "the answer names no element type of the model"}${checks.length ? `; counts: ${checks.join(", ")}` : ""}${miss ? `; same kind, not named: ${miss}` : ""}`],
       missing: [...(a.missing ?? []), ...(miss ? [`the answer does not mention ${miss} (same kind of fixture in the model)`] : [])],
-      assumptions: [...(a.assumptions ?? []), said.length ? "highlighted elements are matched by the family/type names the answer uses; the solver did not cite them"
+      assumptions: [...(a.assumptions ?? []), cited ? "the browser recounted the types the answer names by family/type name in the loaded model"
+        : said.length ? "highlighted elements are matched by the family/type names the answer uses; the solver did not cite them"
         : "purple elements are the model's families of the kind the question asks about (matched by element name), not cited by the solver"],
     }, roundTripMs);
   }

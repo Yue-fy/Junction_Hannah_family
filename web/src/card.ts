@@ -145,6 +145,11 @@ function rangeHtml(a: Answer) {
  *  value big and the sub-question it answers small, instead of one long sentence. null when the value is not that shape. */
 export function multiPart(a: Answer): { v: string; u: string; q: string }[] | null {
   if (typeof a.value !== "string") return null;
+  // W4 compose 'list' ("How many doors and how many windows …?"): "door: 46; window: 55"
+  const named = a.value.split(/;\s+/).map((x) => x.match(/^\s*([A-Za-z][\w ()'.-]{0,40}?):\s*(-?\d[\d,]*(?:\.\d+)?)\s*([A-Za-z²³%€/]{0,12})\s*$/));
+  if (named.length >= 2 && named.every((m) => m)) {
+    return named.map((m) => ({ v: m![2], u: /^count$/i.test(m![3]) ? "" : m![3], q: m![1].replace(/_/g, " ") }));
+  }
   const parts = a.value.split(/\);\s+/).map((x, i, all) => (i < all.length - 1 ? `${x})` : x));
   if (parts.length < 2) return null;
   const rows = parts.map((x) => x.match(/^\s*(-?\d[\d,]*(?:\.\d+)?|yes|no)\s*([A-Za-z²³%€/0-9]{0,12})\s*\((.{3,200})\)\s*$/i));
@@ -275,7 +280,7 @@ function checkedHtml(a: Answer, text: string) {
     <div class="rich-body">
       <table class="checked"><tbody>${rows.map((r) => `<tr class="${r.notInAnswer ? "contrast" : ""}"><td>${esc(r.name)}</td><td class="num">${r.model}</td><td>${mark(r)}</td></tr>`).join("")}</tbody>${foot}</table>
       <div class="checked-src">${allOk && counted.length ? `Every count in the answer matches the model.` : allOk ? "" : "The model and the answer differ (✗)."} Counted in your browser from the loaded model: no model call.</div>
-      <details class="llm-words"${allOk ? "" : " open"}><summary>The language model's text answer · ${lines} line${lines === 1 ? "" : "s"}</summary><div class="value text rich">${richText(text)}</div></details>
+      <details class="llm-words"${allOk ? "" : " open"}><summary>${(a.cost?.llm_tokens_in ?? 0) > 0 ? "The language model's" : "The solver's"} text answer · ${lines} line${lines === 1 ? "" : "s"}</summary><div class="value text rich">${richText(text)}</div></details>
     </div>`;
 }
 
