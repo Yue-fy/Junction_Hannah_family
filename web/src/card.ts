@@ -87,7 +87,10 @@ export function crossChecks(a: Answer, asks: string[] = []): { text: string; ok:
     return m && new RegExp(`\\b${m[1]} ${m[2]}\\b`).test(t);
   });
   const extra = located ? fromTrace.filter((t) => !same(t.text) && !fromEv.some((e) => t.text.startsWith(key(e.text)) || e.text.startsWith(key(t.text)))) : [];
-  const out = fromEv.length ? [...fromEv, ...extra] : fromTrace;
+  // the agent's final answer checked against another solver's own reading of the whole question ("agent 20700 = ifc
+  // 20700", W4) verifies the answer itself, not a sub-step, so it always shows, first
+  const final = fromEv.length ? fromTrace.filter((t) => /^agent\b/i.test(t.text)) : [];
+  const out = fromEv.length ? [...final, ...fromEv, ...extra] : fromTrace;
   // a failed check is never the one cut off: failures first (stable), then the cap
   const uniq = out.filter((x, i) => out.findIndex((y) => y.text === x.text) === i);
   return [...uniq.filter((x) => !x.ok), ...uniq.filter((x) => x.ok)].slice(0, Math.max(2, parts.size));

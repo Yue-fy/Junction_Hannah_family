@@ -1,32 +1,32 @@
 {
- "w0_m": 0.8144,
+ "w0_m": 0.8034,
  "log_resid_80": [
-  -0.1821,
-  0.1776
+  -0.1759,
+  0.1992
  ],
- "n_fit": 69,
- "within10_area_check": 0.348,
- "within2_area_check": 0.043,
- "within20_area_check": 0.58,
- "area_err_p50_check": 0.1744,
- "coverage80_crossfit": 0.739,
+ "n_fit": 152,
+ "within10_area_check": 0.309,
+ "within2_area_check": 0.072,
+ "within20_area_check": 0.553,
+ "area_err_p50_check": 0.1647,
+ "coverage80_crossfit": 0.789,
  "min_doors": 2,
  "source": "experiments/r1/raster_scale/raster_scale.py on TRAIN cubicasa plans with printed areas",
- "typical_apartment_m2": 69.5,
- "blend_w": 0.589,
+ "typical_apartment_m2": 70.5,
+ "blend_w": 0.549,
  "blend_log_true_over_est_80": [
-  -0.2934,
-  0.4141
+  -0.281,
+  0.4465
  ],
- "n_totals": 48,
- "w0_room_m": 0.8632,
+ "n_totals": 108,
+ "w0_room_m": 0.8619,
  "log_resid_80_room": [
-  -0.1636,
-  0.443
+  -0.1735,
+  0.473
  ],
- "n_rooms": 178,
- "room_err_p50_check": 0.1918,
- "room_within20_check": 0.522,
- "room_within2_check": 0.056,
- "room_band80_coverage_check": 0.775
+ "n_rooms": 349,
+ "room_err_p50_check": 0.2116,
+ "room_within20_check": 0.487,
+ "room_within2_check": 0.066,
+ "room_band80_coverage_check": 0.808
 }

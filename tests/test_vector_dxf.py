@@ -243,3 +243,18 @@ def test_tableqa_guards():
     assert "t2['Family'] (1 rows)" in _where("x = t2[t2['Size'].str.contains('Casement')]", t)
     assert _extract_code("```python\nanswer = 1") == "answer = 1"
     assert '14"x6"' in _render(t, sep="|") and '""' not in _render(t, sep="|")
+
+
+def test_qparse_pctdiff_and_unused_numbers():
+    from stoa.solvers.vector import qparse
+    q = "By what percentage is apartment B larger than apartment A (net floor area)?"
+    qr = qparse.parse(q, ["Bad"], room_numbers=set())
+    assert qr.op == "pctdiff" and [t.arg for t in qr.terms] == ["B", "A"] and qr.unit == "%"
+    qr = qparse.parse("What share of the floor's net area does apartment C take up, in %?", ["Bad"], room_numbers=set())
+    assert qr.op == "pct"
+    q = "If each door costs 450 euros, how much do the doors on this floor cost in total?"
+    assert qparse.unused_numbers(q, qparse.parse(q, ["Bad"], room_numbers=set())) == ["450"]
+    for q in ["What is the net floor area of room 2.05 ('Bad') in m²?", "How many rooms are larger than 20 m²?",
+              "What is the total net floor area of apartment A in m2, rounded to 2 decimal places?",
+              "How many rooms are labelled 'Zimmer 1'?"]:
+        assert qparse.unused_numbers(q, qparse.parse(q, ["Bad", "Zimmer"], room_numbers={"2.05"})) == [], q
