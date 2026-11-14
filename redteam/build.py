@@ -355,6 +355,114 @@ def main():
             out.append(row(path, t.format(a=cwords[lang][a_], b=cwords[lang][b_]), int(g[a_]) + int(g[b_]), "count",
                            "count", f"compose-cc:{lang}", "same", note=f"{a_} {g[a_]} + {b_} {g[b_]}"))
 
+    # ===== v5 (05:00): how a site engineer actually refers to things ===========================================
+    # Nobody types "'00 Begane grond'": they say "the ground floor", in their own language, often while looking at
+    # another sheet. Gold = the ifc solver's answer to the dataset's own template wording with the exact storey
+    # name (that path is 100 % on dev, on F's 301-question unseen-model count probe and 78/78 on the area probe).
+    from stoa.solvers import get_solver
+
+    ifc = get_solver("ifc")
+    M = "data/ifc_models/"
+    # (model stem, storey name in the model, natural EN reference, sheet the question is asked on: another storey)
+    # (model stem, storey name, its own plan sheet (for the gold), natural EN reference, sheet the question is ON)
+    storeys = [
+        ("bsc-gymzaal-amersfoort_example-project-location", "00 Begane grond", "plan-01-00-begane-grond",
+         "ground floor", "plan-02-01-eerste-verdieping"),
+        ("kit-smiley-west_ac-20-smiley-west-10-bldg", "EG", "plan-02-eg", "ground floor", "plan-03-1-og"),
+        ("kit-smiley-west_ac-20-smiley-west-10-bldg", "KG", "plan-01-kg", "basement", "plan-03-1-og"),
+        ("bimspeed-gdynia_ruchu-oporu-18", "0", "plan-03-0", "ground floor", "plan-04-1"),
+        ("bimspeed-gdynia_ruchu-oporu-18", "-1", "plan-02-1", "basement", "elevation-south"),
+        ("bimspeed-warmond_ar", "Attic", "plan-08-attic", "attic", "plan-03-1-level"),  # no doors: area only
+    ]
+    tmpl_gold = {"doors": "How many doors are shown on the floor plan of '{s}'?",
+                 "windows": "How many windows are shown on the floor plan of '{s}'?",
+                 "area": "What is the total net floor area of all rooms (spaces) on '{s}', in m²?"}
+    nat = {"doors": "How many doors are there {p} the {n}?",
+           "windows": "How many windows does the {n} have?",
+           "area": "What is the total floor area of all rooms {p} the {n}, in square metres?"}
+    prep = {"ground floor": "on", "basement": "in", "attic": "in"}
+    loc = {  # doors on the ground floor / in the basement, as a native speaker would ask
+        "de": {"ground floor": "Wie viele Türen gibt es im Erdgeschoss?",
+               "basement": "Wie viele Türen gibt es im Keller?", "attic": "Wie viele Türen gibt es im Dachgeschoss?"},
+        "nl": {"ground floor": "Hoeveel deuren zijn er op de begane grond?",
+               "basement": "Hoeveel deuren zijn er in de kelder?", "attic": "Hoeveel deuren zijn er op zolder?"},
+        "fi": {"ground floor": "Montako ovea pohjakerroksessa on?",
+               "basement": "Montako ovea kellarikerroksessa on?", "attic": "Montako ovea ullakolla on?"},
+        "sv": {"ground floor": "Hur många dörrar finns det på bottenvåningen?",
+               "basement": "Hur många dörrar finns det i källaren?", "attic": "Hur många dörrar finns det på vinden?"},
+        "fr": {"ground floor": "Combien de portes y a-t-il au rez-de-chaussée ?",
+               "basement": "Combien de portes y a-t-il au sous-sol ?", "attic": "Combien de portes y a-t-il dans les combles ?"},
+    }
+    for stem, sname, own, natural, sheet in storeys:
+        target_sheet = f"{M}{stem}_{own}.pdf"
+        ask = f"{M}{stem}_{sheet}.pdf"
+        for k in ("doors", "windows", "area"):
+            a = ifc.solve(target_sheet, tmpl_gold[k].format(s=sname))
+            if a.value is None or a.confidence < 0.9:
+                continue
+            g = float(a.value)
+            unit, typ = ("count", "count") if k != "area" else ("m2", "area")
+            note = f"gold: ifc on the template wording for '{sname}' ({a.value} {a.unit} @ {a.confidence})"
+            out.append(row(ask, nat[k].format(n=natural, p=prep[natural]), int(g) if unit == "count" else round(g, 3), unit, typ,
+                           "storey:en", "same", note=note))
+            if k == "doors":
+                for lang, qs in loc.items():
+                    out.append(row(ask, qs[natural], int(g), unit, typ, f"storey:{lang}", "same", note=note))
+    # "first floor" is ambiguous (UK/EU: one above ground; US/FI '1. kerros': the ground floor). Gold = EU reading;
+    # what matters is whether the answer SAYS which storey it used (analysis prints the assumptions).
+    for stem, sname, sheet in [("bsc-gymzaal-amersfoort_example-project-location", "01 Eerste verdieping",
+                                "plan-01-00-begane-grond"),
+                               ("kit-smiley-west_ac-20-smiley-west-10-bldg", "1.OG", "plan-02-eg"),
+                               ("bimspeed-gdynia_ruchu-oporu-18", "1", "plan-03-0")]:
+        p = f"{M}{stem}_{sheet}.pdf"
+        a = ifc.solve(p, tmpl_gold["doors"].format(s=sname))
+        if a.value is not None and a.confidence >= 0.9:
+            out.append(row(p, "How many doors are there on the first floor?", int(float(a.value)), "count", "count",
+                           "storey:first-floor", "same", note=f"EU reading '{sname}'; US/FI reading = ground floor"))
+
+    # Swiss: a room by its printed name only (no number). Unique on the floor -> scored; repeated in several
+    # apartments -> ambiguous: a single confident number is a guess (expect flag: say which one / ask).
+    from stoa.data import siblings
+    from stoa.solvers.vector.floor import load_floor
+
+    rng5 = random.Random(1405)
+    sw_dev = sorted((q for q in load_split("dev") if q.source == "swiss_dwellings" and sw_room.match(q.question)),
+                    key=lambda q: q.qid)
+    amb = []
+    for q in sw_dev:
+        num_, name = sw_room.match(q.question).groups()
+        fm = load_floor(str(abspath(siblings(q.path)[".dxf"])))
+        same = [r for r in fm.rooms if (r.name or "").lower() == name.lower()]
+        if len(same) == 1:
+            out.append(row(q.path, f"How big is the {name}?", q.answer, "m2", "area", "room-name:unique", "same",
+                           note=f"room {num_} is the only '{name}' on this floor"))
+        elif len(same) >= 3 and name not in ("Balcon", "Balkon", "Balcone"):
+            amb.append((q.path, name, len(same)))
+    seen_amb = set()
+    rng5.shuffle(amb)
+    for path, name, n in amb:
+        if path in seen_amb or len(seen_amb) == 5:
+            continue
+        seen_amb.add(path)
+        out.append(row(path, f"How big is the {name}?", None, None, "area", "room-name:ambiguous", "flag",
+                       note=f"{n} rooms named '{name}' on this floor"))
+
+    # Yes/no without the "Answer yes or no." crutch (hard2 always adds it), EN / FI / SV, CubiCasa.
+    yn_atom = "How many saunas are on this floor plan?"
+    yn_gold = {}
+    for q in load_questions():
+        if q.path in cdev and q.question == yn_atom:
+            yn_gold[q.path] = q.answer
+    yes = sorted(p for p, g in yn_gold.items() if float(g) > 0)
+    no = sorted(p for p, g in yn_gold.items() if float(g) == 0)
+    rng5.shuffle(yes)
+    rng5.shuffle(no)
+    for p in yes[:4] + no[:4]:
+        g = "yes" if float(yn_gold[p]) > 0 else "no"
+        for lang, q in (("en", "Does this apartment have a sauna?"), ("fi", "Onko asunnossa sauna?"),
+                        ("sv", "Har lägenheten en bastu?")):
+            out.append(row(p, q, g, None, "text", f"yesno:{lang}", "same", note=f"saunas = {yn_gold[p]}"))
+
     with open(OUT, "w", encoding="utf-8") as f:
         for r in out:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
