@@ -138,7 +138,7 @@ def sheet_kind(path: str, use_vlm: bool = True, layer: T.TextLayer | None = None
     return out
 
 
-_ASK = re.compile(r"how\s+many|number\s+of|\bcount|\barea\b|\bsize\b|square|m2|m²|sq\.?\s*ft|largest|smallest|biggest|"
+_ASK = re.compile(r"how\s+many|number\s+of|\bcount|\bareas?\b|\bsize\b|square|m2|m²|sq\.?\s*ft|largest|smallest|biggest|"
                   r"which\s+room|montako|kuinka|lukumäärä|pinta-ala|wie\s+viele|anzahl|fläche|combien|nombre\s+de|"
                   r"surface|quant[ie]|numero\s+di|superficie|hur\s+många|antal|yta|cuántos|cuántas", re.I)
 

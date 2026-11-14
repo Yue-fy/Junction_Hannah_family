@@ -50,4 +50,9 @@ export const ask = (path: string, question: string, solver?: string, solverArgs?
 /** Hosted NVIDIA Nemotron (vision + reasoning) as an on-demand second opinion: one API call, cached by the API. */
 export const secondOpinion = (path: string, question: string) => ask(path, question, "vlm_direct", { backend: "nvidia" });
 
+/** Your own drawing: saved by the Vite middleware outside the repo and the dataset; returns its FileInfo
+ * (path `upload/<id>/<name>`), usable like any dataset path in the calls above. */
+export const upload = (file: File, style = "") =>
+  call<FileInfo>(`/api/upload?name=${encodeURIComponent(file.name)}${style ? `&style=${encodeURIComponent(style)}` : ""}`, { method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: file });
+
 export const benchmark = () => fetch("/api/bench").then((r) => (r.ok ? r.json() : Promise.reject(new Error(`${r.status}`))));

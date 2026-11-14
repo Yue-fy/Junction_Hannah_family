@@ -187,6 +187,25 @@ def detect(question: str) -> Outer | None:
             r = _num(m.group("n"))
             return Outer("mul", 1.0 / r, per + "s", metric, kind, bu, spans=[m.span()], rate=r, per=per,
                          why=f"rate {m.group('n')} {bu} per {per}")
+    # 0b. a stated height (hard3 class, S0 08:22): "if the walls are 2.6 m high, what is their side area?" -> wall length
+    #     x 2.6 (m²); "rooms with a ceiling height of 2.5 m: total volume?" -> room area x 2.5 (m³). Any language with a
+    #     height word next to a length in metres.
+    _HW = r"(?:high|tall|hoch|hoog|alto|alta|altos|altas|haut|haute|hauts|korkea\w*|alt[ae]?|wysok\w*|korge\w*|in height)"
+    m = (re.search(r"(?P<n>\d+(?:[.,]\d+)?)\s*(?:m|metres?|meters?|metros?|metri|metre)\b\s*(?:de\s+|of\s+)?" + _HW + r"\b", t)
+         or re.search(r"\b(?:height|hohe|hoehe|altura|hauteur|hoogte|korkeus|altezza|wysokosc|korgus)\s+(?:of\s+|von\s+|de\s+|"
+                      r"van\s+|di\s+)?(?P<n>\d+(?:[.,]\d+)?)\s*(?:m|metres?|meters?|metros?|metri)\b", t))
+    if m and _num(m.group("n")) > 0:
+        h = _num(m.group("n"))
+        vol = re.search(r"\b(volume\w*|m3|cubic|kubik\w*|inhoud|tilavuus|volumen|volym)\b|\b(ceiling|techo|techos|decke\w*|"
+                        r"plafond\w*|soffitt\w*|katto|lagi)\b", t)
+        kinds_ = [h_[2] for h_ in _kind_hits(t) if h_[2] != "storey"]
+        if vol and ("space" in kinds_ or re.search(r"\b(rooms?|spaces?|raum|raume|habitacion\w*|ruimte\w*|pieces?|huone\w*)\b", t)
+                    or not kinds_):
+            return Outer("mul", h, "m3", "area", "space", "m2", spans=[m.span()],
+                         why=f"room floor area x stated height {m.group('n')} m")
+        if "wall" in kinds_:
+            return Outer("mul", h, "m2", "length", "wall", "m", spans=[m.span()],
+                         why=f"wall length x stated height {m.group('n')} m")
     # 1. a factor per something: "450 euros per door", "35 EUR per square metre", "2 curtains for every window"
     for m in re.finditer(r"(?:" + _cur("c1") + r"\s*)?(?P<n>\d+(?:[.,]\d+)?)\s*(?:" + _cur("c2") + r")?(?:\s+(?P<noun>[a-z]+))?\s*"
                          r"(?:per|/|for each|for every|each|every|pro|je|par|por)\s+(?P<basis>[^,;?]{1,40})", t):
@@ -284,13 +303,16 @@ def detect(question: str) -> Outer | None:
     if m:
         return Outer("wwr", None, "%", spans=[m.span()], why="window-to-wall ratio")
     # "if the walls were 10% thicker", "a 15 % increase"
-    m = re.search(r"(?P<n>\d+(?:[.,]\d+)?)\s*(?:%|percent|per ?cent|prozent|procent)\s*(?P<w>more|larger|bigger|thicker|"
+    m = re.search(r"(?P<n>\d+(?:[.,]\d+)?)\s*(?:%|percent|per ?cent|prozent|procent)\s*(?:(?:of it |of that )?(?:is|are|gets?|"
+                  r"will be|would be|goes|go) )?(?P<w>lost|deducted|subtracted|taken|occupied|unusable|wasted|"
+                  r"reserved)\b", t) or re.search(r"(?P<n>\d+(?:[.,]\d+)?)\s*(?:%|percent|per ?cent|prozent|procent)\s*(?P<w>more|larger|bigger|thicker|"
                   r"higher|longer|wider|increase\w*|extra|less|smaller|thinner|lower|shorter|narrower|fewer|"
                   r"decrease\w*|reduc\w*)", t) or re.search(
                   r"\b(?P<w>increase\w*|grow\w*|rais\w*|decrease\w*|reduc\w*|cut\w*|shrink\w*)\b[^.?;]{0,30}?\bby\s+"
                   r"(?P<n>\d+(?:[.,]\d+)?)\s*(?:%|percent|per ?cent)", t)
     if m:
-        down = bool(re.match(r"less|smaller|thinner|lower|shorter|narrower|fewer|decrease|reduc|cut|shrink", m.group("w")))
+        down = bool(re.match(r"less|smaller|thinner|lower|shorter|narrower|fewer|decrease|reduc|cut|shrink|lost|deduct|"
+                             r"subtract|taken|occupied|unusable|wasted|reserved", m.group("w")))
         f = 1 + (-1 if down else 1) * _num(m.group("n")) / 100.0
         return Outer("mul", f, None, None, spans=[m.span()], why=f"{'-' if down else '+'}{m.group('n')}% (x {f:g})")
     # 3. ratios: "ratio of doors to windows", "doors-to-windows ratio", "m² of floor per door", "windows per room"

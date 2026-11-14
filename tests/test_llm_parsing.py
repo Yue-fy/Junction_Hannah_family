@@ -181,9 +181,19 @@ def test_protect_keeps_grouped_thousands_as_one_number():
 def test_should_translate_fires_on_unread_compositions_outside_rule_languages():
     from stoa.llm import should_translate
 
-    # Swedish 'och' + 'totalt': the composer reads neither, so the question reached the LoRA as balconies only
-    assert should_translate("Hur många toalettstolar och balkonger finns det totalt på planritningen?")
-    assert should_translate("Hur många sovrum och bastur finns det totalt på planritningen?")
+    from stoa.router.compose import _TOGETHER
+    from stoa.router.intent import targets_mentioned
+
+    # Swedish 'och' with no 'total' word at all: the composer never splits it, so the front end must
+    assert should_translate("Hur många sovrum och bastur finns det på planritningen?")
+    assert should_translate("Hur många toalettstolar och balkonger finns det på planritningen?")
+    # Swedish 'och' + 'totalt' reached the LoRA as ONE class (balconies only). W4 08:54: once the composer reads
+    # 'totalt' / the Swedish nouns, these are EITHER composed (two classes + a total word) OR translated, never neither
+    for q in ("Hur många toalettstolar och balkonger finns det totalt på planritningen?",
+              "Hur många sovrum och bastur finns det totalt på planritningen?",
+              "Hur många sovrum och bastur finns det sammanlagt på planritningen?"):
+        composed = len(set(targets_mentioned(q)) - {"apartment", "room"}) >= 2 and _TOGETHER.search(q)
+        assert should_translate(q) or composed, q
     # two classes + a 'total' word the composer reads (NL 'in totaal'): keep the original (no translation cap)
     assert not should_translate("Hoeveel deuren en ramen staan er in totaal op deze plattegrond?")
     # rule languages compose themselves; no conjunction -> nothing to split
@@ -210,3 +220,22 @@ def test_to_english_repairs_single_brackets_and_retries_a_lost_placeholder(monke
     assert L._restore("floor '[1]' and room '[[2]]'", ["'A'", "'B'"]) == ("floor 'A' and room 'B'", True)
     assert L.lang_guess("Milline protsent korruse '3. korrus' netopinnast on ruum 'WC (3.05)'?") == "et"
     L._tr_memo.clear()
+
+
+def test_text_backend_is_opt_in_and_falls_back(monkeypatch):
+    import stoa.llm as L
+
+    monkeypatch.delenv("STOA_TEXT_BACKEND", raising=False)
+    assert L.text_backend() == "local"
+    monkeypatch.setenv("STOA_TEXT_BACKEND", "local2")
+    L._TB_SEEN.clear()
+
+    class Down:
+        def with_options(self, **kw):
+            raise ConnectionError("no server on :8002")
+
+    monkeypatch.setattr(L, "_client", lambda b: Down())
+    assert L.text_backend() == "local"  # second server down -> shared server
+    L._TB_SEEN.clear()
+    monkeypatch.setenv("STOA_TEXT_BACKEND", "no-such-backend")
+    assert L.text_backend() == "local"

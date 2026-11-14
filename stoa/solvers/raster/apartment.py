@@ -145,9 +145,31 @@ def numbering_gaps(layer: T.TextLayer) -> list[str]:
     return out
 
 
+# an unquoted label after the same words: "rooms called Pièce?", "Räume mit der Bezeichnung Zimmer im 2. OG"
+_LAB_WORD = re.compile(r"\b(?:labell?ed|named|called|marked|bezeichnet|beschriftet|bezeichnung|intitulées?|"
+                       r"étiquetées?|nommées?|appelées?|désignation|denominat[eia]|denominazione|etichettat[eia]|"
+                       r"chiamat[eia]|nimetty|nimellä|merkitty|märkt[a]?|benämn\w*)\s+(?:as\s+|als\s+|comme\s+|come\s+)?",
+                       re.I)
+_LAB_END = re.compile(r"[?.,;:!()]|\s(?:in|on|of|at|within|from|im|auf|dans|sur|du|nel|nella|sul|nei|på|i|and|und|et|"
+                      r"e|och|ja|or|oder|ou|o|eller|tai)\s", re.I)
+
+
+def unquoted_label(question: str) -> str | None:
+    """'rooms called Pièce?' -> 'Pièce': 1-3 words after a label word, up to punctuation or a preposition; the first
+    must be capitalised (a printed label, not 'rooms named after ...' or a class word like 'bedrooms')."""
+    m = _LAB_WORD.search(question or "")
+    if not m:
+        return None
+    rest = _LAB_END.split(question[m.end():] + " ", 1)[0].strip()
+    words = rest.split()
+    if not 1 <= len(words) <= 3 or not words[0][:1].isupper() or re.search(r"[«'\"‘“„»’”]", rest):
+        return None
+    return rest
+
+
 def labelled_name(question: str) -> str | None:
     m = _LABELLED.search(question)
-    return m.group(1).strip() if m else None
+    return m.group(1).strip() if m else unquoted_label(question)
 
 
 def room_set(path: str, layer: T.TextLayer, question: str, px_per_m: float | None,

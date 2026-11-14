@@ -858,6 +858,182 @@ def main():
             r_["meta"]["accept_re"] = st_rx
             out.append(r_)
 
+    # ===== v19 (09:05): answers that are LISTS ("which rooms are larger than 50 m²?", "which floors have …?") =====
+    # Stoa: the hidden test's answers are "not so simple". Gold = the dataset's own per-room net areas for all 50
+    # rooms of '1.korrus' and its per-storey door / room counts (no solver output used). An answer is right when it
+    # names every gold item and none of the excluded ones (boundary rooms just outside the threshold).
+    K = r"1\.?\s*korrus"
+
+    def kor(n):
+        return rf"\b{n}\.?\s*korrus"
+    for q, items, not_items, kind, note in [
+        ("Which rooms on '1.korrus' are larger than 50 m²?", [r"FUAJEE|\b101\b", r"\b105\b", r"\b119\b",
+         r"ÜHISTEGEVUSE|\b114\b"], [r"LIIKUMISVAHENDID|\b121\b"], "list:ifc", "90.64 / 78.4 / 63.84 / 59.37; next 33.43"),
+        ("Millised ruumid korrusel „1.korrus“ on suuremad kui 50 m²?", [r"FUAJEE|\b101\b", r"\b105\b", r"\b119\b",
+         r"ÜHISTEGEVUSE|\b114\b"], [r"LIIKUMISVAHENDID|\b121\b"], "list:ifc-et", "= the English row"),
+        ("Welche Räume im Geschoss '1.korrus' sind größer als 50 m²?", [r"FUAJEE|\b101\b", r"\b105\b", r"\b119\b",
+         r"ÜHISTEGEVUSE|\b114\b"], [r"LIIKUMISVAHENDID|\b121\b"], "list:ifc-de", "= the English row"),
+        ("List the rooms on '1.korrus' with a net floor area under 4 m².", [r"EL\.?\s*KILP|\b118\b",
+         r"VEEM|\b120\b", r"\b6-2\b"], [r"\b109\b", r"SERVER|\b117\b"], "list:ifc", "3.58 / 3.49 / 3.01; next 4.2"),
+        ("What are the three largest rooms on '1.korrus'?", [r"FUAJEE|\b101\b", r"\b105\b", r"\b119\b"],
+         [r"ÜHISTEGEVUSE|\b114\b"], "list:ifc", "top 3 by net area"),
+        ("Name the rooms on '1.korrus' whose net floor area is between 20 and 25 m².", [r"PERSONALI|\b110\b",
+         r"\b6-1\b", r"SOOJUS|\b116\b"], [r"\b107\b|ILU-", r"\b3-1\b"], "list:ifc",
+         "23.97 / 22.05 / 21.05; 25.13 and 25.25 are just above 25"),
+        ("Which ELUTUBA+KÖÖK rooms on '1.korrus' are smaller than 25 m²?", [r"\b6-1\b"], [r"\b[1-57-9]-1\b|10-1", r"TUALETTRUUM|ESIK|KORIDOR"],
+         "list:ifc", "only 6-1 (22.05); the other nine are 25.25"),
+        ("On which floors is there a room called MAGAMISTUBA?", [kor(2), kor(3), kor(4), kor(5)], [K], "list:ifc-st",
+         "bedrooms only on 2.–5.korrus"),
+        ("Which floors have more than 55 rooms?", [kor(2), kor(3), kor(4)], [K, kor(5)], "list:ifc-st",
+         "60/60/60; 1.korrus 50, 5.korrus 55 (not more than 55)"),
+        ("Which floors have fewer than 42 doors?", [kor(5)], [K, kor(2), kor(3), kor(4)], "list:ifc-st",
+         "5.korrus 39; 2–4 have exactly 42"),
+    ]:
+        r_ = row(E, q, "; ".join(items), None, "text", kind, "same", note=note)
+        r_["meta"]["items"] = items
+        r_["meta"]["not_items"] = not_items
+        out.append(r_)
+    # controls: the same thresholds asked as counts (the number the list should have)
+    for q, g in [("How many rooms on '1.korrus' are larger than 50 m²?", 4),
+                 ("How many rooms on '1.korrus' have a net floor area under 4 m²?", 3),
+                 ("How many rooms on '1.korrus' are between 20 and 25 m²?", 3)]:
+        out.append(row(E, q, g, "count", "count", "list:control", "same", note="count of the list"))
+    # v19b: the same list kinds on three other models (dev: warmond; train: digitalhub, clinic; never a test drawing);
+    # gold = the dataset's per-room net areas, complete for these storeys (area questions = the storey's room count).
+    WM = "data/ifc_models/bimspeed-warmond_ar_plan-03-1-level.pdf"
+    DH = "data/ifc_models/rwth-digitalhub_digitalhub-fm-arc-v2_plan-02-e00-okrd.pdf"
+    CL = "data/ifc_models/bsc-clinic_clinic-architectural.ifc"
+    for path, q, items, not_items, kind, note in [
+        (WM, "Which rooms on '1. Level' are larger than 30 m²?", [r"414B-13-001-001"], [r"414B-1-001-002|414B-7-001-003"],
+         "list:ifc-b", "36.22; next 25.27"),
+        (WM, "List the living rooms on '1. Level' that are smaller than 30 m².", [r"414B-1-001-002", r"414B-7-001-003",
+         r"414B-19-001-002"], [r"414B-13-001-001", r"Bedroom|Storage|Stair|Bathroom"], "list:ifc-b",
+         "three Living at 25.27; the fourth is 36.22; other room kinds excluded by the name"),
+        (DH, "Welche Räume im Geschoss 'E00_OKRD' sind größer als 100 m²?", [r"Eingangsbereich|\b1-1\b",
+         r"Cafeteria|\b1-2\b", r"Open Workspace|\b1-7\b"], [r"Veranstaltungsraum|\b1-12\b"], "list:ifc-b-de",
+         "383.61 / 114.45 / 113.16; next 76.48"),
+        (DH, "Which rooms on 'E00_OKRD' are smaller than 5 m²?", [r"\b302\b", r"\b402\b", r"\b301\b", r"\b401\b"],
+         [r"Aufzug|\b300\b|\b400\b"], "list:ifc-b", "4.5 / 4.5 / 3.99 / 3.99; lifts 5.15"),
+        (CL, "Which rooms on 'First Floor' are larger than 100 m²?", [r"1DC1", r"1AC1", r"1E24"], [r"1F01"], "list:ifc-b",
+         "178.22 / 136.8 / 115.12; next 78.92"),
+        (CL, "Which rooms on 'First Floor' are smaller than 1 m²?", [r"1C11"], [r"1A11|1D17|1D01|1D39|1E15"],
+         "list:ifc-b", "only ELEC. CL. (1C11) 0.54; next 1.66"),
+    ]:
+        r_ = row(path, q, "; ".join(items), None, "text", kind, "same", note=note)
+        r_["meta"]["items"] = items
+        r_["meta"]["not_items"] = not_items
+        out.append(r_)
+
+    # ===== v20 (09:22): link questions in wordings / languages / models v17 did not use (R1 09:06 asked for it) ======
+    # Facts reused from v17 (esplanades '1.korrus': 46 doors drawn = 46 IfcDoor; 52 of 55 windows drawn; smiley-west
+    # '1.OG': 50 doors drawn = 50 IfcDoor) + sheet facts from the dataset's file names (esplanades plan-01..05; warmond
+    # 8 plans + 4 elevations + 2 sections; smiley-west 4 plans KG/EG/1.OG/2.OG) + room → storey from the dataset's
+    # per-room area questions. yes/no answers must open with the word (any language).
+    WM8 = "data/ifc_models/bimspeed-warmond_ar_plan-03-1-level.pdf"
+    for path, q, g, typ, kind, rx, note in [
+        (E, "Are all the doors of '1.korrus' in the IFC model drawn on this plan?", "yes", "text", "yesno:link", None,
+         "46 = 46"),
+        (E, "Are all the windows of '1.korrus' in the IFC model drawn on this plan?", "no", "text", "yesno:link", None,
+         "52 of 55"),
+        (E, "Is the window count on this sheet consistent with the BIM model?", "no", "text", "yesno:link", None,
+         "sheet = 1.korrus; 52 vs 55"),
+        (E, "How many of the model's windows on '1.korrus' does this drawing not show?", 3, "count", "link20:count", None,
+         "55 - 52"),
+        (E, "Vastaako tämän pohjapiirustuksen ovien määrä IFC-mallia?", "yes", "text", "yesno:link-fi", None, "46 = 46"),
+        (E, "Kas sellel plaanil on sama palju aknaid kui mudelis korrusel „1.korrus“?", "no", "text", "yesno:link-et",
+         None, "52 vs 55"),
+        (E, "Stimmen Grundriss und IFC-Modell bei der Anzahl der Fenster überein?", "no", "text", "yesno:link-de", None,
+         "52 vs 55"),
+        (E, "Which sheet is the floor plan of '3.korrus'?", None, "text", "link20:which", r"plan[- _]?0?3\b",
+         "plan-03-3-korrus"),
+        (E, "On which sheet can I find the room 'PESUKODA (115)'?", None, "text", "link20:which",
+         r"plan[- _]?0?1\b", "PESUKODA only on 1.korrus = plan-01"),
+        (E, "How many drawings belong to this building model?", 5, "count", "link20:count", None, "plan-01 … plan-05"),
+        (SM, "Is every door of '1.OG' in the model drawn on this floor plan?", "yes", "text", "yesno:link", None,
+         "50 = 50"),
+        (SM, "Stimmen Grundriss und IFC-Modell bei der Anzahl der Türen im Geschoss '1.OG' überein?", "yes", "text",
+         "yesno:link-de", None, "50 = 50"),
+        (SM, "How many floor plan sheets are there for this building?", 4, "count", "link20:count", None,
+         "plan-01-kg … plan-04-2-og"),
+        (SM, "Which sheet shows the storey 'KG'?", None, "text", "link20:which", r"plan[- _]?0?1\b",
+         "plan-01-kg"),
+        (WM8, "How many floor plan sheets are there for this building?", 8, "count", "link20:count", None,
+         "plan-01-basement … plan-08-attic"),
+        (WM8, "How many elevation drawings are there for this building?", 4, "count", "link20:count", None,
+         "elevation-east/north/south/west"),
+        (WM8, "How many section drawings belong to this model?", 2, "count", "link20:count", None,
+         "section-east-west, section-north-south"),
+        (WM8, "Which sheet shows the attic?", None, "text", "link20:which", r"plan[- _]?0?8\b", "plan-08-attic"),
+        (WM8, "On which sheet is the room 'Stair (414B-XX-001-001)'?", None, "text", "link20:which",
+         r"plan[- _]?0?3\b", "only on '1. Level' = plan-03"),
+    ]:
+        r_ = row(path, q, g if g is not None else note, "count" if typ == "count" else None, typ, kind, "same",
+                 note=note)
+        if rx:
+            r_["meta"]["accept_re"] = rx
+            # a refusal that only echoes the storey/room name does not name a sheet
+            r_["meta"]["reject_re"] = r"does not contain|no (sheet |drawing )?information|not include|cannot (be )?determine|no plan sheet"
+        out.append(r_)
+
+    # ===== v21 (09:20): non-schedule sheets (life safety, general notes, site plans, elevations) asked naturally ======
+    # W2's 51 verified probe rows (snapshot of night-W2 454e8bb: artifacts/Q/v21_src_w2_454e8bb.jsonl; none of these
+    # sheets is in any split) all start "On sheet A020 (Life Safety) of the Cannery Trail Residences drawings, …". A
+    # person types the question without that hint; here the hint is removed, and 6 rows are also asked in DE/FI/SV.
+    # Numbers: count / ft2 rows scored by the eval; other numbers and text by a regex on W2's gold.
+    def strip_hint(q):
+        m = re.match(r"On sheet .*? drawings, (.*)$", q)
+        return (m.group(1)[0].upper() + m.group(1)[1:]) if m else q
+
+    def gold_re(g):
+        if isinstance(g, (int, float)) or re.fullmatch(r"[\d.]+", str(g)):
+            return rf"(?<![\d.]){re.escape(str(g))}(?!\d)"
+        quote = {"'": "['’′]", '"': "[\"”″]"}
+        tail = r"(?!\s*-?\s*[1-9])" if str(g).strip()[-1] in "'\"" else r"(?!\d)" if str(g).strip()[-1].isdigit() else ""
+        alts = ["".join(quote.get(c, re.escape(c)) + r"\s*" for c in str(g) if not c.isspace()) + tail]
+        m = re.fullmatch(r"(\d+)'\s*-?\s*(\d+)?(?:\s+(\d+)/(\d+))?\"?", str(g).strip())
+        if m and m.group(2):  # feet-inches: the same length in decimal feet is right too
+            ft = int(m.group(1)) + (int(m.group(2)) + (int(m.group(3)) / int(m.group(4)) if m.group(3) else 0)) / 12
+            alts.append(rf"(?<![\d.]){ft:.2f}|(?<![\d.]){ft:.1f}(?!\d)")
+        m = re.fullmatch(r"(\d+)'", str(g).strip())
+        if m:  # bare feet: "32 ft" / "32 feet" is right too
+            alts.append(rf"(?<![\d.]){m.group(1)}(\.0+)?\s*(ft|feet|foot)\b")
+        return "|".join(alts)
+    src = [json.loads(line) for line in open(SHARED / "artifacts/Q/v21_src_w2_454e8bb.jsonl")]
+    for r0 in src:  # one gold corrected: the sheet prints "BUILDING HEIGHT (MAX) = 32' - 9\"" (W2's gold says 32')
+        if "32' - 9" in r0.get("verified", ""):
+            r0["gold"] = "32' - 9"
+    for r0 in src:
+        g, u = r0["gold"], r0.get("unit")
+        q = strip_hint(r0["question"])
+        if u == "count":
+            out.append(row(r0["path"], q, g, "count", "count", "sheet21:count", "same", note=r0.get("verified", "")[:120]))
+        elif u == "ft2":
+            out.append(row(r0["path"], q, g, "ft2", "area", "sheet21:area", "same", note=r0.get("verified", "")[:120]))
+        else:
+            r_ = row(r0["path"], q, str(g), None, "text", "sheet21:text", "same", note=r0.get("verified", "")[:120])
+            r_["meta"]["accept_re"] = gold_re(g)
+            out.append(r_)
+    byq = {strip_hint(r0["question"]).lower(): r0 for r0 in src}
+    for en, tr, kind in [
+        ("who is the structural engineer of record?", "Wer ist der verantwortliche Tragwerksplaner?", "sheet21:de"),
+        ("what 28-day compressive strength is required for the slabs-on-grade?",
+         "Welche 28-Tage-Druckfestigkeit wird für die Bodenplatten gefordert?", "sheet21:de"),
+        ("what is the maximum building height?", "Mikä on rakennuksen suurin sallittu korkeus?", "sheet21:fi"),
+        ("how many parking stalls are there in total according to the project data?",
+         "Montako pysäköintipaikkaa hankkeessa on yhteensä?", "sheet21:fi"),
+        ("who is the general contractor?", "Vem är generalentreprenör?", "sheet21:sv"),
+        ("what occupancy classification is the basement parking garage?",
+         "Welche Nutzungsklasse hat die Tiefgarage im Untergeschoss?", "sheet21:de"),
+    ]:
+        r0 = byq[en]
+        g = r0["gold"]
+        if r0.get("unit") == "count":
+            out.append(row(r0["path"], tr, g, "count", "count", kind, "same", note=f"= '{en}'"))
+        else:
+            r_ = row(r0["path"], tr, str(g), None, "text", kind, "same", note=f"= '{en}'")
+            r_["meta"]["accept_re"] = gold_re(g)
+            out.append(r_)
+
     with open(OUT, "w", encoding="utf-8") as f:
         for r in out:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")

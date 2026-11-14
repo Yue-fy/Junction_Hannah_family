@@ -261,6 +261,86 @@ def vocabulary_group(idx: IfcIndex, question: str, names: list[str]) -> tuple[st
     return None, []
 
 
+def room_filter(idx: IfcIndex, question: str) -> tuple[str | None, list[Element], str]:
+    """The room set a question narrows to by a label or type word outside quotes ('Which ELUTUBA+KÖÖK rooms …',
+    'the living rooms', 'Gruppenbüros', 'Kellerräume', 'WCs'). Returns (what, spaces, how): how = 'label' when a
+    room label of the model is written in the question (longest one wins, 1-3 words, plural endings allowed),
+    'type' for a multilingual room-type concept matched against the labels (arith.ROOM_TYPES); (None, [], '')
+    when the question names no room set. Q v19: a threshold list dropped the filter (34 rooms for 'Which
+    ELUTUBA+KÖÖK rooms are smaller than 25 m²?')."""
+    from stoa.solvers.ifc.arith import label_has_type, room_type_in_question
+
+    q = _QUOTED_RX.sub(" ", question)
+    labels: dict[str, list[Element]] = {}
+    for e in idx.by_class("IfcSpace"):
+        for k in {_label_key(e.long_name), _label_key(e.name)}:
+            if len(k) >= 3 and not k.isdigit():
+                labels.setdefault(k, []).append(e)
+    toks = [w for w in re.split(r"[\s,;:?!()]+", fold(q)) if w]
+    best: tuple[str, list[Element]] | None = None
+    for n in (3, 2, 1):
+        for i in range(len(toks) - n + 1):
+            win = toks[i:i + n]
+            if win[0] in _STOP or win[-1] in _STOP or any(re.fullmatch(r"[\d.,]+|m2|m²|sqm", w) for w in win):
+                continue
+            key = re.sub(r"[^a-z0-9]+", "", "".join(win))
+            for cand in _singulars(key) + ([key[:-1]] if key.endswith("s") and len(key) >= 3 else []):
+                if cand in labels and (best is None or len(cand) > len(best[0])):
+                    best = (cand, labels[cand])
+    if best is not None:
+        shown = Counter(re.sub(r"[\s\-_.]*\(?[A-Za-z]?\d+[\w.\-]*\)?$", "", (e.long_name if _label_key(e.long_name) == best[0]
+                                                                         else e.name) or "").strip() for e in best[1])
+        return (shown.most_common(1)[0][0] or best[0]), best[1], "label"
+    concept = room_type_in_question(q)
+    if concept:
+        grp = [e for e in idx.by_class("IfcSpace") if label_has_type(e.long_name, concept) or label_has_type(e.name, concept)]
+        if grp:
+            return concept, grp, "type"
+    return None, [], ""
+
+
+def rooms_named(idx: IfcIndex, question: str) -> tuple[list[Element], str]:
+    """The IfcSpaces a question points at by name: a quoted name, 'called/named X', 'the room X' / 'room 117'
+    (exact LongName / Name / 'LongName (Name)', else every room with that type label), else a room label or type
+    word (room_filter). Returns (spaces, how) with how = "room 'X'" (exact) | "rooms labelled 'X'" | "rooms of
+    type 'X'"; ([], '') when none."""
+    from stoa.solvers.ifc.resolve import match_storey as _ms
+
+    cands: list[str] = []
+    for g in _QUOTED_RX.findall(question):
+        n = next((x for x in g if x), "") if isinstance(g, tuple) else g
+        if n.strip():
+            cands.append(n.strip())
+    mq = re.search(r"\b(?:called|named|labell?ed|titled)\s+([^\s,?;:'\"‘’“”]+(?:\s+[^\s,?;:'\"‘’“”]+)?)", question)
+    if mq:
+        cands += [mq.group(1).strip(" ."), mq.group(1).split()[0].strip(" .")]
+    mr = re.search(r"\b(?:room|space)\s+(?:number\s+|no\.?\s+)?([^\s,?;:'\"‘’“”]+)", question, re.I)
+    if mr and mr.group(1).lower() not in ("called", "named", "labelled", "labeled", "titled", "is", "with", "that",
+                                          "which", "where", "on", "in"):
+        cands.append(mr.group(1).strip(" ."))
+    found: list[Element] = []
+    how = ""
+    spaces = idx.by_class("IfcSpace")
+    for c in dict.fromkeys(cands):
+        if _ms(idx, c) is not None and _ms(idx, c).score >= 95:
+            continue  # a storey name, not a room
+        cf = fold(c)
+        exact = [e for e in spaces if cf in (fold(e.long_name or ""), fold(e.name or ""),
+                                              fold(f"{e.long_name} ({e.name})"))]
+        if exact:
+            found, how = exact, f"room '{c}'"
+            break
+        grp = label_group(idx, c)
+        if grp:
+            found, how = grp, f"rooms labelled '{c}'"
+            break
+    if not found:
+        what, grp, h = room_filter(idx, question)
+        if what:
+            found, how = grp, f"rooms {'labelled' if h == 'label' else 'of type'} '{what}'"
+    return found, how
+
+
 _OUTLINE_CLASSES = ("IfcSpace", "IfcWall", "IfcWallStandardCase", "IfcColumn", "IfcCurtainWall")
 
 
@@ -439,6 +519,53 @@ class IfcSolver(BaseSolver):
     _PVM_SHEETS = re.compile(r"\bhow many (floor )?(plan )?(sheets|plans|drawings|floor plans)\b|\bnumber of (floor )?(plan )?"
                              r"(sheets|plans|drawings)\b")
 
+    _PVM_ALL = re.compile(r"\b(show|shows|draw|draws|include|includes|contain|contains|depict\w*)\b.{0,25}\b(every|all|each)\b|"
+                          r"\b(every|all|each)\b.{0,50}\b(drawn|shown|depicted|included|visible)\b")
+    _PVM_WHICH_SHEET = re.compile(r"\b(which|what)\s+(floor\s+)?(plan\s+)?(sheet|drawing|plan|page)s?\b(?!\s+(level|storey|floor))|"
+                                  r"\b(on|in)\s+which\s+(floor\s+)?(plan\s+)?(sheet|drawing|plan|page)s?\b")
+
+    def _sheet_of_room(self, model: str, idx: IfcIndex, question: str) -> Answer | None:
+        """'Which sheet shows the server room?' (Q v17, was 'the model does not contain any information about sheets'):
+        room -> its IfcBuildingStorey -> the plan file rendered for that storey, checked by the room's GlobalId on
+        the sheet. Evidence = the room on the sheet (page 0, its box) and in the model."""
+        from stoa.solvers.ifc.plan2d import plan_items, plans_of_model
+
+        found, how = rooms_named(idx, question)
+        if not found:
+            return None
+        plans = plans_of_model(model)
+        rows, ev = [], []
+        names = {st.guid: st.name for st in idx.storeys}
+        for e in found:
+            plan = plans.get(e.storey or "")
+            if not plan:
+                continue
+            items = plan_items(plan)
+            pi = items.get(e.guid)
+            rows.append((plan, names.get(e.storey, "?"), e, pi is not None))
+            lab = f"{e.long_name} ({e.name})" if e.long_name and e.name and e.long_name != e.name else (e.long_name or e.name)
+            ev.append(Evidence(file=plan, page=0, bbox=list(pi.bbox) if pi is not None else None,
+                               note=f"{lab} on {Path(plan).name}" + ("" if pi is not None else " (not tagged on the sheet)")))
+            ev.append(self._ev(model, e, f"{lab} on storey {names.get(e.storey, '?')}"))
+        if not rows:
+            return None
+        by_plan: dict[str, list] = {}
+        for r in rows:
+            by_plan.setdefault(r[0], []).append(r)
+        def lab_(e: Element) -> str:
+            return f"{e.long_name} ({e.name})" if e.long_name and e.name and e.long_name != e.name else (e.long_name or e.name or "")
+        txt = "; ".join(f"{Path(p).stem.split('_')[-1]} (storey '{rs[0][1]}'" + (f", {lab_(rs[0][2])})" if len(rs) == 1
+                                                                              else f", {len(rs)} rooms)")
+                        for p, rs in sorted(by_plan.items()))
+        drawn_all = all(r[3] for r in rows)
+        conf = (0.9 if how.startswith("room '") else 0.85 if "labelled" in how else 0.75) * (1.0 if drawn_all else 0.85)
+        return Answer(value=txt, unit=None, confidence=conf, evidence=ev[:MAX_EVIDENCE], solver=self.name,
+                      trace=[f"{how}: {len(found)} space(s) -> storey -> plan file: "
+                             + ", ".join(Path(p).name for p in sorted(by_plan))],
+                      assumptions=["sheet = the floor plan rendered for the room's IfcBuildingStorey; the room is found "
+                                   "on it by its IFC GlobalId"],
+                      missing=[] if drawn_all else ["some rooms are not tagged on their storey's sheet"])
+
     def _plan_vs_model(self, path: str, model: str, idx: IfcIndex, question: str) -> Answer | None:
         """Questions that need the plan AND the model (Stoa point 4, Q red-team v17): "How many windows on 'S' are in
         the model but not drawn on this plan?", "Do the floor plan and the IFC model agree on the number of doors on
@@ -458,7 +585,14 @@ class IfcSolver(BaseSolver):
                           trace=["plan sheets rendered from the model: " + ", ".join(Path(p).name for _, p in plans)],
                           assumptions=["plan sheets = the floor plan files of this model (one per storey drawn); "
                                        "sections and elevations not counted"], missing=[])
+        if self._PVM_WHICH_SHEET.search(qf):
+            ans = self._sheet_of_room(model, idx, question)
+            if ans is not None:
+                return ans
         agree = bool(self._PVM_AGREE.search(qf) and self._PVM_PLAN.search(qf) and self._PVM_MODEL.search(qf))
+        # 'Does this drawing show every window that the model has on S?' (Q v17: 297 @ 0.30): drawn ⊇ modelled?
+        complete = bool(self._PVM_ALL.search(qf) and self._PVM_PLAN.search(qf) and self._PVM_MODEL.search(qf))
+        agree = agree or complete
         notdrawn = bool(self._PVM_NOTDRAWN.search(qf))
         if not (agree or notdrawn):
             return None
@@ -506,6 +640,13 @@ class IfcSolver(BaseSolver):
                           trace=trace + [f"in the model but not drawn: {len(on)} - {len(drawn)} = {len(missing_els)}; "
                                          + why_nd],
                           solver=self.name, assumptions=asm, missing=[])
+        if complete and not self._PVM_AGREE.search(qf):
+            txt = (f"yes: all {len(on)} {word} of the model on '{storey.name}' are drawn on {Path(plan).name}" if not missing_els
+                   else f"no: {len(drawn)} of the {len(on)} {word} of the model on '{storey.name}' are drawn; "
+                        f"{len(missing_els)} are not ({why_nd})")
+            return Answer(value=txt, unit=None, confidence=0.85,
+                          evidence=(ev or [self._ev(model, e, e.eff_cls) for e in drawn])[:MAX_EVIDENCE],
+                          trace=trace, solver=self.name, assumptions=asm, missing=[])
         same = len(drawn) == len(on) and not other
         txt = (f"yes: the IFC model and the plan both have {len(on)} {word} on '{storey.name}'" if same else
                f"no: the IFC model has {len(on)} {word} on '{storey.name}', the plan draws {len(drawn)}"
@@ -662,6 +803,62 @@ class IfcSolver(BaseSolver):
                         r"lower) (?:is|lies)|how high (?:is \S+ )?above|(?:height|elevation) of \S+ above)\b|"
                         r"\bhow far\b.{0,30}\b(above|below)\b")
 
+    def _threshold_area(self, path: str, model: str, idx: IfcIndex, it: Intent, question: str, trace: list[str],
+                        ctx: dict) -> Answer | None:
+        """Area of a DERIVED room set (hard3 class, S0 08:22; W1 c6 probe 5): "What percentage of the floor area on S
+        is taken by rooms larger than 20 m²?" = area(rooms > 20) / area(all rooms) x 100 (was the room list at 0.92);
+        "the floor area of the rooms on S without the rooms smaller than 5 m²" = area(rooms >= 5) (was the small
+        rooms' list at 0.3)."""
+        import dataclasses
+
+        from stoa.solvers.ifc.parse import _LOWER as _LOW, _THRESH as _TH
+
+        qf = fold(_QUOTED_RX.sub(" ", question))
+        mt = _TH.search(qf)
+        if not mt or not re.search(r"\b(rooms?|spaces?|raume?|habitaciones|ruimtes?|pieces)\b", qf) or \
+                not re.search(r"\b(area|floor|m2|square|surface|flache|superficie|oppervlak\w*)\b", qf):
+            return None
+        share = re.search(r"\b(percent\w*|share|fraction|proportion|porcentaje|anteil|aandeel|prozent|procent|osuus)\b|%",
+                          qf[:mt.start()] + " " + qf[mt.end():])
+        excl = re.search(r"\b(without|except(?: for)?|excluding|apart from|other than|not counting|ohne|ausser|sin|excepto|"
+                         r"sauf|sans|senza|zonder|behalve)\s+(?:the\s+|all\s+|die\s+|los\s+|les\s+)?(rooms?|spaces?|raume?|"
+                         r"habitaciones|ruimtes?|pieces)\b[^.?]{0,25}$", qf[:mt.end()][: mt.start()] + " ")
+        if not (share or excl):
+            return None
+        low = mt.group(1) in _LOW
+        thr_v = float(mt.group(2).replace(",", "."))
+        op = ("gt" if low else "lt") if excl else ("lt" if low else "gt")
+        base = dict(op=None, which=False, yes_no=False, top_n=False, group_by=None, filters={}, material=None)
+        itp = dataclasses.replace(it, metric="area", kind="space", kinds=["space"], mod="threshold", threshold=(op, thr_v),
+                                  notes=["threshold_sum"], asked_unit=None, **base)
+        st1: list[str] = []
+        part = self._answer(path, model, idx, itp, st1, {"question": question, "threshold_sum": True})
+        if not isinstance(part.value, (int, float)) or isinstance(part.value, bool):
+            return None
+        it.threshold = (op, thr_v)  # the threshold number is used: not a leftover for the guard
+        rel = {"gt": "larger than", "lt": "smaller than"}[op]
+        if excl and not share:
+            ctx["rest_applied"] = True  # the exclusion IS applied (no 'exclusion NOT applied' cap)
+            trace.extend(st1[-3:])
+            trace.append(f"derived set: rooms {rel} {thr_v:g} m² (the question leaves out the others): {part.value} m²")
+            return Answer(value=part.value, unit="m2", confidence=min(part.confidence, 0.85), evidence=part.evidence,
+                          trace=trace, solver=self.name, assumptions=part.assumptions + [
+                              f"rooms left out = those {('smaller' if op == 'gt' else 'larger')} than {thr_v:g} m²"],
+                          missing=part.missing)
+        itw = dataclasses.replace(it, metric="area", kind="space", kinds=["space"], mod=None, threshold=None, notes=[],
+                                  asked_unit=None, **base)
+        st2: list[str] = []
+        whole = self._answer(path, model, idx, itw, st2, {"question": "", "compose": False})
+        if not isinstance(whole.value, (int, float)) or not whole.value:
+            return None
+        pct = float(part.value) / float(whole.value) * 100.0
+        trace.extend(st1[-2:] + st2[-1:])
+        trace.append(f"share: rooms {rel} {thr_v:g} m² {part.value} m² / all rooms {whole.value} m² x 100 = {pct:.2f}%")
+        return Answer(value=round(pct, 3), unit="%", confidence=min(part.confidence, whole.confidence, 0.85),
+                      evidence=part.evidence, trace=trace, solver=self.name,
+                      assumptions=whole.assumptions[:1] + [f"share = floor area of the rooms {rel} {thr_v:g} m² / floor area "
+                                                           "of all rooms x 100"], missing=part.missing)
+
     def _storey_distance(self, model: str, idx: IfcIndex, question: str, trace: list[str]) -> Answer | None:
         """'Floor-to-floor height / vertical distance / height difference between storeys A and B' = |z_B - z_A|
         from IfcBuildingStorey elevations (W1 c5: was the difference of the two storey heights at 0.69)."""
@@ -706,6 +903,143 @@ class IfcSolver(BaseSolver):
                       assumptions=["vertical distance = difference of the IfcBuildingStorey elevations (finished floor "
                                    "levels as modelled)"])
 
+    _FLOORS = (r"(floors?|storeys?|stor(?:y|ies)|levels?|geschosse?|stockwerke?|etagen?|korrused?|korrusel?|verdiepingen?|"
+               r"bouwlagen?|etages?|plantas?|pian[io]|kerrokset|kerroksi\w*|vaningar|vaningarna|kondygnacj\w*|pietr\w*)")
+    _WHICH_FLOORS = re.compile(r"^\s*(?:(?:on|in|at)\s+)?(which|what|list|name|show|give|welche\w*|millised|milliste|quels?|"
+                               r"quelles?|cuales|que|quali|welke|vilka|mitka|ktore)\s+(?:(?:of\s+)?the\s+|all\s+(?:the\s+)?)?"
+                               + _FLOORS + r"\b")
+    _HOWMANY_FLOORS = re.compile(r"^\s*(how many|wie viele|hoeveel|combien d.|cuant[oa]s|quant[ie]|mitu|kuinka monta|"
+                                 r"hur manga|ile)\s+" + _FLOORS + r"\b")
+    _LOC = re.compile(r"\b(on|in|at)\s+which\s+(floor|storey|story|level)s?\b|\bwhich\s+(floor|storey|story|level)s?\s+"
+                      r"(is|are|has|have|holds?|contains?|do|does|houses?)\b|\bwhat\s+(floor|storey|story|level)\s+(is|are)\b|"
+                      r"\bwhich\s+(floor|storey|story|level)\b.{0,60}\b(on|located|situated|found)\s*\??\s*$|"
+                      r"\bhow many (floors|storeys|stories|levels)\b.{0,30}\b(have|has|contain|with|hold)\b")
+    _NOT_LOC = re.compile(r"\b(most|fewest|least|largest|smallest|biggest|highest|lowest|more|fewer|less|greater|"
+                          r"how much|area|total|average|per)\b")
+
+    def _storey_select(self, path: str, model: str, idx: IfcIndex, it: Intent, question: str, trace: list[str],
+                       ctx: dict) -> Answer | None:
+        """Questions whose answer is a SET of storeys (Q red-team v19; both read as room-area lists before, at 0.92):
+        (1) a count threshold per storey: 'Which floors have more than 55 rooms?', 'How many storeys have fewer than
+            42 doors?', 'Welche Geschosse haben mehr als 55 Räume?' -> count each used storey with the same rules as
+            'How many <kind> are on S?' and keep those that pass;
+        (2) where a room is: 'On which floors is there a room called MAGAMISTUBA?', 'On which floor is the room
+            SERVER?', "On which storey is the space 'LIFT'?" (was the sheet storey's room count 50 at 0.97)."""
+        from stoa.solvers.ifc.arith import text_of
+        from stoa.solvers.ifc.parse import _LOWER as _LOW, _THRESH as _TH
+
+        t = text_of(question)
+        sts = sorted([st for st in own_storeys(idx)], key=lambda st: st.elevation or 0.0)
+        if not sts:
+            return None
+        which = self._WHICH_FLOORS.search(t)
+        howmany = self._HOWMANY_FLOORS.search(t)
+        # ---- (1) count / area threshold over storeys -----------------------------------------------------------
+        mt = _TH.search(t)
+        if (which or howmany) and mt:
+            after = t[mt.end():].strip()
+            area_q = bool(re.match(r"(m2|m²|sq\.? ?m|square|qm|m\^2|ft2|sq\.? ?ft)", after))
+            if not area_q and re.match(r"(m\b|%|percent|m3|metre|meter|cm|mm)", after):
+                return None  # a length / volume / share threshold per storey: not modelled here
+            if area_q:
+                # 'Which floors have a total floor area of more than 800 m²?': the per-storey value of the phrase between
+                # 'floors' and the comparator, with the same rule as 'What is the total floor area of S?'
+                phrase = t[(which or howmany).end():mt.start()]
+                phrase = re.sub(r"\b(have|has|having|with|a|an|the|of|is|are|that|whose|their|its|been|over)\b", " ", phrase)
+                phrase = " ".join(phrase.split())
+                if not re.search(r"\b(area|floor ?space|surface|flache|ala|pinta|oppervlakte|superficie|yta|areal)\b", phrase):
+                    phrase = "total floor area"
+                    asm0 = ["no measure named: the total floor area of the rooms on each floor"]
+                else:
+                    asm0 = []
+                kw, sub_q, unit_ = phrase, "What is the {kw} of '{st}'?", "m2"
+            else:
+                mw = re.match(r"([\w+\-]+(?:\s+[\w+\-]+){0,2}?)(?=\s+(?:on|in|at|each|per|and|or|than|with|that|which|"
+                              r"there|auf|im|op)\b|\s*[?.!]|\s*$)", after)
+                words = mw.group(1) if mw else " ".join(after.split()[:1])
+                kind = parse(f"How many {words}?").kind
+                if kind in (None, "storey"):
+                    return None
+                # 'more than 2 bathrooms' counts bathrooms, 'more than 55 rooms' every room, 'more than 42 doors' doors
+                kw = words if (kind != "space" or room_filter(idx, words)[0]) else "rooms"
+                sub_q, unit_, asm0 = "How many {kw} are there on '{st}'?", "count", []
+            thr = float(mt.group(2).replace(",", "."))
+            ctx["outer_spans"] = ctx.get("outer_spans", []) + [mt.span()]
+            w = mt.group(1)
+            op = "lt" if w in _LOW else "gt"
+            if re.search(r"\bat least\b|\bvahemalt\b|\bmindestens\b", t):
+                op = "ge"
+            elif re.search(r"\bat most\b|\bhochstens\b|\bmaximal\b", t):
+                op = "le"
+            cmp = {"gt": lambda v: v > thr, "ge": lambda v: v >= thr, "lt": lambda v: v < thr, "le": lambda v: v <= thr}[op]
+            pool = used_storeys(idx, sts) or sts
+            skipped = [st.name for st in sts if st not in pool]
+            rows, subs = [], []
+            for st in pool:
+                a, _, _ = self._core(path, model, idx, sub_q.format(kw=kw, st=st.name))
+                if a.value is None or isinstance(a.value, str) or (a.unit or "") != unit_:
+                    trace.append(f"storey threshold: no {unit_} for '{st.name}' ({a.value!r} {a.unit})")
+                    return None
+                rows.append((st, float(a.value)))
+                subs.append(a)
+            hit = [(st, n) for st, n in rows if cmp(n)]
+            sym = {"gt": ">", "ge": ">=", "lt": "<", "le": "<="}[op]
+            fmt = (lambda n: f"{n:g} {kw}") if unit_ == "count" else (lambda n: f"{kw} {n:.2f} m²")
+            steps = [f"'{st.name}': {fmt(n)} {'✓' if cmp(n) else '-'}" for st, n in rows]
+            trace.append(f"threshold per storey ({kw} {sym} {thr:g}{' m²' if unit_ == 'm2' else ''}) over {len(pool)} used storeys")
+            trace.extend(steps)
+            # a floor far from the threshold cannot flip the set (warmond 'Entrance': 0 rooms at 0.6 held a right list
+            # at 0.54): only passing floors and close calls carry their confidence
+            close = [a for (st, n), a in zip(rows, subs) if cmp(n) or abs(n - thr) <= max(2.0, 0.2 * thr)]
+            conf = 0.9 * min(a.confidence for a in (close or subs)) * (0.85 if asm0 else 1.0)
+            ev = [e for (st, n), a in zip(rows, subs) if cmp(n) for e in a.evidence][:MAX_EVIDENCE]
+            ev += [Evidence(file=model, ifc_guid=st.guid, note=f"IfcBuildingStorey {st.name}: {fmt(n)}") for st, n in hit]
+            asm = asm0 + [f"per storey with the same rule as '{sub_q.format(kw=kw, st='<storey>')}'"]
+            if skipped:
+                asm.append("levels without rooms or doors are not floors: " + ", ".join(repr(x) for x in skipped))
+            if howmany and not which:
+                return Answer(value=len(hit), unit="count", confidence=conf, evidence=ev, trace=trace, solver=self.name,
+                              assumptions=asm + ["floors passing: " + (", ".join(f"{st.name} ({fmt(n)})" for st, n in hit)
+                                                                      or "none")])
+            txt = ("; ".join(f"{st.name} ({fmt(n)})" for st, n in hit) if hit
+                   else f"none (no floor has {kw} {sym} {thr:g}{' m²' if unit_ == 'm2' else ''})")
+            return Answer(value=txt, unit=None, confidence=conf, evidence=ev, trace=trace, solver=self.name,
+                          assumptions=asm + ["other floors: " + ", ".join(f"{st.name} ({fmt(n)})" for st, n in rows
+                                                                          if not cmp(n))])
+        # ---- (2) where a room is ---------------------------------------------------------------------------------
+        if not self._LOC.search(t) or self._NOT_LOC.search(t):
+            return None
+        qf = fold(question)
+        if not re.search(r"\b(rooms?|spaces?|called|named|labell?ed)\b", qf) and not _QUOTED_RX.search(question) \
+                and not room_filter(idx, question)[0]:  # 'On which floor is the kitchen?', '… are there WCs?'
+            return None
+        found, how = rooms_named(idx, question)
+        if not found:
+            return None
+        by_st: dict[str, list[Element]] = {}
+        for e in found:
+            if e.storey:
+                by_st.setdefault(e.storey, []).append(e)
+        hit = [st for st in sorted(idx.storeys, key=lambda st: st.elevation or 0.0) if st.guid in by_st]
+        if not hit:
+            return None
+        trace.append(f"where: {how} -> {len(found)} space(s) on " + ", ".join(f"'{st.name}'" for st in hit))
+        ev = [self._ev(model, e, f"{e.long_name or ''} {e.name or ''} on {st.name}".strip())
+              for st in hit for e in by_st[st.guid]][:MAX_EVIDENCE]
+        conf = 0.92 if how.startswith("room '") else 0.9 if "labelled" in how else 0.8
+        if howmany:
+            return Answer(value=len(hit), unit="count", confidence=conf, evidence=ev, trace=trace, solver=self.name,
+                          assumptions=[f"{how}: on " + ", ".join(st.name for st in hit)])
+        def lab(e: Element) -> str:
+            return f"{e.long_name} ({e.name})" if e.long_name and e.name and e.long_name != e.name else (e.long_name or e.name or "")
+        def several(els: list[Element]) -> str:
+            labs_ = {re.sub(r"[\s\-_.]*\(?[A-Za-z]?\d+[\w.\-]*\)?$", "", e.long_name or e.name or "").strip() for e in els}
+            return f"{len(els)} x {labs_.pop()}" if len(labs_) == 1 else f"{len(els)} rooms"
+        txt = "; ".join(st.name + (f" ({lab(by_st[st.guid][0])})" if len(by_st[st.guid]) == 1
+                                   else f" ({several(by_st[st.guid])})") for st in hit)
+        return Answer(value=txt, unit=None, confidence=conf, evidence=ev, trace=trace, solver=self.name,
+                      assumptions=[f"{how}; storey = the IfcBuildingStorey that contains the IfcSpace"])
+
     # ------------------------------------------------------------------------------------------------
     def _core(self, path: str, model: str, idx: IfcIndex, question: str) -> tuple[Answer, Intent, dict]:
         """Rules + guards for one wording of the question (no LLM call)."""
@@ -730,6 +1064,12 @@ class IfcSolver(BaseSolver):
                 mc_ = _CMP.search(text_of(question))
                 if mc_:  # the yes/no threshold was used: not a leftover number
                     ctx["outer"], ctx["outer_spans"] = True, [mc_.span()]
+            if ans is None:
+                ans = self._storey_select(path, model, idx, it, question, trace, ctx)
+                if ans is not None:
+                    ctx["outer"] = True  # its numbers (the threshold) are used
+            if ans is None:
+                ans = self._threshold_area(path, model, idx, it, question, trace, ctx)
             if ans is None:
                 ans = self._relation(path, model, idx, it, question, trace, ctx)
             if ans is None:
@@ -1950,8 +2290,12 @@ class IfcSolver(BaseSolver):
             it.mod, it.op, it.kind, it.yes_no, it.metric = "threshold", None, "space", False, "area"
             it.notes.append("between")
         mt0 = _TH0.search(qf)
-        if (mt0 or mb) and it.kind in ("space", None) and re.search(r"^\s*(which|what|list|name|show|give)\b", qf) and \
-                re.search(r"\b(rooms|spaces)\b", qf) and not re.search(r"\b(how many|number of|total|sum)\b", qf):
+        if (mt0 or mb) and it.kind in ("space", None) and re.search(
+                r"^\s*(which|what|list|name|show|give|welche\w*|millised|milliste|quels?|quelles?|cuales|quali|welke|"
+                r"vilka|mitka|ktore)\b", qf) and \
+                (re.search(r"\b(rooms|spaces|raume|raeume|ruumid|pieces|kamers|ruimtes|stanze|locali|habitaciones|"
+                           r"huoneet|rummen|pomieszczenia)\b", qf) or room_filter(idx, question)[0]) and \
+                not re.search(r"\b(how many|number of|total|sum)\b", qf):  # 'Which bedrooms …' (Q v19)
             if not mb:
                 w = mt0.group(1)
                 it.threshold = ("lt" if w in _LOW0 else "gt", float(mt0.group(2).replace(",", ".")))
@@ -2163,7 +2507,7 @@ class IfcSolver(BaseSolver):
                 k = o.basis_kind or (it.kind if it.kind not in (None, "storey") else ("space" if o.basis == "area" else None))
                 if k is None:
                     return None
-                it2 = dataclasses.replace(it, metric=o.basis, kind=k, kinds=[k], asked_unit=o.basis_unit,
+                it2 = dataclasses.replace(it, metric=o.basis, kind=k, kinds=[k], asked_unit=o.basis_unit, attr=None,
                                           side_area=o.basis == "area" and (it.side_area or k == "wall"), **base)
             a, st = run(it2)
             if not num(a):
@@ -2475,6 +2819,19 @@ class IfcSolver(BaseSolver):
                     whole_m = it.scope == "model" or ps is None
                     els = idx.by_class("IfcSpace") if whole_m else idx.in_storey(ps.guid, "IfcSpace")
                     trace.append("threshold over every room " + ("of the model" if whole_m else f"on the sheet's storey '{ps.name}'"))
+                # 'Which ELUTUBA+KÖÖK rooms …', 'the living rooms …', 'How many bedrooms …': only that room set (Q v19)
+                rf_what, rf_grp, rf_how = room_filter(idx, ctx.get("question", "") or it.question or "")
+                if rf_what:
+                    keep = {e.guid for e in rf_grp}
+                    n0, els = len(els), [e for e in els if e.guid in keep]
+                    labs = sorted({e.long_name or e.name or "" for e in els})
+                    trace.append(f"room set '{rf_what}' ({rf_how}): {len(els)} of {n0} rooms")
+                    ctx["threshold_room_set"] = rf_what
+                    if rf_how == "type":
+                        ctx.setdefault("threshold_assumptions", []).append(
+                            f"'{rf_what}' = rooms labelled " + ", ".join(f"'{x}'" for x in labs[:6]) + (" ..." if len(labs) > 6 else ""))
+                    if not els:
+                        return None
                 parts = []
                 for e in els:
                     v, _ = self._floor_area(e, it, [])
@@ -2491,27 +2848,31 @@ class IfcSolver(BaseSolver):
                 return v / FT2_PER_M2 if a.unit == "ft2" else v / FT_PER_M if a.unit == "ft" else v
             hit = [(n, si(a)) for n, a, _ in parts if cmp(si(a))]
             sym = {"gt": ">", "ge": ">=", "lt": "<", "le": "<=", "between": "between"}[op]
+            cond = (f"{thr:g} and {hi_thr:g} {unit_si}" if op == "between" and hi_thr is not None
+                    else f"{thr:g} {unit_si}")  # 'between 20 and 25 m2' (the upper bound was missing from the text)
+            rset = f"'{ctx['threshold_room_set']}' rooms" if ctx.get("threshold_room_set") and not others else "rooms"
             steps = [f"{n}: {si(a):.2f} {unit_si} {'✓' if cmp(si(a)) else '-'}" for n, a, _ in parts]
+
+            def finish(a: Answer) -> Answer:
+                a.evidence = [ev for (n, a_, _) in parts if cmp(si(a_)) for ev in a_.evidence] or a.evidence
+                a.assumptions += [x for x in ctx.get("threshold_assumptions", []) if x not in a.assumptions]
+                return a
+
             if ctx.get("threshold_list"):
                 names_hit = [n for n, a, _ in parts if cmp(si(a))]
-                txt = (f"{len(names_hit)} rooms with {it.metric} {sym} {thr:g} {unit_si}"
+                txt = (f"{len(names_hit)} {rset} with {it.metric} {sym} {cond}"
                        + (": " + "; ".join(f"{n} ({v:.2f} {unit_si})" for n, v in hit[:40]) if hit else "")
                        + (" ..." if len(hit) > 40 else ""))
-                ans = done(txt, None, [a for _, a, _ in parts], steps + [f"{len(hit)} of {len(parts)} listed"],
-                           f"rooms with {it.metric} {sym} {thr:g} {unit_si}")
-                ans.evidence = [ev for (n, a, _) in parts if cmp(si(a)) for ev in a.evidence] or ans.evidence
-                return ans
+                return finish(done(txt, None, [a for _, a, _ in parts], steps + [f"{len(hit)} of {len(parts)} listed"],
+                                   f"{rset} with {it.metric} {sym} {cond}"))
             if ctx.get("threshold_sum"):
                 tot = sum(v for _, v in hit)
-                ans = done(tot, unit_si, [a for _, a, _ in parts], steps + [f"sum of the {len(hit)} of {len(parts)} with "
-                                                                          f"{sym} {thr:g} {unit_si} = {tot:.3f}"],
-                           f"total {it.metric} of the rooms with {it.metric} {sym} {thr:g} {unit_si}")
-                ans.evidence = [ev for (n, a, _) in parts if cmp(si(a)) for ev in a.evidence] or ans.evidence
-                return ans
-            ans = done(len(hit), "count", [a for _, a, _ in parts], steps + [f"{len(hit)} of {len(parts)} have {sym} {thr:g} {unit_si}"],
-                       f"count of the {len(parts)} {'named ' if others else ''}rooms with {it.metric} {sym} {thr:g} {unit_si}")
-            ans.evidence = [ev for (n, a, _) in parts if cmp(si(a)) for ev in a.evidence] or ans.evidence
-            return ans
+                return finish(done(tot, unit_si, [a for _, a, _ in parts],
+                                   steps + [f"sum of the {len(hit)} of {len(parts)} with {sym} {cond} = {tot:.3f}"],
+                                   f"total {it.metric} of the {rset} with {it.metric} {sym} {cond}"))
+            return finish(done(len(hit), "count", [a for _, a, _ in parts],
+                               steps + [f"{len(hit)} of {len(parts)} have {sym} {cond}"],
+                               f"count of the {len(parts)} {'named ' if others else ''}{rset} with {it.metric} {sym} {cond}"))
         return None
 
     # ------------------------------------------------------------------------------------------------
