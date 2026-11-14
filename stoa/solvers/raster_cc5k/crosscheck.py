@@ -30,6 +30,14 @@ What it does for a drawing-scope count key (count:<target>:drawing) on a drawing
      calibrated confidence. Other solvers keep their confidence (not measured). Relative to the LoRA's OWN
      p(answer digits) agreement adds little (dev AUROC 0.864 → 0.868), and a noisy-OR on agreement is wrong here
      (the two are not independent; dev ECE 0.040 → 0.052).
+  5. range, for the same solvers: a calibrated integer interval for the true count (Stoa: "a best estimate with a
+     calibrated confidence"), [min(answer, detector) - lo, max(answer, detector) + hi] with split-conformal margins
+     per group (openings: window, door | fixtures: wc, sink | rooms) x agree/disagree, fitted on train_gate
+     (experiments/r1/count_interval/interval.py). 90% nominal → covers the true count on 93% of dev answers (mean
+     width 3.9 values) and 97% of the leak-free-for-both drawings (3.2). Fixtures and rooms: the two counts' range
+     (margins 0); windows/doors: widened by −1/+5 (both counters miss symbols). Machine line in the trace
+     "interval90: [lo, hi]"; a human line goes to `missing` when lo < hi. interval() is public for the composer
+     (e.g. a comparison is sure only when the two ranges don't overlap).
 No-op (returns a copy with at most one trace line) when: the key is not a drawing-scope count of a supported target,
 the value is not an integer, the answer already comes from raster_cc5k, or the drawing has no cached detections and
 live inference is off (default; pass live=True or set CC5K_LIVE=1 to run predict.py via CC5K_PYTHON, ~1–3 s CPU).
@@ -157,6 +165,18 @@ def _own_p(ans: Answer) -> float:
     return float(ans.confidence or 0.0)
 
 
+def interval(target: str, value: int, detector: int, level: int = 90) -> tuple[int, int] | None:
+    """Calibrated range for the true count given another solver's `value` and the CC5K `detector` count (both ints),
+    or None when no table exists for the target/level. level 90 or 80 (nominal coverage, %)."""
+    t = _table().get("intervals") or {}
+    g = (t.get("groups") or {}).get(target)
+    m = (t.get(str(level)) or {}).get(g or "", {}).get("agree" if value == detector else "disagree")
+    if m is None:
+        return None
+    lo, hi = int(m[0]), int(m[1])
+    return max(0, min(value, detector) - lo), max(value, detector) + hi
+
+
 def check(path: str, key: str | None, ans: Answer, source: str | None = None, live: bool | None = None,
           arbitrate: bool = True) -> Answer:
     """See the module docstring. `key`: intent key ("count:window:drawing") or a bare target ("window").
@@ -202,6 +222,13 @@ def check(path: str, key: str | None, ans: Answer, source: str | None = None, li
             trace.append(f"confidence {out.confidence:.2f} → {c:.2f}: P(right | {src} and {what} "
                          f"{'agree' if agree else 'disagree'}) on train_gate, which {src} never saw")
             out.confidence = float(c)
+    if any(n in (ans.solver or "") for n in tab.get("applies_to_solvers", [])):
+        rng = interval(tgt, v, det)
+        if rng is not None:
+            trace.append(f"interval90: [{rng[0]}, {rng[1]}]")
+            if rng[0] < rng[1]:
+                out.missing = [*out.missing, f"exact count not certain: 90% range {rng[0]}–{rng[1]} ({src} {v}, {what} "
+                                             f"{det}; this range held the true count for 93% of dev answers)"]
     has_located = any(e.bbox is not None or e.ifc_guid for e in out.evidence)
     rel = d["path"]
     if not has_located and boxes:

@@ -61,5 +61,82 @@
    "switched": 0.273,
    "n_switched": 31
   }
+ },
+ "intervals": {
+  "rule": "[min(answer, detector) - lo, max(answer, detector) + hi], lo/hi per group x (agree|disagree); split-conformal margins fitted on 20261114-012403-vlm_direct-train_gate-ee1b.jsonl",
+  "groups": {
+   "window": "openings",
+   "door": "openings",
+   "wc": "fixtures",
+   "sink": "fixtures",
+   "bedroom": "rooms",
+   "balcony": "rooms",
+   "bathroom": "rooms",
+   "kitchen": "rooms"
+  },
+  "90": {
+   "fixtures": {
+    "agree": [
+     0,
+     0
+    ],
+    "disagree": [
+     0,
+     0
+    ]
+   },
+   "openings": {
+    "agree": [
+     1,
+     4
+    ],
+    "disagree": [
+     1,
+     5
+    ]
+   },
+   "rooms": {
+    "agree": [
+     0,
+     0
+    ],
+    "disagree": [
+     0,
+     0
+    ]
+   }
+  },
+  "80": {
+   "fixtures": {
+    "agree": [
+     0,
+     0
+    ],
+    "disagree": [
+     0,
+     0
+    ]
+   },
+   "openings": {
+    "agree": [
+     1,
+     0
+    ],
+    "disagree": [
+     0,
+     4
+    ]
+   },
+   "rooms": {
+    "agree": [
+     0,
+     0
+    ],
+    "disagree": [
+     0,
+     0
+    ]
+   }
+  }
  }
 }

@@ -70,3 +70,24 @@ def test_other_solvers_keep_their_confidence_and_their_own_evidence():
 def test_unknown_drawing_without_live_inference_is_a_noop():
     out = cx.check("data/cubicasa5k/does-not-exist.png", "count:window:drawing", lora(2, 0.4), live=False)
     assert out.value == 2 and out.evidence == [] and "no cached" in out.trace[-1]
+
+
+def test_interval_is_the_two_counts_range_widened_for_openings():
+    assert cx.interval("sink", 2, 2) == (2, 2)
+    lo, hi = cx.interval("sink", 1, 3)
+    assert lo <= 1 and hi >= 3
+    lo, hi = cx.interval("window", 5, 8)
+    assert lo <= 5 and hi >= 8 and hi - lo > 3
+    assert cx.interval("door", 0, 0)[0] == 0  # never below zero
+    assert cx.interval("shower_bathtub", 1, 1) is None
+
+
+@needs_cache
+def test_lora_answers_get_a_machine_readable_range():
+    out = cx.check(DRAWING, "count:window:drawing", lora(5, 0.99))
+    line = [t for t in out.trace if t.startswith("interval90:")]
+    assert line and any("90% range" in m for m in out.missing)
+    lo, hi = map(int, line[0].split("[")[1].rstrip("]").split(","))
+    assert lo <= 5 and hi >= 11
+    raster = Answer(value=1, unit="count", confidence=0.7, solver="raster")
+    assert not any(t.startswith("interval90:") for t in cx.check(DRAWING, "count:sink:drawing", raster).trace)
