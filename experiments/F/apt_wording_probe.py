@@ -134,13 +134,58 @@ KINDS = {
 }
 
 
+# v6 (c225, 08:45): German / French / Italian wordings a Swiss judge might type. The base is any dataset-language
+# apartment template of the same drawing (gold is language-independent). Written to apt_wording_ml.jsonl (`--ml`).
+_APT_ANY = (r"^(?:What is the net floor area of apartment|Wie gross ist die Nettowohnfläche von Wohnung|"
+            r"Quelle est la surface nette de l'appartement|Qual è la superficie netta dell'appartamento) "
+            r"(?P<L>[A-Z]) in m²")
+_APTS_ANY = (r"^(?:How many apartments \(residential units\) are shown on this floor plan\?|"
+             r"Wie viele Wohnungen sind auf diesem Grundriss dargestellt\?|"
+             r"Combien d'appartements \(logements\) figurent sur ce plan d'étage \?)$")
+KINDS_ML = {
+    "de_apt": (_APT_ANY, {
+        "gross_ohne": ("Wie groß ist Wohnung {L} ohne Balkone?", False),
+        "whg": ("Nettofläche Whg. {L} in m², ohne Balkon und Loggia?", False),
+        "qm": ("Wie viele Quadratmeter hat die Wohnung {L}, Balkone und Terrassen nicht mitgerechnet?", False),
+        "fronted": ("Wohnung {L}: Nettowohnfläche in m² ohne Aussenräume?", False),
+        "letter_first": ("Welche Wohnfläche hat die {L}-Wohnung (ohne Balkon)?", False),
+        "einheit": ("Wie groß ist die Nettofläche der Wohneinheit {L} exkl. Balkone?", False),
+        "bare": ("Wie groß ist Wohnung {L}?", True),
+    }),
+    "fr_apt": (_APT_ANY, {
+        "sans": ("Quelle est la surface de l'appartement {L}, sans les balcons ?", False),
+        "logement": ("Surface nette du logement {L} en m², hors balcons ?", False),
+        "m2": ("Combien de mètres carrés fait l'appartement {L} (hors balcons et terrasses) ?", False),
+        "fronted": ("Appartement {L} : surface habitable nette en m², balcons exclus ?", False),
+        "appt": ("Quelle est la superficie de l'appt {L} hors espaces extérieurs ?", False),
+    }),
+    "it_apt": (_APT_ANY, {
+        "grande": ("Quanto è grande l'appartamento {L}, esclusi i balconi?", False),
+        "alloggio": ("Superficie netta dell'alloggio {L} in m² (senza balconi)?", False),
+        "mq": ("Quanti metri quadrati ha l'appartamento {L}, terrazze escluse?", False),
+        "fronted": ("Appartamento {L}: superficie netta in m², senza spazi esterni?", False),
+    }),
+    "ml_apartments": (_APTS_ANY, {
+        "de_einheiten": ("Wie viele Wohneinheiten hat dieses Geschoss?", False),
+        "de_anzahl": ("Anzahl Wohnungen auf diesem Plan?", False),
+        "fr_logements": ("Combien de logements y a-t-il à cet étage ?", False),
+        "fr_nombre": ("Nombre d'appartements sur ce plan ?", False),
+        "it_quanti": ("Quanti appartamenti ci sono su questo piano?", False),
+        "en_how_many_units": ("How many units are on this floor?", False),
+    }),
+}
+
+
 def main():
-    n = int(sys.argv[1]) if len(sys.argv) > 1 else 30
+    ml = "--ml" in sys.argv
+    argv = [a for a in sys.argv[1:] if a != "--ml"]
+    n = int(argv[0]) if argv else 30
     dev_all = load_split("dev")
-    out = os.path.join(os.environ["JUNCTION_SHARED"], "artifacts", "F", "apt_wording.jsonl")
+    out = os.path.join(os.environ["JUNCTION_SHARED"], "artifacts", "F",
+                       "apt_wording_ml.jsonl" if ml else "apt_wording.jsonl")
     total = 0
     with open(out, "w", encoding="utf-8") as f:
-        for kind, (rx, wordings) in KINDS.items():
+        for kind, (rx, wordings) in (KINDS_ML if ml else KINDS).items():
             bases, seen = [], set()
             source = ("ifc_models" if kind.startswith("ifc_") else "cubicasa5k" if kind.startswith("cc_")
                       else "swiss_dwellings")
