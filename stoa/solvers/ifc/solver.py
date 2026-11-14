@@ -237,6 +237,20 @@ def external_by_outline(idx: IfcIndex, walls: list[Element]) -> list[Element]:
     return out
 
 
+_PARTS: dict[str, dict[str, str]] = {}
+
+
+def _parts_of(model: str) -> dict[str, str]:
+    if model not in _PARTS:
+        from stoa.solvers.ifc.index import nested_parts
+
+        try:
+            _PARTS[model] = nested_parts(model)
+        except Exception:  # noqa: BLE001 - no parts info is the old behaviour
+            _PARTS[model] = {}
+    return _PARTS[model]
+
+
 def _poly(e: Element):
     from shapely.geometry import Polygon
 
@@ -317,6 +331,22 @@ class IfcSolver(BaseSolver):
                 ans.confidence = 0.5
                 ans.missing.append(f"the question has an operator word ('{w.group(0)}') the rules did not apply")
                 ans.trace.append(f"guard: operator word '{w.group(0)}' not modelled -> confidence capped at 0.5")
+        n_bad = 0
+        if ans.value is not None and it.metric == "area" and it.kind == "space":
+            for ev_ in ans.evidence:
+                e_ = idx.elements.get(ev_.ifc_guid) if ev_.ifc_guid else None
+                if e_ is not None and e_.cls == "IfcSpace":
+                    q_ = _qto(e_, QTO_KEYS[("floor", "net")])
+                    g_ = e_.geo.footprint_area if e_.geo else None
+                    if q_ and g_ and abs(q_ - g_) > 0.02 * g_:
+                        n_bad += 1
+            if n_bad:
+                ans.trace.append(f"cross-check: {n_bad} room(s) with explicit NetFloorArea ≠ shape area (> 2%) ✗")
+        if ans.value is not None and n_bad and ans.confidence > 0.7:
+            # explicit quantity and shape disagree for some rooms: the model is unusual; say so and be less sure
+            ans.confidence = 0.7
+            ans.missing.append(f"{n_bad} room(s): explicit NetFloorArea and the room shape differ by > 2%; "
+                               "used the explicit quantity")
         if ans.value is not None:
             # a number in the question that no rule used ("if each door costs 450 EUR", "minus 5"): the answer
             # ignores part of the question, so it is not what was asked (W5's probes, 01:49)
@@ -742,6 +772,17 @@ class IfcSolver(BaseSolver):
             trace.append(f"{len(els)} elements of {'/'.join(classes)} in {where}")
             if not els and not idx.by_class(*classes):  # the model has none of this class at all
                 els = self._kind_fallback(idx, kind, storey if where != "whole model" else None, trace, assumptions)
+            if it.metric == "count" and els:
+                # parts of an assembly of the same kind (stair parts exported as IfcStair under a parent IfcStair):
+                # a person counts the assembly once (S0 D15 mechanism A)
+                parts = _parts_of(model)
+                same = set(classes)
+                drop = {e.guid for e in els if parts.get(e.guid) in same}
+                if drop:
+                    els = [e for e in els if e.guid not in drop]
+                    trace.append(f"{len(drop)} {kind} elements are parts of another {kind} (IfcRelAggregates): "
+                                 f"counted once per assembly, {len(els)} left")
+                    assumptions.append(f"{kind}s nested inside another {kind} are parts of it, not separate {kind}s")
             if kind == "slab" and re.search(r"\bfloor[- ]?slabs?\b|\bfloors? (slab|plate)", fold(ctx.get("question", ""))):
                 keep = [e for e in els if (e.predefined_type or "").upper() not in ("ROOF", "LANDING", "BASESLAB")
                         and not _FOUNDATION_NAME.search(fold(f"{e.name or ''} {e.type_name or ''} {e.object_type or ''}"))]
@@ -2009,6 +2050,11 @@ class IfcSolver(BaseSolver):
                 mark = "✓" if len(drawn) == ans.value else f"(differs by {len(drawn) - ans.value:+d})"
                 ans.trace.append(f"cross-check: the plan drawing shows {len(drawn)} "
                                  f"{'/'.join(sorted({i.cls for i in drawn}))} symbols; model count {ans.value} {mark}")
+                if len(drawn) != ans.value and ans.confidence > 0.75:
+                    # two derivations disagree (S0 D15 C): on train/dev/hard this happens on 2 of 407 correct counts
+                    ans.confidence = 0.75
+                    ans.missing.append(f"the plan drawing shows {len(drawn)} symbols where the model counts "
+                                       f"{ans.value}")
         ans.evidence = (ev2d + ans.evidence) if asked_plan else (ans.evidence + ev2d)
 
     @staticmethod
@@ -2019,10 +2065,15 @@ class IfcSolver(BaseSolver):
             q = _qto(e, QTO_KEYS[("floor", "gross")])
             if q is not None:
                 return q, "gross floor area = Qto GrossFloorArea"
-        if geo is not None and geo > 0:
-            if q_net is not None:
+        if q_net is not None and q_net > 0:
+            # an explicit quantity wins (S0 D15 mechanism B: a test model's gold follows Qto where it differs from the
+            # shape by 5-15%; on every train/dev room asked, Qto and geometry agree, so this changes nothing there)
+            if geo is not None and geo > 0:
+                ok = abs(q_net - geo) <= 0.02 * geo
                 trace.append(f"cross-check: Qto NetFloorArea {q_net:.2f} vs geometry {geo:.2f}"
-                             + (" ✓" if abs(q_net - geo) <= 0.02 * geo else f" ({(q_net - geo) / geo * 100:+.1f}%)"))
+                             + (" ✓" if ok else f" ✗ ({(q_net - geo) / geo * 100:+.1f}%)"))
+            return q_net, "net floor area = the space's explicit Qto NetFloorArea (geometry as cross-check)"
+        if geo is not None and geo > 0:
             return geo, "net floor area = footprint of the IfcSpace geometry"
         if q_net is not None:
             return q_net, "net floor area = Qto NetFloorArea (no geometry)"
