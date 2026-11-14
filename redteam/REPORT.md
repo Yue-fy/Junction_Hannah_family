@@ -43,6 +43,7 @@ caused by the perturbation, not by the drawing.
 | v10 scan follow-ups (8) | date / author / scale; floor-plan questions on an elevation | 4/4 facts · premises answered without a reason |
 | v11 number formats (10) | "1,200 euros", "1.200 €", "1'200 CHF", "450,50", "80,5 m²" | 6/10 · **2** ("1,200" → 1.2 in ifc) |
 
+Chart of the rounds (confidently wrong answers per run, by family): `demo/redteam-rounds.png`.
 Re-run everything: see "Re-run" at the end. History (v1 → v10, with each round's verification) follows.
 
 ## Results v1 (174 Qs; acc = eval scorer, which converts units; strict = the number is in the unit asked)

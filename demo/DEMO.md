@@ -86,6 +86,10 @@ By source on sealed test: Swiss vector plans 98 % areas / 100 % counts; IFC mode
 
 ## 2:35–2:55 · Where it breaks, and why (slide 4 — the failure analysis)
 > "We tried to break it ourselves."
+
+Slide image: `demo/redteam-rounds.png` (SVG next to it; regenerate with `python3 experiments/q/plot_rounds.py` and
+headless chromium, numbers from `redteam/REPORT.md`). Say: "every bar is a round; the families we had already asked
+went to zero after each fix, and each new family found the same root cause somewhere new."
 - **Scanned plans, windows and doors**: 19–35 % exact; both our model and a detector *undercount* dense plans
   (missed symbols grow with density, not with resolution — we tested 2× upscaling: no gain). We show a 90 % range
   ("7 windows, 6–12") instead of pretending.
