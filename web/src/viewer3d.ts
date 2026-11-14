@@ -558,8 +558,9 @@ export class Viewer3D {
     if (box.isEmpty()) return;
     this.lastFramed = obj;
     const c = box.getCenter(new THREE.Vector3());
-    // a single door or window is shown with ~3 m of its surroundings
-    box.expandByVector(new THREE.Vector3(3, 3, 3).sub(box.getSize(new THREE.Vector3()).multiplyScalar(0.5)).max(new THREE.Vector3()));
+    // a door or a few windows are shown with their surroundings: the framed box is at least 10 m wide
+    const MIN_HALF = 5;
+    box.expandByVector(new THREE.Vector3(MIN_HALF, MIN_HALF, MIN_HALF).sub(box.getSize(new THREE.Vector3()).multiplyScalar(0.5)).max(new THREE.Vector3()));
     const dir = new THREE.Vector3(0.6, 0.75, 0.9).normalize();
     // exact fit: the closest camera distance along `dir` that keeps the elements inside the view (+ margin), so the lit
     // elements fill the pane instead of a sphere around the box diagonal
@@ -573,7 +574,7 @@ export class Viewer3D {
     // site has empty box corners that would leave the lit part small; the expanded box's corners keep the minimum size
     const pts: THREE.Vector3[] = [];
     for (const x of [box.min.x, box.max.x]) for (const y of [box.min.y, box.max.y]) for (const z of [box.min.z, box.max.z]) pts.push(new THREE.Vector3(x, y, z));
-    const small = box.getSize(new THREE.Vector3()).length() <= Math.sqrt(3) * 6 + 0.01;
+    const small = box.getSize(new THREE.Vector3()).length() <= Math.sqrt(3) * 2 * MIN_HALF + 0.01;
     if (!small) {
       pts.length = 0;
       const meshes: THREE.Mesh[] = [];

@@ -814,14 +814,15 @@ async function showAnswer(a: Answer, roundTripMs: number) {
     xb.innerHTML = xcs.map((x) => `<b>${x.ok ? "✓" : "✗"}</b> ${esc(x.text)}`).join(" &nbsp;·&nbsp; ");
   }
   if (state.ifc && a.evidence.some((e) => e.ifc_guid)) {
-    if (state.mode === "2d" && !v2d.hasGuid(a.evidence.find((e) => e.ifc_guid)!.ifc_guid!)) setMode("split");
+    const drawnHere = v2d.hasGuid(a.evidence.find((e) => e.ifc_guid)!.ifc_guid!);
+    // customer view on a plan sheet: every answer picks its own view (the plan when its elements are drawn on it, plan +
+    // model when they are not, the 3D model for a whole building, below), whatever the previous answer showed
+    if (isCustomer() && state.file?.ext !== ".ifc") setMode(drawnHere ? "2d" : "split");
+    else if (state.mode === "2d" && !drawnHere) setMode("split");
     await ensure3D();
-    // customer view: an answer about several floors (the whole building, a floor comparison) is shown in the 3D model,
-    // where all of it is lit; one floor plan would show only part of it
-    if (isCustomer() && state.mode !== "3d" && v3d && v3d.file === state.ifc) {
-      const floors = new Set(a.evidence.filter((e) => e.ifc_guid).map((e) => v3d!.storeyOfGuid(e.ifc_guid!)).filter((x) => x !== null));
-      if (floors.size > 1) setMode("3d");
-    }
+    // customer view: many elements on several floors (the whole building) are shown in the 3D model, where all of them
+    // are lit; one floor plan would show only part of them (a few elements keep plan + model side by side)
+    if (isCustomer() && state.mode !== "3d" && v3d && v3d.file === state.ifc && floorGroups(a, v3d)) setMode("3d");
     applyEvidence3D(a);
   } else if (v3d && v3d.file === state.ifc) {
     applyEvidence3D(a); // clears the previous answer's highlight
