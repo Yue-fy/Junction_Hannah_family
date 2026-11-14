@@ -753,6 +753,38 @@ def main():
     ]:
         out.append(row(path, q, g, "count", "count", "multi15:sum", "same", note="explicit total: one number"))
 
+    # ===== v16 (08:40): four other Swiss DEV plans handed over alone, as PNG and as PDF ============================
+    # v13 tried this on the demo plan only. Raster (W3) now reads twin-less PNGs; are its gains general? Drawings:
+    # the first 4 Swiss dev drawings after a seeded shuffle (dev = everyone's development split, never trained on).
+    # Questions: the drawing's own English dataset questions (gold = dataset), at most 6 kinds per drawing.
+    dev_ids = [json.loads(line) for line in open(SHARED / "results/splits/dev.jsonl")]
+    sw_paths = sorted({r["path"] for r in dev_ids if r["source"] == "swiss_dwellings"})
+    random.Random(16).shuffle(sw_paths)
+    sw_paths = sw_paths[:4]
+    by_path = defaultdict(list)
+    with open(Path(os.environ.get("STOA_DATA", "")) / "questions.jsonl") as f:
+        for line in f:
+            d = json.loads(line)
+            if d["path"] in sw_paths and d["question"].startswith(("How many", "What is")):
+                by_path[d["path"]].append(d)
+    kinds = [("apartments", r"apartments \(residential"), ("doors", r"^How many doors"), ("windows", r"^How many windows"),
+             ("label", r"rooms labelled"), ("apt-area", r"net floor area of apartment"),
+             ("label-area", r"total net area in m² of all rooms labelled")]
+    lone16 = IMG_DIR / "lone16"
+    lone16.mkdir(parents=True, exist_ok=True)
+    for p in sw_paths:
+        picked = []
+        for _, rx in kinds:
+            hit = next((d for d in by_path[p] if re.search(rx, d["question"])), None)
+            if hit:
+                picked.append(hit)
+        for ext in ("png", "pdf"):
+            dst = lone16 / (Path(p).stem.replace("site", "upload-") + f".{ext}")
+            shutil.copyfile(abspath(p.replace(".pdf", f".{ext}")), dst)
+            for d in picked:
+                out.append(row(dst, d["question"], d["answer"], d.get("unit"), d.get("type") or "count",
+                               f"lone16:{ext}", "same", note=f"{Path(p).name}: dataset gold"))
+
     with open(OUT, "w", encoding="utf-8") as f:
         for r in out:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
