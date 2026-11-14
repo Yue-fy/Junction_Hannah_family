@@ -386,3 +386,23 @@ def test_compared_units_parsing():
     assert A.compared_units("Welche Wohnung ist die grösste?", tl) == (list("ABCD"), "max")
     assert A.compared_units("What is the net floor area of apartment B in m²?", tl) is None
     assert A.compared_units("Is apartment B the largest?", tl) is None  # one unit named: not handled as a comparison
+
+
+def test_doorarcs_quarter_arc_not_circle(tmp_path):
+    """One drawn quarter arc (r 0.9 m at 59 px/m) is a door; a full circle (north arrow, round fixture) is not."""
+    from PIL import Image, ImageDraw
+
+    from stoa.solvers.raster import doorarcs as DA
+
+    im = Image.new("L", (600, 400), 255)
+    d = ImageDraw.Draw(im)
+    r = 0.9 * 59
+    d.arc([150 - r, 200 - r, 150 + r, 200 + r], 270, 360, fill=0, width=2)  # hinge (150, 200), swing up-right
+    d.line([150, 200, 150 + r, 200], fill=0, width=2)  # the leaf
+    d.ellipse([420 - r, 200 - r, 420 + r, 200 + r], outline=0, width=2)  # a full circle
+    p = tmp_path / "plan.png"
+    im.save(p)
+    dets = DA.detect(str(p), 59.0)
+    assert len(dets) == 1
+    assert abs(dets[0]["c"][0] - 150) < 6 and abs(dets[0]["c"][1] - 200) < 6
+    assert abs(dets[0]["r_m"] - 0.9) < 0.06

@@ -325,24 +325,122 @@ KINDS_ML2 = {
 }
 
 
+# v12 (c225, 09:10): Swiss fixture synonyms in English (bases: EN/DE/FR dataset templates of the same drawing).
+def _any(*qs):
+    return r"^(?:" + "|".join(re.escape(q) for q in qs) + r")$"
+
+
+KINDS_SYN = {
+    "syn_wc": (_any("How many toilets (WC) are drawn on this floor plan?", "Wie viele WCs sind auf diesem Grundriss eingezeichnet?",
+                    "Combien de WC sont dessinés sur ce plan ?"), {
+        "wcs": ("How many WCs are there on this floor?", False),
+        "toilet_bowls": ("How many toilet bowls does this plan show?", False),
+        "loos": ("How many loos are on this floor?", False),
+        "water_closets": ("How many water closets are drawn?", False),
+        "toilet_seats": ("Count the toilet seats.", False),
+    }),
+    "syn_shower": (_any("How many showers are drawn on this floor plan?"), {
+        "trays": ("How many shower trays are on this floor?", False),
+        "have": ("How many showers does this floor have?", False),
+        "cubicles": ("Number of shower cubicles on the plan?", False),
+    }),
+    "syn_bathtub": (_any("How many bathtubs are drawn on this floor plan?", "Wie viele Badewannen sind auf diesem Grundriss eingezeichnet?",
+                         "Combien de baignoires sont dessinées sur ce plan ?"), {
+        "tubs": ("How many tubs are there?", False),
+        "bath_tubs": ("How many bath tubs are drawn on this plan?", False),
+    }),
+    "syn_washbasin": (_any("How many washbasins are drawn on this floor plan?", "Wie viele Lavabos sind auf diesem Grundriss eingezeichnet?",
+                           "Combien de lavabos sont dessinés sur ce plan ?"), {
+        "hand_basins": ("How many hand basins are on this floor?", False),
+        "lavabos": ("How many lavabos are on this plan?", False),
+        "wash_hand_basins": ("Count the wash-hand basins.", False),
+    }),
+    "syn_window": (_any("How many windows are drawn on this floor plan?", "Wie viele Fenster sind auf diesem Grundriss eingezeichnet?",
+                        "Combien de fenêtres sont dessinées sur ce plan ?"), {
+        "glazed": ("How many windows are there in the exterior walls of this floor?", False),
+        "count": ("Window count for this floor?", False),
+    }),
+}
+
+
+# v13 (c225, 09:12): quick-typing wordings (lower-case ids/labels, common misspellings, no punctuation).
+KINDS_TYPO = {
+    "typo_apt": (r"^What is the net floor area of apartment (?P<L>[A-Z]) in m², summing all its rooms except balconies", {
+        "lower_id": ("what is the net floor area of apartment {l} without balconies", False),
+        "appartment": ("What is the net floor area of appartment {L}, excluding balconies?", False),
+        "apartmnet": ("net floor area of apartmnet {L} excluding balconies?", False),
+        "flat_lower": ("how big is flat {l} without the balcony", False),
+        "caps": ("WHAT IS THE NET FLOOR AREA OF APARTMENT {L} EXCLUDING BALCONIES?", False),
+        "squ_meters": ("apartment {L} net area in sq m (no balconies)", False),
+    }),
+    "typo_room": (r"^What is the net floor area of room (?P<N>\d+\.\d+) \('(?P<S>[^']+)'\) in m²\?$", {
+        "lower_label": ("area of the {s} room {N}?", False),
+        "comma_no": ("what is the area of room {Nc}", False),
+        "roon": ("How big is roon {N}?", False),
+    }),
+    "typo_count_label": (r"^How many rooms labelled '(?P<S>[^']+)' are there on this floor\?$", {
+        "lower_label": ("how many {s} rooms are there", False),
+        "labeled_us": ("How many rooms labeled '{S}' are on this floor?", False),
+        "quoted_lower": ("how many rooms are labelled '{s}'", False),
+    }),
+    "typo_doors": (r"^How many doors \(interior doors and entrance doors together\) are drawn on this floor plan\?$", {
+        "dors": ("how many dors are on this floor", False),
+        "no_q": ("number of doors on this plan", False),
+    }),
+}
+
+
+# v14 (c225, 09:22): IFC storey references by ROLE ("the ground floor", "the basement") instead of the storey's name.
+# Only storeys whose names are unambiguous: 0 / 00 Begane grond / EG = ground; -1 / KG / Basement = basement.
+# ('first floor' is left out: British vs American usage.) {G} = the role phrase.
+_ROLE = {"0": "ground", "00 Begane grond": "ground", "EG": "ground", "-1": "basement", "KG": "basement",
+         "Basement": "basement"}
+_ROLE_PHRASES = {"ground": ("on the ground floor", "on the ground level", "at ground level"),
+                 "basement": ("in the basement", "on the basement level", "in the cellar")}
+_SC = r"(?P<S>0|00 Begane grond|EG|-1|KG|Basement)"
+KINDS_SCOPE = {
+    "scope_room": (r"^(?:What is the net floor area of the room|Wat is de netto vloeroppervlakte van de ruimte) "
+                   r"'(?P<R>[^']+)' (?:on|op) '" + _SC + r"', in m²\?$", {
+        "p0": ("What is the net floor area of the room '{R}' {G0}, in m²?", False),
+        "p1": ("How big is the room '{R}' {G1}?", False),
+        "p2": ("Area of '{R}' {G2}?", False),
+    }),
+    "scope_count": (r"^How many (?P<K>walls|doors|windows|rooms \(spaces\)) are shown on the floor plan of '" + _SC + r"'\?$", {
+        "p0": ("How many {N} are there {G0}?", False),
+        "p1": ("How many {N} are {G1}?", False),
+        "p2": ("Count the {N} {G2}.", False),
+    }),
+    "scope_total": (r"^What is the total net (?P<Q>floor area of all rooms \(spaces\)|side area of all walls|volume of all slabs|"
+                    r"volume of all walls) on '" + _SC + r"', in (?P<U>m²|m³)\?$", {
+        "p0": ("What is the total net {q} {G0}, in {U}?", False),
+        "p1": ("Total net {q} {G1}?", False),
+    }),
+}
+
+
 def main():
     ml = "--ml" in sys.argv
     cc = "--cc" in sys.argv
     ifc8 = "--ifc" in sys.argv
     ml2 = "--ml2" in sys.argv
-    argv = [a for a in sys.argv[1:] if a not in ("--ml", "--cc", "--ifc", "--ml2")]
+    syn = "--syn" in sys.argv
+    typo = "--typo" in sys.argv
+    scope = "--scope" in sys.argv
+    argv = [a for a in sys.argv[1:] if a not in ("--ml", "--cc", "--ifc", "--ml2", "--syn", "--typo", "--scope")]
     n = int(argv[0]) if argv else 30
     dev_all = load_split("dev")
     out = os.path.join(os.environ["JUNCTION_SHARED"], "artifacts", "F",
                        "apt_wording_ml.jsonl" if ml else "apt_wording_cc.jsonl" if cc else
                        "apt_wording_ifc.jsonl" if ifc8 else "apt_wording_ml2.jsonl" if ml2 else
-                       "apt_wording.jsonl")
+                       "apt_wording_syn.jsonl" if syn else
+                       "apt_wording_typo.jsonl" if typo else
+                       "apt_wording_scope.jsonl" if scope else "apt_wording.jsonl")
     total = 0
     with open(out, "w", encoding="utf-8") as f:
-        for kind, (rx, wordings) in (KINDS_ML if ml else KINDS_CC if cc else KINDS_IFC if ifc8 else KINDS_ML2 if ml2 else KINDS).items():
+        for kind, (rx, wordings) in (KINDS_ML if ml else KINDS_CC if cc else KINDS_IFC if ifc8 else KINDS_ML2 if ml2 else KINDS_SYN if syn else KINDS_TYPO if typo else KINDS_SCOPE if scope else KINDS).items():
             bases, seen = [], collections.Counter()
-            per_path = 4 if kind.startswith("ifc8") else 1
-            source = ("ifc_models" if kind.startswith("ifc") else "cubicasa5k" if kind.startswith("cc")
+            per_path = 4 if kind.startswith("ifc8") else 8 if kind.startswith("scope") else 1
+            source = ("ifc_models" if kind.startswith(("ifc", "scope")) else "cubicasa5k" if kind.startswith("cc")
                       else "swiss_dwellings")
             for q in dev_all:
                 m = re.match(rx, q.question) if q.source == source else None
@@ -352,6 +450,16 @@ def main():
                     if "K" in g:
                         g["N"] = g["K"].replace(" (spaces)", "")
                         g.update({f"N_{lang}": nouns[g["N"]] for lang, nouns in _NOUNS.items()})
+                    if g.get("S") in _ROLE:
+                        g.update({f"G{i}": ph for i, ph in enumerate(_ROLE_PHRASES[_ROLE[g["S"]]])})
+                    if "Q" in g:
+                        g["q"] = g["Q"].replace(" (spaces)", "")
+                    if "L" in g:
+                        g["l"] = g["L"].lower()
+                    if "S" in g:
+                        g["s"] = g["S"].lower()
+                    if "N" in g and "." in g["N"]:
+                        g["Nc"] = g["N"].replace(".", ",")
                     bases.append((q, g))
             random.Random(7).shuffle(bases)
             for q, g in bases[:n]:

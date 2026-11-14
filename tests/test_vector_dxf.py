@@ -367,3 +367,24 @@ def test_pdf_text_only_for_pdfs_outside_the_dataset_sources():
     for p in ("data/swiss_dwellings/site1_bldg2_floor3.pdf", "data/opening_design/CTR/A700.pdf",
               "data/ifc_models/x_plan-01.pdf", "/somewhere/plan.png"):
         assert not s.can_handle(p, "How many doors?"), p
+
+
+def test_sheettext_feet_inch_arithmetic():
+    """Aggregates over printed feet-inch lengths are computed in feet and printed back (not '7' - 10 1/4"' -> 7)."""
+    from stoa.solvers.vector.sheettext import _fmt_ftin, _ftin
+    assert abs(_ftin("7' - 10 1/4\"") - (7 + 10.25 / 12)) < 1e-9 and _ftin("-12' - 8\"") == -(12 + 8 / 12)
+    assert _ftin("4000 PSI") is None and _ftin("3\"") is None
+    assert _fmt_ftin(_ftin("22' - 5\"") - _ftin("11' - 3 1/8\"")) == "11' - 1 7/8\""
+
+
+@needs_data
+def test_dxf_whole_building_on_a_one_floor_plan():
+    """Every swiss building in the data has one floor drawn: 'the whole building' is answered for this floor at <= 0.5,
+    saying so (Q: 36 doors @0.99)."""
+    from stoa.solvers import get_solver
+    s = get_solver("dxf", llm=0)
+    p = "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf"
+    a = s.solve(p, "Wie viele Türen gibt es im ganzen Gebäude?")
+    assert a.value == 36 and a.confidence <= 0.5 and any("floor 9385 of building 2082" in x for x in a.assumptions)
+    b = s.solve(p, "How many doors are there on this floor plan?")
+    assert b.value == 36 and b.confidence > 0.9
