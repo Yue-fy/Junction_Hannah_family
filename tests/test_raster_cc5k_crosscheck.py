@@ -119,3 +119,10 @@ def test_raster_cc5k_answers_carry_the_range():
     assert a.value == 11 and line
     lo, hi = map(int, line[0].split("[")[1].rstrip("]").split(","))
     assert lo <= 11 <= hi
+
+
+def test_threshold_confidence_is_lower_when_the_detector_straddles_the_threshold():
+    same = cx.threshold_confidence("wc", 2, 3, 2)
+    straddle = cx.threshold_confidence("wc", 2, 1, 2)
+    assert same is not None and straddle is not None and same > straddle
+    assert cx.threshold_confidence("shower_bathtub", 1, 1, 2) is None

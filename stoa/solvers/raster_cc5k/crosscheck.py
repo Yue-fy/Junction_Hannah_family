@@ -210,6 +210,18 @@ def detector_interval(target: str, count: int, level: int = 90) -> tuple[int, in
     return max(0, count - int(m[0])), count + int(m[1])
 
 
+def threshold_confidence(target: str, value: int, detector: int, n: int) -> float | None:
+    """Confidence for a yes/no threshold answer ("at least n?" / "more than n-1?") taken from another solver's count
+    `value`, given the CC5K `detector` count: P(the yes/no is right | detector on the same side of n or not), pooled
+    over n = 1..10 per group, fitted on train_gate (experiments/r1/count_interval/threshold_side.py). Dev check:
+    same side 95–98% right (conf 0.94–0.97); straddling 59% (openings, conf 0.53), 69% (fixtures, 0.68)."""
+    t = _table().get("threshold_side") or {}
+    g = (t.get("groups") or {}).get(target)
+    if g is None:
+        return None
+    return (t.get("table") or {}).get(f"{g}|{'same' if (value >= n) == (detector >= n) else 'straddle'}")
+
+
 def check(path: str, key: str | None, ans: Answer, source: str | None = None, live: bool | None = None,
           arbitrate: bool = True, other: int | None = None, other_name: str = "raster") -> Answer:
     """See the module docstring. `key`: intent key ("count:window:drawing") or a bare target ("window").
