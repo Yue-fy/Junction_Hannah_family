@@ -28,7 +28,7 @@ Code: night c1d6149 (S0 cycle 37 merges incl. W4 0319d93 apartment normalisation
 | apt_wording_ml2 (Swiss rooms/labels/fixtures DE/FR/IT) | 934 | **100** | = control | 0 | none |
 | apt_wording_ifc (IFC rooms/counts in 7 languages) | 348 | **100** | = control | 0 | none (quoted names) |
 | apt_wording_cc (CubiCasa casual FI/EN) | 1080 | 73.2 | 71.8 vs 75.8 | 18 | composer: "sinks … kitchen and bathroom together" → sink+kitchen+bathroom (0/30); FI '…keittiössä ja kylpyhuoneessa yhteensä' → kitchen+bathroom @0.92; 'Laske ikkunat.' → text |
-| comp_ml (Swiss hard/hard2 compositions DE/FR/IT) | 780 | 93.3* | 549/585 = control except two | 36 | **FR 'de plus que' summed (compose.py 'plus' = +) 23/23 @0.976; IT 'Di quanti m² … più grande del …' → max (room name) 13/13 @0.99** |
+| comp_ml (Swiss hard/hard2 compositions DE/FR/IT) | 780 | 93.3* | 537/585 vs control 573/585; all 36 losses in two buckets | 36 | **FR 'de plus que' summed (compose.py 'plus' = +) 23/23 @0.976; IT 'Di quanti m² … più grande del …' → max (room name) 13/13 @0.99** |
 | comp_ml_cc (CubiCasa hard/hard2 count compositions FI/SV) | 399 | 45.4 | FI = control (7/7 recipes); SV 42.1 vs 51.9 | 2 | **SV 'våtrum (badrum, separata toaletter och bastur)' → 'sauna' via LoRA @0.75 (0/25); 'sovrum och badrum … sammanlagt' → 'bedroom'** (no sv sum cues; front end skips because a target was found) |
 
 \* first run had a probe bug (sanitary item list always 'bathtubs'; English bases vary bathtubs/showers): 15 false
