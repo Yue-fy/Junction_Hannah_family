@@ -473,6 +473,16 @@ many floors" → 7; v8 scope premises ×5.
   separator; one or two digits after a comma is a decimal. Same family as bug 9: the arithmetic is verified, the
   operand is not.
 
+## Cost under attack (05:12; bug 8 re-measured on run `20261114-050528-pipeline-questions-98f0`, 440 Qs)
+Overall $0.073 per 1,000 questions, but the **15 most expensive questions (3 % of rows) are 53 % of the cost**, and
+they are the ones we cannot answer: "Who is the architect of this building?" 13 LLM calls / 76.7k tokens in (→
+'Archilyse AG', the dataset publisher, at 0.20); "How many swimming pools are drawn on this floor plan?" 13 calls /
+42.5k tokens to say 0; a schedule false premise 7 calls / 47k tokens / 22.9 s. Per family ($ per 1,000): scans 0.85,
+unanswerable 0.42, absent objects 0.39, false premises 0.19 — against 0.07 for reworded known questions and 0.016 for
+storey questions. Someone probing "do you know what you don't know?" makes us up to 6× more expensive. Fix (W4): a
+per-question budget — stop the cascade after ~3 LLM calls / 20k tokens when no step lifted confidence above 0.5, and
+return what is missing.
+
 ## Pre-merge check (05:07): night 753eccb + W1 1c43c57 + W2 2254acb + W4 f889ace (scratch snapshot)
 All 440 rows, run `20261114-050528-pipeline-questions-98f0` vs night's `93c5`: **0 answers lost**; core 283 rows 96.5 %
 (=), 189/189 right at ≥ 0.8, 0/24 false premises; all 440: 91.7 % scored, 237/247 right at ≥ 0.8, $0.073 per 1,000.
