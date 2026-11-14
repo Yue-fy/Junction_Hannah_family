@@ -448,6 +448,17 @@ transfer to other raster styles (swiss PNG 3%, Revit 0–12%), so this is for cu
 Leak note (D8): the CC5K maps on our TRAIN plans are from a model that saw most of them in pretraining; the truth is
 printed text, not CC5K labels. Error on the few plans from CC5K's own val/test lists: CC5K-test plans 11.0% (n 13), val 18.3% (n 6), train 17.0% (n 133): no sign of inflation.
 
+### 8g. Scale of a historical scan, two ways (exploratory, small n)
+HABS scans were resized to ≤ 3000 px, so the DPI is lost and a printed "1/4" = 1'-0"" alone gives no px/ft.
+`experiments/r1/scan_scale/scan_scale.py` (CPU, W3's cached text layer) gets px/ft twice: (A) the scale note ×
+the standard sheet size found from the aspect ratio (24 × 36 in → 1.5, 19 × 24 in → 1.263; px per paper inch = long
+side / 36 or 24), and (B) a graphic scale bar (tick labels in one row next to FEET/METERS: least squares, or one
+merged OCR item "0 10 20 30 60 90 ft." spanning the bar). On 16 bars on 11 HABS sheets the two agree within 10% half
+the time (median gap 8.7%; 5.6% on the 9 sheets with one scale note); bars run a few % below the note estimate
+(scans include some margin). Failures: a junk label row, a ×2 mismatch, metric bars on multi-scale sheets. Use it
+as "≈ 42 ft (scale bar and 1/4" note agree within 5%)" with that agreement as the confidence, never as exact.
+Coverage: 50/148 scans have a known sheet aspect, 77 a scale note, 19 a usable bar.
+
 ### 8f. What the cubicasa second reader is worth (measured; cost cascade, 8b)
 The pipeline runs raster (VLM label reader) as a second opinion on every LoRA count and moves the confidence by
 agreement. That made cubicasa ~20× more expensive (S0 03:56: $0.02 → $0.42 per 1k). The values never change, so
