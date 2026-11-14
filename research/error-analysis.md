@@ -50,6 +50,17 @@ fixtures in DE/FR/IT, IFC in 7 languages, CubiCasa casual FI/EN: 100% / 100% / =
 4. *Intent says area, the solver says count*: 'wie viele Quadratmeter …' (intent right, dxf counts balconies). A kind
    mismatch between intent and answer should trigger the canonical re-ask instead of returning the count.
 
+**Round-2 merges (night 62754aa, 09:00), paired per wording vs c1d6149:** English 89.3 → 91.4% (confident-wrong
+43 → 13: 'Sum the floor areas …' 0 → 30/30, 'including the apartment entrance doors' still 0/28 but capped, 28 → 0
+confident); Swedish 'våtrum' 0 → 16/25; DE/FR/IT apartments 66.8 → 67.0 (77 Wohneinheit/logement confident-wrong left),
+compositions 93.3 = (36 left), CubiCasa casual 73.2 → 72.9 (sinks composer 10 left). Runs 20261114-085553-pipeline-
+{apt_wording-a614, apt_wording_ml-4942, comp_ml-1e99, comp_ml_cc-b8c5, apt_wording_cc-8fe9} = baselines for the next fixes.
+
+**Held-out check of W4's 'both readings' (2b954b5)** on hardL (nb/hr/el/lt; F/S0 only, aggregates): 85.3 → 84.9%
+(paired −0.5 [−3.2, +2.3], 4 vs 3), ECE 0.179 → 0.085, conf ≥ 0.8 on 23% → 60% of answers at 99.3% right, AUROC
+0.925 → 0.932, $0.12 → $0.15 per 1k. hardL_open 87.0 → 87.7, ECE 0.134 → 0.084, 36% → 61% @ 99.4%. My offline
+simulation (08:20) predicted ECE 0.132 and 54%: the wired rule does better. Runs -085405-…-hardL-5270 / -085553-…-hardL-4adb.
+
 Owners told (inbox 08:40–08:52): W4 (1, 2-plus/areas, 3, 4, CubiCasa 'Laske'), W2 (2-incl/areas/di quanti, the
 Quadratmeter parse, exclusions read as targets, alloggio table-QA). Re-run commands for each are in board/F.md NEXT.
 
