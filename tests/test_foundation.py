@@ -118,3 +118,22 @@ def test_judge_numeric_precheck():
     assert n("Created with Revit 2020.", "Revit 2019")[0] is False  # integers without unit: exact
     assert n("Total: 8 doors", "There are 8 doors")[0] is True
     assert n("10 walls, 472.018 sq ft", "472")[0] is None  # several numbers: LLM decides
+
+
+def test_adhoc_split_file_without_answers(tmp_path):
+    """Hand-written question files (e.g. Stoa's example questions) load even without answer/qid, and are not scored."""
+    import json
+    from stoa.data import make_qid
+    from stoa.eval.scoring import score
+    from stoa.eval.splits import load_split
+    f = tmp_path / "adhoc.jsonl"
+    rows = [{"qid": "a1", "path": "data/cubicasa5k/x.png", "question": "How many doors?", "answer": 3, "type": "count"},
+            {"path": "data/cubicasa5k/x.png", "question": "How many windows?", "type": "count"},
+            {"path": "data/cubicasa5k/x.png", "question": "What is this drawing?"}]
+    f.write_text("\n".join(json.dumps(r) for r in rows) + "\n")
+    qs = load_split(str(f))
+    assert [q.qid for q in qs] == ["a1", make_qid("data/cubicasa5k/x.png", "How many windows?"),
+                                   make_qid("data/cubicasa5k/x.png", "What is this drawing?")]
+    assert qs[1].answer is None and qs[2].type == "other"
+    assert score("count", None, None, 4, "count") is None
+    assert score("count", 3, None, 3, "count") is True

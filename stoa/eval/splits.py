@@ -27,7 +27,7 @@ import os
 import random
 from pathlib import Path
 
-from stoa.data import Question, concept_map, drawing_group, load_questions, template_of
+from stoa.data import Question, concept_map, drawing_group, load_questions, make_qid, template_of
 
 SEED = 20261113
 SPLITS = ("smoke", "dev", "test", "train")
@@ -260,8 +260,9 @@ def write_splits(seed: int = SEED, force: bool = False) -> dict[str, int]:
 
 
 def load_split(name: str) -> list[Question]:
-    """Questions (with answers) of a split, in file order. Rows that carry their own question/answer
-    (generated splits such as `hard`) are used as-is; the rest are joined with questions.jsonl via qid."""
+    """Questions of a split, in file order. `name` is a split name or a path to a .jsonl file. Rows that carry their
+    own `question` + `path` (generated splits such as `hard`, ad-hoc files) are used as-is (`answer`, `qid`, `unit`,
+    `type` optional); rows with only a `qid` are joined with questions.jsonl."""
     if name == "all":
         return list(load_questions())
     f = Path(name) if (name.endswith(".jsonl") or "/" in name) else splits_dir() / f"{name}.jsonl"
@@ -274,8 +275,12 @@ def load_split(name: str) -> list[Question]:
             if not line.strip():
                 continue
             r = json.loads(line)
-            if "question" in r and "answer" in r:
-                q = Question(r["qid"], r["path"], r["question"], r["answer"], r.get("unit"), r.get("type", "other"))
+            # Rows that carry their own question are used as-is: generated splits (hard, hard2, ...) and ad-hoc files
+            # written by hand, e.g. Stoa's example questions. `answer` and `qid` are optional there: no answer =
+            # unscored (predictions and evidence only), qid defaults to a hash of path + question.
+            if "question" in r and "path" in r:
+                q = Question(r.get("qid") or make_qid(r["path"], r["question"]), r["path"], r["question"],
+                             r.get("answer"), r.get("unit"), r.get("type", "other"))
                 if r.get("meta"):
                     object.__setattr__(q, "meta", r["meta"])  # frozen dataclass; meta is eval-only
                 out.append(q)
