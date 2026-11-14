@@ -390,6 +390,34 @@ KINDS_TYPO = {
 }
 
 
+# v14 (c225, 09:22): IFC storey references by ROLE ("the ground floor", "the basement") instead of the storey's name.
+# Only storeys whose names are unambiguous: 0 / 00 Begane grond / EG = ground; -1 / KG / Basement = basement.
+# ('first floor' is left out: British vs American usage.) {G} = the role phrase.
+_ROLE = {"0": "ground", "00 Begane grond": "ground", "EG": "ground", "-1": "basement", "KG": "basement",
+         "Basement": "basement"}
+_ROLE_PHRASES = {"ground": ("on the ground floor", "on the ground level", "at ground level"),
+                 "basement": ("in the basement", "on the basement level", "in the cellar")}
+_SC = r"(?P<S>0|00 Begane grond|EG|-1|KG|Basement)"
+KINDS_SCOPE = {
+    "scope_room": (r"^(?:What is the net floor area of the room|Wat is de netto vloeroppervlakte van de ruimte) "
+                   r"'(?P<R>[^']+)' (?:on|op) '" + _SC + r"', in m²\?$", {
+        "p0": ("What is the net floor area of the room '{R}' {G0}, in m²?", False),
+        "p1": ("How big is the room '{R}' {G1}?", False),
+        "p2": ("Area of '{R}' {G2}?", False),
+    }),
+    "scope_count": (r"^How many (?P<K>walls|doors|windows|rooms \(spaces\)) are shown on the floor plan of '" + _SC + r"'\?$", {
+        "p0": ("How many {N} are there {G0}?", False),
+        "p1": ("How many {N} are {G1}?", False),
+        "p2": ("Count the {N} {G2}.", False),
+    }),
+    "scope_total": (r"^What is the total net (?P<Q>floor area of all rooms \(spaces\)|side area of all walls|volume of all slabs|"
+                    r"volume of all walls) on '" + _SC + r"', in (?P<U>m²|m³)\?$", {
+        "p0": ("What is the total net {q} {G0}, in {U}?", False),
+        "p1": ("Total net {q} {G1}?", False),
+    }),
+}
+
+
 def main():
     ml = "--ml" in sys.argv
     cc = "--cc" in sys.argv
@@ -397,20 +425,22 @@ def main():
     ml2 = "--ml2" in sys.argv
     syn = "--syn" in sys.argv
     typo = "--typo" in sys.argv
-    argv = [a for a in sys.argv[1:] if a not in ("--ml", "--cc", "--ifc", "--ml2", "--syn", "--typo")]
+    scope = "--scope" in sys.argv
+    argv = [a for a in sys.argv[1:] if a not in ("--ml", "--cc", "--ifc", "--ml2", "--syn", "--typo", "--scope")]
     n = int(argv[0]) if argv else 30
     dev_all = load_split("dev")
     out = os.path.join(os.environ["JUNCTION_SHARED"], "artifacts", "F",
                        "apt_wording_ml.jsonl" if ml else "apt_wording_cc.jsonl" if cc else
                        "apt_wording_ifc.jsonl" if ifc8 else "apt_wording_ml2.jsonl" if ml2 else
                        "apt_wording_syn.jsonl" if syn else
-                       "apt_wording_typo.jsonl" if typo else "apt_wording.jsonl")
+                       "apt_wording_typo.jsonl" if typo else
+                       "apt_wording_scope.jsonl" if scope else "apt_wording.jsonl")
     total = 0
     with open(out, "w", encoding="utf-8") as f:
-        for kind, (rx, wordings) in (KINDS_ML if ml else KINDS_CC if cc else KINDS_IFC if ifc8 else KINDS_ML2 if ml2 else KINDS_SYN if syn else KINDS_TYPO if typo else KINDS).items():
+        for kind, (rx, wordings) in (KINDS_ML if ml else KINDS_CC if cc else KINDS_IFC if ifc8 else KINDS_ML2 if ml2 else KINDS_SYN if syn else KINDS_TYPO if typo else KINDS_SCOPE if scope else KINDS).items():
             bases, seen = [], collections.Counter()
-            per_path = 4 if kind.startswith("ifc8") else 1
-            source = ("ifc_models" if kind.startswith("ifc") else "cubicasa5k" if kind.startswith("cc")
+            per_path = 4 if kind.startswith("ifc8") else 8 if kind.startswith("scope") else 1
+            source = ("ifc_models" if kind.startswith(("ifc", "scope")) else "cubicasa5k" if kind.startswith("cc")
                       else "swiss_dwellings")
             for q in dev_all:
                 m = re.match(rx, q.question) if q.source == source else None
@@ -420,6 +450,10 @@ def main():
                     if "K" in g:
                         g["N"] = g["K"].replace(" (spaces)", "")
                         g.update({f"N_{lang}": nouns[g["N"]] for lang, nouns in _NOUNS.items()})
+                    if g.get("S") in _ROLE:
+                        g.update({f"G{i}": ph for i, ph in enumerate(_ROLE_PHRASES[_ROLE[g["S"]]])})
+                    if "Q" in g:
+                        g["q"] = g["Q"].replace(" (spaces)", "")
                     if "L" in g:
                         g["l"] = g["L"].lower()
                     if "S" in g:
