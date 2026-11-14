@@ -80,7 +80,7 @@ already does this), accept "<Letter> apartment|flat|unit", and add 'flat' (curre
   'număruând', 'sediiile'), and one ro composition dropped "average" (gold 13.81 = average, the question as written
   asks the sum 27.63 → the pipeline is right). The ro numbers are slightly pessimistic.
 
-**5. English wording probe on the commonest Swiss kinds (open; 08:30): apartment references are the weak spot.**
+**5. English wording probe on the commonest Swiss kinds (open; 08:22): apartment references are the weak spot.**
 `experiments/F/apt_wording_probe.py` → `$JUNCTION_SHARED/artifacts/F/apt_wording.jsonl`: 30 dev Swiss bases per kind,
 each re-asked in natural English wordings with the same gold (810 rows). Run 20261114-082232-pipeline-apt_wording-6bcb
 (night bb94fe4): 76.9% overall, conf ≥ 0.8 on 66% of answers but only 83.8% of those right.
