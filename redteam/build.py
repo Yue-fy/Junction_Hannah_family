@@ -1189,6 +1189,150 @@ def main():
                  ("How many rooms on 'Level 1' are larger than 20 m²?", 2)]:
         out.append(row(DUP, q, g, "count", "count", "list24:control", "same", note="count of the list"))
 
+    # ===== v25 (10:30): rankings + top-k lists from the IFC (W1 882630f / 23ada76 are new code: 'Which floor has the
+    # most rooms?' = a count ranking, 'the three largest rooms' = a rule list). Written before any run. Gold: storey
+    # counts = IfcRelContainedInSpatialStructure / IfcRelAggregates (ifcopenshell; scratch ifc_gold.py, matches the
+    # dataset's totals: barlad windows 38+74+71+70+62 = 315), room areas = the dataset's own net floor areas
+    # (esplanades: 50/60/60/60/55 rooms). Two models nobody probed tonight: barlad (Romanian, NO IfcDoor at all) and
+    # frigento (Italian storey names, no IfcSpace). Esplanades counts: doors 46/42/42/42/39, windows 55/60/60/60/60,
+    # walls 144/156/160/160/153, rooms 50/60/60/60/55 (1.–5.korrus); rooms > 30 m² 5/3/3/3/4, > 25 m² 16/17/17/17/18;
+    # storey room-area totals 870.35 / 859.39 / 857.24 / 857.24 / 859.78. Duplex: doors L1 6 / L2 8, windows 4 / 18,
+    # rooms 10 / 10. Barlad windows Ground 38 / L1 74 / L2 71 / L3 70 / L4 62, columns 109 on each of the 5 levels.
+    # Frigento doors 0_Piano terra 7 / Piano 1 17 / Solaio interrato 3; windows 15 / 14 / 0.
+    EIFC = "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc"
+    BARG = "data/ifc_models/bimspeed-barlad_ro-arc-m3-e-pth-0000_plan-02-ground-level.pdf"
+    BARIFC = "data/ifc_models/bimspeed-barlad_ro-arc-m3-e-pth-0000.ifc"
+    FRI1 = "data/ifc_models/bimspeed-frigento_modello-palazzo-testa-cipriano_plan-03-piano-1.pdf"
+    FRIIFC = "data/ifc_models/bimspeed-frigento_modello-palazzo-testa-cipriano.ifc"
+    K = lambda n: rf"\b{n}\.\s?korrus"  # noqa: E731
+    for path, q, items, not_items, kind, note in [
+        # count rankings (a tie must name every tied storey)
+        (E, "Which floor has the most rooms?", [K(2), K(3), K(4)], [], "rank25:tie", "60 = 60 = 60; asked on 1.korrus"),
+        (E, "Of the floors that have rooms, which one has the fewest?", [K(1)], [K(2), K(3), K(4)], "rank25:count",
+         "50"),
+        (E, "On which floor are the most doors?", [K(1)], [K(2), K(3), K(4), K(5)], "rank25:count",
+         "46 vs 42/42/42/39 (v15 asks 'Which floor has the most doors?')"),
+        (EIFC, "Which storey has the most windows?", [K(2), K(3), K(4), K(5)], [], "rank25:tie",
+         "60 ×4; 1.korrus 55"),
+        (EIFC, "Which level contains the largest number of walls?", [K(3), K(4)], [K(1), K(2)], "rank25:tie",
+         "160 = 160"),
+        (E, "Welches Geschoss hat die meisten Türen?", [K(1)], [K(2), K(3)], "rank25:de", "46"),
+        (E, "Millisel korrusel on kõige rohkem uksi?", [K(1)], [K(2), K(3)], "rank25:et", "46"),
+        (E, "Missä kerroksessa on eniten ovia?", [K(1)], [K(2), K(3)], "rank25:fi", "46"),
+        (E, "Quel étage compte le plus de portes ?", [K(1)], [K(2), K(3)], "rank25:fr", "46"),
+        # count rankings with an area filter / area rankings that share the words
+        (E, "Which floor has the most rooms larger than 30 m²?", [K(1)], [K(5)], "rank25:filtered",
+         "5 vs 3/3/3/4 (the count-ranking rule skips any question with an area word)"),
+        (E, "Which floor has the most rooms over 25 m²?", [K(5)], [K(1)], "rank25:filtered", "18 vs 16/17/17/17"),
+        (EIFC, "Which floor has the largest total room area?", [K(1)], [K(2), K(5)], "rank25:area-sum",
+         "870.35 vs 859.78 / 859.39"),
+        (EIFC, "Which floor has the biggest room?", [K(1)], [K(2)], "rank25:area-max",
+         "FUAJEE-TREPIKODA (101) 90.64"),
+        (EIFC, "Which floor has no MAGAMISTUBA?", [K(1)], [K(2), K(3)], "rank25:negated",
+         "MAGAMISTUBA on 2.–5.korrus only"),
+        # top-k lists
+        (EIFC, "What are the 3 biggest spaces on '1.korrus'?", [r"\b101\b|FUAJEE", r"\b105\b", r"\b119\b"],
+         [r"\b114\b", r"\b121\b"], "topk25:en", "90.64 / 78.4 / 63.84; next 114 59.37 (v19 asks the 'three largest rooms')"),
+        (E, "Name the 3 smallest rooms on this floor.", [r"6-2", r"\b120\b|VEEM", r"\b118\b|EL\.?\s?KILP"],
+         [r"\b109\b", r"\b117\b"], "topk25:this-floor", "3.01 / 3.49 / 3.58; next WC (109) 4.2"),
+        (EIFC, "List the top 5 rooms by area on '5.korrus'.", [r"\b502\b", r"\b506\b", r"\b503\b", r"\b501\b",
+                                                                 r"74-1"], [r"75-1", r"67-1"], "topk25:en",
+         "78.4 / 63.84 / 58.88 / 45.5 / 28.3; next 75-1 25.59"),
+        (E, "Welche drei Räume im '1.korrus' sind am größten?", [r"\b101\b|FUAJEE", r"\b105\b", r"\b119\b"],
+         [r"\b114\b"], "topk25:de", "same as the English row"),
+        (E, "Mitkä ovat kerroksen '1.korrus' kolme suurinta huonetta?", [r"\b101\b|FUAJEE", r"\b105\b", r"\b119\b"],
+         [r"\b114\b"], "topk25:fi", "same"),
+        (E, "Which three living rooms on '1.korrus' are the largest?", [r"25[.,]25|ELUTUBA"], [r"6-1", r"\b101\b",
+                                                                                                 r"\b105\b"],
+         "topk25:typed-tie", "9 ELUTUBA+KÖÖK rooms tie at 25.25 (6-1 is 22.05): any three of them, never a corridor"),
+        # other models
+        (DUP, "Which level has the most windows?", [r"Level 2"], [r"Level 1(?!\d)"], "rank25:duplex", "18 vs 4"),
+        (DUP, "Which level has the most doors?", [r"Level 2"], [r"Level 1(?!\d)"], "rank25:duplex", "8 vs 6"),
+        (DUP, "Which level has the most rooms?", [r"Level 1(?!\d)", r"Level 2"], [], "rank25:tie", "10 = 10"),
+        (BARG, "Which floor has the most windows?", [r"Level 1(?!\d)"], [r"Ground", r"Level 2"], "rank25:barlad",
+         "74 vs 38/71/70/62; asked on the Ground Level sheet"),
+        (BARIFC, "Of the levels that have windows, which has the fewest?", [r"Ground"], [r"Level 4"], "rank25:barlad",
+         "38 vs 62"),
+        (BARIFC, "Which level has the most columns?", [r"Ground", r"Level 1(?!\d)", r"Level 2", r"Level 3",
+                                                      r"Level 4"], [], "rank25:tie", "109 on each of the 5 levels"),
+        (FRI1, "Which floor has the most windows?", [r"Piano terra|piano 0|ground"], [r"(?<!0_)Piano 1\b"],
+         "rank25:frigento", "15 vs 14; asked on the Piano 1 sheet"),
+        (FRIIFC, "Quale piano ha il maggior numero di porte?", [r"Piano 1\b"], [r"Piano terra|interrato"],
+         "rank25:frigento-it", "17 vs 7 / 3"),
+    ]:
+        r_ = row(path, q, "; ".join(items), None, "text", kind, "same", note=note)
+        r_["meta"]["items"] = items
+        r_["meta"]["not_items"] = not_items
+        out.append(r_)
+    # barlad models no IfcDoor at all: the right answer says so (a storey name is a confident invention)
+    r_ = row(BARG, "Which floor of this building has the most doors?", "none: the model has no doors", None, "text",
+             "rank25:no-doors", "same", note="IfcDoor 0 in the model")
+    r_["meta"]["accept_re"] = (r"\bno doors?\b|\b0 doors?\b|\bnone\b|\bzero\b|no IfcDoor|(do(es)?n.t|not) (contain|have|"
+                               r"model|include)\w* (any )?doors?|no door")
+    out.append(r_)
+    for path, q, g, unit, typ, kind, note in [
+        (EIFC, "What is the total area of the three largest rooms on '1.korrus'?", 232.88, "m2", "area",
+         "topk25:sum", "90.64 + 78.4 + 63.84"),
+        (EIFC, "How large is the third largest room on '1.korrus'?", 63.84, "m2", "area", "topk25:control",
+         "KORIDOR (119)"),
+        (EIFC, "How many rooms does the floor with the most doors have?", 50, "count", "count", "rank25:compose",
+         "1.korrus (46 doors) has 50 rooms"),
+        (EIFC, "How many windows does the floor with the most doors have?", 55, "count", "count", "rank25:compose",
+         "1.korrus"),
+        (DUP, "How many windows are on the level with the most doors?", 18, "count", "count", "rank25:compose",
+         "Level 2"),
+    ]:
+        out.append(row(path, q, g, unit, typ, kind, "same", note=note))
+
+    # ===== v27 (10:45): links round 4 — comparatives, two-part, RELATIVE storeys (R1 10:34 asked for wordings neither of
+    # us wrote). Facts as v17/v20/v23 (esplanades 1.korrus doors 46 = 46, windows model 55 / plan 52) + IFC containment:
+    # esplanades 2.korrus doors 42 / windows 60, below 1.korrus = 'Vundament' (walls only: 0 doors), top floor 5.korrus 55
+    # rooms; smiley-west KG / EG / 1.OG / 2.OG walls 60 / 81 / 70 / 70, doors 20 / 50 / 50 / 50, rooms 30 / 30 / 40 / 40.
+    for path, q, g, typ, kind, note in [
+        (E, "Does the IFC model contain more windows on '1.korrus' than this drawing shows?", "yes", "text",
+         "yesno:link27", "55 > 52"),
+        (E, "Are fewer doors drawn here than the model has on this storey?", "no", "text", "yesno:link27", "46 = 46"),
+        (E, "Is the window count in the drawing lower than in the model for this floor?", "yes", "text",
+         "yesno:link27", "52 < 55"),
+        (SM, "Does this drawing show more doors than the model has on 1.OG?", "no", "text", "yesno:link27",
+         "50 = 50"),
+        (E, "Zeigt dieser Plan weniger Fenster als das Modell auf diesem Geschoss hat?", "yes", "text",
+         "yesno:link27-de", "52 < 55"),
+        (E, "Onko mallissa enemmän ikkunoita kuin tässä piirustuksessa?", "yes", "text", "yesno:link27-fi",
+         "55 > 52"),
+        (E, "¿Tiene el modelo más ventanas que este plano?", "yes", "text", "yesno:link27-es", "55 > 52"),
+        (E, "Visar ritningen lika många dörrar som modellen?", "yes", "text", "yesno:link27-sv", "46 = 46"),
+        (E, "How many more windows does the model have than this plan shows?", 3, "count", "link27:count",
+         "55 - 52"),
+        (E, "If I count the doors on this plan and in the model, what's the difference?", 0, "count",
+         "link27:count", "46 - 46"),
+        (SM, "What is the difference between the number of doors in the model on 1.OG and on this drawing?", 0,
+         "count", "link27:count", "50 - 50"),
+        (E, "How many doors are on the floor above this one?", 42, "count", "storey27:relative", "2.korrus"),
+        (E, "How many windows does the storey directly above this one have?", 60, "count", "storey27:relative",
+         "2.korrus"),
+        (E, "How many doors are on the floor below this one?", 0, "count", "storey27:relative",
+         "Vundament (foundation, walls only)"),
+        (SM, "How many walls does the floor below this one have?", 81, "count", "storey27:relative", "EG"),
+        (SM, "How many walls are on the floor above this one?", 70, "count", "storey27:relative", "2.OG"),
+        (SM, "How many rooms are on the storey above?", 40, "count", "storey27:relative", "2.OG"),
+        (E, "On the top floor, how many rooms are there?", 55, "count", "storey27:role", "5.korrus (Katus has none)"),
+        (SM, "How many rooms does the top floor have?", 40, "count", "storey27:role", "2.OG"),
+        (SM, "How many doors are on the lowest floor?", 20, "count", "storey27:role", "KG"),
+    ]:
+        out.append(row(path, q, g, "count" if typ == "count" else None, typ, kind, "same", note=note))
+    for path, q, items, kind, note in [
+        (E, "What floor is drawn here, and how many doors are on it?", [r"\b1\.\s?korrus", r"\b46\b"],
+         "link27:two-part", "1.korrus; 46"),
+        (SM, "Which storey is this, and how many walls does the model have on it?", [r"1\.\s?OG", r"\b70\b"],
+         "link27:two-part", "1.OG; 70"),
+        (E, "Name this sheet's storey and say how many windows the model has there.", [r"\b1\.\s?korrus", r"\b55\b"],
+         "link27:two-part", "1.korrus; 55"),
+    ]:
+        r_ = row(path, q, "; ".join(items), None, "text", kind, "same", note=note)
+        r_["meta"]["items"] = items
+        out.append(r_)
+
     with open(OUT, "w", encoding="utf-8") as f:
         for r in out:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")

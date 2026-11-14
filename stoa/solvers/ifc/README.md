@@ -227,4 +227,19 @@ Probes written before fixing: `experiments/w1/probes/c8_cmp.{txt,jsonl}` (22 row
   sheet (F 10:22: 'How many doors are in this building?' on the foundation sheet = 0, gold 16); a storey word still
   wins ('this building's ground floor', 'the basement of this building'). F whole_top 326/326 (pipeline 311/326).
 - Dutch 'plattegrond' no longer matches the slab stem 'platte' (`parse._STEM_NOT`).
-Every step: ifc_models train/dev/hard/hard2 0 of 2,051 answers changed; pipeline dev/hard ifc 0 changed.
+- **Door/window sizes on a sheet** (`_dims_answer`, own probe c8_scope): no storey named on a plan sheet -> the sheet's
+  storey (was the whole model at 0.85: 'doors on this floor wider than 1 m' on 2.korrus 24 of 211, gold 3 of 42);
+  'exactly 900 mm wide' -> equality count (± 1 mm); 'how many different widths / distinct heights' -> distinct values
+  to the mm. The KG cross-check skips size-filtered counts (a subset, not the storey total: 0.85 -> 0.60 in the pipeline).
+- **Q v25 / W5 10:34**: `quote_room_refs` ('How big is room 119?' -> the space named '119' when the model has one; was
+  the storey total 870 m² @ 0.95); negated 'which floor has no X' -> the complement over `used_storeys`;
+  `rewrite_of_the_floors` ('Of the floors that have rooms, which one has the fewest?' -> 'Which floor has the fewest
+  rooms?'); top-k sums ('total area of the three largest rooms'); German / translated top-k ('Welche drei Räume … am
+  größten', 'Which three rooms … are the largest?').
+- **Relative storeys**: 'the floor above / below this one' = the next storey by elevation from the sheet's (own
+  storeys, aux levels included: esplanades 1.korrus -> below = 'Vundament', 0 doors); none -> confidence 0.3.
+- **'what's the difference'** between plan and model counts -> the count (was the agree answer).
+Every step: ifc_models train/dev/hard/hard2 0 of 2,051 answers changed; pipeline dev/hard ifc 0 changed. Q's 314 IFC
+red-team rows on ifc alone: 93.8 -> 96.4%, 5 won / 0 lost, wrong at >= 0.8: 5 -> 0.
+Open: Italian 'Quale piano ha il maggior numero di porte?' (Q v25: 27 @ 0.97), 'Welche 3 Räume …' right at 0.30
+(number guard), 'of the levels that have windows' leaves out roof levels that hold windows (esplanades 'Katus': 2).

@@ -1,0 +1,13 @@
+# cycle 8 probe, written before fixing: element properties (width/height/area of doors and windows), thresholds on them
+PATH bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf
+How many doors on '1.korrus' are wider than 1 m?
+How many doors on this floor are narrower than 0.8 m?
+What is the widest door on '1.korrus'?
+What is the average width of the doors on '1.korrus'?
+How many windows on '1.korrus' are taller than 1.5 m?
+What is the total glazing area of the windows on '1.korrus'?
+What is the total window area on this floor?
+What is the area of the largest window on '1.korrus'?
+How tall is the tallest door on '1.korrus'?
+How many different door widths are there on '1.korrus'?
+How many doors on '1.korrus' are exactly 0.9 m wide?

@@ -1,0 +1,19 @@
+# Q v25 (10:32) + W5 10:34 confident misses, repro before fixing
+PATH bsc-esplanades_1807-ep-ar-v18.ifc
+Which floor has no MAGAMISTUBA?
+Which floors do not have a MAGAMISTUBA?
+Which floor has no bedroom?
+PATH bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf
+Of the floors that have rooms, which one has the fewest?
+Which floor has the fewest rooms?
+What is the total area of the three largest rooms on '1.korrus'?
+What is the combined area of the 3 largest rooms on '1.korrus'?
+Welche drei Räume im '1.korrus' sind am größten?
+How big is room 119?
+How big is corridor 119?
+What is the area of corridor 119 on floor 1?
+How many doors on floor 2?
+Of the levels that have windows, which has the fewest?
+Of the floors that have doors, which one has the most?
+What is the sum of the areas of the 3 smallest rooms on '1.korrus'?
+What are the three largest rooms on '1.korrus'?

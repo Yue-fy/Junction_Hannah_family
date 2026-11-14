@@ -293,7 +293,7 @@ class RasterSolver(BaseSolver):
         from stoa.solvers.raster import textlayer as T
 
         img_path = self._raster_file(path)
-        if img_path is None:
+        if img_path is None or not self._clean(img_path, trace, "door arcs"):
             return None
         bar = self._metric_bar(img_path, trace, "door arcs", "the door radius in pixels is unknown")
         if bar is None:
@@ -302,6 +302,9 @@ class RasterSolver(BaseSolver):
         from PIL import Image
 
         dets = DA.detect(T._abspath(img_path), bar.px_per_m)
+        if not dets:  # a plan without a single swing arc draws its doors another way: not "0 doors"
+            trace.append("door arcs: no swing arc found (this drawing may draw doors differently)")
+            return None
         rgb = np.asarray(Image.open(T._abspath(img_path)).convert("RGB"))
         dup = [d for d in dets if DA.red_near(rgb, d, bar.px_per_m) >= DA.DUP_RED]
         n = len(dets) + len(dup)
@@ -321,6 +324,22 @@ class RasterSolver(BaseSolver):
                                    f"source data does"],
                       missing=["a vector twin (DXF/PDF) of this plan for an exact count: the image alone matched the "
                                "exact count on 7 of 60 TRAIN floors (median error -2 doors)"])
+
+    def _clean(self, img_path: str, trace: list[str], what: str) -> bool:
+        """Symbol detectors only on clean digital renders, never on scans (windows.clean_render); checked before the
+        text layer, so a scan costs no tokens here."""
+        from stoa.solvers.raster import textlayer as T
+        from stoa.solvers.raster import windows as WS
+
+        try:
+            ok, pure, top = WS.clean_render(T._abspath(img_path))
+        except Exception as e:  # noqa: BLE001
+            trace.append(f"{what}: image unreadable ({type(e).__name__})")
+            return False
+        if not ok:
+            trace.append(f"{what}: not a clean render (white {pure:.2f}, top-8 grey levels {top:.2f}): a scan or "
+                         f"photo, where the symbol detectors fire on hatching and paper noise")
+        return ok
 
     def _metric_bar(self, img_path: str, trace: list[str], what: str, why: str):
         """The drawing's metric scale bar (text layer + scalebar.py; cached per drawing), else None."""
@@ -346,7 +365,7 @@ class RasterSolver(BaseSolver):
         from stoa.solvers.raster import windows as WS
 
         img_path = self._raster_file(path)
-        if img_path is None:
+        if img_path is None or not self._clean(img_path, trace, "window symbols"):
             return None
         bar = self._metric_bar(img_path, trace, "window symbols", "the wall/window sizes in pixels are unknown")
         if bar is None:
@@ -355,6 +374,10 @@ class RasterSolver(BaseSolver):
             trace.append(f"window symbols: {bar.px_per_m:.1f} px/m is too coarse (1:200; the window lines merge)")
             return None
         dets = WS.detect(T._abspath(img_path), bar.px_per_m)
+        if not dets:  # 0 of 160 Swiss dev/TRAIN floors have no window: another symbol convention, not "0 windows"
+            trace.append("window symbols: none of the known 4-line kind found (this drawing may draw windows "
+                         "differently)")
+            return None
         ev = [Evidence(file=path, page=0, bbox=[round(float(v), 1) for v in d["box"]], bbox_space="image_px",
                        note=f"window {k + 1}: 4-line window symbol in a {'horizontal' if d['dir'] == 'h' else 'vertical'}"
                             f" wall")

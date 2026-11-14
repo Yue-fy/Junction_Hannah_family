@@ -537,3 +537,21 @@ def test_schedule_answer_echoing_a_question_number():
     assert not e(50, "Is the room larger than 50 m²?")
     assert not e(120, "What is the area of unit U120 in square feet?")
     assert not e("22' - 5\"", "What is the elevation of the 3rd floor level?")
+
+
+def test_sheettext_sum_drops_a_length_mixed_into_counts(monkeypatch):
+    import json as _json
+    from types import SimpleNamespace
+
+    import stoa.llm
+    from stoa.solvers.vector import sheettext
+
+    reply = {"op": "sum", "items": [{"row": 1, "label": "PARKING STALLS", "value": "24"},
+                                    {"row": 2, "label": "UNLIMITED AREA SETBACK", "value": "60"},
+                                    {"row": 3, "label": "PARKING STALLS", "value": "18"}], "answer": "102", "unit": "count"}
+    monkeypatch.setattr(stoa.llm, "chat", lambda *a, **k: SimpleNamespace(text=_json.dumps(reply)))
+    rows = [{"id": 1, "view": None, "text": "24 PARKING STALLS"},
+            {"id": 2, "view": None, "text": "60' - 0\" / (UNLIMITED AREA SETBACK)"},
+            {"id": 3, "view": None, "text": "18 PARKING STALLS"}]
+    res = sheettext.ask("If you add up the parking stall labels, how many stalls are there?", rows)
+    assert res["value"] == 42 and res["used"] == [1, 3], res

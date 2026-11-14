@@ -383,6 +383,41 @@ def room_filter(idx: IfcIndex, question: str) -> tuple[str | None, list[Element]
     return None, [], ""
 
 
+_ROOM_WORD_NUM = re.compile(r"\b(room|space|corridor|office|kitchen|bedroom|bathroom|hall|toilet|wc|lobby|storage|"
+                            r"stair ?case|raum|zimmer|ruimte|kamer|huone|sala|stanza|piece|local|rum|pomieszczenie|ruum|"
+                            r"tuba|koridor|korridor|flur)\s+(?:no\.?\s*|nr\.?\s*|number\s+|#\s*)?"
+                            r"([A-Za-z]?\d+[A-Za-z]?(?:[-./]\d+[A-Za-z]?)*)\b(?!\s*(?:m2|m²|m\b|sq|%))", re.I)
+
+
+_OF_THE_FLOORS = re.compile(r"^\s*(?:of|among|from) (?:all )?the (?:floors|storeys|stories|levels)\s+(?:that|which)\s+(?:have|"
+                            r"contain|hold|include)\s+(?:any\s+|some\s+)?([a-z]+)\s*,?\s*which(?:\s+one|\s+floor|\s+storey|"
+                            r"\s+level)?\s+(?:has|contains|holds|includes)\s+the\s+(fewest|most|least)\s*(?:of them)?\s*\??\s*$",
+                            re.I)
+
+
+def rewrite_of_the_floors(question: str) -> str:
+    """'Of the floors that have rooms, which one has the fewest?' -> 'Which floor has the fewest rooms?' (Q v25: read as
+    the smallest ROOM of the sheet's storey @ 0.90; the counted noun sits in the leading clause)."""
+    m = _OF_THE_FLOORS.match(question)
+    return f"Which floor has the {m.group(2).lower()} {m.group(1)}?" if m else question
+
+
+def quote_room_refs(idx: IfcIndex, question: str) -> str:
+    """'How big is room 119?' -> "How big is room '119'?" when an IfcSpace of this model is named '119' (W5 10:34:
+    the unquoted number was dropped and the storey total 870 m² came back @ 0.95). Quoted spans are left alone; a
+    code that no space carries is not touched."""
+    if "'" in question and _QUOTED_RX.search(question):
+        return question
+    names = {fold(e.name or "") for e in idx.by_class("IfcSpace") if e.name}
+    out, last = [], 0
+    for m in _ROOM_WORD_NUM.finditer(question):
+        code = m.group(2)
+        if fold(code) in names:
+            out.append(question[last:m.start(2)] + f"'{code}'")
+            last = m.end(2)
+    return "".join(out) + question[last:] if out else question
+
+
 def rooms_named(idx: IfcIndex, question: str) -> tuple[list[Element], str]:
     """The IfcSpaces a question points at by name: a quoted name, 'called/named X', 'the room X' / 'room 117'
     (exact LongName / Name / 'LongName (Name)', else every room with that type label), else a room label or type
@@ -599,6 +634,7 @@ class IfcSolver(BaseSolver):
         if model is None:
             return Answer.abstain(self.name, "no IFC model for this drawing", missing=["an IFC model of the building"])
         idx = load_index(model)
+        question = quote_room_refs(idx, rewrite_of_the_floors(question))
         llm_on = str(self.options.get("llm", "1")) != "0"
         pv = self._plan_vs_model(path, model, idx, question)
         if pv is not None:
@@ -941,7 +977,10 @@ class IfcSolver(BaseSolver):
                           evidence=(ev or [self._ev(model, e, e.eff_cls) for e in drawn])[:MAX_EVIDENCE],
                           trace=trace, solver=self.name, assumptions=asm, missing=[])
         same = len(drawn) == len(on) and not other
-        if how_many and not complete and re.search(r"\b(differ\w*|discrepan\w*|mismatch\w*|difference|unterscheid\w*|"
+        # "If I count the doors on this plan and in the model, what's the difference?" (Q: 'no: both 46' @ 0.85, gold 0)
+        wh_diff = bool(re.search(r"\bwhat(?:.s| is| would be)\s+the\s+difference\b|\bwie gross ist der unterschied\b|"
+                                 r"\bmika on ero\b|\bwat is het verschil\b|\bquelle est la difference\b", qf))
+        if (how_many or wh_diff) and not complete and re.search(r"\b(differ\w*|discrepan\w*|mismatch\w*|difference|unterscheid\w*|"
                                                    r"eroa\w*|erinev\w*|verschil\w*)\b", qf):
             # 'By how many doors does this plan differ from the IFC model?' (Q v23: 'yes: both 46', gold 0)
             n_plan = len(drawn) + len(other)
@@ -1371,6 +1410,22 @@ class IfcSolver(BaseSolver):
         ev = [self._ev(model, e, f"{e.long_name or ''} {e.name or ''} on {st.name}".strip())
               for st in hit for e in by_st[st.guid]][:MAX_EVIDENCE]
         conf = 0.92 if how.startswith("room '") else 0.9 if "labelled" in how else 0.8
+        if re.search(r"\b(no|not|without|lacks?|lacking|none|ohne|keine?\w*|geen|zonder|ilman|sans|aucune?|senza|"
+                     r"nessun\w*|sin|utan|ingen|bez|pole)\b(?!\.?\s*\d)|n.t have\b|\bei ole\b", qf):
+            # 'Which floor has no MAGAMISTUBA?' answered the floors WITH one @ 0.9 (Q v25): the complement over the
+            # floors (storeys with rooms or doors, not roof/foundation levels)
+            floors = sorted(used_storeys(idx), key=lambda st: st.elevation or 0.0)
+            rest = [st for st in floors if st.guid not in by_st]
+            trace.append(f"negation: floors without them = {len(rest)} of {len(floors)} floors")
+            ev_n = [Evidence(file=model, ifc_guid=st.guid, note=f"IfcBuildingStorey {st.name}: none") for st in rest]
+            asm_n = [f"{how}: on " + ", ".join(st.name for st in hit),
+                     "floors = storeys with rooms or doors (roof / foundation levels left out)"]
+            if howmany:
+                return Answer(value=len(rest), unit="count", confidence=0.85, evidence=ev_n, trace=trace,
+                              solver=self.name, assumptions=asm_n)
+            return Answer(value=("; ".join(st.name for st in rest) if rest else "none: every floor has one"), unit=None,
+                          confidence=0.85, evidence=ev_n + ev[:MAX_EVIDENCE - len(ev_n)], trace=trace, solver=self.name,
+                          assumptions=asm_n)
         if howmany:
             return Answer(value=len(hit), unit="count", confidence=conf, evidence=ev, trace=trace, solver=self.name,
                           assumptions=[f"{how}: on " + ", ".join(st.name for st in hit)])
@@ -1461,7 +1516,7 @@ class IfcSolver(BaseSolver):
             # ignores part of the question, so it is not what was asked (W5's probes, 01:49)
             from stoa.solvers.ifc.arith import leftover_numbers
 
-            thr_vals = [float(x) for x in (it.threshold[1:] if it.threshold else ())]
+            thr_vals = [float(x) for x in (it.threshold[1:] if it.threshold else ())] + list(ctx.get("used_numbers", ()))
             left = [x for x in leftover_numbers(question, ctx.get("outer_spans", []), None, dims=bool(ctx.get("dims_used")))
                     if not any(abs(float(x.replace(",", ".")) - t) < 1e-9 for t in thr_vals)]
             if ctx.get("rank", 1) > 1:
@@ -1671,6 +1726,28 @@ class IfcSolver(BaseSolver):
             if ps is not None and not (it.metric == "area" and rooms and not it.total):
                 storey = ps
                 trace.append(f"storey from the plan file: {why}")
+                # 'How many doors are on the floor above / below this one?' (Q: the sheet's own storey @ 0.97): the
+                # next storey up / down from the sheet's, by elevation
+                rel = re.search(r"\b(?:floor|storey|story|level)\s+(above|below|under|over|beneath)\s+(?:this|the current|"
+                                r"the present|the one shown|the one on this (?:sheet|plan))\b|\b(?:one|a) (?:floor|storey|level)"
+                                r"\s+(up|down|higher|lower)\b|\bnext (?:floor|storey|level) (up|down)\b",
+                                fold(_QUOTED_RX.sub(" ", it.question or "")))
+                if rel:
+                    up = (rel.group(1) or rel.group(2) or rel.group(3)) in ("above", "over", "up", "higher")
+                    order = sorted([st_ for st_ in own_storeys(idx) if st_.elevation is not None],
+                                   key=lambda st_: st_.elevation)
+                    j = next((k for k, st_ in enumerate(order) if st_.guid == ps.guid), None)
+                    nb = order[j + 1] if (j is not None and up and j + 1 < len(order)) else \
+                        order[j - 1] if (j is not None and not up and j >= 1) else None
+                    if nb is not None:
+                        storey = nb
+                        trace.append(f"the floor {'above' if up else 'below'} the sheet's '{ps.name}' = '{nb.name}' "
+                                     f"(next storey by elevation)")
+                        assumptions.append(f"'the floor {'above' if up else 'below'} this one' = the next storey by "
+                                           f"elevation from the sheet's '{ps.name}': '{nb.name}'")
+                    else:
+                        conf = min(conf, 0.3)
+                        trace.append(f"guard: no storey {'above' if up else 'below'} '{ps.name}' -> confidence 0.3")
             elif ps is not None:
                 trace.append(f"plan file shows {why}")
             elif not rooms and len({e.storey for e in idx.elements.values()
@@ -1708,6 +1785,10 @@ class IfcSolver(BaseSolver):
         st_n, oth_n = self._storey_names(idx, it) if it.names else ([], [])
         if ctx.get("compose", True) and not oth_n and len(st_n) <= 1 and not ctx.get("no_dims"):
             ctx["dims_storey"] = st_n[0][1] if st_n else None
+            # 'How many doors on this floor are wider than 1 m?' asked on the 2.korrus sheet took the whole model (24 of
+            # 211 @ 0.85; W1 c8): no storey named on a plan sheet -> the sheet's storey, as for plain counts
+            ctx["dims_sheet"] = (plan_storey(path, idx) if not st_n and it.scope != "model"
+                                 and Path(path).suffix.lower() != ".ifc" and is_plan_sheet(path, idx) else (None, ""))
             dim = self._dims_answer(model, idx, it, trace, ctx)
             if dim is not None:
                 ctx["dims_used"] = True
@@ -2479,6 +2560,12 @@ class IfcSolver(BaseSolver):
             tie_b = nxt is not None and abs(nxt[0] - top[-1][0]) <= 0.005 + 0.0002 * abs(top[-1][0])
             trace.append(f"{'largest' if big else 'smallest'} {len(top)} of {len(vals)} rooms {where_s}: "
                          + "; ".join(f"{lab_of(e)} {v:.2f} m²" for v, e in top))
+            if "topk_sum" in it.notes:
+                tot = sum(v for v, _ in top)
+                trace.append(f"sum of the {len(top)}: {tot:.3f} m²")
+                return self._final(tot, "m2", it, conf * 0.9 * (0.85 if tie_b else 1.0),
+                                   [self._ev(model, e, f"#{i + 1} {lab_of(e)} {v:.2f} m²") for i, (v, e) in enumerate(top)],
+                                   trace, assumptions, missing)
             txt = "; ".join(f"{lab_of(e)} ({v:.2f} m²)" for v, e in top)
             if tie_b:
                 txt += f" (tie at {top[-1][0]:.2f} m² with {lab_of(nxt[1])})"
@@ -2685,7 +2772,11 @@ class IfcSolver(BaseSolver):
                         r"smallest number of)\s+(?:\w+\s+){0,2}?(rooms?|spaces?|doors?|windows?|walls?|columns?|stairs?|"
                         r"slabs?|beams?)\b", qf)
         pre_ = qf[:mc_.start()] if mc_ else ""
-        if mc_ and it.metric in ("area", "text") and not re.search(r"\b(area|m2|square|sq|size|surface|volume|m3|length|"
+        # 'Which floor has the greatest number of doors?' parses as a plain count (Q v25: Italian 'Quale piano ha il maggior
+        # numero di porte?' and its translation -> the whole-model 27 @ 0.97): a which-floor question ranks too
+        if mc_ and (it.metric in ("area", "text") or (it.metric == "count" and it.op is None
+                                                       and re.match(r"\s*(which|what)\b", qf))) \
+                and not re.search(r"\b(area|m2|square|sq|size|surface|volume|m3|length|"
                                                                   r"large|big|small)\b", qf.replace(mc_.group(0), " ")) \
                 and re.search(r"\b(floors?|storeys?|stor(?:y|ies)|levels?)\b", pre_) and not re.search(r"\b(rooms?|spaces?)\b", pre_):
             it.metric = "count"
@@ -2697,6 +2788,22 @@ class IfcSolver(BaseSolver):
         mk_ = re.search(r"\b(?:top\s+)?(\d{1,2}|two|three|four|five|six|seven|eight|nine|ten)\s+(largest|biggest|smallest|"
                         r"tiniest)\s+(rooms|spaces)\b|\btop\s+(\d{1,2}|two|three|four|five|six|seven|eight|nine|ten)\s+"
                         r"(rooms|spaces)\b", qf)
+        if not mk_:
+            # German 'Welche drei Räume … sind am größten?' / 'die 3 kleinsten Räume' (Q v25: top-1 @ 0.90)
+            _nw.update({"zwei": 2, "drei": 3, "vier": 4, "funf": 5, "fuenf": 5, "sechs": 6, "sieben": 7, "acht": 8,
+                        "neun": 9, "zehn": 10})
+            mg_ = re.search(r"\b(\d{1,2}|zwei|drei|vier|funf|fuenf|sechs|sieben|acht|neun|zehn)\s+(?:raume|raeume|zimmer)\b"
+                            r"[^?]{0,40}?\b(?:am\s+)?(grossten|groessten|kleinsten)\b|\b(\d{1,2}|zwei|drei|vier|funf|fuenf|"
+                            r"sechs|sieben|acht|neun|zehn)\s+(grossten|groessten|kleinsten)\s+(?:raume|raeume|zimmer)\b|"
+                            # the translation's order: 'Which three rooms in the '1.korrus' are the largest?'
+                            r"\b(\d{1,2}|two|three|four|five|six|seven|eight|nine|ten)\s+(?:rooms|spaces)\b[^?]{0,40}?\b"
+                            r"(?:are|is)\s+the\s+(largest|biggest|smallest)\b", qf)
+            if mg_:
+                k_g, w_g = ((mg_.group(1), mg_.group(2)) if mg_.group(1) else (mg_.group(3), mg_.group(4)) if mg_.group(3)
+                            else (mg_.group(5), "kleinsten" if mg_.group(6) == "smallest" else "grossten"))
+                k_num = k_g if k_g.isdigit() else str(_nw[k_g])
+                mk_ = re.search(r"\b(\d{1,2})\s+(largest|smallest)\s+(rooms)\b|\btop\s+(\d{1,2})\s+(rooms)\b",
+                                f"{k_num} {'smallest' if w_g == 'kleinsten' else 'largest'} rooms")
         if mk_ and it.kind in ("space", None):
             k_ = mk_.group(1) or mk_.group(4)
             k = int(k_) if k_.isdigit() else _nw[k_]
@@ -2707,6 +2814,10 @@ class IfcSolver(BaseSolver):
                     it.metric = "area"
                 it.notes.append(f"topk:{k}")
                 trace.append(f"top-{k} list of the {'smallest' if small else 'largest'} rooms")
+                if re.search(r"\b(total|combined|sum|summed|together|altogether|aggregate|insgesamt|zusammen\w*|gesamt\w*|"
+                             r"yhteensa|kokku|totale?|samman\w*|samen)\b", qf):
+                    # 'What is the total area of the three largest rooms?' answered the 3-room list @ 0.90 (Q v25)
+                    it.notes.append("topk_sum")
         mr = re.search(r"\b(second|third|fourth|fifth|2nd|3rd|4th|5th)[- ](largest|biggest|smallest)\b", qf)
         if mr and it.kind in ("space", None):
             k = {"second": 2, "third": 3, "fourth": 4, "fifth": 5, "2nd": 2, "3rd": 3, "4th": 4, "5th": 5}[mr.group(1)]
@@ -3031,7 +3142,8 @@ class IfcSolver(BaseSolver):
                               r"floor|level|geschoss|stockwerk|etage|verdieping|korrus|niveau|planta|piano|kerros|vaning)",
                               qf_)
                 and re.search(r"\b(most|fewest|least|largest|smallest|highest|lowest|meisten|wenigsten|meeste|minste|"
-                              r"more|fewer|less|larger|bigger|greater|smaller)\b", qf_)
+                              r"more|fewer|less|larger|bigger|greater|smaller|greatest|biggest|maggior\w*|minor\w*|piu|"
+                              r"eniten|vahiten|plus|moins)\b", qf_)
                 and storey_mention(ctx.get("question", ""), [s_.name for s_ in idx.storeys])[0] is None):
             # "Which storey has the most doors?": every storey of the model is a candidate
             cand = [s_ for s_ in own_storeys(idx) if s_.name]
@@ -3354,6 +3466,9 @@ class IfcSolver(BaseSolver):
         missing: list[str] = []
         i, _ = storey_mention(ctx.get("question", ""), [s.name for s in idx.storeys])
         storey = ctx.get("dims_storey") or (idx.storeys[i] if i is not None else None)
+        if storey is None and (ctx.get("dims_sheet") or (None, ""))[0] is not None and not self._BUILDING.search(q):
+            storey = ctx["dims_sheet"][0]
+            trace.append(f"storey from the plan file: {ctx['dims_sheet'][1]}")
         els = idx.by_class(*KIND_CLASSES[it.kind])
         if storey is not None:
             els = [e for e in els if e.storey == storey.guid]
@@ -3427,7 +3542,28 @@ class IfcSolver(BaseSolver):
         mm = lambda v: f"{v * 1000:.0f} mm"  # noqa: E731
         asks_type = bool(re.search(r"\b(type|types|which|what kind|family)\b", q))
         thr = _DIM_THRESHOLD.search(q)
-        if thr and (it.metric == "count" or re.search(r"\b(how many|number of|count|wie viele|hoeveel|combien)\b", q)):
+        how_many_q = it.metric == "count" or re.search(r"\b(how many|number of|count|wie viele|hoeveel|combien)\b", q)
+        # 'How many doors on 1.korrus are exactly 0.9 m wide?' (W1 c8: the width table @ 0.30): equal within 1 mm
+        eq = None if thr else re.search(r"\b(exactly|precisely|genau|precies|exactement|exactamente|tasan|täsmälleen)\s+"
+                                        r"(?P<num>\d+(?:[.,]\d+)?)\s*(?P<unit>mm|cm|m)?\b", q)
+        if eq and how_many_q:
+            num = float(eq.group("num").replace(",", "."))
+            u = eq.group("unit") or ""
+            lim = num / 1000 if u == "mm" or (not u and num > 20) else num / 100 if u == "cm" else num
+            hit = [(v, e) for v, e in vals if abs(v - lim) <= 1e-3]
+            ctx.setdefault("used_numbers", []).append(num)
+            trace.append(f"equal: {what} = {lim:.3f} m (± 1 mm) -> {len(hit)} of {len(vals)} {noun}s")
+            ev = [self._ev(model, e, f"{label(e)} {what} {mm(v)}") for v, e in hit][:MAX_EVIDENCE]
+            return self._final(len(hit), "count", it, conf * 0.95, ev, trace, assumptions, missing)
+        # 'How many different door widths are there on 1.korrus?' (W1 c8: the table @ 0.77): distinct values to the mm
+        if how_many_q and re.search(r"\b(different|distinct|unique|verschiedene\w*|unterschiedliche\w*|verschillende|"
+                                    r"differentes|distintos|eri)\b", q) and re.search(
+                r"\b(widths?|heights?|thickness\w*|sizes?|breiten?|hohen?|breedtes?|hoogtes?|largeurs?|hauteurs?|"
+                r"anchos?|alturas?|leveyksi\w*|korkeuksi\w*)\b", q):
+            distinct = sorted({round(v * 1000) for v, _ in vals})
+            trace.append(f"distinct {whats} (to the mm): " + ", ".join(f"{d_} mm" for d_ in distinct[:20]))
+            return self._final(len(distinct), "count", it, conf * 0.95, ev_all, trace, assumptions, missing)
+        if thr and how_many_q:
             num = float(thr.group("num").replace(",", "."))
             u = thr.group("unit") or ""
             lim = num / 1000 if u == "mm" or (not u and num > 20) else num / 100 if u == "cm" else num
