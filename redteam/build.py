@@ -614,6 +614,36 @@ def main():
         kind = "yesno:numfmt" if typ == "text" else "numfmt"
         out.append(row(path, q, g, None, typ, kind, "same", note="thousands separator / decimal comma"))
 
+    # ===== v12 (05:15): English room concepts on the Estonian-labelled demo model =================================
+    # 1.korrus rooms: TUALETTRUUM 11, ELUTUBA+KÖÖK 10, ESIK 10, INVA-WC 1, WC 1, PESUKODA (laundry) 115, SERVER 117, LIFT.
+    # Gold for areas = ifc on the template wording with the exact room name; counts = label counts (assumption shown).
+    for q, g, unit, typ, note in [
+        ("How many kitchens are on this floor?", 10, "count", "count", "ELUTUBA+KÖÖK x10 (living room + kitchen)"),
+        ("How many toilets are on this floor?", 13, "count", "count", "TUALETTRUUM 11 + INVA-WC + WC"),
+        ("How big is the server room?", 4.257, "m2", "area", "SERVER (117) 4.257"),
+        ("How big is the laundry room on this floor?", 14.332, "m2", "area", "PESUKODA (115) 14.332"),
+    ]:
+        out.append(row(E, q, g, unit, typ, "judge-et:ifc", "same", note=note))
+    r_ = row(E, "Is there a lift on this floor?", "yes", None, "text", "yesno:et-labels", "same", note="LIFT space")
+    out.append(r_)
+
+    # ===== v13 (05:17): the Swiss demo plan handed over alone, outside our folder, as PDF or as PNG ===============
+    # No DXF sibling: the PDF must be read as vectors, the PNG as pixels. Gold = the drawing's dataset answers.
+    lone = IMG_DIR / "lone"
+    lone.mkdir(parents=True, exist_ok=True)
+    for ext in ("pdf", "png"):
+        dst = lone / f"plan-upload.{ext}"
+        shutil.copyfile(abspath(SW.replace(".pdf", f".{ext}")), dst)
+        for q, g, unit, typ in [
+            ("How many doors (interior doors and entrance doors together) are drawn on this floor plan?", 36, "count",
+             "count"),
+            ("How many apartments (residential units) are shown on this floor plan?", 4, "count", "count"),
+            ("What is the net floor area of apartment B in m², summing all its rooms except balconies, loggias, "
+             "terraces and other outdoor spaces?", 80.83, "m2", "area"),
+            ("How many bathtubs are drawn on this floor plan?", 4, "count", "count"),
+        ]:
+            out.append(row(dst, q, g, unit, typ, f"lone:{ext}", "same", note="Swiss demo plan without its DXF"))
+
     with open(OUT, "w", encoding="utf-8") as f:
         for r in out:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
