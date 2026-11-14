@@ -58,6 +58,23 @@ confident); Swedish 'våtrum' 0 → 16/25; DE/FR/IT apartments 66.8 → 67.0 (77
 compositions 93.3 = (36 left), CubiCasa casual 73.2 → 72.9 (sinks composer 10 left). Runs 20261114-085553-pipeline-
 {apt_wording-a614, apt_wording_ml-4942, comp_ml-1e99, comp_ml_cc-b8c5, apt_wording_cc-8fe9} = baselines for the next fixes.
 
+**Round-3 (night 31397eb = S0 4fb47c9 + R1, 09:10), paired per wording vs 62754aa — the wording gaps close:**
+
+| probe | 62754aa | 31397eb | confident-wrong | won / lost |
+|---|---:|---:|---|---|
+| apt_wording (EN) | 91.4 | **92.7** | 13 → 10 | 28 / 6 (IFC unquoted names 3 → 8/8; CubiCasa 'this apartment' windows 7 → 15/30) |
+| apt_wording_ml (DE/FR/IT apartments) | 67.0 | **92.0** | 84 → 12 | 224 / 4 |
+| comp_ml (Swiss compositions DE/FR/IT) | 93.3 | **97.9** | 37 → 1 | 36 / 0 |
+| comp_ml_cc (CubiCasa FI/SV compositions) | 50.4 | 53.1 | 4 → 4 | 21 / 10 (SV now = control) |
+| apt_wording_cc (CubiCasa casual) | 72.9 | 74.4 | 28 → 11 | 23 / 6 (sinks composer 0 → 17/30) |
+| apt_wording_syn / _typo | 99.1 / 78.7 | 98.9 / 77.9 | 0 / 3 | single low-conf flips |
+
+All 7 probes: 6,044 rows, 86.8%, confident-wrong 168 → 41. 32 of the 41 are two Swiss apartments wrong by ~3% in
+EVERY wording incl. the dataset's (site171_bldg350_floor1442 A 123.1 vs 119.14; site790_bldg1731_floor7704 B 105.78
+vs 102.63: a dxf/data issue, W2 told); only one is wording-specific. Runs 20261114-090750-pipeline-{apt_wording-b90c,
+apt_wording_ml-7528, comp_ml-e57e, comp_ml_cc-eaff, apt_wording_cc-f375, apt_wording_syn-0308, apt_wording_typo-85c3}.
+Still open (low confidence, accuracy only): quick typing (lower-case ids, misspelt 'apartment', 'room 5,11', 'sq m').
+
 **Held-out check of W4's 'both readings' (2b954b5)** on hardL (nb/hr/el/lt; F/S0 only, aggregates): 85.3 → 84.9%
 (paired −0.5 [−3.2, +2.3], 4 vs 3), ECE 0.179 → 0.085, conf ≥ 0.8 on 23% → 60% of answers at 99.3% right, AUROC
 0.925 → 0.932, $0.12 → $0.15 per 1k. hardL_open 87.0 → 87.7, ECE 0.134 → 0.084, 36% → 61% @ 99.4%. My offline
