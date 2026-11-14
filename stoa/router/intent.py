@@ -89,6 +89,10 @@ _NUMBERED = re.compile(r"numbered|nummerierten|num[ée]rot[ée]es|numerati", re.
 # --- modifiers that change WHAT is computed (the hidden set is "harder"): a known key + one of these is NOT the
 # known template ("average area of rooms labelled X" is not "total area of rooms labelled X"). The pipeline sends
 # such questions to the general agent instead of canonicalising them to a template.
+# number words for constants stated in words ("if every bedroom gets two beds")
+_NUMWORD = (r"\b(?:one|two|three|four|five|six|seven|eight|nine|ten|twice|double|half|zwei|drei|vier|f[üu]nf|doppelt|"
+            r"halb|deux|trois|quatre|cinq|double|moiti[ée]|due|tre|quattro|cinque|doppi[oa]|met[àa]|kaksi|kolme|nelj[äa]|"
+            r"viisi|kahdesti|puoli|twee|drie|vier|vijf|tv[åa]|tre|fyra|fem|to|fire)\b")
 _OPS = [
     ("avg", r"\b(average|mean|on average|durchschnitt\w*|moyenne|medi[ao]\b|keskim\w*|gennemsnit\w*|genomsnitt\w*|"
             r"gemiddeld\w*|keskmi\w*|[śs]redni\w*)\b"),
@@ -116,7 +120,22 @@ _OPS = [
                 r"\b(?:apartment|unit|wohnung|appartement)\s+[A-Z]\s+(?:or|oder|ou)\s+(?:apartment|unit|wohnung|appartement)?\s*[A-Z]\b"),
     # two scopes summed: "all rooms on 'A' and on 'B'", "on 'EG' und auf '1.OG'"
     ("multi_scope", r"\b(?:on|auf|sur|op|in)\s+<q>\s*,?\s*(?:and|und|et|en|og|ja)\s+(?:on|auf|sur|op|in)\s+<q>"),
+    # DERIVED quantities (W5 01:49): computed FROM a measured quantity, never the quantity itself. A rate ("m² of
+    # floor per door", "doors per 100 m²"; 'per apartment/room/storey' stays an average, see ratio), a price ("each
+    # door costs 450 €"), or a constant given in the question ("if one litre covers 8 m²"). 0 train templates hit
+    # outside ifc_bench (free-text model questions, not routed by these).
+    ("rate", r"\b(?:per|pro|par|kohden|por cada|per ogni|f[öo]r varje|for hver)\s+(?!(?:cent|cento|mille|cents?|"
+             r"rapport|the|a|an|il|la|lo|l'|i|gli|le|les|un|una|uno|des|du|de|der|die|das|den|dem|el|los|las)\b)"
+             r"(?!(?:apartments?|appartements?|wohnung\w*|appartament\w*|asun\w*|units?|storeys?|stories|floors?|levels?|"
+             r"[ée]tages?|geschoss\w*|stockwerk\w*|piano|piani|kerro\w*|rooms?|zimmer|r[äa]ume?|pi[eè]ces?|stanz\w*|"
+             r"local[ei]|huonee\w*|bedrooms?|persons?|personnes?|persona|people)\b)\w|/\s*(?:doors?|windows?|rooms?|m²|m2|sq)|"
+             r"\d\s*\S+\s+(?:kohden|kohta)\b"),  # fi/et postposition: "100 neliömetriä kohden"
+    ("cost", r"\b(?:cost\w*|price[sd]?|pricing|kost(?:et|en|ar|er)?|preis\w*|co[uû]t\w*|prix|prezz\w*|maksa\w*|hinta\w*|"
+             r"euros?|eur|dollars?|usd|chf|franken|francs?|kronor|kroner|pounds?|budget)\b|[€$£]"),
+    ("given", r"\b(?:if|assuming|assume|suppose|supposing|given that|wenn|falls|angenommen|jos|hvis|ifall|indien|se)\b"
+              r"[^?.;]*(?:\d|" + _NUMWORD + r")|\bsi\s+(?:une?|le|la|les|l'|chaque|on|el|cada)\b[^?.;]*(?:\d|" + _NUMWORD + r")"),
 ]
+DERIVED = ("rate", "cost", "given")
 _OPS_RX = [(n, re.compile(p, re.I)) for n, p in _OPS]
 _APT_SCOPE = re.compile(r"\b(?i:apartment|wohnung|appartement|appartamento|asunto|unit)\s+[A-Z0-9]{1,3}\b")
 _GENERIC = {"room", "unknown", "sanitary"}

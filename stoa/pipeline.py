@@ -44,9 +44,10 @@ from stoa.data import siblings, source_of
 from stoa.router import gating, prior
 from stoa.router.canonical import canonical
 from stoa.router.compose import combine, decompose
-from stoa.router.intent import Intent, modifiers, parse
+from stoa.router.intent import DERIVED, Intent, modifiers, parse
 from stoa.router.prior import known_template
 
+DERIVED_CAP = 0.4  # max confidence of a rules-only (0 LLM calls) as-asked answer to a derived-quantity question
 UNSEEN_CAP = 0.5  # max confidence of a local-tier / prior answer to a wording that is not a known train template
 # D8: symbol counts R1's pretrained CubiCasa5K model answers; its gate is measured on cc5k_heldout only
 CC5K_KEYS = {"count:window:drawing", "count:door:drawing", "count:wc:drawing", "count:sink:drawing"}
@@ -216,7 +217,8 @@ class Pipeline(BaseSolver):
         if intent.task not in ("count", "area", "volume", "length"):
             # text / yes-no: only comparisons and operators over named things ("which storey has more doors, '0' or
             # '-1'?", "which is smaller, apartment B or H?"); plain look-ups stay with the solvers
-            if mods and set(mods) & {"compare", "threshold", "multi_scope", "rest", "ratio", "avg", "share", "diff"}:
+            if mods and set(mods) & {"compare", "threshold", "multi_scope", "rest", "ratio", "avg", "share", "diff",
+                                     *DERIVED}:
                 return "modifier " + "+".join(mods) + " (comparison/operator over named things); not a known template"
             return None
         if mods:
@@ -255,7 +257,8 @@ class Pipeline(BaseSolver):
             # read translations and apply operators themselves, and flag what they could not apply with a low conf)
             if why:
                 trace.append(f"operator question ({why.split(';')[0]})")
-            pre, unsure = self._raw_deterministic(path, question, intent, cands, trace, t0)
+            derived = [] if source_of(path) == "ifc_bench" else [m for m in modifiers(question) if m in DERIVED]
+            pre, unsure = self._raw_deterministic(path, question, intent, cands, trace, t0, derived)
             if pre is not None:
                 return pre
             if unsure is not None and not why and self.use_agent and allow_agent and intent.task != "text" and \
@@ -478,7 +481,7 @@ class Pipeline(BaseSolver):
         best.cost = _cost_of(best).add(_cost_of(a))
 
     def _raw_deterministic(self, path: str, question: str, intent: Intent, cands: list[str], trace: list[str],
-                           t0: float) -> Answer | None:
+                           t0: float, derived: list[str] | None = None) -> Answer | None:
         """Operator question: the deterministic solver gets the RAW question first. dxf / ifc apply averages,
         shares, thresholds, comparisons themselves and say so with confidence >= accept (W1/W2 cap it at 0.3-0.5 when
         an operator word was present but no rule applied it). Sure -> done, no LLM; unsure -> the general agent."""
@@ -499,6 +502,19 @@ class Pipeline(BaseSolver):
             total = total.add(_cost_of(a))
             if a.value is None:
                 continue
+            if derived and not (a.cost.llm_calls or 0) and a.confidence >= self.raw_accept:
+                # a rate / price / given constant (W5 01:49: "if each door costs 450 €, how much do the doors cost?"
+                # -> ifc 46 doors at 0.97): rules that read no LLM may have answered the measured quantity, not the
+                # derived one. Keep it as a capped second opinion; the agent computes (a table-QA solver that read
+                # the question with an LLM, e.g. schedule's pandas code, is trusted as before)
+                a = a.model_copy(deep=True)
+                a.confidence = round(min(a.confidence, DERIVED_CAP), 3)
+                a.missing = [*a.missing, f"{name} answered by rules ({a.value} {a.unit or ''}); the question's "
+                                         f"{'/'.join(derived)} operation may not be applied"]
+                trace.append(f"{name} (question as asked): {a.value} {a.unit or ''} by rules, but the question asks "
+                             f"a derived quantity ({'+'.join(derived)}): kept as a second opinion at conf "
+                             f"{a.confidence:.2f}")
+                return None, (name, a)
             if a.confidence < self.raw_accept:
                 trace.append(f"{name} (question as asked): {a.value} {a.unit or ''} at conf {a.confidence:.2f}, unsure"
                              + ("" if _fits(intent.task, a) else f" (a {a.unit} answer to a {intent.task} question)")
