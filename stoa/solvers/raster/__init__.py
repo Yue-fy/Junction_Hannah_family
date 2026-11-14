@@ -158,8 +158,9 @@ class RasterSolver(BaseSolver):
         if op == "none" and self._text_mode(path, question):
             from stoa.solvers.raster import textqa
 
-            return textqa.answer(path, question, image_path=self._raster_file(path), backend=self.backend,
-                                 solver=self.name)
+            ans = textqa.answer(path, question, image_path=self._raster_file(path), backend=self.backend,
+                                solver=self.name)
+            return self._sheet_veto(path, question, ans)
         if op in ("single", "none"):
             return self._solve_class(path, question, classes[0] if classes else None)
         # compositions over our classes: sum ("doors and windows in total"), diff ("how many more X than Y"),
@@ -247,7 +248,7 @@ class RasterSolver(BaseSolver):
         trace.append(f"source '{source_of(path)}' is not CubiCasa: raster's gate/priors/rules do not apply")
         lab = labelled_query(question or "")
         if lab or cls in ROOM_CLASSES:
-            return self._text_count(path, cls, lab, trace)
+            return self._sheet_veto(path, question or "", self._text_count(path, cls, lab, trace))
         return Answer(value=None, unit="count", solver=self.name, trace=trace + ["abstain (off-domain symbol class)"],
                       missing=[f"a {cls.replace('_', ' ')} detector for this drawing style (raster's are fitted on "
                                f"CubiCasa plans only)"])
@@ -279,6 +280,29 @@ class RasterSolver(BaseSolver):
                                    f"one label = one room"],
                       missing=[] if hits else [f"no {what} found in the text read from the drawing; an unlabelled "
                                                f"room would be missed"])
+
+    def _sheet_veto(self, path: str, question: str, ans: Answer, cap: float = 0.05) -> Answer:
+        """A room question on a sheet that shows no floor plan (an elevation, section, detail or site plan; Q 05:04):
+        keep the answer, cap its confidence and say why, with the sheet title as evidence (sheet.py: text layer
+        titles first, else one ~1k-token VLM call; 0/8 plan sheets vetoed on 19 hand-labelled scans)."""
+        from stoa.solvers.raster import sheet
+
+        img = self._raster_file(path)
+        if img is None or not self.offdomain:
+            return ans
+        try:
+            v = sheet.veto(img, question)
+        except Exception as e:  # noqa: BLE001 - the veto is advisory
+            ans.trace.append(f"sheet kind check failed: {type(e).__name__}")
+            return ans
+        if not v:
+            return ans
+        ans.trace.append(f"sheet kind ({v['source']}): {v['note']} -> confidence capped at {cap}")
+        ans.confidence = round(min(ans.confidence, cap), 3)
+        ans.evidence = v["evidence"] + ans.evidence
+        ans.assumptions = [*ans.assumptions, v["note"]]
+        ans.missing = [*ans.missing, v["missing"]]
+        return ans
 
     def _raster_file(self, path: str) -> str | None:
         """The image to read: the path itself, or a PNG/JPG sibling of a PDF/other format (same drawing)."""

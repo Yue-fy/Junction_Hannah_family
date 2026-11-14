@@ -317,3 +317,42 @@ def test_qparse_conjunctions_and_singular_labels():
     assert qparse.singular_label("How big is the Küche?")
     assert not qparse.singular_label("What is the total net floor area of all rooms labelled 'Küche' in m²?")
     assert not qparse.singular_label("How big are the kitchens?")
+
+
+def test_qparse_yes_no_size_comparison():
+    from stoa.solvers.vector import qparse
+    vocab = ["Küche", "Bad"]
+    qr = qparse.parse("Is apartment A bigger than apartment B?", vocab, room_numbers=set())
+    assert qr.op == "yes_gt" and [t.arg for t in qr.terms] == ["A", "B"] and qparse.covered("Is apartment A bigger than apartment B?", qr)
+    qr = qparse.parse("Is apartment B's kitchen bigger than apartment A's kitchen?", vocab, room_numbers=set())
+    assert qr.op == "yes_gt" and [t.scope for t in qr.terms] == [["B"], ["A"]]
+    qr = qparse.parse("Is the kitchen in apartment C larger than 7 m²?", vocab, room_numbers=set())
+    assert qr.op == "yes_gt" and qr.threshold == 7.0
+    qr = qparse.parse("Ist Wohnung F kleiner als Wohnung E?", vocab, room_numbers=set())
+    assert qr.op == "yes_lt"
+
+
+def test_pdftext_groups_tags_and_views(tmp_path):
+    """Stacked short lines become one tag; a tag belongs to the view whose title (with a scale) is below-left of it;
+    the page rotation is undone (tags on a 90-degree sheet are found in visual space)."""
+    import pymupdf
+
+    from stoa.solvers.vector.pdftext import text_groups
+
+    for rot in (0, 90):
+        doc = pymupdf.open()
+        page = doc.new_page(width=800, height=600)
+        lines = [(100, 100, "COMMUNITY"), (100, 111, "ROOM"), (100, 122, "115 - 410 SF"), (100, 133, "27.3 O.L."),
+                 (500, 100, "FITNESS"), (500, 111, "113 - 210 SF"),
+                 (60, 300, "LIFE SAFETY PLAN - BASEMENT"), (60, 313, "3/32\" = 1'-0\""),
+                 (450, 300, "LIFE SAFETY PLAN - 1ST FLOOR"), (450, 313, "3/32\" = 1'-0\"")]
+        page.set_rotation(rot)  # text is written so that it reads horizontally on the displayed (rotated) sheet
+        for x, y, t in lines:
+            page.insert_text(pymupdf.Point(x, y) * page.derotation_matrix, t, fontsize=9, rotate=rot)
+        path = tmp_path / f"tags{rot}.pdf"
+        doc.save(path)
+        gs = {g.text: g for g in text_groups(str(path))}
+        assert "COMMUNITY / ROOM / 115 - 410 SF / 27.3 O.L." in gs, list(gs)
+        assert gs["COMMUNITY / ROOM / 115 - 410 SF / 27.3 O.L."].view == "LIFE SAFETY PLAN - BASEMENT"
+        assert gs["FITNESS / 113 - 210 SF"].view == "LIFE SAFETY PLAN - 1ST FLOOR"
+        assert sum(g.is_title for g in gs.values()) == 2

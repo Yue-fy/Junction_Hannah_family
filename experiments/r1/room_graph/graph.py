@@ -156,11 +156,52 @@ def _labels_index() -> dict:
     return out
 
 
-def room_graph(path: str, labels: list | None = None, live: bool = True, printed: bool = False) -> dict | None:
+_TL_AREA = __import__("re").compile(r"(?<![\d.,+-])(\d{1,3}[.,]\d{1,2})(?![\d.,])\s*(m2|m²|m\^2)?", __import__("re").I)
+_TL_TYPE = __import__("re").compile(r"\d\s*(?:h|mh)\s*\+|\+\s*(?:k|kt|kk|s|sauna)\b", __import__("re").I)
+
+
+def textlayer_items(path: str) -> tuple[list, list]:
+    """(labels [(text, cls, box)], areas [{m2, text, box, unitless, total}]) from W3's tiled OCR text layer
+    (stoa.solvers.raster.textlayer: VLM text spotting per 1100 px tile, boxes in image px, cached on disk).
+    Its boxes are tile-accurate, unlike one whole-image VLM call (8j: printed areas landed in wrong regions)."""
+    import re as _re
+    from stoa.solvers.raster.classes import label_class
+    from stoa.solvers.raster.textlayer import text_layer
+    tl = text_layer(path)
+    labels, areas = [], []
+    for it in tl.items:
+        t = it.text.strip()
+        b = [float(v) for v in it.box]
+        nums = list(_TL_AREA.finditer(t))
+        if nums:
+            m = nums[-1]  # '18,0 17,5' = a corrected value: the last one printed wins
+            v = float(m.group(1).replace(",", "."))
+            total = bool(_TL_TYPE.search(t)) or "yht" in t.lower() or "total" in t.lower()
+            if 0.5 <= v <= 400:
+                areas.append({"m2": v, "text": t, "box": b, "unitless": not m.group(2), "total": total})
+        word = _re.sub(r"[\d.,]+\s*(m2|m²)?", " ", t).strip(" /-+:")
+        if _re.search(r"[A-Za-zÄÖÅäöå]{1,}", word) and len(word) <= 24 and len(word.split()) <= 3 \
+                and not _TL_TYPE.search(t):
+            labels.append((word, label_class(word), b))
+    return labels, areas
+
+
+def room_graph(path: str, labels: list | None = None, live: bool = True, printed: bool = False,
+               textlayer: bool = False) -> dict | None:
     """Room graph of one plan, or None (no cached map and no live CC5K run). labels: optional [(text, cls, box)].
 
     printed=True also reads the areas printed on the plan (scale.printed_areas: ONE local VLM call, cached) and
-    attaches each to the room under it ("printed_m2"); apartment totals go to g["printed_total"]."""
+    attaches each to the room under it ("printed_m2"); apartment totals go to g["printed_total"].
+    textlayer=True takes labels AND printed areas from W3's OCR text layer instead (tile-accurate boxes; works on
+    plans without a cached label read, e.g. a hidden test plan); falls back to the default sources on error."""
+    tl_labels = tl_areas = None
+    if textlayer:
+        try:
+            tl_labels, tl_areas = textlayer_items(path)
+        except Exception:  # noqa: BLE001
+            tl_labels = tl_areas = None
+        if tl_labels is not None and labels is None:
+            labels = tl_labels
     f = _npz(path, live=live)
     if f is None:
         return None
@@ -334,7 +375,7 @@ def room_graph(path: str, labels: list | None = None, live: bool = True, printed
     if printed:
         try:
             from experiments.r1.raster_scale.scale import printed_areas
-            for it in printed_areas(path):
+            for it in (tl_areas if tl_areas is not None else printed_areas(path)):
                 b = it["box"]
                 cx, cy = int((b[0] + b[2]) / 2), int((b[1] + b[3]) / 2)
                 if it.get("total"):
