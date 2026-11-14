@@ -424,8 +424,32 @@ class Agent:
         # adding many table rows by hand is where the model slips (wrong rows, a missed room): less sure
         return list(used.values()), (state.get("n_table", 0) if state["table"] else 0), bad
 
+    def _finish_text(self, final, results, evidence, trace, assumptions, missing, cost, t0) -> Answer:
+        asked = [(v, c, e, w) for v, c, e, w in results if c >= 0]
+        conf = 0.25
+        if len(asked) >= 2:
+            conf = 0.85
+            for _, c, _, _ in asked:
+                conf *= max(0.05, c)
+            assumptions.append("answer chosen by comparing the tool results above")
+            for _, _, ev, w in asked:
+                evidence += [e.model_copy(update={"note": (f"{w[5:60]} — {e.note}" if e.note else w[5:60])}) for e in ev[:6]]
+        else:
+            missing.append("the agent's answer is not backed by a tool result")
+        cost.wall_seconds = round(time.perf_counter() - t0, 3)
+        trace.insert(0, f"agent: general tool-using path ({len(trace)} steps, {cost.llm_calls} LLM calls)")
+        return Answer(value=final, unit=None, confidence=round(min(conf, 0.95), 3), evidence=evidence[:20], trace=trace,
+                      solver="agent", assumptions=assumptions, missing=missing, cost=cost)
+
     def _finish(self, final, unit, results, evidence, trace, assumptions, missing, cost, t0, question) -> Answer:
         value = final
+        from stoa.router.intent import _QUOTED
+
+        names = {next(g for g in m.groups() if g).strip().lower() for m in _QUOTED.finditer(question)}
+        if final is not None and str(final).strip().strip("'\"‘’“”«»").lower() in names:
+            # "which storey has more doors, '1.korrus' or '2.korrus'?" -> '1.korrus' is a name, not the number 1 (W5)
+            final, unit = str(final).strip().strip("'\"‘’“”«»"), None
+            return self._finish_text(final, results, evidence, trace, assumptions, missing, cost, t0)
         x = _num(final)
         numeric_unit = (unit or "").lower() in ("count", "m2", "m²", "m3", "m³", "m", "ft2", "ft²", "ft", "ft3", "%")
         mu = re.fullmatch(r"\s*(-?\d+(?:\.\d+)?)\s*(m²|m2|m³|m3|m|ft²|ft2|ft|%|doors?|windows?|rooms?)\s*", str(final or ""))

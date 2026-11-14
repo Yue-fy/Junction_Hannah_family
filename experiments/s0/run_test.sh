@@ -41,9 +41,10 @@ run hard2 hard2
 run hard2q hard2q   # held out: aggregates only, never quote wordings (D10)
 run hard2p hard2p   # partly seen
 run hard2r hard2r --judge local   # D12: sealed fresh draw (F), milestones only, aggregates only
+run hard3 hard3 --judge local    # D15: sealed derived quantities (F), milestones only, aggregates only
 pred() { tr '\r' '\n' < "$L/test-$STAMP-$1.log" | sed -n 's/^predictions: //p' | tail -1; }
 CLEAN=$(pred test-cc5k0)
 DEV=$(pred dev)
 echo "scorecard: test=$CLEAN dev=$DEV"
-"$P" -m stoa.eval.scorecard "$CLEAN" --hard "$(pred hard)" --gen "$(pred hard2)" --gen "$(pred hard2q)" --gen "$(pred hard2r)" --out "$L/scorecard-$STAMP.md" 2>&1 | tail -40
+"$P" -m stoa.eval.scorecard "$CLEAN" --hard "$(pred hard)" --gen "$(pred hard2)" --gen "$(pred hard2q)" --gen "$(pred hard2r)" --gen "$(pred hard3)" --out "$L/scorecard-$STAMP.md" 2>&1 | tail -40
 echo "done $C; scorecard in $L/scorecard-$STAMP.md"

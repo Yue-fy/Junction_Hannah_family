@@ -43,8 +43,31 @@ def make_qid(path: str, question: str) -> str:
     return hashlib.sha1(f"{path}\n{question}".encode()).hexdigest()[:12]
 
 
+def dataset_rel(path: str | Path, root: Path | None = None) -> str:
+    """Any path to a dataset file -> the dataset-relative form ("data/<source>/...") that every cache, gate and split
+    is keyed by. Relative paths are returned unchanged. An absolute path under the dataset root is made relative; one
+    elsewhere (a copy of the dataset, another mount) is cut at its last "data/<source>/" component; any other absolute
+    path (a drawing from outside the dataset) is returned unchanged."""
+    p = Path(path)
+    if not p.is_absolute():
+        return str(path)
+    try:
+        return relpath(p, root)
+    except ValueError:
+        pass
+    parts = p.parts
+    for i in range(len(parts) - 3, -1, -1):  # need data/<source>/<file> at least
+        if parts[i] == "data":
+            return str(Path(*parts[i:]))
+    return str(path)
+
+
 def source_of(path: str) -> str:
-    parts = Path(path).parts
+    """Dataset source of a path ("cubicasa5k", "swiss_dwellings", ...); "unknown" for a file outside the dataset.
+    Accepts relative ("data/cubicasa5k/x.png") and absolute paths (R1 03:44: absolute paths used to give "/")."""
+    parts = Path(dataset_rel(path)).parts
+    if not parts or Path(parts[0]).is_absolute():
+        return "unknown"
     return parts[1] if len(parts) > 1 and parts[0] == "data" else parts[0]
 
 

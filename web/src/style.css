@@ -360,3 +360,25 @@ select, input[type="search"], textarea { border: 1px solid var(--line); border-r
 .xcheck.second small { display: block; color: var(--muted); font-size: 11px; margin-top: 2px; }
 .xcheck.second details { margin-top: 3px; font-size: 11.5px; }
 .xcheck.second details p { margin: 3px 0 0; color: var(--ink); font-weight: 400; line-height: 1.4; }
+
+/* label reader ("Show where") for CubiCasa answers without evidence; arithmetic lines in the trace */
+.locate-slot { margin: 6px 0 2px; }
+.locate-btn { border: 1px solid var(--navy); color: var(--navy); background: #fff; border-radius: 7px; padding: 4px 10px; font-size: 12px; font-weight: 600; cursor: pointer; }
+.locate-btn:hover { background: #f0f4f9; }
+.locate-btn:disabled { opacity: .7; cursor: progress; }
+.trace li.calc { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; color: #145f35; }
+
+/* calibrated 90% range under a count (R1 interval90) */
+.value .range { display: block; margin-top: 4px; font-size: 12px; font-weight: 600; letter-spacing: 0; color: var(--muted); }
+.ev-item.contrast .n { background: #7b4fd6; color: #fff; }
+
+/* ranked answers: one bar per candidate, the chosen one in the accent colour */
+.compare { margin: 6px 0 4px; font-size: 12px; }
+.compare-h { font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 3px; }
+.compare .crow { display: grid; grid-template-columns: minmax(60px, 34%) 1fr auto; gap: 8px; align-items: center; padding: 1px 0; }
+.compare .crow span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.compare .bar { height: 7px; background: #e8ecf1; border-radius: 4px; overflow: hidden; }
+.compare .bar i { display: block; height: 100%; background: #9aa7b8; }
+.compare .crow.win { font-weight: 700; color: var(--navy); }
+.compare .crow.win .bar i { background: var(--accent); }
+.compare .crow b { font-weight: 600; font-variant-numeric: tabular-nums; }
