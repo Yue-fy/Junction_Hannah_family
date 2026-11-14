@@ -297,6 +297,35 @@ def _poly(e: Element):
     return p if p.is_valid else p.buffer(0)
 
 
+_ZONE_NAME = re.compile(r"\b(brutto\w*|bruttoareal|nettoareal|gross (floor )?area|gfa|bta|bgf|nfa|area zone|"
+                        r"arealsone|flachenzone|zone)\b")
+
+
+def zone_spaces(spaces: list[Element]) -> set[str]:
+    """IfcSpaces that are area zones, not rooms: named as a gross/net area zone, or whose footprint holds >= 3 other
+    spaces of the set (hitos 'Bruttoareal uetg' 1618 m² over 59 rooms). Used to keep them out of 'largest room'
+    only: the dataset's room totals include every IfcSpace (W1 c5)."""
+    out = {e.guid for e in spaces if _ZONE_NAME.search(fold(f"{e.name or ''} {e.long_name or ''}"))}
+    polys = [(e, _poly(e)) for e in spaces if e.guid not in out]
+    polys = [(e, g) for e, g in polys if g is not None and g.area > 0.5]
+    if len(polys) > 400:
+        return out
+    for z, gz in polys:
+        n = 0
+        for o, go in polys:
+            if o is z or o.storey != z.storey or go.area >= 0.8 * gz.area:
+                continue
+            try:
+                if gz.intersection(go).area > 0.8 * go.area:
+                    n += 1
+            except Exception:  # noqa: BLE001 - invalid geometry: skip the pair
+                continue
+            if n >= 3:
+                out.add(z.guid)
+                break
+    return out
+
+
 def adjacent(idx: IfcIndex, space: Element, classes: tuple[str, ...], reach: float = 0.35) -> list[Element]:
     """Doors/windows (or any elements) of `classes` that touch a room: their plan footprint is within `reach` m of the
     room's footprint and their heights overlap. A door in a wall touches both rooms it connects; a window touches the
@@ -1194,6 +1223,13 @@ class IfcSolver(BaseSolver):
 
         # ---- aggregated quantities ------------------------------------------------------------------
         if it.top_n and it.kind == "space":
+            zs = zone_spaces(els) if len(els) >= 3 else set()
+            if zs and len(zs) < len(els):
+                assumptions.append(f"{len(zs)} space(s) are area zones over other rooms (e.g. "
+                                   f"'{next(e.long_name or e.name for e in els if e.guid in zs)}'), not rooms: left out")
+                trace.append(f"{len(zs)} area-zone space(s) left out of the ranking")
+                els = [e for e in els if e.guid not in zs]
+                conf = min(conf, 0.9)
             vals = sorted(((self._floor_area(e, it, [])[0] or 0.0, e) for e in els), key=lambda x: -x[0])
             if it.op == "argmin":
                 vals = vals[::-1]
@@ -1436,6 +1472,13 @@ class IfcSolver(BaseSolver):
                                                                   for v, e in vals], trace, assumptions, missing)
         big = it.op in ("max", "argmax")
         rank = max(1, int(rank))
+        zs = zone_spaces([e for _, e in vals]) if len(vals) >= 3 else set()
+        if zs and len(zs) < len(vals):
+            assumptions.append(f"{len(zs)} space(s) are area zones over other rooms (e.g. "
+                               f"'{next(lab_of(e) for _, e in vals if e.guid in zs)}'), not rooms: left out")
+            trace.append(f"{len(zs)} area-zone space(s) left out of the ranking")
+            vals = [(v, e) for v, e in vals if e.guid not in zs]
+            conf = min(conf, 0.85)
         order = sorted(vals, key=lambda x: x[0], reverse=big)
         v0, e0 = order[min(rank, len(order)) - 1]
         lab = lab_of(e0)
