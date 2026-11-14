@@ -37,8 +37,8 @@ caused by the perturbation, not by the drawing.
    Unscored but visible: two-part questions to dxf answer one part at 0.60 ("3" with unit m² for "how many rooms
    and what is their total area", bug 20, W2); on scans, unanswerable questions still get an invented number (514
    seats at 0.34) with no reason given (v10, W4).
-5. **Demo safety.** All 21 demo/tour questions give the expected answers on the test-2 build (19 right + the 2
-   deliberate misses, `demo/LIVE-CHECK.md`, 08:16). Judge-style questions on the three demo drawings (v6, v9, v12,
+5. **Demo safety.** 19 of the 21 demo/tour questions are as expected on the test-2 build; the other 2 are known
+   (the deliberate step-10 miss and an unquoted corridor wording the script avoids) (`demo/LIVE-CHECK.md`, 08:16). Judge-style questions on the three demo drawings (v6, v9, v12,
    v14) are sorted into safe / avoid in `demo/DEMO.md` ("If a judge types their own question").
 
 | family (rows) | what it asks | bb94fe4 (test 2): scored right · false premises handled · wrong at ≥ 0.8 |
@@ -577,6 +577,29 @@ spaces) — "How high above the ground floor is the top floor?" → 15.10 at 0.5
 Küchen gibt es … und wie gross ist die grösste?" → 4 only. Not confident, but wrong on screen. Fix: detect the second
 question and answer every part, or cap ≤ 0.3 with "answers only the count".
 
+## v15 (08:26): bug-18 probe — "how many X and how many Y" in 8 languages, with controls — 22 Qs
+Run `20261114-082629-pipeline-v15-7ba9` on night 5996739 (identical on bb94fe4, `-d553`). A repeated question word
+asks for two numbers (meta.parts); "in total" asks for one; a bare "X and Y" is ambiguous (both numbers or the sum
+accepted). **Two numbers asked: ifc 3/3 (W1's multi-part split: ET "Mitu ust ja mitu akent …" → "46 …; 55 …" at
+0.80), CubiCasa 2/2 (agent: "3 bedrooms and 1 sauna"), Swiss 0/10** — EN wordings ("…, and how many windows?", "Give
+me the number of doors and the number of windows", "…, respectively?") → compose's sum 64 / 32 **at 0.98**; Finnish →
+the agent answers doors only, 36 **at 0.95**; DE/FR/IT/NL/SV → dxf sums, 64 at 0.59–0.69. Controls hold: "in total" /
+"insgesamt" / "altogether" 4/4, bare "doors and windows" 3/3 (sum). W4 (compose, agent) and W2 (dxf) have the rows.
+
+## Pre-merge check #4 (08:27): night 5996739 + W1 059e9c4 + W3 1882e96 + W4 d40778d + R2 2ccace2 + R1 2941e4a
+All 516 rows, run `20261114-082711-pipeline-questions-v15-2f2a` vs night (`70ad` + `7216` + `7ba9`, same code as
+snapshot #3): **9 won, 1 lost; scored 89.7 → 91.4 %; confident misses 17 → 11** (scored wrong at ≥ 0.8 12 → 8,
+false premises at ≥ 0.8 5 → 3); core 283 rows 187/187 right at ≥ 0.8, 0/24 premises. Won: **bug 17 fixed** ("1,200
+euros" → 55,200 and "€1,500" → 69,000 at 0.92, German "1.200 €" 55,200 at 0.75, Swiss "1'200 CHF" 43,200 at 0.89 via
+the agent), "how many floors" 7 → 5 (EN, FI), Finnish "kellarikerroksessa" 50 → 20, "top floor" 0 → 39, "1.korrus
+and 2.korrus together" 42 → 88, "the 7th / eighth floor" 46 at 0.98 → 0 at 0.50; "Are there more doors on '2.korrus'
+than on '5.korrus'?" now "yes (42 vs 3…)" at 0.89; the Swiss PNG's apartment B 16.78 → 77.79 m² at 0.50 (gold 80.83,
+W3). Lost: the Swiss "1,200 euros per door" → 91,200 at 0.45 (dxf table code multiplied by all objects; LLM noise,
+was 43,200 at 0.45). **Calibration regression (W1 059e9c4): 7 right "ground floor" answers drop from 0.98 to 0.29**
+— on smiley-west ('EG') and esplanades ('1.korrus') "ground floor" now "matches no single storey" and is answered
+for the sheet's storey, right only by coincidence. Left at ≥ 0.8: bug 18 (Swiss two-number questions, 5 + 3 in
+v14/v15), bug 19 (ifc "ground floor, and … top floor" → 211; 211), one-floor "whole building" ×3 (W2).
+
 ## For Saturday noon: red-team Stoa's example questions in one command (`redteam/from_examples.py`)
 Put Stoa's examples in a jsonl (`path`, `question`, and `answer` / `unit` when known; a path may be absolute), then
 ```
@@ -602,8 +625,8 @@ stayed 3 but moved confidence band (0.75 → 0.35 / 0.92).
 - Rotated, grayscale, heavily compressed and half-resolution copies of a plan: 30/30 right, at the same confidence.
 
 ## Re-run
-`questions.jsonl` now has 494 rows: v1 (174) + v2 (31) + v3 Swiss compositions (42) + v4 CubiCasa compositions (36) +
-v5 natural references (70) + v6 judge questions on the demo drawings (21) + v7 scope words in 9 languages (36) + v8 scope premises (8) + v9 Finnish judge (14) + v10 scan follow-ups (8) + v11 number formats (10) + v12 Estonian labels (5) + v13 lone PDF/PNG (8) + v14 two-part / comparisons / heights / which (31) = 494; earlier rows are byte-identical across builds (checked with cmp), so runs on the first 205 /
+`questions.jsonl` now has 516 rows: v1 (174) + v2 (31) + v3 Swiss compositions (42) + v4 CubiCasa compositions (36) +
+v5 natural references (70) + v6 judge questions on the demo drawings (21) + v7 scope words in 9 languages (36) + v8 scope premises (8) + v9 Finnish judge (14) + v10 scan follow-ups (8) + v11 number formats (10) + v12 Estonian labels (5) + v13 lone PDF/PNG (8) + v14 two-part / comparisons / heights / which (31) + v15 bug-18 probe (22) = 516; earlier rows are byte-identical across builds (checked with cmp), so runs on the first 205 /
 283 rows compare directly (`python3 $JUNCTION_SHARED/artifacts/Q/subset_stats.py <run> 283`). Build with
 `PYTHONHASHSEED=0 PYTHONPATH=.`; v5 calls the ifc solver for its gold (deterministic, < 1 s per row).
 ```
