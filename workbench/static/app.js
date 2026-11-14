@@ -382,6 +382,15 @@ const asker = {
     if (v.n_pages > 1) $("#ask-page").addEventListener("change", (e) => this.open(this.path, +e.target.value));
     await this.viewer.load(v, []);
     measure.reset(v);
+    if (this.dsPath !== path) {
+      this.dsPath = path;
+      $("#ds-n").textContent = "…"; $("#ds-list").innerHTML = "";
+      api(`api/dataset-questions?path=${encodeURIComponent(path)}`).then((d) => {
+        $("#ds-n").textContent = d.n;
+        $("#ds-list").innerHTML = d.questions.map((q) => `<li>${esc(q.question)} <small>→ ${esc(q.answer)}</small></li>`).join("") ||
+          "<li>None: this drawing has no dataset questions yet.</li>";
+      }).catch(() => { $("#ds-n").textContent = "?"; });
+    }
   },
   async ask() {
     const question = $("#q-text").value.trim();

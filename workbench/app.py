@@ -222,6 +222,39 @@ def ask(a: AskIn):
     return run_pipeline(a.path, a.question)
 
 
+def _warm() -> None:
+    """Load the pipeline and its imports in the background, so the expert's first "Ask" is not a 30 s wait."""
+    try:
+        item = next((r for r in _audit_items() if r.get("source") == "swiss_dwellings"), None)
+        if item:
+            run_pipeline(item["path"], item["question"])
+        else:
+            _pipeline()
+    except Exception:  # noqa: BLE001
+        pass
+
+
+@app.on_event("startup")
+def _startup() -> None:
+    threading.Thread(target=_warm, daemon=True).start()
+
+
+@app.get("/api/dataset-questions")
+def dataset_questions(path: str = Query(...)):
+    """What the dataset already asks about this drawing (so the expert can go beyond it). Never for test drawings."""
+    try:
+        catalog.safe_file(path)
+        if catalog.is_sealed(path):
+            raise catalog.BadPath("this drawing belongs to the sealed test split")
+    except Exception as e:  # noqa: BLE001
+        _bad(e)
+    from stoa.data import load_questions
+
+    rows = [q for q in load_questions() if q.path == path]
+    return {"n": len(rows), "questions": [{"question": q.question, "answer": _fmt_value(q.answer, q.unit), "type": q.type}
+                                          for q in rows[:60]]}
+
+
 class QuestionIn(BaseModel):
     path: str
     page: int = 0
