@@ -138,5 +138,11 @@ pretrained CC5K net never saw them) minus drawings in the LoRA's training data m
 4. Hosted Nemotron (thinking on, ~30 s, ~5k tokens, 1–2 API calls): only for escalated / demo questions. It is
    not more accurate than the local 8B in direct mode, so it should be used as a reasoning verifier
    (e.g. "here is the count and the points; check it"), not as a first-pass counter.
-5. If the counting LoRA wins on dev cc and on train_gate per concept, it replaces step 2 for those concepts
-   (same server with LoRA enabled, `model="cc-v2"`).
+5. Counting LoRAs (status 03:50): cc-v2 replaced step 2 for atomic cubicasa counts (W4's per-concept gate fitted on
+   train_gate; pipeline dev weighted 74.0 → 82.1, $0.03/1k, 1 call, 2 output tokens). For raster plans of any other
+   style `vlm_lora` uses cc-v3 (+16 over the base 8B on swiss PNGs). Both on :8001 (start.sh loads them by default).
+6. Cheap cross-check before any escalation: R1's CC5K detector boxes (cache read, 0 tokens) agree/disagree with the
+   LoRA count → confidence + located evidence. Agreement adds little beyond the LoRA's own p (R1 01:56), so use it
+   for evidence and for the 'missing' note, not for a second model call.
+7. Nemotron (hosted) stays a visible second opinion on low-confidence image answers (W5's button), not a bulk tier.
+8. Gemma 4 E4B base is weaker than the 8B (cubicasa 31.7 vs 46.2); its role depends on the Gemma LoRA result.
