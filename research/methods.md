@@ -801,3 +801,28 @@ and c8 was written by W1 for the same bug class, so the classes are known, the w
 Still open: Swiss PDF↔DXF↔PNG and CubiCasa link questions ('Is there an IFC model for this plan?', 'do this plan and
 its DXF agree on doors?') — facts() returns [] for non-IFC files, so kg_qa abstains and the pipeline answers (right
 on v23 at 0.30–0.45). Finnish/Italian/Estonian trigger recall 54–79% on paraphrases.
+
+### 8m. Estimate, don't refuse: out-of-drawing questions (measured end to end; NOT wired, a post-noon option)
+Stoa point 3. Q's audit (KNOWLEDGE 09:16): the pipeline answers rent / occupants / price / construction cost /
+U-value / construction year / energy questions with the string "unknown" @ 0.25. `experiments/r1/estimate/
+estimate.py`: `kind_of(question)` (en/fi/sv/de/fr/it/nl/et/es; questions that STATE their own rate are not ours —
+those are derived quantities) and `solve(path, question)` = a quantity the drawing DOES hold (dwelling area from DXF
+rooms / IFC spaces / CubiCasa room graph; bedroom count) × a published reference rate for the dataset's country,
+with the rate's range as the interval, assumptions and 'what would settle it' in `missing`, evidence = the rooms
+summed, confidence ≤ 0.2 by construction, 0 LLM calls. `pipeline_est.py` = Pipeline + this route (CubiCasa/Swiss:
+estimate first; IFC/sheets/scans: pipeline first, estimate only when that gives None / not a number / < 0.3 without
+evidence; text-judged sources get a sentence "Not recorded in the model; estimate ~ …").
+End to end on probe_e2e.jsonl (107 rows, Q-style; runs artifacts/eval/20261114-103519-pipeline-probe_e2e-65ce vs
+-103949-pipeline_est-probe_e2e-d933, `python experiments/r1/estimate/compare.py A.jsonl B.jsonl`):
+| 101 out-of-drawing rows | pipeline | pipeline_est |
+|---|---|---|
+| bare 'unknown' / None | 16 | **0** |
+| a number or a flagged estimate | 55 | **100** |
+| answers at conf ≥ 0.5 (should be few: nothing is read) | 20 | 11 |
+| LLM calls / tokens / wall | 328 / 787k / 1021 s | **180 / 492k / 254 s** |
+The 6 'states its own rate' rows: 0 values changed. Trigger: **1 fire on 127,044 dataset questions** (ifc_bench
+duplex_mep 'What is the predicted annual energy consumption?', gold 'This information is not available in the BIM
+model.' — the IFC route answers first, the estimate only as the sentence fallback) and 0 on 1,491 open-split rows.
+No accuracy number exists for these (no gold); what it buys is Stoa's 'no bare refusal' + cost. Wiring = ~10 lines
+in Pipeline._solve_question after the link route (W4); deliberately not before the 11:10 freeze (D22: no new
+subsystems). Decide after the noon reveal if Stoa's hidden kinds include out-of-drawing questions.
