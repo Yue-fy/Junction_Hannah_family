@@ -29,6 +29,7 @@ class Cell:
     x1: float
     y: float
     box: tuple  # unrotated page space (PyMuPDF words), for evidence
+    words: tuple = ()  # (x0, x1, text, box) per word, visual space
 
     @property
     def xc(self) -> float:
@@ -93,7 +94,8 @@ def page_rows(page) -> tuple[list[Row], float]:
             seg.append(b)
         cells.append(seg)
         y = statistics.mean((w[1] + w[3]) / 2 for w in g)
-        rows.append(Row(y, [Cell(" ".join(w[4] for w in s), s[0][0], s[-1][2], y, _union([w[5] for w in s]))
+        rows.append(Row(y, [Cell(" ".join(w[4] for w in s), s[0][0], s[-1][2], y, _union([w[5] for w in s]),
+                                 tuple((w[0], w[2], w[4], w[5]) for w in s))
                             for s in cells]))
     return rows, h
 
@@ -206,6 +208,7 @@ def _build(rows: list[Row], run: list[int], h: float, _depth: int = 0) -> Table 
                 vals[k] = (vals[k] + " " + c.text).strip()
                 bs.append(c.box)
                 cb[k] = c.box if cb[k] is None else _union([cb[k], c.box])
+        _split_glued(rows[i].cells, xs, vals, cb, col_of)
         if not bs or (len(xs) >= 4 and sum(bool(v) for v in vals) <= 1):
             continue  # stray word / blank row inside the table, not a record
         data.append(vals)
@@ -421,6 +424,33 @@ def _pull_totals(t: Table) -> None:
             t.cell_boxes = [t.cell_boxes[i] for i in keep]
     elif drop:
         t.totals.clear()
+
+
+DIM_END = re.compile(r"(?:\d+/\d+|\d)[\"']?$")
+WORD_ONLY = re.compile(r"[A-Za-z][A-Za-z./()&-]*$")
+
+
+def _split_glued(cells: list[Cell], xs: list[float], vals: list[str], cb: list, col_of) -> None:
+    """Tight columns glue neighbouring cells into one ("6' - 5 3/8\" SLIDER" = height + type). Split a cell where a
+    dimension/number is followed by plain words whose centre is nearest to a column on the right that is empty in
+    this row."""
+    for c in cells:
+        k = col_of(c)
+        if k is None or len(c.words) < 2 or vals[k] != c.text:
+            continue
+        for sp in range(1, len(c.words)):
+            left, right = c.words[:sp], c.words[sp:]
+            if not DIM_END.search(left[-1][2]) or not all(WORD_ONLY.match(w[2]) for w in right):
+                continue
+            xc = (right[0][0] + right[-1][1]) / 2
+            k2 = min(range(len(xs)), key=lambda j: abs(xs[j] - xc))
+            if k2 <= k or vals[k2] or abs(xs[k2] - xc) >= abs(xs[k] - xc):
+                continue
+            vals[k] = " ".join(w[2] for w in left)
+            vals[k2] = " ".join(w[2] for w in right)
+            cb[k] = _union([w[3] for w in left])
+            cb[k2] = _union([w[3] for w in right])
+            break
 
 
 def _merge(rows: list[Row], tables: list[Table], h: float) -> list[Table]:

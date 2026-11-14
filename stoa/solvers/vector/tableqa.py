@@ -101,13 +101,18 @@ WHICH = re.compile(r"^\s*(which|welche[rs]?|quel(?:le)?s?\s+(?:appartement|pièc
                    r"in\s+which|welk[e]?|vilk(?:en|et)|cu[áa]l|kumpi|kt[óo]r[ey])\b", re.I)
 
 
-def _render(tables: dict[str, pd.DataFrame], max_rows: int = 160) -> str:
+def _render(tables: dict[str, pd.DataFrame], max_rows: int = 160, sep: str = ",") -> str:
+    """sep="|": values are shown as printed, without CSV quote doubling (a 14"x6" cell is not shown doubled)."""
+    import csv
+
     out = []
     for name, df in tables.items():
         if df.empty:
             out.append(f"{name}: (empty)")
             continue
-        out.append(f"{name} ({len(df)} rows):\n" + df.head(max_rows).to_csv(index=False))
+        body = (df.head(max_rows).to_csv(index=False) if sep == "," else
+                df.head(max_rows).to_csv(index=False, sep=sep, quoting=csv.QUOTE_NONE, escapechar="\\"))
+        out.append(f"{name} ({len(df)} rows{', columns separated by ' + repr(sep) if sep != ',' else ''}):\n" + body)
     return "\n".join(out)
 
 
@@ -186,13 +191,13 @@ def _where(code: str, tables: dict[str, pd.DataFrame]) -> str:
 
 
 def ask(question: str, tables: dict[str, pd.DataFrame], backend: str = "local", tries: int = 3, doc: str = DOC,
-        id_col: str = "room_id", units: str = '"count", "m2"', lookup_text: bool = False) -> dict:
+        id_col: str = "room_id", units: str = '"count", "m2"', lookup_text: bool = False, sep: str = ",") -> dict:
     """lookup_text: a typed-in string that is a table cell is sent back once ("look it up"); if the lookup fails,
     the typed answer is kept (res["typed"] = True)."""
     from stoa.llm import chat
 
     names = ", ".join(f"`{k}`" for k in tables)
-    msgs = [{"role": "user", "content": PROMPT.format(doc=doc, data=_render(tables), question=question, names=names,
+    msgs = [{"role": "user", "content": PROMPT.format(doc=doc, data=_render(tables, sep=sep), question=question, names=names,
                                                       id_col=id_col, units=units)}]
     last = {"value": None, "unit": None, "used": [], "code": "", "error": "no attempt"}
     typed = None  # the first typed-in cell answer, kept as the fallback

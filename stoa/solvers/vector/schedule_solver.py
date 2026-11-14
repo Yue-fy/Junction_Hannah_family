@@ -128,6 +128,7 @@ def _qty_sum(value: int, used: list, tables: dict[str, pd.DataFrame], question: 
     used = [int(u) for u in used if isinstance(u, (int, float)) and int(u) < 900000]
     if not used or value != len(set(used)):
         return None
+    question = re.sub(r"\([^)]*\)", " ", question)  # "(types SS, TT and UU)" filters, it is not the counted noun
     m = re.search(r"how many\s+(.*?)(?:\b(?:are|is|does|do|have|has|carry|carries|appear|in|on|at|of|with|that|which|"
                   r"whose|for|from|within|scheduled|listed|shown|use|uses|need|needs|require|get|belong)\b|[?,]|$)", question, re.I)
     if m is None or KINDS_RE.search(m.group(1)):
@@ -222,7 +223,7 @@ class ScheduleSolver(BaseSolver):
             f"{n} ({len(df)}x{len(df.columns) - 1})" for n, df in tables.items())]
         try:
             res = tableqa.ask(question, tables, backend=self.backend, doc=doc, id_col="row_id",
-                              units='"count", "ft2", "m2", "ft", "m"', lookup_text=True)
+                              units='"count", "ft2", "m2", "ft", "m"', lookup_text=True, sep="|")
         except Exception as e:  # noqa: BLE001
             return Answer.abstain(self.name, f"table QA failed: {type(e).__name__}: {e}", trace)
         trace.append("table QA code: " + " ; ".join(ln.strip() for ln in (res.get("code") or "").splitlines()
