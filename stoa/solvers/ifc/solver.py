@@ -2042,7 +2042,32 @@ class IfcSolver(BaseSolver):
                     t = sum(th for nm, th in e.layers if material_match(layer_fam, [nm]))
                     return t or None
                 return sum(th for _, th in e.layers) or None
-            return (e.dims or {}).get(attr)
+            d = e.dims or {}
+            if attr in ("OverallWidth", "OverallHeight") and e.guid in swapped:
+                return d.get("OverallHeight" if attr == "OverallWidth" else "OverallWidth")
+            return d.get(attr)
+
+        # width/height exported swapped on some instances of a type (digital_hub: 4 of 8 escape doors 2.27 x 0.95,
+        # the other 4 0.95 x 2.27): if a sibling of the same type has the transposed size and the element is a
+        # door lying on its side (width > height), read it the sibling's way (W1 c5)
+        swapped: set[str] = set()
+        if attr in ("OverallWidth", "OverallHeight"):
+            by_type: dict[str, list[tuple[float, float]]] = {}
+            for e in els:
+                d = e.dims or {}
+                if d.get("OverallWidth") and d.get("OverallHeight"):
+                    by_type.setdefault(tk(e), []).append((round(d["OverallWidth"], 3), round(d["OverallHeight"], 3)))
+            for e in els:
+                d = e.dims or {}
+                w_, h_ = d.get("OverallWidth"), d.get("OverallHeight")
+                if w_ and h_ and e.cls.startswith("IfcDoor") and w_ > h_ and \
+                        (round(h_, 3), round(w_, 3)) in by_type.get(tk(e), []):
+                    swapped.add(e.guid)
+            if swapped:
+                trace.append(f"{len(swapped)} door(s) have width and height swapped against other doors of their type: "
+                             "read transposed")
+                assumptions.append(f"{len(swapped)} door(s) export OverallWidth/OverallHeight swapped (same type, "
+                                   "transposed size elsewhere); read as their siblings")
 
         vals = [(value(e), e) for e in els]
         vals = [(v, e) for v, e in vals if v is not None and v > 0]
