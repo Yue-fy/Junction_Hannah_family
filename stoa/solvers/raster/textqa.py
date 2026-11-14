@@ -15,7 +15,7 @@ import json
 import re
 
 from stoa import llm
-from stoa.contract import Answer, Evidence, record_cost
+from stoa.contract import Answer, Evidence
 from stoa.solvers.raster import textlayer as T
 
 PROMPT = """You answer a question about a scanned technical drawing (architecture / engineering).
@@ -65,8 +65,6 @@ def answer(path: str, question: str, image_path: str | None = None, backend: str
     prompt = PROMPT.format(facts=facts(tl), texts=texts or "(no text found)", question=question.strip())
     r = llm.chat(prompt, images=[str(T._abspath(image_path or path))], backend=backend, max_tokens=300,
                  json_schema=SCHEMA, cache=True)
-    record_cost(llm_tokens_in=r.prompt_tokens or 0, llm_tokens_out=r.completion_tokens or 0, llm_calls=1,
-                gpu_seconds=llm.gpu_seconds_estimate(r.prompt_tokens or 0, r.completion_tokens or 0))
     trace = [f"text layer: {len(tl.items)} texts in {tl.tiles} tile(s); {facts(tl).splitlines()[0]}"]
     try:
         d = json.loads(r.text)

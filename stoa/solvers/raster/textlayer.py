@@ -67,6 +67,7 @@ class TextLayer:
     size: tuple[int, int]
     items: list[TextItem] = field(default_factory=list)
     tiles: int = 1
+    calls: int = 0
     tokens_in: int = 0
     tokens_out: int = 0
     seconds: float = 0.0
@@ -177,25 +178,26 @@ def text_layer(path: str, backend: str = "local", tile: int = 1100, upscale_to: 
     with _glock:
         lk = _locks.setdefault(key, threading.Lock())
     with lk:
-        if key not in _mem:
-            f = _disk_key(path, tile, backend)
-            if f.exists():
-                d = json.loads(f.read_text())
-                d["items"] = [TextItem(**i) for i in d["items"]]
-                d["size"] = tuple(d["size"])
-                _mem[key] = TextLayer(**d)
-            else:
-                _mem[key] = _read(path, backend, tile, upscale_to, max_tokens, workers)
-                try:
-                    f.parent.mkdir(parents=True, exist_ok=True)
-                    f.write_text(json.dumps(asdict(_mem[key])))
-                except OSError:
-                    pass
-        tl = _mem[key]
-    record_cost(llm_tokens_in=tl.tokens_in, llm_tokens_out=tl.tokens_out, llm_calls=tl.tiles,
-                gpu_seconds=llm.gpu_seconds_estimate(tl.tokens_in, tl.tokens_out)
-                if hasattr(llm, "gpu_seconds_estimate") else tl.seconds)
-    return tl
+        if key in _mem:  # read earlier in this process (another question on the same drawing): already paid
+            return _mem[key]
+        f = _disk_key(path, tile, backend)
+        if f.exists():
+            d = json.loads(f.read_text())
+            d["items"] = [TextItem(**i) for i in d["items"]]
+            d["size"] = tuple(d["size"])
+            tl = TextLayer(**d)
+            # persisted from an earlier run: bill it as computed, so warm and cold runs cost the same
+            record_cost(llm_tokens_in=tl.tokens_in, llm_tokens_out=tl.tokens_out, llm_calls=tl.calls or tl.tiles,
+                        gpu_seconds=llm.gpu_seconds_estimate(tl.tokens_in, tl.tokens_out))
+        else:
+            tl = _read(path, backend, tile, upscale_to, max_tokens, workers)  # llm.chat bills each call itself
+            try:
+                f.parent.mkdir(parents=True, exist_ok=True)
+                f.write_text(json.dumps(asdict(tl)))
+            except OSError:
+                pass
+        _mem[key] = tl
+        return tl
 
 
 def _read(path: str, backend: str, tile: int, upscale_to: int, max_tokens: int, workers: int) -> TextLayer:
@@ -213,15 +215,19 @@ def _read(path: str, backend: str, tile: int, upscale_to: int, max_tokens: int, 
             crop = crop.resize((round(crop.width * s), round(crop.height * s)), Image.LANCZOS)
         r = llm.chat(OCR_PROMPT, images=[crop], backend=backend, max_tokens=max_tokens,
                      max_pixels=upscale_to * upscale_to, max_side=max(upscale_to, 1024), cache=True)
-        notes = []
+        notes, tin, tout, ncalls = [], 0, 0, 1
         items = parse_items(r.text, x1 - x0, y1 - y0)
         if r.finish_reason == "length" and len(items) < 3:  # looping output: one retry with a repetition penalty
             r2 = llm.chat(OCR_PROMPT, images=[crop], backend=backend, max_tokens=max_tokens,
                           max_pixels=upscale_to * upscale_to, max_side=max(upscale_to, 1024), cache=True,
                           extra_body={"repetition_penalty": 1.1})
             items2 = parse_items(r2.text, x1 - x0, y1 - y0)
+            ncalls = 2  # both tries are billed: `extra` = the one that is not kept in `r`
             if len(items2) > len(items):
+                tin, tout = r.prompt_tokens or 0, r.completion_tokens or 0
                 items, r = items2, r2
+            else:
+                tin, tout = r2.prompt_tokens or 0, r2.completion_tokens or 0
             notes.append(f"tile {i}: retry with repetition_penalty")
         elif r.finish_reason == "length":
             notes.append(f"tile {i}: text list truncated at {max_tokens} tokens")
@@ -229,17 +235,18 @@ def _read(path: str, backend: str, tile: int, upscale_to: int, max_tokens: int, 
             it.box = [round(it.box[0] + x0, 1), round(it.box[1] + y0, 1), round(it.box[2] + x0, 1),
                       round(it.box[3] + y0, 1)]
             it.tile = i
-        return items, notes, r.prompt_tokens or 0, r.completion_tokens or 0
+        return items, notes, tin + (r.prompt_tokens or 0), tout + (r.completion_tokens or 0), ncalls
 
     with cf.ThreadPoolExecutor(min(workers, len(boxes))) as ex:
         ctxs = [contextvars.copy_context() for _ in boxes]
         res = list(ex.map(lambda cb: cb[0].run(read_one, cb[1]), zip(ctxs, enumerate(boxes))))
     allitems = []
-    for items, notes, ti, to in res:
+    for items, notes, ti, to, nc in res:
         allitems += items
         tl.notes += notes
         tl.tokens_in += ti
         tl.tokens_out += to
+        tl.calls += nc
     tl.items = merge_items(allitems)
     tl.seconds = round(time.perf_counter() - t0, 2)
     return tl

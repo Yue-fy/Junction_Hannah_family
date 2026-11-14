@@ -99,15 +99,16 @@ def test_tiled_labels_merge_overlap_and_charge_cost(monkeypatch):
     from stoa.solvers.raster import vlm
 
     # every tile sees one "MH" in its own centre and one "S" at its top-left; neighbours overlap
-    def fake_chat(prompt, images=None, **kw):
-        return llm.ChatResult(text='[{"bbox_2d": [480, 480, 520, 520], "text": "MH"}, '
-                                   '{"bbox_2d": [0, 0, 20, 20], "text": "S"}]',
-                              prompt_tokens=100, completion_tokens=20, latency_s=0.1, backend="local")
+    def fake_chat(prompt, images=None, **kw):  # like llm.chat, bills itself to the caller's meter (llm._charge)
+        return llm._charge(llm.ChatResult(text='[{"bbox_2d": [480, 480, 520, 520], "text": "MH"}, '
+                                               '{"bbox_2d": [0, 0, 20, 20], "text": "S"}]',
+                                          prompt_tokens=100, completion_tokens=20, latency_s=0.1, backend="local"))
     monkeypatch.setattr(vlm.llm, "chat", fake_chat)
     with CostMeter() as m:
         items, log = vlm.read_labels_tiled(Image.new("RGB", (1000, 800), "white"))
     assert sum(i.text == "MH" for i in items) == 4  # 4 distinct tile centres
-    assert log.tokens_in == 400 and m.cost.llm_calls == 4  # cost reaches the caller's meter from the threads
+    # cost reaches the caller's meter from the threads, once per call (raster no longer bills on top of llm.chat)
+    assert log.tokens_in == 400 and m.cost.llm_calls == 4 and m.cost.llm_tokens_in == 400
 
 
 def test_tk_is_a_vestibule_not_a_kitchen():
