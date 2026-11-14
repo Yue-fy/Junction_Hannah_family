@@ -154,7 +154,7 @@ def test_off_domain_symbol_counts_abstain_and_scans_go_to_text_mode():
     a = s._off_domain("data/swiss_dwellings/x.png", "window", [])
     assert a.value is None and "detector" in a.missing[0]  # no Finnish prior on a Swiss/scan drawing
     assert s._text_mode("data/habs/x_sheet_00001.jpg", "What is the scale of this drawing?")
-    assert not s._text_mode("data/cubicasa5k/x.png", "What is the scale of this drawing?")
+    assert s._text_mode("data/cubicasa5k/x.png", "What is the scale of this drawing?")  # non-count: text mode (W3 c5)
     assert not RasterSolver(text=0)._text_mode("data/habs/x.jpg", "What is the scale of this drawing?")
 
 
@@ -252,7 +252,7 @@ def test_swiss_png_without_twin_goes_to_text_mode(monkeypatch):
     assert R.RasterSolver(twins=0)._text_mode("data/swiss_dwellings/x.png", q)
     monkeypatch.setattr(R, "_siblings", lambda p: {".png": p})
     assert R.RasterSolver()._text_mode("data/swiss_dwellings/x.png", q)
-    assert not R.RasterSolver()._text_mode("data/cubicasa5k/x.png", q)
+    assert R.RasterSolver()._text_mode("data/cubicasa5k/x.png", q)  # non-count questions on CubiCasa: text mode
 
 
 def test_sheet_kind_titles_and_room_questions():
@@ -335,3 +335,14 @@ def test_apartment_net_area_sums_printed_rooms_inside_the_unit_boundary(tmp_path
                  box=[0, 0, 296, 10], residual=1.0, source="layer")
     SB._resolve_unknown([bar], TextLayer(path="x.png", size=(2480, 1753), items=[TextItem("1:200 (A3)", [0, 0, 9, 9])]))
     assert bar.unit == "m"
+
+
+def test_cubicasa_non_count_questions_go_to_text_mode(monkeypatch):
+    """An unseen non-count question on a CubiCasa plan ('area of the living room', printed 'OH 22.8') is read from
+    the text layer; count questions stay with the counting methods."""
+    import stoa.solvers.raster as R
+
+    s = R.RasterSolver()
+    assert s._text_mode("data/cubicasa5k/x.png", "What is the area of the living room (OH) in m²?")
+    assert not s._text_mode("data/cubicasa5k/x.png", "How many rooms have a window?")
+    assert not s._text_mode("data/cubicasa5k/x.png", "Kuinka monta makuuhuonetta on?")

@@ -45,6 +45,10 @@ CANONICAL = {  # used when a composition needs a `direct` answer for one part
 }
 IMG_EXT = (".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp")
 # sources whose non-template questions keep going to their own solvers / vlm_direct (no text-grounded raster answer)
+_COUNT_Q = re.compile(r"\b(how many|number of|count|montako|kuinka monta|lukumäärä|wie viele|anzahl|combien|"
+                      r"nombre de|quant[ie]|numero di|hur många|antal|cu[aá]nt[oa]s|ile|kolik|mitu|hány|câte|kaç)\b", re.I)
+
+
 def _siblings(path: str) -> dict:
     try:
         from stoa.data import siblings
@@ -146,6 +150,11 @@ class RasterSolver(BaseSolver):
         src = source_of(path)
         if src not in TEXT_OFF:
             return True
+        if src == "cubicasa5k":
+            # an unseen NON-count question on a CubiCasa plan ('area of the living room': many print 'OH 22.8'):
+            # read it from the text layer. Count questions keep the counting LoRA / vlm_direct (0 dev/hard/hard2 Qs
+            # reach this branch: all their CubiCasa questions are recognised counts)
+            return not _COUNT_Q.search(question)
         # a Swiss-style plan with NO vector twin (an unseen PNG/JPEG floor): dxf can't answer, so raster reads and
         # measures it (scale bar + room fill: Swiss PNG dev rooms median error 5-6.5%, vs VLM guesses ~50%)
         return src == "swiss_dwellings" and (not self.twins or not ({".pdf", ".dxf", ".ifc"} & set(_siblings(path))))
