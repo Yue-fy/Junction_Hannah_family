@@ -103,7 +103,14 @@ _OPS = [
     ("rest", r"\b(other than|leaving out|apart from|besides|all the other|the other rooms|remaining|übrigen|autres que|"
              r"lukuun ottamatta <q>|do(?:es)? not belong|don't belong|not (?:part of|belonging to|in|within) "
              r"(?:the )?(?:apartment|unit|storey|floor|level|room)|outside (?:of )?(?:the )?(?:apartment|unit)|"
-             r"nicht zu|n'appartiennent pas|ne font pas partie)"),
+             r"nicht zu|n'appartiennent pas|ne font pas partie|"
+             # c73: exclusion word + a named apartment/room/storey (NOT "excluding balconies": template wording)
+             r"(?:except|excluding|without|minus|but|ohne|ausser|au(?:ss|ß)er|abz[uü]glich|sans|sauf|hors|escluso|esclusa|"
+             r"esclusi|senza|tranne|eccetto|ilman|paitsi|utan|f[oö]rutom|zonder|behalve|uden|bortset fra)\s+(?:for\s+|of\s+)?"
+             r"(?:the\s+|those\s+(?:of|in)\s+|die\s+|der\s+|den\s+|dem\s+|la\s+|le\s+|l'|il\s+|lo\s+|l')?"
+             r"(?:apartment|flat|unit|wohnung|appartement|appartamento|asunto|lagenhet|room|zimmer|raum|pi[eè]ce|locale|"
+             r"storey|floor|level|geschoss|etage|<q>)|"
+             r"\b(?:leave|leaving|left|take|taking|taken)\s+(?:\w+\s+){0,3}(?:out|aside|away)\b|\brest of (?:the|this)\b)"),
     ("ratio", r"\b(how many times|times (?:larger|bigger|smaller|greater|as (?:large|big|many))|divided by|"
               r"per (?:apartment|unit|storey|floor|level|room|bedroom|person)|mal so (?:gro(?:ß|ss)|viel)|fois plus)\b"),
     ("threshold", r"\b(?:gr[öo](?:ß|ss)er|kleiner|mehr|weniger)\s+als\s+\d|\bplus (?:grande?s?|petite?s?|de)\s+(?:que\s+)?\d|"
