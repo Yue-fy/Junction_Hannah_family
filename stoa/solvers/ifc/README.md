@@ -133,4 +133,10 @@ also end to end through `pipeline`). ifc_models train/dev/hard/hard2 stay 100% w
   the model (4351: 21 with GUIDs) instead of the fact-card LLM.
 - Exclusions by quote position: storey 'Attic' vs room 'Attic (414B-…)' (W4); no 'exclusion NOT applied' line when
   the rest rule applied it.
+- Later in the cycle: digits are ungrouped once in `solve()` outside quoted names (`ungroup_question`; 'wider than
+  1,000 mm' was read as 1.0 mm); roof levels by whole word ('Dachgeschoss' is an attic floor: IFC-Bench 'number of
+  levels' golds 4/4); `cable_tray` kind (carriers named tray/ladder/trunking, conduits left out); derived wordings
+  (probe 4 `experiments/w1/probes/c6_derived.py`, 6 -> 10/10): '25% of the doors are replaced' = 25% of the count
+  ('remain' = 75%), 'share of the openings on S are windows' = windows / (doors + windows) at 0.6, 'gets a lock
+  costing 1,050 euros', 'weighs 35 kg'. Probe 3 (`c6_q3.txt`, 3 untuned IFC-Bench models, es/sv/cs) 15/15.
 Tests: `tests/test_ifc_c6.py`.
