@@ -457,13 +457,12 @@ def parse(question: str, vocab: list[str] | None = None, room_numbers: set[str] 
                 found[kind] = ps[0]
         if "toilet" in found and "washbasin" not in found and re.search(r"\bwc[- ]?seats?\b", ql):
             pass
-        if not found:
-            for w, kind in AMBIGUOUS.items():
-                ps = _find_words([w], ql)
-                if ps:
-                    found[kind] = ps[0]
-                    notes.append("'sink' read as washbasin (kitchen sinks are not on the FIXTURE layer rules)")
-                    break
+        for w, kind in AMBIGUOUS.items():  # also as the 2nd noun: "toilets and sinks" (Q 04:48: sinks were dropped)
+            ps = _find_words([w], ql)
+            if ps and kind not in found:
+                found[kind] = ps[0]
+                notes.append("'sink' read as washbasin (kitchen sinks are not on the FIXTURE layer rules)")
+                break
         # "bath" inside "bathtub" is the same object; "apartment" in "apartment A" is not a count of apartments
         terms = [Term("count", k, p) for k, p in sorted(found.items(), key=lambda kv: kv[1])]
         if not terms:
@@ -701,3 +700,59 @@ ATTR_W = re.compile(r"\bfire\b|feuer|\bincendi|\bbrand(?:schutz|widerstand)|u-?v
                     r"\bwidth\s+of\s+(?:the\s+)?(?:door|window)|\bopening\s+direction|\bswing\b|\bhinge|"
                     r"how\s+(?:tall|high)\b|\btall\b|\bfinish(?:es|ing)?\b|flooring|floor\s+covering|bodenbelag|"
                     r"rev[êe]tement|rivestimento", re.I)
+
+
+_CONJ = re.compile(r"\b(?:and|und|et|e|ed|y|i|och|og|en|a|ja|és|ve|și|plus|as\s+well\s+as|together\s+with|sowie|ainsi\s+que)\b|&|\+", re.I)
+
+
+def unparsed_conjunct(question: str, qr: "Query") -> str | None:
+    """'How many toilets and X …': a count question that joins two noun phrases with 'and' while the parse found ONE
+    class: return the word after the conjunction that no term covers (None when every conjunct is parsed)."""
+    if qr.qtype != "count" or len(qr.terms) != 1 or qr.op != "sum":
+        return None
+    q = _norm(question).lower()
+    m = re.search(COUNT_WORDS, q)
+    if not m:
+        return None
+    head = q[m.end():m.end() + 80]
+    head = re.split(r"\b(?:are|is|does|do|have|has|in|on|of|drawn|shown|there|sind|gibt|y\s+a|ci\s+sono|hay)\b|[?,(]", head)[0]
+    parts = [p.strip() for p in _CONJ.split(head) if p and p.strip()]
+    if len(parts) < 2:
+        return None
+    t = qr.terms[0]
+    covered_words = []
+    for k, words in KIND_WORDS.items():
+        if t.kind == "count" and t.arg == k:
+            covered_words += words
+    for c, (words, labs) in CONCEPTS.items():
+        if t.kind == "count_label" and isinstance(t.arg, list) and set(t.arg) == set(labs):
+            covered_words += words
+    for p in parts:
+        if any(re.search(r"(?<![\w])" + w + r"(?![\w])", p) for w in covered_words):
+            continue
+        if isinstance(t.arg, str) and t.arg.lower() in p:
+            continue
+        if re.fullmatch(r"(?:the|all|of|total|in\s+total|together|\W)*", p):
+            continue
+        return p
+    return None
+
+
+# wordings that ask for ALL rooms of a label (a sum is right): "total", "all", "combined", plurals ("kitchens")
+PLURAL_CUE = (r"\b(?:all|total|sum|combined|together|altogether|every|each|both|overall|gesamt\w*|insgesamt|alle[nmrs]?|"
+              r"zusammen|summe|tous|toutes|ensemble|totale?s?|somme|tutt[ie]|insieme|complessiv\w*|somma|"
+              r"rooms|r[äa]ume|pi[èe]ces|locali|stanze|labell?ed|named|called|bezeichn\w*|nomm[ée]e?s|denominat\w*)\b")
+
+
+def singular_label(question: str) -> bool:
+    """True when the question names a label in the singular ("How big is the Küche?"), so several matching rooms
+    are ambiguous rather than a total (Q 04:50: 8 kitchens summed at 0.98)."""
+    ql = _norm(question).lower()
+    if re.search(PLURAL_CUE, ql):
+        return False
+    for c, (words, _) in CONCEPTS.items():
+        for w in words:
+            for m in re.finditer(r"(?<![\w])(" + w + r")(?![\w])", ql):
+                if re.search(r"(?:s|en|ies|i)$", m.group(1)) and not re.search(r"(?:ss|is)$", m.group(1)):
+                    return False  # "kitchens", "Küchen", "bagni"
+    return True
