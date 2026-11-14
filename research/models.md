@@ -4,7 +4,7 @@ Hardware: 1× RTX PRO 6000 Blackwell 96 GB. Shared server budget ≈ 45 GB (`--g
 **Bandwidth is the real constraint tonight:** this machine downloads from Hugging Face at only ~2.5 MB/s total
 (Wi-Fi; measured with 8 parallel range requests), i.e. ~2 h per 19 GB. Every download must be chosen carefully.
 
-## TL;DR for the captain (09:45, end of night)
+## TL;DR for the captain (10:45, end of night)
 - **Small fine-tuned beats big general.** A LoRA on our own 8B (cc-v2, 2 output tokens per answer) is the night's largest gain on
   SEALED test: CubiCasa +8.8 [+6.0, +11.9], weighted 73.8 → 79.8, at ~$0.02 per 1k questions. A 4× bigger base VLM (Qwen3.6-35B-A3B)
   and hosted Nemotron 3.5 Super VL both count WORSE (35B base: −21 vs cc-v2 on dev CubiCasa; Nemotron: below even the base 8B on smoke).
@@ -13,6 +13,11 @@ Hardware: 1× RTX PRO 6000 Blackwell 96 GB. Shared server budget ≈ 45 GB (`--g
 - **Hosted Nemotron = visible second opinion** (demo button), not a bulk tier: as planner it ties at 9× cost, as translator 25× slower.
 - **Language front end**: translate only what the rules can't read (`should_translate`); held-out languages (nb/hr/el/lt) 78 → 84.5
   in the pipeline (F), 0 dataset questions touched.
+- **Files outside our folders (uploads, a hidden set in its own layout)** lose the folder-keyed readers: 800 dev CubiCasa Qs as
+  uploads have 47 confident misses vs 24 on the dataset path. Tonight: W4's confidence cap (D23). Day team: file the upload by
+  its image-guessed style (`stoa/style.py`, CubiCasa only): 47 → 31, evidence 0 → 32%, 586/588 touched answers = dataset path.
+- **Gemini** (key from Sat 10:50): `backend="gemini"` in stoa.llm with the no-abuse rules in code (daily cap, purpose log, rpm);
+  for visible steps only. Not yet run live.
 - **Cost honesty:** every local call is billed from tokens at measured GPU throughput (not wall time, which includes queueing).
 - Negative results are listed under each section and in board/R2.md ("don't repeat").
 
