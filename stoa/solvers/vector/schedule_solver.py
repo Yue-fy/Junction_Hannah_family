@@ -513,3 +513,16 @@ class ScheduleSolver(BaseSolver):
         return Answer(value=res["value"], unit=res["unit"], confidence=conf, evidence=evidence, trace=trace,
                       solver=self.name, assumptions=assumptions, missing=missing)
 
+
+
+@register("pdf_text")
+class PdfTextSolver(ScheduleSolver):
+    """Any vector PDF with a text layer from OUTSIDE the dataset's known sources (a drawing set handed in at the demo,
+    Stoa's hidden/noon examples): the pipeline routes such PDFs to `pdf_vector`, `pdf_text`, `vlm_direct`, and
+    `schedule` (routed only for opening_design) never saw them. Same reader as `schedule`: rebuilt schedule tables, and
+    the sheet's text groups (tags, notes, title block) by row pointing. Not for swiss_dwellings / ifc_models (their DXF /
+    IFC twins answer) nor opening_design / cubicasa5k (routed elsewhere), so the dataset's answers don't change."""
+
+    def can_handle(self, path: str, question: str) -> bool:
+        return Path(path).suffix.lower() == ".pdf" and \
+            source_of(path) not in ("swiss_dwellings", "ifc_models", "opening_design", "cubicasa5k")

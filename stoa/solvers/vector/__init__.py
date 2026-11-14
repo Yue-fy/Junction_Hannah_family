@@ -11,7 +11,9 @@ Modules:
 - `dxf_solver.py` the `dxf` solver (+ table-QA fallback via `tableqa.py`)
 - `pdffloor.py` PDF-only floor model (room polygons/doors/apartments by drawing style + printed scale)
 - `pdftables.py` schedule tables rebuilt from a (rotated) PDF text layer
-- `schedule_solver.py` the `schedule` solver: pdftables + tableqa
+- `schedule_solver.py` the `schedule` solver: pdftables + tableqa; sheets without a schedule (plans with tags, notes,
+  title block) via `pdftext.py` (text groups) + `sheettext.py` (row pointing, Python arithmetic); also registered as
+  `pdf_text` for PDFs from outside the dataset's sources
 """
 
 from stoa.solvers.vector import dxf_solver  # noqa: F401  (registers "dxf")
