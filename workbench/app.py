@@ -164,6 +164,7 @@ def post_audit(a: AuditIn):
                                  "our_value": it.get("value"), "our_unit": it.get("unit"),
                                  "confidence": it.get("confidence"), "gold": it.get("gold"),
                                  "matches_reference": it.get("correct")})
+    _report()
     return {"ok": True, "saved": row}
 
 
@@ -284,6 +285,7 @@ def post_question(q: QuestionIn):
     if n in (1, 5, 10, 20, 40):
         _notify("F", f"expert workbench: {n} human question(s) in $JUNCTION_SHARED/human/questions.jsonl "
                      f"(fields: path, question, answer, unit, type, method, sureness, system). Ready for an eval split 'human'.")
+    _report()
     return {"ok": True, "saved": row, "n": n}
 
 
@@ -323,12 +325,22 @@ def post_rule(r: RuleIn):
     for agent in ("W4", "R1"):
         _notify(agent, f"new expert rule in $JUNCTION_SHARED/human/rules.jsonl: {desc}{rng} "
                        f"({len(store.read('rules'))} rules total)")
+    _report()
     return {"ok": True, "saved": row}
 
 
 @app.get("/api/rules")
 def get_rules():
     return {"rules": store.read("rules")[::-1]}
+
+
+def _report() -> None:
+    try:
+        from workbench.report import write
+
+        write()
+    except Exception:  # noqa: BLE001  (a report failure must never lose or block a save)
+        pass
 
 
 def _notify(agent: str, msg: str) -> None:
