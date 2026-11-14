@@ -41,7 +41,7 @@ from pathlib import Path
 
 from stoa.contract import Answer, Cost, Evidence
 from stoa.data import siblings, source_of
-from stoa.router import gating, prior
+from stoa.router import budget, gating, prior
 from stoa.router.canonical import canonical
 from stoa.router.compose import combine, decompose
 from stoa.router.intent import _COUNT, DERIVED, Intent, extra_structure, modifiers, parse
@@ -499,6 +499,17 @@ class Pipeline(BaseSolver):
 
     # -- main -------------------------------------------------------------------------------------
     def solve(self, path: str, question: str) -> Answer:
+        """One question, metered as a whole (D20-2): optional LLM steps stop once the question's budget is spent."""
+        from stoa.router import budget
+
+        with budget.question():
+            ans = self._solve_question(path, question)
+            n = budget.note()
+            if n and ans.value is not None:
+                ans.assumptions = [*ans.assumptions, n]
+        return ans
+
+    def _solve_question(self, path: str, question: str) -> Answer:
         t0 = time.perf_counter()
         try:  # caches, gates and the KG key on the dataset-relative path (F 03:49: absolute paths missed them)
             from stoa.data import dataset_rel
@@ -683,6 +694,8 @@ class Pipeline(BaseSolver):
         rules solver is also given to the rules solvers in its ORIGINAL wording (no LLM pass of ours). Same answer ->
         confidence = the surer of the two, no translation cap ('agree'); different -> the surer one, capped at 0.5
         ('disagree'). Only rules answers are lifted (vlm/raster/LoRA/agent readings never are)."""
+        if budget.skip("the second reading of the original wording"):
+            return None
         if ans.value is None or str(ans.solver or "").split("/")[-1] not in ("dxf", "ifc", "schedule", "pdf_vector",
                                                                               "pdf_text"):
             return None
@@ -1103,7 +1116,10 @@ class Pipeline(BaseSolver):
                 best.trace = trace + [f"[{label}] {t}" for t in best.trace[-8:]]
                 best.solver = f"pipeline/{label}"
                 return best
-        if why:
+        sk = budget.skip("the general agent") if why and unsure is not None and _fits(intent.task, unsure[1]) else None
+        if sk:  # D20-2: a reading exists and the question's LLM budget is spent: no agent run on top
+            trace.append(sk)
+        elif why:
             ans = self._run_agent(path, question, why, t0)
             if ans is not None:
                 ans.trace = trace + ans.trace  # intent, "dxf as asked: unsure", then the agent's steps
@@ -1149,6 +1165,11 @@ class Pipeline(BaseSolver):
             s = self._get(name)
             if s is None:
                 continue
+            if answers or (unsure is not None and _fits(intent.task, unsure[1])):
+                sk = budget.skip(f"{name} (another reader)")
+                if sk:  # D20-2: a reading exists and the question's LLM budget is spent
+                    trace.append(sk)
+                    break
             if name in raw_abstained and not (canon and canon != question):
                 trace.append(f"{name}: already asked this exact question (not understood): skipped")
                 continue

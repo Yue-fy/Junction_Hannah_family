@@ -20,3 +20,21 @@ def test_link_route_only_on_ifc_projects():
     # a plain building fact on an IFC sheet does not fire (R1's narrow trigger)
     assert p._link_question("data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
                             "How many doors are on '1.korrus'?", 0.0) is None
+
+
+def test_question_budget(monkeypatch):
+    """D20-2: one LLM budget per question; optional steps are skipped once it is spent, and the answer says so."""
+    from stoa.contract import record_cost
+    from stoa.router import budget
+
+    monkeypatch.setattr(budget, "QUESTION_TOKENS", 1000)
+    assert budget.skip("x") is None  # outside a question nothing is metered
+    with budget.question():
+        assert budget.skip("the general agent") is None
+        record_cost(llm_calls=1, llm_tokens_in=900, llm_tokens_out=200)
+        assert budget.spent() == (1100, 1)
+        with budget.question():  # nested: the same meter
+            assert budget.spent() == (1100, 1)
+        assert "budget" in budget.skip("the general agent")
+        assert "the general agent skipped" in budget.note()
+    assert budget.spent() == (0, 0)
