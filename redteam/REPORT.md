@@ -33,8 +33,8 @@ caused by the perturbation, not by the drawing.
 | v1 control/perturb/image/unit/absent (174) | surface noise, injection, image transforms, unit traps, objects that don't exist | see v1 table; 0 confident misses |
 | v1–v2 false premise / unanswerable (24) | storeys/rooms/models that don't exist, facts no drawing holds | 22/24 handled · 0 |
 | v2 wording (20) | "how big is …", "what's the size of …" | 20/20 · 0 |
-| v3/v4 compositions (102) | "A and B in total" in 7 + 4 languages | 99/102 · 0 (SV raster 3/6 at ≤ 0.75) |
-| v5 storey nouns (36) / room names (10) / yes-no (24) | "doors in the basement", "How big is the Küche?", "Onko asunnossa sauna?" | 23/36 · 6 · rooms 5/5 unique, **5 ambiguous at 0.98** · yes/no 24/24 |
+| v3/v4 compositions (78) | "A and B in total" in 7 + 4 languages, with atomic controls | 75/78 · 0 (SV raster 3/6 at ≤ 0.75) |
+| v5 storey nouns (36) / room names (10) / yes-no (24) | "doors in the basement", "How big is the Küche?", "Onko asunnossa sauna?" | 24/36 · 6 · rooms 5/5 unique, **5 ambiguous at 0.98** · yes/no 24/24 |
 | v6 judge on demo drawings (21) | what a judge might type on stage | 14/20 + flag · 1 ("how many floors" → 7) |
 | v7 scope words (36) | "in the whole building" / "on this floor" in 9 languages | 33/36 · 3 (Italian) |
 | v8 scope premises (8) | "whole building" on a one-floor plan, "7th floor" in a 5-storey model | 2/2 ordinals · **5 of 6 premises at ≥ 0.8** |
