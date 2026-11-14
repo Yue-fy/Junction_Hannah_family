@@ -396,7 +396,7 @@ class Pipeline(BaseSolver):
             best = self._prior_answer(src, intent, trace, gate, question)
         if self.cc5k and src == "cubicasa5k" and intent.key in CC5K_KEYS and best.value is not None and \
                 best.solver != "raster_cc5k":
-            self._cc5k_evidence(path, canon or question, best, trace)
+            self._cc5k_evidence(path, canon or question, best, trace, intent.key)
         if self.crosscheck and best.value is not None:
             self._kg_crosscheck(path, intent, best, trace)
         if why and best.value is not None:  # the agent failed on an operator question: the template answer may ignore it
@@ -466,7 +466,7 @@ class Pipeline(BaseSolver):
                      f"{100 * p:.0f}% (cc5k_heldout n={n}) → first")
         return ["raster_cc5k"] + [c for c in order if c != "raster_cc5k"]
 
-    def _cc5k_evidence(self, path: str, ask: str, best: Answer, trace: list[str]) -> None:
+    def _cc5k_evidence(self, path: str, ask: str, best: Answer, trace: list[str], key: str = "") -> None:
         """The pretrained CubiCasa5K detector as a cross-check: agreement lends its symbol boxes (image_px) as evidence.
         No confidence change: its pretraining saw most of our cubicasa drawings (D8), so agreement is not independent."""
         d = self._get("raster_cc5k")
@@ -487,6 +487,20 @@ class Pipeline(BaseSolver):
             best.missing = [*best.missing, f"the CubiCasa5K detector counted {a.value}"]
         trace.append(note)
         best.cost = _cost_of(best).add(_cost_of(a))
+        if best.solver == "vlm_lora" and key.count(":") == 2:
+            # R1 03:25: calibrated 90% range for a LoRA count given the detector's (coverage 93% dev / 97% leak-free;
+            # fitted for LoRA vs detector, not for the detector's own answers)
+            try:
+                from stoa.solvers.raster_cc5k.crosscheck import interval
+
+                rng = interval(key.split(":")[1], int(best.value), int(a.value))
+            except Exception:  # noqa: BLE001
+                rng = None
+            if rng:
+                lo, hi = rng
+                trace.append(f"interval90: [{lo}, {hi}]")
+                if lo < hi:
+                    best.missing = [*best.missing, f"exact count not certain: 90% range {lo}–{hi}"]
 
     def _raw_deterministic(self, path: str, question: str, intent: Intent, cands: list[str], trace: list[str],
                            t0: float, derived: list[str] | None = None) -> Answer | None:
