@@ -275,11 +275,12 @@ function bench() {
   };
   const test = rows.filter((r) => r.solver === "pipeline" && r.split === "test" && r.agent === "S0" && r.n >= 500 && full(r) && clean(r)).at(-1);
   out.test = { pipeline: summary(test) };
-  // novel question kinds (operators no template covers): hard2 = developed on; hard2q = clean held-out rewording,
-  // reported as an aggregate only (D10)
-  for (const split of ["hard2", "hard2q"]) {
+  // novel question kinds (operators no template covers): hard2 = developed on; hard2q = held-out rewording (D10, now
+  // "worn"); hard2r = F's sealed fresh draw in a fourth wording (D12, the clean one). Aggregates only.
+  for (const split of ["hard2", "hard2q", "hard2r"]) {
     const r = rows.filter((x) => x.solver === "pipeline" && x.split === split && x.n >= 200 && full(x));
-    out[split] = { pipeline: summary(r.filter((x) => x.agent === "S0" || x.agent === "F").at(-1) ?? r.at(-1)) };
+    // S0's integration run on the night commit first; F's (often an experimental branch) only when S0 has none
+    out[split] = { pipeline: summary(r.filter((x) => x.agent === "S0").at(-1) ?? r.filter((x) => x.agent === "F").at(-1) ?? r.at(-1)) };
   }
   return { from: "leaderboard", generated: new Date().toISOString(), runs: out };
 }

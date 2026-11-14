@@ -56,7 +56,10 @@ export function renderBench(el: HTMLElement, b: Bench) {
   const kinds = hp?.by_kind ? Object.entries(hp.by_kind) : [];
   const t = b.runs.test?.pipeline;
   const h2 = b.runs.hard2?.pipeline;
-  const h2q = b.runs.hard2q?.pipeline;
+  // held-out generality: F's sealed fresh draw (hard2r, D12) when logged, else the older held-out rewording (hard2q)
+  const h2r = b.runs.hard2r?.pipeline;
+  const h2q = h2r ?? b.runs.hard2q?.pipeline;
+  const h2qLabel = h2r ? "a fresh draw of these kinds in a new wording, sealed (never seen while building)" : "same kinds reworded, never seen while building";
   const runs = [t, ...Object.values(dev), ...Object.values(hard), h2, h2q].filter((r): r is Run => !!r);
 
   el.innerHTML = `
@@ -72,7 +75,7 @@ export function renderBench(el: HTMLElement, b: Bench) {
         <div class="s">${pct(p.weighted_acc)} weighted by each source's share of the full dataset · VLM alone ${pct(dev.vlm_direct?.accuracy)}, prior ${pct(dev.prior?.accuracy)}</div></div>`}
       <div class="bn-tile"><div class="k">Generality · hard split${hp ? `, ${hp.n} questions` : ""}</div>
         <div class="v">${pct(hp?.accuracy)}</div>
-        <div class="s">${kinds.length ? kinds.map(([k, v]) => `${esc(k)}s ${pct(v.accuracy, 0)}`).join(" · ") : "translations, paraphrases, compositions"}${h2 ? `<br><b>New question kinds</b> (average, share, threshold, which-is-larger…) ${pct(h2.accuracy, 0)}${h2q ? ` · same kinds reworded, never seen while building: ${pct(h2q.accuracy, 0)}` : ""}` : ""}</div></div>
+        <div class="s">${kinds.length ? kinds.map(([k, v]) => `${esc(k)}s ${pct(v.accuracy, 0)}`).join(" · ") : "translations, paraphrases, compositions"}${h2 ? `<br><b>New question kinds</b> (average, share, threshold, which-is-larger…) ${pct(h2.accuracy, 0)}${h2q ? ` · ${h2qLabel}: ${pct(h2q.accuracy, 0)}` : ""}` : ""}</div></div>
       <div class="bn-tile"><div class="k">Cost per 1,000 questions</div>
         <div class="v">${eur(p.usd_per_1k_q)}</div>
         <div class="s">median ${p.latency_p50_s !== null ? `${(p.latency_p50_s * 1000).toFixed(0)} ms` : "–"} per question · GPU time + tokens at the eval's rates</div></div>
