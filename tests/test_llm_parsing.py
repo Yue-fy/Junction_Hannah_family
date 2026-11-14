@@ -141,7 +141,8 @@ def test_to_english_skips_covered_languages_and_checks_placeholders(monkeypatch)
 
     def fake_chat(masked, **kw):
         calls.append(masked)
-        if "kaç" in masked:  # loses the placeholder -> must fall back to the original
+        src = masked if isinstance(masked, str) else masked[0]["content"]  # the corrective retry sends a list
+        if "kaç" in src:  # loses the placeholder (also on the retry) -> must fall back to the original
             return R('{"lang": "tr", "english": "How many rooms are there?"}')
         return R('{"lang": "cs", "english": "How many doors are on floor \'[[1]]\'?"}')
 
@@ -188,3 +189,24 @@ def test_should_translate_fires_on_unread_compositions_outside_rule_languages():
     # rule languages compose themselves; no conjunction -> nothing to split
     assert not should_translate("Wie viele Türen und Fenster gibt es insgesamt?")
     assert not should_translate("Hur många dörrar finns det?")
+
+
+def test_to_english_repairs_single_brackets_and_retries_a_lost_placeholder(monkeypatch):
+    import stoa.llm as L
+
+    class R:
+        def __init__(self, text):
+            self.text = text
+
+    def fake_chat(msgs, **kw):
+        if isinstance(msgs, str):  # first answer: [1] for [[1]], and [[2]] dropped
+            return R('{"lang": "et", "english": "What share of floor \'[1]\' is the room?"}')
+        return R('{"lang": "et", "english": "What share of floor \'[[1]]\' is the room \'[[2]]\'?"}')
+
+    monkeypatch.setattr(L, "chat", fake_chat)
+    L._tr_memo.clear()
+    t = L.to_english("Kui suure osa korruse '2. Level' netopinnast hõivab ruum 'Office (2.14)'?", force=True)
+    assert t.ok and t.translated and t.text == "What share of floor '2. Level' is the room 'Office (2.14)'?"
+    assert L._restore("floor '[1]' and room '[[2]]'", ["'A'", "'B'"]) == ("floor 'A' and room 'B'", True)
+    assert L.lang_guess("Milline protsent korruse '3. korrus' netopinnast on ruum 'WC (3.05)'?") == "et"
+    L._tr_memo.clear()

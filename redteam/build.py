@@ -785,6 +785,79 @@ def main():
                 out.append(row(dst, d["question"], d["answer"], d.get("unit"), d.get("type") or "count",
                                f"lone16:{ext}", "same", note=f"{Path(p).name}: dataset gold"))
 
+    # ===== v17 (08:48): linking documents (Stoa: "different data don't talk to each other; linking earns points") ===
+    # Questions that need the plan AND the model (or the set of sheets). Gold: esplanades plan sheets in the dataset
+    # (plan-01..05), ifcopenshell containment (doors 46 / windows 55 on '1.korrus', SERVER / PESUKODA spaces only on
+    # '1.korrus'), the plan's drawn symbols (46 doors; 52 windows: 3 lie wholly above/below the 1.2 m cut plane —
+    # tour step 3), smiley-west '1.OG' 50 doors drawn = 50 in the model (the cross-check line).
+    for path, q, g, typ, kind, rx, note in [
+        (E, "Do the floor plan and the IFC model agree on the number of doors on '1.korrus'?", "yes", "text",
+         "yesno:link", None, "46 drawn = 46 IfcDoor"),
+        (E, "Do the floor plan and the IFC model agree on the number of windows on '1.korrus'?", "no", "text",
+         "yesno:link", None, "52 drawn vs 55 IfcWindow"),
+        (E, "Does this drawing show every window that the model has on '1.korrus'?", "no", "text", "yesno:link", None,
+         "3 of 55 are not cut by the plan"),
+        (SM, "Do the floor plan and the IFC model agree on the number of doors on '1.OG'?", "yes", "text", "yesno:link",
+         None, "50 drawn = 50 IfcDoor"),
+        (E, "How many windows on '1.korrus' are in the model but not drawn on this plan?", 3, "count", "link:count", None,
+         "55 - 52"),
+        (E, "How many floor plan sheets are there for this building?", 5, "count", "link:count", None,
+         "plan-01-1-korrus … plan-05-5-korrus"),
+        (E, "How many more doors are on '1.korrus' than on '5.korrus'?", 7, "count", "link:count", None, "46 - 39"),
+        (E, "Which sheet shows the server room?", None, "text", "link:which", r"1\.?\s*korrus|plan[- ]?0?1\b",
+         "SERVER space only on 1.korrus"),
+        (E, "On which floor is the laundry room (PESUKODA)?", None, "text", "link:which",
+         r"1\.?\s*korrus|first floor|ground floor", "PESUKODA only on 1.korrus"),
+    ]:
+        r_ = row(path, q, g if g is not None else "1.korrus", "count" if typ == "count" else None, typ, kind, "same",
+                 note=note)
+        if rx:
+            r_["meta"]["accept_re"] = rx
+        out.append(r_)
+
+    # ===== v18 (08:50): historical scans asked naturally, in other languages, rotated (Stoa: scans matter) =========
+    # Base = W4's scan probe (artifacts/W4/scans.jsonl: 20 HABS sheets, gold from the Library of Congress catalogue
+    # title "(sheet N of M)" + state = what the title block prints), which asks with a format hint ("Answer like '2 of
+    # 5'", "Give the two-letter state code"). Here: the first 6 sheets asked the way a person would, in DE/FI, and on a
+    # copy rotated by 90° (scans arrive sideways). Counts are scored as numbers; the state by name or code.
+    states = {"AL": "Alabama", "AK": "Alaska", "AZ": "Arizona", "AR": "Arkansas", "CA": "California", "CO": "Colorado",
+              "CT": "Connecticut", "DE": "Delaware", "DC": "District of Columbia", "FL": "Florida", "GA": "Georgia",
+              "HI": "Hawaii", "ID": "Idaho", "IL": "Illinois", "IN": "Indiana", "IA": "Iowa", "KS": "Kansas",
+              "KY": "Kentucky", "LA": "Louisiana", "ME": "Maine", "MD": "Maryland", "MA": "Massachusetts",
+              "MI": "Michigan", "MN": "Minnesota", "MS": "Mississippi", "MO": "Missouri", "MT": "Montana",
+              "NE": "Nebraska", "NV": "Nevada", "NH": "New Hampshire", "NJ": "New Jersey", "NM": "New Mexico",
+              "NY": "New York", "NC": "North Carolina", "ND": "North Dakota", "OH": "Ohio", "OK": "Oklahoma",
+              "OR": "Oregon", "PA": "Pennsylvania", "RI": "Rhode Island", "SC": "South Carolina", "SD": "South Dakota",
+              "TN": "Tennessee", "TX": "Texas", "UT": "Utah", "VT": "Vermont", "VA": "Virginia", "WA": "Washington",
+              "WV": "West Virginia", "WI": "Wisconsin", "WY": "Wyoming", "PR": "Puerto Rico", "VI": "Virgin Islands"}
+    scan_rows = [json.loads(line) for line in open(SHARED / "artifacts/W4/scans.jsonl")]
+    sheets = []
+    for r_ in scan_rows:
+        if r_["path"] not in sheets:
+            sheets.append(r_["path"])
+    rot_dir = IMG_DIR / "scans"
+    rot_dir.mkdir(parents=True, exist_ok=True)
+    for p in sheets[:6]:
+        gold = {r_["meta"]["recipe"]: r_["answer"] for r_ in scan_rows if r_["path"] == p}
+        n, m = (int(x) for x in re.match(r"(\d+) of (\d+)", gold["sheet-of"]).groups())
+        code = gold["state"]
+        st_rx = rf"\b{code}\b|{states.get(code, code)}"
+        rot = rot_dir / (Path(p).stem + "_rot90.jpg")
+        if not rot.exists():
+            Image.open(abspath(p)).convert("RGB").rotate(90, expand=True).save(rot, quality=90)
+        for path, q, g, kind in [
+            (p, "How many sheets are in this drawing set?", m, "scan18:count"),
+            (p, "Which sheet number is this?", n, "scan18:count"),
+            (p, "Wie viele Blätter hat dieser Plansatz?", m, "scan18:de"),
+            (rot, "How many sheets are in this drawing set?", m, "scan18:rot90"),
+        ]:
+            out.append(row(path, q, g, "count", "count", kind, "same", note=f"catalogue: sheet {n} of {m}"))
+        for path, q, kind in [(p, "Where is this building located?", "scan18:state"),
+                              (p, "Missä osavaltiossa rakennus sijaitsee?", "scan18:state-fi")]:
+            r_ = row(path, q, states.get(code, code), None, "text", kind, "same", note=f"catalogue: state {code}")
+            r_["meta"]["accept_re"] = st_rx
+            out.append(r_)
+
     with open(OUT, "w", encoding="utf-8") as f:
         for r in out:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")

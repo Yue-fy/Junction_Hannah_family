@@ -1,10 +1,10 @@
 import "./style.css";
 import { ask, benchmark, exampleQuestions, fileUrl, knowledgeGraph, listFiles, onBackend, roomGraph, secondOpinion } from "./api";
 import { renderBench } from "./bench";
-import { agentAsks, crossChecks, renderCard } from "./card";
+import { agentAsks, crossChecks, renderCard, roomKindsIn } from "./card";
 import { markAnswerCheck, renderKg } from "./kg";
 import type { Answer, FileInfo, KgRoom, RoomGraph } from "./types";
-import { roomName, roomShown, Viewer2D } from "./viewer2d";
+import { roomKind, roomName, roomShown, Viewer2D } from "./viewer2d";
 import type { Viewer3D } from "./viewer3d"; // loaded lazily: web-ifc + three are ~4 MB
 import tourSteps from "../fixtures/tour.json";
 
@@ -191,6 +191,57 @@ function roomLegend(g: RoomGraph) {
     + `${scale ? ` ~m²: ${esc(scale)}` : ""}</small>`;
 }
 $("roomsBtn").addEventListener("click", () => void showRooms(!roomsOn));
+
+/** "Show where · room graph": box the rooms a question names (by printed code when it gives one, e.g. '(OH)', else by
+ *  kind) from R1's room graph, with a check line against the answer when the answer names a room or a number. */
+async function locateRooms(a: Answer, path: string, question: string) {
+  const t0 = performance.now();
+  let g: RoomGraph;
+  try {
+    g = await roomGraph(path);
+  } catch (e) {
+    await showAnswer({ ...a, trace: [...(a.trace ?? []), `room graph: not available for this plan (${e})`] }, 0);
+    return;
+  }
+  if (state.file?.path !== path) return;
+  const kinds = new Set(roomKindsIn(question));
+  const codes = [...question.matchAll(/\(([A-ZÄÖ.]{1,6})\)|'([A-ZÄÖ.]{1,6})'/g)].map((m) => (m[1] ?? m[2]).replace(/\./g, ""));
+  const byCode = g.rooms.filter((r) => r.label && codes.includes(r.label.replace(/\./g, "")));
+  const picked = (byCode.length ? byCode : g.rooms.filter((r) => kinds.has(r.cls) && roomShown(r)));
+  const kindWord = [...kinds].map((k) => roomKind({ cls: k } as RoomGraph["rooms"][number])).join(" / ");
+  const said = String(a.value ?? "").trim();
+  const names = picked.flatMap((r) => [r.label ?? "", roomKind(r)]).filter(Boolean).map((x) => x.toLowerCase());
+  // rooms a marked room's doors (or open sides) lead to: "which room is the sauna entered from?" → the sauna's door
+  const linked = picked.flatMap((r) => [...(r.door_to ?? []), ...(r.open_to ?? [])]).map((id) => g.rooms.find((x) => x.id === id))
+    .filter((r): r is RoomGraph["rooms"][number] => !!r);
+  const said_ = said.toLowerCase();
+  const via = linked.find((r) => (r.label ?? "").toLowerCase() === said_ || roomKind(r) === said_);
+  const verdict = /^\d+(\.\d+)?$/.test(said) && a.intent?.task === "count" ? (Number(said) === picked.length ? " ✓" : ` ✗ (answer ${said})`)
+    : names.includes(said_) ? ` ✓ (the answer names '${said}')`
+    : via ? ` ✓ (its door leads to ${roomName(via)}, the answer)` : "";
+  // only a verdict is a cross-check (✓/✗ line); plain marking stays in the evidence notes and the trace
+  const check = picked.length
+    ? `${verdict ? "cross-check: " : ""}room graph (CubiCasa5K segmentation) marks ${picked.length} ${picked.length === 1 ? "room" : "rooms"}: ${picked.map((r) => roomName(r)).join(", ")}${verdict}`
+    : `room graph: no ${kindWord || "such"} room found on this plan`;
+  const ev = picked.map((r, i) => ({
+    file: path, page: 0, bbox: r.bbox, bbox_space: "image_px" as const,
+    note: `room graph: ${roomName(r)}${r.m2 ? ` (~${r.m2} m²${r.m2_80 ? `, 80%: ${r.m2_80[0]}–${r.m2_80[1]}` : ""})` : ""}`
+      + `${(r.door_to ?? []).length ? `, doors to ${r.door_to!.map((id) => { const o = g.rooms.find((x) => x.id === id); return o ? roomName(o) : id; }).join(", ")}` : ""}`
+      + `${i === 0 ? `; ${check}` : ""}`,
+  }));
+  // the room the answer names through a door link is boxed too: both ends of the link are on screen
+  if (via && !picked.includes(via)) ev.push({ file: path, page: 0, bbox: via.bbox, bbox_space: "image_px" as const,
+    note: `room graph: ${roomName(via)} (the answer), linked by a door to ${picked.map((r) => roomName(r)).join(", ")}` });
+  const a2: Answer = {
+    ...a,
+    evidence: ev.length ? ev : [{ file: path, note: check }],
+    trace: [...(a.trace ?? []), `${check} — room graph, ${Math.round(performance.now() - t0)} ms (cached per drawing)`],
+    missing: ev.length ? (a.missing ?? []).filter((m) => !/no located evidence/i.test(m)) : a.missing,
+    assumptions: [...(a.assumptions ?? []), ...(ev.length ? [`marked from the room graph: ${byCode.length ? `rooms printed ${codes.join("/")}` : `every ${kindWord} region`} (pretrained CubiCasa5K segmentation; areas assume ${g.scale?.assumptions?.[0] ?? "no scale"})`] : [])],
+  };
+  await showAnswer(a2, 0);
+  if (ev.length && !$("credit").textContent?.includes("weights")) $("credit").insertAdjacentHTML("beforeend", " · boxes: CubiCasa5K model (Kalervo et al. 2019), weights CC BY-NC 4.0");
+}
 
 $("benchBtn").addEventListener("click", async () => {
   const el = $("bench");
@@ -498,12 +549,13 @@ async function showAnswer(a: Answer, roundTripMs: number) {
   const askedQ = $<HTMLTextAreaElement>("question").value.trim();
   renderCard($("card"), a, {
     roundTripMs: roundTripMs || (a.cost?.wall_seconds ?? 0) * 1000, onEvidence: focusEvidence,
-    describeGuid: (g) => v3d?.describe(g) ?? g, currentFile: state.file?.path ?? "", onOpenSheet: (p) => void openSheet(p),
+    describeGuid: (g) => v3d?.describe(g) ?? g, currentFile: state.file?.path ?? "", currentQuestion: askedQ, onOpenSheet: (p) => void openSheet(p),
     onAsk: (q) => {
       $<HTMLTextAreaElement>("question").value = q;
       void runAsk();
     },
     onLocate: async (loc) => {
+      if (loc.solver === "rooms") return locateRooms(a, askedPath, askedQ);
       // a second reader answers the same question; its boxes become the evidence, with a cross-check line
       const t0 = performance.now();
       const r = await ask(askedPath, askedQ, loc.solver);
@@ -560,7 +612,12 @@ async function showAnswer(a: Answer, roundTripMs: number) {
   // A free-text answer about a model with no element evidence ("Toilet-Domestic-3D: 9 units, Urinal-Wall-3D: 4"):
   // find the element types it names in the loaded model (in the browser, no model call), highlight them and check
   // the counts it gives against the model.
-  if (/\.ifc$/i.test(askedPath) && typeof a.value === "string" && !a.evidence.some((e) => e.ifc_guid)) {
+  // Also when the solver did cite elements but its text lists counts per type (W1 rules: "Toilet-Domestic-3D: 9" …):
+  // the browser's own IFC parser (web-ifc) recounts them, an independent second reading of the same model.
+  const cited = a.evidence.some((e) => e.ifc_guid);
+  const perType = typeof a.value === "string" ? (a.value.match(/[A-Za-z][^:\n]{2,80}:\s*\d+\b/g) ?? []).length : 0;
+  // (never twice: the re-rendered answer carries `checked`, and a cited answer would otherwise qualify again forever)
+  if (/\.ifc$/i.test(askedPath) && typeof a.value === "string" && !a.checked && (!cited || perType >= 2)) {
     await ensure3D();
     const v = v3d;
     if (state.answer !== a || !v || v.file !== askedPath) return;
@@ -585,13 +642,16 @@ async function showAnswer(a: Answer, roundTripMs: number) {
       file: askedPath, ifc_guid: g,
       note: `NOT in the answer: ${n.name} (${i + 1} of ${n.guids.length})${i === 0 && n === missed[0] ? `; cross-check: the model ${said.length ? "also " : ""}has ${miss} of ${said.length ? "the same kind" : "the kind the question asks about"} (purple in 3D), which the answer does not mention ✗` : ""}`,
     }) as Answer["evidence"][number])));
+    // the solver cited its elements: keep its evidence; the browser's recount is a check line, not new evidence
+    const recount = cited && counted.length ? [`cross-check: counted again in your browser with a second IFC parser (web-ifc): ${counted.length} type${counted.length > 1 ? "s" : ""}, ${counted.every((n) => n.said === n.guids.length) ? `${counted.reduce((t, n) => t + n.guids.length, 0)} elements, every count as the answer says ✓` : `${counted.filter((n) => n.said !== n.guids.length).map((n) => `'${n.name}' ${n.guids.length} vs ${n.said}`).join(", ")} ✗`}`] : [];
     await showAnswer({
-      ...a, evidence: [...ev, ...a.evidence],
+      ...a, evidence: cited ? [...a.evidence, ...ev.filter((e) => /^NOT in the answer:/.test(e.note ?? ""))] : [...ev, ...a.evidence],
       checked: [...said.map((n) => ({ name: n.name, model: n.guids.length, said: n.said })),
         ...missed.map((n) => ({ name: n.name, model: n.guids.length, said: null, notInAnswer: true }))],
-      trace: [...(a.trace ?? []), `checked against the model by element name (in the browser, no model call): ${said.length ? `named in the answer ${said.map((n) => `${n.name} ×${n.guids.length}`).join(", ")}` : "the answer names no element type of the model"}${checks.length ? `; counts: ${checks.join(", ")}` : ""}${miss ? `; same kind, not named: ${miss}` : ""}`],
+      trace: [...(a.trace ?? []), ...recount, `checked against the model by element name (in the browser, no model call): ${said.length ? `named in the answer ${said.map((n) => `${n.name} ×${n.guids.length}`).join(", ")}` : "the answer names no element type of the model"}${checks.length ? `; counts: ${checks.join(", ")}` : ""}${miss ? `; same kind, not named: ${miss}` : ""}`],
       missing: [...(a.missing ?? []), ...(miss ? [`the answer does not mention ${miss} (same kind of fixture in the model)`] : [])],
-      assumptions: [...(a.assumptions ?? []), said.length ? "highlighted elements are matched by the family/type names the answer uses; the solver did not cite them"
+      assumptions: [...(a.assumptions ?? []), cited ? "the browser recounted the types the answer names by family/type name in the loaded model"
+        : said.length ? "highlighted elements are matched by the family/type names the answer uses; the solver did not cite them"
         : "purple elements are the model's families of the kind the question asks about (matched by element name), not cited by the solver"],
     }, roundTripMs);
   }
