@@ -293,7 +293,7 @@ class RasterSolver(BaseSolver):
         from stoa.solvers.raster import textlayer as T
 
         img_path = self._raster_file(path)
-        if img_path is None:
+        if img_path is None or not self._clean(img_path, trace, "door arcs"):
             return None
         bar = self._metric_bar(img_path, trace, "door arcs", "the door radius in pixels is unknown")
         if bar is None:
@@ -325,6 +325,22 @@ class RasterSolver(BaseSolver):
                       missing=["a vector twin (DXF/PDF) of this plan for an exact count: the image alone matched the "
                                "exact count on 7 of 60 TRAIN floors (median error -2 doors)"])
 
+    def _clean(self, img_path: str, trace: list[str], what: str) -> bool:
+        """Symbol detectors only on clean digital renders, never on scans (windows.clean_render); checked before the
+        text layer, so a scan costs no tokens here."""
+        from stoa.solvers.raster import textlayer as T
+        from stoa.solvers.raster import windows as WS
+
+        try:
+            ok, pure, top = WS.clean_render(T._abspath(img_path))
+        except Exception as e:  # noqa: BLE001
+            trace.append(f"{what}: image unreadable ({type(e).__name__})")
+            return False
+        if not ok:
+            trace.append(f"{what}: not a clean render (white {pure:.2f}, top-8 grey levels {top:.2f}): a scan or "
+                         f"photo, where the symbol detectors fire on hatching and paper noise")
+        return ok
+
     def _metric_bar(self, img_path: str, trace: list[str], what: str, why: str):
         """The drawing's metric scale bar (text layer + scalebar.py; cached per drawing), else None."""
         from stoa.solvers.raster import scalebar as SB
@@ -349,7 +365,7 @@ class RasterSolver(BaseSolver):
         from stoa.solvers.raster import windows as WS
 
         img_path = self._raster_file(path)
-        if img_path is None:
+        if img_path is None or not self._clean(img_path, trace, "window symbols"):
             return None
         bar = self._metric_bar(img_path, trace, "window symbols", "the wall/window sizes in pixels are unknown")
         if bar is None:

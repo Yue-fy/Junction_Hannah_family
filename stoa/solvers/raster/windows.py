@@ -24,7 +24,24 @@ INNER_MIN = 110     # ink mass of a glass line (grey 59 1-px line = 196; antiali
 INNER_RATIO = 1.5   # the two glass lines carry similar ink
 OUTER_K = 1.12      # a wall face (black 1-px = 255..275) carries more ink than a glass line (~197)
 OUTER_MIN_V = 100   # a wall face reaches at least this dark somewhere
+CLEAN_WHITE = 0.7   # clean render: >= 70% of pixels pure white (Swiss renders 0.72-0.94 on 160 floors)
+CLEAN_TOP8 = 0.45   # ... and the 8 commonest grey levels hold >= 45% of the ink (Swiss 0.53-0.84, HABS 0.10-0.37)
 SMALL_GAP = 6.5     # px: below this line spacing (thin walls) antialiasing mixes glass and faces: no ink test
+
+
+def clean_render(png: str) -> tuple[bool, float, float]:
+    """(is a clean digital render, pure-white share, ink share of the 8 commonest grey levels). The symbol detectors
+    (windows, door arcs) are tuned on renders with a few flat grey levels; on a scan (paper texture, many levels)
+    they fire on hatching and noise (a HABS sheet: 358 'windows'). 160 Swiss dev+TRAIN PNGs all pass; HABS sheets
+    with a scale bar all fail (top-8 share <= 0.37); ~10/254 sampled historical images pass (Wikimedia redraws)."""
+    g = np.asarray(Image.open(png).convert("L"))
+    pure = float((g >= 250).mean())
+    nw = g[g < 250]
+    top = 0.0
+    if nw.size:
+        _, c = np.unique(nw, return_counts=True)
+        top = float(np.sort(c)[::-1][:8].sum() / nw.size)
+    return pure >= CLEAN_WHITE and top >= CLEAN_TOP8, pure, top
 
 
 def _runs(prof: np.ndarray):
