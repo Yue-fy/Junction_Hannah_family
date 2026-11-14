@@ -246,3 +246,14 @@ def test_human_split_last_row_wins(tmp_path, monkeypatch):
     assert qs[0].answer == 4.0 and qs[0].meta["kind"] == "human:certain"
     assert qs[1].answer == "a flat" and qs[1].meta["kind"] == "human:unknown"
     assert splits.split_hash("human")
+
+
+def test_split_row_without_path_is_skipped(tmp_path, capsys):
+    """R2 11:03: an ad-hoc row with a question but no drawing used to crash load_split with KeyError 'qid'."""
+    from stoa.eval.splits import load_split
+
+    f = tmp_path / "x.jsonl"
+    f.write_text('{"question": "How many doors?"}\n{"path": "data/cubicasa5k/x.png", "question": "How many doors?"}\n')
+    qs = load_split(str(f))
+    assert len(qs) == 1 and qs[0].path == "data/cubicasa5k/x.png"
+    assert "no 'path'" in capsys.readouterr().err

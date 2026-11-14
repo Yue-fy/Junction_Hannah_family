@@ -25,6 +25,7 @@ import hashlib
 import json
 import os
 import random
+import sys
 from pathlib import Path
 
 from stoa.data import Question, concept_map, dataset_rel, drawing_group, load_questions, make_qid, template_of
@@ -318,7 +319,7 @@ def load_split(name: str) -> list[Question]:
     by_id = None
     out = []
     with open(f, encoding="utf-8") as fh:
-        for line in fh:
+        for lineno, line in enumerate(fh, 1):
             if not line.strip():
                 continue
             r = json.loads(line)
@@ -332,6 +333,10 @@ def load_split(name: str) -> list[Question]:
                 if r.get("meta"):
                     object.__setattr__(q, "meta", r["meta"])  # frozen dataclass; meta is eval-only
                 out.append(q)
+                continue
+            if "qid" not in r:  # R2 11:03: a typed-in question without a drawing crashed here (KeyError 'qid')
+                print(f"[splits] {f.name} line {lineno}: no 'path' (and no dataset 'qid'): row skipped; attach a drawing "
+                      f"(e.g. experiments/r2/attach_drawings.py)", file=sys.stderr)
                 continue
             if by_id is None:
                 by_id = {q.qid: q for q in load_questions()}
