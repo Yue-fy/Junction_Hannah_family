@@ -1,6 +1,6 @@
 # Error analysis (E = agent F)
 
-Updated 01:45, 14 Nov 2026 (sections newest first). Regenerate the tables with
+Updated 03:30, 14 Nov 2026 (sections newest first). Regenerate the tables with
 `/data/User/fangy4/envs/junction/bin/python -m stoa.eval.analyze <run_id> --baseline <dummy run_id> --top 20`.
 For paired significance use `python3 experiments/r1/stats/compare.py RUN_A RUN_B --by template` (cluster CI).
 
@@ -13,7 +13,83 @@ answer) vs `20261113-234812-dummy-dev` (template prior), both on dev v2 (hash f4
 | dummy (prior) | 26.1% | 40.4% | 0 | 0% |
 | vlm_direct | 32.0% (28.0–36.5) | 44.1% | 200 (all IFC) | 0% |
 
-## LATEST (01:45): night fdb0ecc: where the points are now, LoRA routing worth +8, held-out mechanisms
+## LATEST (03:30): gate of the test-1 code, cc5k=1 leak-free, where dev points are left
+
+Context: every agent was stopped by the org spend limit 01:58–03:10, so there was no 02:40 freeze. At 03:12 F gated
+W4 c1b294c (trust on unseen wordings, from F's 01:44 held-out mechanisms) + W4 3d21bee (cc5k gate path) + R1 eb03604
+(CC5K crosscheck) as a scratch merge (d764334 = night 609e41c + night-W4 8d7f23a + night-R1 6072523). S0 froze the same
+code (+ R1 f13db8f count ranges, W5 web) as 95f2277 and started sealed test 1 at 03:21.
+
+### Gate (pipeline, cc5k=0; paired cluster CI from experiments/r1/stats/compare.py)
+| split | 609e41c | d764334 | paired | calibration |
+|---|---:|---:|---|---|
+| dev (weighted / micro) | 81.7 / 88.5 | 81.7 / 88.5 | +0.0 [−0.1, +0.1] | ECE 0.020 → 0.019 |
+| hard (micro) | 84.7 | 84.5 | −0.3 [−0.8, +0.0] n.s. (2 cubicasa LoRA re-reads at conf ≤ 0.16) | **ECE 0.036 → 0.075** |
+| hard2 (micro) | 92.1 | 92.1 | identical | ECE 0.133 both |
+| **hard2q held-out (scored)** | 75.7 | **79.9** | **+5.9 [+0.7, +11.3] \*** (all swiss: 11 wins / 3 losses) | conf≥0.8 precision 88.0 → 92.7% |
+
+- Held-out gain is entirely swiss area (64.4 → 82.2 of 45); cubicasa (42.0) and ifc (100) unchanged; judged text 68.7
+  unchanged. F's 01:44 simulation predicted ≈81.5.
+- The 0.5 confidence cap on non-template wordings: on `hard` it lowers 77 cubicasa paraphrase answers from 0.86 to 0.50
+  while they are 79% right (under-confident → ECE doubles); on held-out hard2q the 15 capped answers are 33% right (0.80 →
+  0.50, still over-confident). Direction right, trigger too broad. Suggested to W4: cap when the parse leaves unexplained
+  structure (second concept, numbers, comparison words); otherwise scale by ~0.9 (fit on `hard`, check on `hard2`).
+
+### cc5k=1 on leak-free data (R2's cc5k_heldout_notLoRA: 200 Qs, 50 drawings unseen by CC5K net AND LoRA)
+| concept | n | cc5k=0 | cc5k=1 | answers with boxes 0 → 1 |
+|---|---:|---:|---:|---|
+| windows | 15 | 5 | 6 | 0 → 15 (all answered by raster_cc5k) |
+| doors | 18 | 6 | 7 | 0 → 5 |
+| WC seats | 32 | 28 | 28 | 10 → 16 |
+| sinks | 14 | 11 | 11 | 8 → 12 |
+| showers/baths | 14 | 8 | 8 | 0 → 0 |
+| rooms etc. | 107 | 100 | 100 | 22 → 22 |
+| **all** | 200 | **79.0** | **80.0** (+1.0 [−2.0, +4.0]) | **20% → 35%** |
+
+cc5k=1 costs no accuracy on unseen drawings and adds located evidence on the worst bucket. Dev/test numbers with it on
+stay labelled "inflated" (D8), but for windows the inflation is small: on dev the detector scores 36% on drawings in
+CC5K's own train list vs 41% on the 17 that are not.
+
+### Where dev points are left (night 609e41c; `stoa.eval.analyze 20261114-015159-pipeline-dev-272e`)
+Weighted 81.7: cubicasa counts are **18.0 of the 18.3** weighted points lost (73.4% right). By concept (EN + FI):
+
+| concept | w-pts lost | right | dominant error |
+|---|---:|---|---|
+| windows | 7.4 | 19% / 20% | under-count (gold mean 9.7; LoRA 8.5; detector 7.4) |
+| doors | 3.2 | 38% / 28% | ±1–3 both ways |
+| sinks | 2.5 | 73% / 66% | off-by-one under (19 vs 8 over) |
+| WC seats | 2.2 | 72% / 81% | off-by-one under (13 vs 5 over, EN) |
+| showers + baths | 1.5 | 84% / 74% | off-by-one under |
+| saunas, bedrooms, bathrooms | 0.75 | 81–88% | — |
+| swiss area | 0.10 | 97.5% | near misses 2–15% |
+
+Windows, two counters (experiments/F/window_combo.py, dev, by CC5K list stratum): on the 91 drawings in CC5K's train list
+LoRA 22%, detector 36%, max 26%, min 32%, rounded mean 24%, oracle-of-two 48%; agreement 18/91 at 50% right. No
+combination of the two beats the detector alone, so the next window gain needs a better counter, not an ensemble.
+Doors: LoRA 31–44%, detector 22–67% (n ≤ 45), no stable winner (R1 saw the sign flip across sets too).
+
+### NEGATIVE: the detector's window undercount is not a resolution problem (03:45)
+Leak-free cc5k_heldout (340 drawings outside CC5K's train list; fit/check halves by path hash; CPU; R1's model code used
+read-only; `experiments/F/cc5k_scale_probe.py`, `cc5k_scale_score.py`, data in `$JUNCTION_SHARED/artifacts/F/cc5k_scale/`).
+The miss grows with window density (long side / √gold < 200 px: 6% exact, 45% of windows missed; ≥ 400 px: 46% exact,
+no bias), so two fixes were tried. Splitting long boxes (by median box length or wall thickness): never beats raw.
+Upscaling ×1.5 / ×2 × morphology kernel 0/3/5/7: ×1.5 shrinks the windows bias (−2.8 → −2.1 per drawing) but exact
+accuracy does not move (FROZEN 28.3 / 31.4 fit/check; best ×1.5 k=3 33.3 / 28.6); ×2 is worse on every symbol (check:
+windows 18.6, WC 41.1, sinks 38.1). R1's FROZEN settings stand; the missed windows are styles, not pixels.
+
+### `hard` on the test-1 code (run 20261114-031744-pipeline-hard-bb4a), by kind
+| kind / source | n | acc | mean conf | share of wrong |
+|---|---:|---:|---:|---:|
+| composition / cubicasa | 83 | 38.6 | 0.27 | 48% |
+| paraphrase / cubicasa | 100 | 70.0 | 0.45 | 28% |
+| translation / cubicasa | 100 | 76.0 | 0.73 | 22% |
+| swiss (all kinds) | 270 | 99.3 | 0.96 | 2% |
+| ifc (all kinds) | 135 | 100 | 0.96 | 0% |
+
+Paraphrases and translations generalise at the dev template level (73.4%); compositions are bounded by the atomic
+counters (two counts both right). The paraphrase confidence (0.45 at 70% right) is the 0.5 unseen-wording cap (told W4).
+
+## Earlier (01:45): night fdb0ecc: where the points are now, LoRA routing worth +8, held-out mechanisms
 
 ### Dev (S0's run 20261114-012630-pipeline-dev-878d): weighted 74.0%, micro 84.0%
 Of the 26 weighted points still lost, ~25.6 are cubicasa counts (62.0%, 800 Qs). Swiss area 98%, swiss count / ifc
