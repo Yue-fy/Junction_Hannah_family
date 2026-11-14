@@ -139,4 +139,11 @@ also end to end through `pipeline`). ifc_models train/dev/hard/hard2 stay 100% w
   (probe 4 `experiments/w1/probes/c6_derived.py`, 6 -> 10/10): '25% of the doors are replaced' = 25% of the count
   ('remain' = 75%), 'share of the openings on S are windows' = windows / (doors + windows) at 0.6, 'gets a lock
   costing 1,050 euros', 'weighs 35 kg'. Probe 3 (`c6_q3.txt`, 3 untuned IFC-Bench models, es/sv/cs) 15/15.
+- Last hour: **plan vs model** (`_plan_vs_model`, Stoa point 4, Q v17): "in the model but not drawn on this plan"
+  = storey elements minus the sheet's GlobalId-tagged ones (esplanades windows 55 - 52 = 3, all wholly outside the
+  1.2 m cut plane, evidence = the 3 GUIDs), "do the plan and the model agree on the number of X on S" -> yes/no with
+  both counts, "how many floor plan sheets" -> the model's plan files; bug 19 (a storey word beats a split part's
+  'of the building model'); 'how high above the ground floor is the top floor' = elevation difference; 'how far is A
+  above B' and 'is the floor-to-floor height … more than 3 m' (yes/no); Italian/other 'whole building' words; room
+  labels typed without quotes ('Living (414B-19-001-002)', F's wording probe 125 -> 135/135).
 Tests: `tests/test_ifc_c6.py`.
