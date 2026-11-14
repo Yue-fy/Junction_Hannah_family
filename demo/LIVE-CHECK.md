@@ -1,6 +1,9 @@
 # Demo pre-flight check
 
-**Newest: run `20261114-110655-pipeline-live_questions-1903` on night b656826** (S0 cycle 43 round 2), 11:07 14 Nov:
+**Final night: run `20261114-111324-pipeline-live_questions-0abb` on night 637a6df** (S0 cycle 43 round 3), 11:13 14 Nov:
+**all 23 answers identical to b656826 / 41188a4 / 0ffd81b** (16 of 17 scored right).
+
+**Before: run `20261114-110655-pipeline-live_questions-1903` on night b656826** (S0 cycle 43 round 2), 11:07 14 Nov:
 **all 23 answers identical to 41188a4 and 0ffd81b** (16 of 17 scored right).
 
 **Before: run `20261114-103801-pipeline-live_questions-5788` on night 41188a4** (S0 cycle 40), 10:38 14 Nov, 23 rows:
