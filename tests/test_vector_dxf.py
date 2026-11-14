@@ -557,3 +557,18 @@ def test_sheettext_sum_drops_a_length_mixed_into_counts(monkeypatch):
             {"id": 3, "view": None, "text": "18 PARKING STALLS"}]
     res = sheettext.ask("If you add up the parking stall labels, how many stalls are there?", rows)
     assert res["value"] == 42 and res["used"] == [1, 3], res
+
+
+def test_outdoor_label_in_an_exclusion_clause_is_not_the_target():
+    # F 10:53: '(ohne Balkon)' was parsed as area_label(Balkon) and the apartment term was dropped
+    vocab = ["Balkon", "Wohnen", "Bad", "Küche"]
+    for q in ("Welche Wohnfläche hat die A-Wohnung (ohne Balkon)?", "Welche Wohnfläche hat die Wohnung A (ohne Balkon)?"):
+        qr = qparse.parse(q, vocab)
+        assert [(t.kind, t.arg) for t in qr.terms] == [("area_apartment", "A")]
+        assert qparse.covered(q, qr)
+    q = "Superficie netta dell'alloggio B in m² (senza balconi)?"
+    assert qparse.covered(q, qparse.parse(q, vocab))
+    # the balcony itself is still a target when it is asked for
+    qr = qparse.parse("Wie gross ist der Balkon der Wohnung A?", vocab)
+    assert [(t.kind, t.arg, t.scope) for t in qr.terms] == [("area_label", "Balkon", ["A"])]
+    assert not qparse.covered("Welche Räume hat die Wohnung B?", qparse.parse("Welche Räume hat die Wohnung B?", vocab))
