@@ -29,7 +29,7 @@ cuts confident false-premise answers 7 → 4 of 24 and makes drawings outside ou
 questions are down to 2 of 24 (both W2's dxf room-name case), scored answers at conf ≥ 0.8 are 135/135 right, and
 the injection's 99 gets conf 0.10 (section "Verification").
 
-## Results (174 Qs; acc = eval scorer, which converts units; strict = the number is in the unit asked)
+## Results v1 (174 Qs; acc = eval scorer, which converts units; strict = the number is in the unit asked)
 | family | n | acc | strict | wrong at conf ≥ 0.8 | note |
 |---|---:|---:|---:|---:|---|
 | control (unchanged base Qs) | 14 | 100 % | 100 % | 0 | |
@@ -248,6 +248,24 @@ Run `20261114-043256-pipeline-questions-aac6` from a scratch worktree (no branch
 - ECE rises (0.057 → 0.092) because the flag rows now sit at 0.28–0.30 while counted as wrong, and several right
   answers are capped lower; AURC (ranking) is the better number here and is the best of all four runs.
 
+
+## v3 (04:37): "A and B in total" in 7 languages on Swiss vector plans
+42 Qs (`meta.kind = compose:<lang>`; 6 dev drawings × EN/FI/DE/FR/IT/NL/SV, gold = sum of the drawing's atomic golds;
+dxf counts are ~100 % right, so a miss is parsing, not perception). F's `hard` has 211 compositions, all in English.
+Run `20261114-043705-pipeline-compose-03ee` on night cc1ca5b: **40/42**. EN, FI, DE, FR, IT 6/6 (conf ≈ 0.96), NL 6/6
+(0.89), **SV 4/6, both misses at conf 0.99**:
+- "Hur många badkar och handfat finns det totalt på planritningen?" (bathtubs + washbasins, gold 10 + 13) → **10**:
+  `dxf parsed: count(bathtub)`; "handfat" is not in the vocabulary, so that half of the question vanished, and the LLM
+  operation check ("'A' = one value, or the total/sum of the named things") said *agree*.
+- "Hur många fönster och toaletter …" (14 + 4) → **14** (windows only), same mechanism.
+
+### 12. A part of the question the parser doesn't know is silently dropped (HIGH for the hidden test) — owners W2 (dxf), W4 (compose/intent), R2 (`to_english`)
+- **Fix:** (a) if the question joins two noun phrases with a conjunction (and/und/et/e/en/ja/och/og/i/y/és/și/ve…)
+  and the parse names only one class, conf ≤ 0.3 + `missing: ["did not understand 'handfat'"]`; (b) R2's
+  `stoa.llm.to_english()` front end (04:13: 38/48 → 48/48 on Czech/Hungarian/Turkish/Romanian) should run before the
+  rule parsers whenever the question has words outside the solver's vocabulary, not only for unknown languages.
+  Same family as bugs 1, 3, 9, 10: the check confirms the number that was computed, not that it covers the question.
+
 ## What held (worth saying in the pitch)
 - Paraphrase / casing / context / distractor numbers: **0 of 56 answers changed**. Typos and injections changed 7
   answers, **all of them at conf ≤ 0.42**, so the confidence flagged every one.
@@ -257,6 +275,8 @@ Run `20261114-043256-pipeline-questions-aac6` from a scratch worktree (no branch
 - Rotated, grayscale, heavily compressed and half-resolution copies of a plan: 30/30 right, at the same confidence.
 
 ## Re-run
+`questions.jsonl` now has 247 rows: v1 (174) + v2 (31) + v3 compositions (42); earlier rows are byte-identical across
+builds (checked with cmp), so runs on the first 205 rows compare directly.
 ```
 PYTHONPATH=. $JUNCTION_VENV/bin/python redteam/build.py        # regenerates questions.jsonl + images (deterministic)
 $JUNCTION_VENV/bin/python -m stoa.eval --solver pipeline --split redteam/questions.jsonl --workers 4
