@@ -123,9 +123,15 @@ def answer(path: str, question: str, image_path: str | None = None, backend: str
         (len(val) > 2 and T.match_score(val, " ".join(i.text for i in cited)) >= 0.85)
     unit = str(d.get("unit", "")).strip() or None
     value: object = val
+    um = _NUM_UNIT.match(val)
+    if um and not _NUM.match(val):  # '20,5 m²' -> 20.5 m2 (R1 08:47: such strings kept 0.75 and escaped every check)
+        val, unit = um.group(1), unit or _UNIT_OF.get(um.group(2).lower().replace(" ", ""), um.group(2))
     if _NUM.match(val):
         v = float(val.replace(",", "."))
         value = int(v) if v.is_integer() and (unit in (None, "count")) else v
+        # the literal check, decimal comma or point ('K 14,5' prints 14.5)
+        num = re.escape(val.replace(",", "."))
+        in_cited = in_cited or any(re.search(rf"(?<![\d.]){num}(?![\d])", i.text.replace(",", ".")) for i in cited)
     else:
         fm = T._FTIN.fullmatch(val.strip().rstrip('"”').strip() + '"') or T._FTIN.fullmatch(val.strip())
         if fm:  # a dimension string 187'-0" -> 187.0 ft (the printed text stays in the trace and evidence)
@@ -157,6 +163,30 @@ def answer(path: str, question: str, image_path: str | None = None, backend: str
         # the 'size' is a number the question itself names (room 0.20 -> '0.20 m²'): an echo, not a reading
         conf = 0.05
         missing = [*missing, "the answer repeats a number from the question (likely the room's number, not its size)"]
+    if cited and isinstance(value, (int, float)) and conf > 0.4:
+        # R1 08:47, 18 by-eye CubiCasa area Qs at a flat 0.75: 9/18 right; the right ones were single named rooms read
+        # literally; wrong: sums ('combined area of kitchen and living room' -> one term), superlatives ('largest
+        # bedroom' -> OLOHUONE 20.5) and a room word mapped to the wrong code ('sauna' -> 'RH 6.3')
+        from stoa.solvers.raster.classes import label_class, question_class, question_classes
+
+        why = None
+        qc = question_class(question)
+        # the room code is printed next to its area ('K' over '14.0'): classes of the cited lines and their neighbours
+        near = {label_class(j.text) for i in cited for j in tl.items
+                if abs(j.cx - i.cx) < 4 * max(6.0, i.box[3] - i.box[1]) and abs(j.cy - i.cy) < 3 * max(6.0, i.box[3] - i.box[1])}
+        if not in_cited:
+            why = "the number is not printed in the cited text"
+        elif _AGG_Q.search(question) or len(question_classes(question)) >= 2:
+            why = "a sum or superlative over several rooms read off the texts (each term not checked)"
+        elif qc and qc not in near:
+            why = f"the cited label{'s' if len(cited) > 1 else ''} " + ", ".join(f"'{i.text}'" for i in cited[:3]) + \
+                  f" {'are' if len(cited) > 1 else 'is'} not a {qc.replace('_', ' ')} label"
+        if why:
+            conf = 0.3 if "label" in why else 0.4
+            missing = [*missing, why]
+    if _SIZE.search(question) and not isinstance(value, (int, float)) and conf > 0.3 and re.search(r"\d", val):
+        conf = 0.3  # a size question answered with something that is not one number ('38.42.46')
+        missing = [*missing, f"the answer '{val[:30]}' is not a single number"]
     if cmp:  # a unit comparison the boundaries could not settle: a VLM reading of sums it never did (3 misses at 0.75)
         conf = min(conf, 0.3)
         missing = [*missing, "could not measure every compared unit from its drawn boundary; the comparison is a "
@@ -180,6 +210,14 @@ def answer(path: str, question: str, image_path: str | None = None, backend: str
     return Answer(value=value, unit=unit, confidence=conf, evidence=ev, solver=solver, trace=trace,
                   assumptions=assumptions, missing=missing)
 
+
+_NUM_UNIT = re.compile(r"^\s*(-?\d+(?:[.,]\d+)?)\s*(m²|m2|sq\.? ?ft|ft²|ft2|m|ft|cm|mm)\.?\s*$", re.I)
+_UNIT_OF = {"m²": "m2", "m2": "m2", "sqft": "ft2", "sq.ft": "ft2", "ft²": "ft2", "ft2": "ft2", "m": "m", "ft": "ft",
+            "cm": "cm", "mm": "mm"}
+_AGG_Q = re.compile(r"\b(total|combined|sum|together|altogether|in all|both|all|largest|smallest|biggest|widest|"
+                    r"longest|most|least|yhteensä|yhteenlaskettu|kaikkien|kaikki|suurin|pienin|gesamt|insgesamt|"
+                    r"zusammen|größte|grösste|kleinste|somme|ensemble|plus grand|plus petit|totale|complessiv\w*|"
+                    r"più grande|più piccol\w*|totalt|sammanlagt|störst|minst)\b", re.I)
 
 # VLM-box measurements: Swiss PNG rooms (experiments/w3/measure_eval.py, 22 Qs) 0 within 2%, 5 within 20%, median
 # error 47%: an estimate whose box a reader can check, not a measurement
