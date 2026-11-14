@@ -1006,7 +1006,33 @@ def should_translate(question: str, intent: Any = None) -> bool:
 
         intent = parse(question)
     return (getattr(intent, "lang", "?") == "?" or getattr(intent, "target", None) in (None, "unknown")
-            or getattr(intent, "task", None) == "text")
+            or getattr(intent, "task", None) == "text" or (TRANSLATE_CONJ and _joins_nouns(question, intent)))
+
+
+# 'and' per language OUTSIDE the rule languages (en/fi/de/fr/it, whose 'und/et/e/ja' the composer reads itself)
+_CONJ = {"sv": "och|samt", "nb": "og", "no": "og", "da": "og", "nl": "en", "pl": "i|oraz", "cs": "a|i", "sk": "a|i",
+         "et": "ja", "lt": "ir", "lv": "un", "hu": "és", "tr": "ve", "ro": "și|și|si", "es": "y|e", "pt": "e",
+         "hr": "i", "sl": "in", "el": "και"}
+# R2 08:40 (Q's compose-cc:sv 3/6): "Hur många toalettstolar och balkonger finns det totalt?" parses as balconies only,
+# and "sovrum och bastur … totalt" names two classes but the composer reads only English 'and' / 'in total', so a
+# Swedish/Dutch/Polish/... composition reaches the LoRA or the agent as ONE question. Translating it lets the composer
+# split it. Kill switch: STOA_TR_CONJ=0.
+TRANSLATE_CONJ = os.environ.get("STOA_TR_CONJ", "1") != "0"
+
+
+def _joins_nouns(question: str, intent: Any) -> bool:
+    """A count/area question in a language the rules do not cover that joins words with its 'and'."""
+    if getattr(intent, "task", None) not in ("count", "area"):
+        return False
+    rx = _CONJ.get(lang_guess(question))
+    if not (rx and re.search(rf"(?<![^\W\d_])(?:{rx})(?![^\W\d_])", _strip_quoted(question), re.I)):
+        return False
+    from stoa.router.compose import _TOGETHER
+    from stoa.router.intent import targets_mentioned
+
+    # the composer already reads it (two classes + its 'in total' word, e.g. NL 'deuren en ramen … in totaal' 0.98
+    # as is): translating would only cap a right answer at the translated-reading confidence
+    return not (len(set(targets_mentioned(question)) - {"apartment", "room"}) >= 2 and _TOGETHER.search(question))
 
 
 def to_english(question: str, *, keep: Sequence[str] = COVERED_LANGS, force: bool = False,
