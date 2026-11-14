@@ -126,6 +126,9 @@ went to zero after each fix, and each new family found the same root cause somew
   "koko rakennuksessa" (answers this storey), floor-to-floor height, and **prices with a thousands separator**:
   "€1,500 per door" → 69.0 at 0.92 (bug 17) — if a judge wants another price, type it as "1500 euros". If one of these comes up, open the evidence and
   say it: "the cross-check shows which storey it used — this is our known failure, on the failure slide."
+- Esplanades rooms are labelled in Estonian; English room words work and the card says which labels it used:
+  "How many kitchens are on this floor?" → 10 ('ELUTUBA+KÖÖK'), "How many toilets …?" → 13, "How big is the server
+  room?" → 4.26 m². Avoid "laundry room" (PESUKODA isn't mapped; flagged at 0.30).
 - Swiss plan — safe: apartments (4), "combined area of apartments A and B" (161.17 m²), "how many square feet is
   apartment B" (870), "by how many m² is B larger than A" (0.49). Avoid "How big is the Küche?" on floors with several
   kitchens (sums them, bug 14).

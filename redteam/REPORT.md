@@ -495,6 +495,13 @@ storey questions. Someone probing "do you know what you don't know?" makes us up
 per-question budget — stop the cascade after ~3 LLM calls / 20k tokens when no step lifted confidence above 0.5, and
 return what is missing.
 
+## v12 (05:15): English room words on the Estonian-labelled demo model — 5 Qs (held)
+Ad hoc on night 753eccb: "How many kitchens are on this floor?" → 10 ('kitchen' = spaces labelled 'ELUTUBA+KÖÖK',
+0.75), "How many toilets …?" → 13 (INVA-WC, TUALETTRUUM, WC listed, 0.75), "How big is the server room?" → 4.257 m²
+(0.93), "Is there a lift on this floor?" → yes (0.30, text). Miss, flagged: "How big is the laundry room on this
+floor?" → the whole storey 870 m² at 0.30 (PESUKODA = laundry not mapped). W1's cross-language label mapping holds and
+says which labels it used — good material for the demo.
+
 ## Pre-merge check (05:07): night 753eccb + W1 1c43c57 + W2 2254acb + W4 f889ace (scratch snapshot)
 All 440 rows, run `20261114-050528-pipeline-questions-98f0` vs night's `93c5`: **0 answers lost**; core 283 rows 96.5 %
 (=), 189/189 right at ≥ 0.8, 0/24 false premises; all 440: 91.7 % scored, 237/247 right at ≥ 0.8, $0.073 per 1,000.
@@ -511,8 +518,8 @@ Italian ×3, floors = 7, 7th floor ×2; W2: one-floor "whole building" ×3).
 - Rotated, grayscale, heavily compressed and half-resolution copies of a plan: 30/30 right, at the same confidence.
 
 ## Re-run
-`questions.jsonl` now has 450 rows: v1 (174) + v2 (31) + v3 Swiss compositions (42) + v4 CubiCasa compositions (36) +
-v5 natural references (70) + v6 judge questions on the demo drawings (21) + v7 scope words in 9 languages (36) + v8 scope premises (8) + v9 Finnish judge (14) + v10 scan follow-ups (8) + v11 number formats (10) = 450; earlier rows are byte-identical across builds (checked with cmp), so runs on the first 205 /
+`questions.jsonl` now has 455 rows: v1 (174) + v2 (31) + v3 Swiss compositions (42) + v4 CubiCasa compositions (36) +
+v5 natural references (70) + v6 judge questions on the demo drawings (21) + v7 scope words in 9 languages (36) + v8 scope premises (8) + v9 Finnish judge (14) + v10 scan follow-ups (8) + v11 number formats (10) + v12 Estonian labels (5) = 455; earlier rows are byte-identical across builds (checked with cmp), so runs on the first 205 /
 283 rows compare directly (`python3 $JUNCTION_SHARED/artifacts/Q/subset_stats.py <run> 283`). Build with
 `PYTHONHASHSEED=0 PYTHONPATH=.`; v5 calls the ifc solver for its gold (deterministic, < 1 s per row).
 ```
