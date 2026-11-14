@@ -54,6 +54,9 @@ KINDS = [
               r"verkaufspreis|marktwert\w*|kaufpreis\w*|verkehrswert\w*|prix de vente|valeur (vénale|marchande|du bien)|"
               r"prezzo di vendita|valore di mercato|marknadsvärde\w*|försäljningspris\w*|köpeskilling\w*|vraagprijs\w*|"
               r"marktwaarde|koopprijs\w*|turuhind\w*|müügihind\w*|precio de venta|valor de mercado)\b"),
+    ("repaint", r"\b(cost to (re)?paint|(re)?painting costs?|cost of (re)?painting|maalauskustannu\w*|malerkosten|"
+                r"kosten (für )?(den )?(neu)?anstrich\w*|coût de (la )?peinture|costo (della )?(tinteggiatura|pittura)|"
+                r"målningskostnad\w*|schilderkosten|värvimise (hind|maksumus)|costo de (la )?pintura)\b"),
     ("construction_cost", r"\b(construction cost|cost to (build|construct)|cost .{0,30}to (build|construct)|"
                           r"build(ing)? cost|did .{0,40}cost|cost of (building|constructing|construction)|"
                           r"rakennuskustannu\w*|rakentamis\w* (hinta|kustannu\w*|maksoi)|maksoi rakentaa|"
@@ -113,7 +116,13 @@ _PERMONTH = (r"(per month|a month|each month|monthly|kuussa|kuukaudessa|kuukausi
              r"kuu kohta|igakuu\w*|al mes|mensual\w*)")
 _HOLD = (r"(hold|house|accommodat\w*|sisältää|majoittaa|aufnehmen|beherbergen|accueillir|loger|ospitare|accogliere|"
          r"innehålla|rymma|huisvesten|herbergen|hoida|mahutada|albergar|alojar)")
+_PAINTW = (r"((re)?paint\w*|maalat\w*|maalaa\w*|maalau\w*|maalaus\w*|(neu )?streich\w*|anstreich\w*|anstrich\w*|"
+           r"maler\w*|(re)?peind\w*|peinture\w*|(ri)?diping\w*|tinteggi\w*|imbianc\w*|måla\w*|målning\w*|"
+           r"(over)?schilder\w*|verven|värvi\w*|pintar\w*|pintura\w*|repint\w*)")
+_PCOST = (rf"({_COSTW[1:-1]}|cost\w*|kost\w*|coût\w*|maksa\w*|cuest\w*|price\w*|prix|preis\w*|hinta\w*|hinnan|"
+          r"pris\w*|prijs\w*|hind\w*|precio\w*|prezzo\w*|budget\w*)")
 _GENERAL = {
+    "repaint": rf"\b{_PCOST}\b.{{0,60}}\b{_PAINTW}\b|\b{_PAINTW}\b.{{0,60}}\b{_PCOST}\b",
     "occupants": rf"\b{_COUNTW}\s+(\w+\s+){{0,2}}{_PEOPLE}\b|\b{_PEOPLE}\b.{{0,40}}\b{_HOLD}\b",
     "rent": rf"\b{_COSTW}\b.{{0,40}}\b{_PERMONTH}|\b{_PERMONTH}.{{0,30}}\b{_COSTW}\b|\bkuukausi(maksu|vuokra)\w*",
     "price": rf"\b{_MARKET}\W{{0,3}}{_VALUEW}|\b{_VALUEW}\b.{{0,30}}\b{_MARKET}\b|\b{_MARKET}\w*\b.{{0,30}}\b{_VALUEW}\b|"
@@ -201,6 +210,19 @@ U_WALL = {  # W/m2K exterior wall
     "EU": (0.25, 0.15, 0.60, "EU new-build 0.15-0.30, older stock up to 0.6+"),
 }
 U_HISTORIC = (1.4, 0.8, 2.2, "uninsulated pre-1950 masonry/timber walls ~0.8-2.2 W/m2K")
+PAINT = {  # local currency per m2 of painted SURFACE (labour + paint, 2 coats, VAT incl.); rules of thumb, not statistics
+    "FI": (15.0, 10.0, 25.0, "assumed Finnish painter price ~10-25 EUR per m2 of wall (labour + paint, 2 coats)"),
+    "CH": (30.0, 20.0, 45.0, "assumed Swiss painter price ~CHF 20-45 per m2 of wall (Malerarbeiten, 2 coats)"),
+    "US": (30.0, 15.0, 55.0, "assumed US painter price ~USD 1.5-5 per ft2 of wall (~15-55 per m2)"),
+    "EU": (15.0, 8.0, 30.0, "assumed EU-typical painter price 8-30 EUR per m2 of wall"),
+}
+# paintable wall surface per m2 of floor: square rooms of a m2, 2.6 m high, ~12% doors/windows ->
+# 4 * 2.6 * sqrt(a) * 0.88 / a = 9.15 / sqrt(a): a = 10 -> 2.9, 15 -> 2.4, 20 -> 2.0, 25 -> 1.8; tiled wet rooms left out
+WALL_PER_FLOOR = (2.4, 1.8, 3.2)
+_CEIL = re.compile(r"\b(ceiling\w*|katto\w*|katot|katon|decke\w*|plafond\w*|soffitt\w*|tak|taket|taken|plafonds?|"
+                   r"lagi|lae|techo\w*|cielo ?rasos?)\b", re.I)
+_WALLS = re.compile(r"\b(walls?|seinä\w*|seinät|wand|wände\w*|murs?|pareti|parete|vägg\w*|muren|muur|seina\w*|"
+                    r"seinte|paredes?)\b", re.I)
 ENERGY = {  # kWh per m2 per year, space heating + hot water
     "FI": (130.0, 60.0, 220.0, "Finnish dwelling stock ~60-220 kWh/m2/a heating energy (newer < 100)"),
     "CH": (100.0, 40.0, 180.0, "Swiss stock ~40-180 kWh/m2/a (Minergie new builds ~40)"),
@@ -222,11 +244,12 @@ MISSING = {
     "u_value": "the wall build-up (layers, insulation thickness) or an energy certificate would settle it",
     "year_built": "the construction year is not printed here: a building permit, register entry or title block date would settle it",
     "energy": "an energy certificate or metered consumption would settle it",
+    "repaint": "a painter's quote (or a stated rate) and the real wall areas (IFC wall faces or a room-by-room take-off) would settle it",
 }
 UNIT = {"occupants": "count", "rent": "{cur}/month", "price": "{cur}", "construction_cost": "{cur}",
-        "u_value": "W/m2K", "year_built": "year", "energy": "kWh/year"}
+        "u_value": "W/m2K", "year_built": "year", "energy": "kWh/year", "repaint": "{cur}"}
 CONF = {"occupants": 0.2, "rent": 0.1, "price": 0.1, "construction_cost": 0.1, "u_value": 0.15, "year_built": 0.1,
-        "energy": 0.1}
+        "energy": 0.1, "repaint": 0.1}
 
 
 def _source(path: str) -> str:
@@ -388,7 +411,7 @@ def _round(kind: str, x: float) -> float | int:
         return round(x, 2)
     if kind == "rent":
         return int(round(x / 10.0) * 10)
-    if kind == "energy":
+    if kind in ("energy", "repaint"):
         return int(round(x / 100.0) * 100)
     return int(round(x / 1000.0) * 1000)
 
@@ -427,7 +450,7 @@ def solve(path: str, question: str, kind: dict | None = None, as_text: bool = Fa
     if d.get("how"):
         trace.append(f"drawing: {d['how']}")
     area = d.get("area")
-    if area is None and kind in ("occupants", "rent", "price", "construction_cost", "energy"):
+    if area is None and kind in ("occupants", "rent", "price", "construction_cost", "energy", "repaint"):
         # no floor area read: a typical dwelling of the country, much wider
         typ = {"FI": 80.6, "CH": 95.0, "US": 150.0, "EU": 90.0}[country]
         area = (typ, typ * 0.5, typ * 1.8)
@@ -472,6 +495,26 @@ def solve(path: str, question: str, kind: dict | None = None, as_text: bool = Fa
             assumptions.append(f"currency: 1 {CUR[country]} = {TO_EUR[CUR[country]] / TO_EUR[cur]:.2f} {cur} (assumed)")
         if kind == "construction_cost" and src in ("habs", "finna", "europeana", "wikimedia"):
             assumptions.append("historical building: this is the cost to build it today, not what it cost then")
+    elif kind == "repaint":
+        c, lo_r, hi_r, ref = PAINT[country]
+        ceil = bool(_CEIL.search(question))
+        walls = bool(_WALLS.search(question)) or not ceil  # no surface named -> walls only
+        wf, wlo, whi = WALL_PER_FLOOR if walls else (0.0, 0.0, 0.0)
+        f, flo, fhi = wf + (1.0 if ceil else 0.0), wlo + (0.95 if ceil else 0.0), whi + (1.05 if ceil else 0.0)
+        surf = area[0] * f
+        what = " + ".join(x for x, on in (("walls", walls), ("ceilings", ceil)) if on)
+        if walls:
+            assumptions.append(f"painted wall area ~ {wf:g} x floor area (range {wlo:g}-{whi:g}): 2.6 m ceilings, "
+                               "rooms of 10-20 m2, doors/windows and tiled wet-room walls left out")
+        if ceil:
+            assumptions.append("ceiling area = floor area")
+        if not _CEIL.search(question) and not _WALLS.search(question):
+            assumptions.append("walls only (ceilings not included)")
+        assumptions.append(f"{what}: ~{surf:.0f} m2 to paint")
+        val, lo, hi = surf * c * fx, area[1] * flo * lo_r * fx, area[2] * fhi * hi_r * fx
+        assumptions.append(f"rate: {ref}")
+        if fx != 1.0:
+            assumptions.append(f"currency: 1 {CUR[country]} = {TO_EUR[CUR[country]] / TO_EUR[cur]:.2f} {cur} (assumed)")
     elif kind == "u_value":
         yrs = _catalogue_year(path) if src in ("habs", "finna", "europeana", "wikimedia") else None
         if src in ("habs", "europeana", "wikimedia", "finna") and (yrs is None or yrs[0] < 1960):

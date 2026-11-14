@@ -876,3 +876,26 @@ can be tested at all.
 177 LLM calls (180), 477k tokens (492k); the 6 rate-stated rows: 0 values changed. So the post-noon option still runs
 unchanged on the final build. Gap found with triage: kind_of misses renovation costs ('What would it cost to repaint
 all walls on this floor?'). That is a derived quantity (wall area × a rate), so it belongs in the agent, not the estimate.
+
+### 8o. Repaint cost as an estimate kind (cycle 23, 11:20-11:30; NOT wired, same post-noon option as 8m)
+Correction to the 8m note above: a repaint question is derived (wall area × rate) only when it STATES the rate
+("… at 12 €/m²"; `_STATED` keeps those out, so the composer/agent answers them exactly). Without a rate, the rate is
+out-of-drawing like a rent rate, so it belongs in the estimate route next to rent/price.
+- `experiments/r1/estimate/estimate.py` kind `repaint`: a cost/price word within 60 characters of a paint word, 9
+  languages (en/de/fi/fr/it/sv/nl/es/et), placed before `construction_cost`.
+- Value = floor area (the same `dwelling()` read as rent: IfcSpace sums per storey, DXF room polygons, CubiCasa room
+  graph; else a typical dwelling) × painted surface per floor m² × a painter rate per m².
+  Wall surface per floor m²: for square rooms of a m², 2.6 m high, ~12% openings, 4·2.6·√a·0.88 / a = 9.15/√a, which is
+  2.9 at 10 m², 2.4 at 15, 2.0 at 20 and 1.8 at 25 → **2.4 (range 1.8–3.2)**. Tiled wet rooms are left out. 'ceilings' adds
+  1.0 × floor area. If no surface is named, walls only (stated as an assumption).
+  Rates (labour + paint, 2 coats) are **rules of thumb, not cited statistics**, and they are labelled "assumed": FI 15
+  (10–25) EUR/m², CH 30 (20–45) CHF, US 30 (15–55) USD, EU 15 (8–30) EUR. Rounded to 100, conf 0.1, and `missing`
+  says what would settle it (a quote or a stated rate, plus the real wall areas).
+- Checks: 0 repaint fires on 141,343 questions (all 127,044 dataset questions + open splits + W4/F derived sets + Q's
+  red team; the only fire is the old energy one). 11/11 positive and 5/5 negative wordings in
+  `experiments/r1/estimate/probe_repaint.txt`. Those wordings are IN-SAMPLE (I wrote them together with the regex).
+  One drawing per source gives sensible values (CubiCasa 106 m² → 3,800 EUR; Swiss 304 m² floor → 21,900 CHF walls,
+  31,000 walls + ceilings; IFC storey 325 m² → 11,700 EUR; HABS/finna without an area → a typical dwelling, wide range).
+- Open: the 2.4 factor is geometry, not fitted. Fit it on IFC: Σ IfcWall side area per storey / Σ IfcSpace area. W1's
+  ifc solver already answers wall-side questions. On an IFC file the agent could also measure the real wall faces and
+  then use the stated or reference rate.
