@@ -239,6 +239,8 @@ def test_human_split_last_row_wins(tmp_path, monkeypatch):
         {"qid": "h-1", "path": "data/cubicasa5k/x.png", "question": "How many doors?", "answer": "4", "unit": "count",
          "type": "count", "sureness": "certain"},
         {"qid": "h-2", "path": "data/cubicasa5k/x.png", "question": "What is shown?", "answer": "a flat", "type": "text"},
+        {"qid": "h-3", "path": "data/cubicasa5k/x.png", "question": "How many windows?", "answer": "2", "type": "count"},
+        {"qid": "h-3", "path": "data/cubicasa5k/x.png", "question": "How many windows?", "deleted": True},
     ]
     (tmp_path / "human" / "questions.jsonl").write_text("\n".join(json.dumps(r) for r in rows) + "\n")
     qs = splits.load_split("human")
@@ -246,3 +248,14 @@ def test_human_split_last_row_wins(tmp_path, monkeypatch):
     assert qs[0].answer == 4.0 and qs[0].meta["kind"] == "human:certain"
     assert qs[1].answer == "a flat" and qs[1].meta["kind"] == "human:unknown"
     assert splits.split_hash("human")
+
+
+def test_split_row_without_path_is_skipped(tmp_path, capsys):
+    """R2 11:03: an ad-hoc row with a question but no drawing used to crash load_split with KeyError 'qid'."""
+    from stoa.eval.splits import load_split
+
+    f = tmp_path / "x.jsonl"
+    f.write_text('{"question": "How many doors?"}\n{"path": "data/cubicasa5k/x.png", "question": "How many doors?"}\n')
+    qs = load_split(str(f))
+    assert len(qs) == 1 and qs[0].path == "data/cubicasa5k/x.png"
+    assert "no 'path'" in capsys.readouterr().err

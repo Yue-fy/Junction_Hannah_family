@@ -80,6 +80,9 @@ Sealed test 2 = S0's run b391 on the test-2 build bb94fe4 (08:12, aggregates onl
 | **New wordings of the same kinds** (sealed, nobody tuned on it) | **80.4 %** (test 1: 63.0) | |
 | **Derived quantities: prices, rates, shares** (sealed) | **62.2 %** (test 1: 34.6) | |
 
+(The dev column is the test-2 build's. The final night 637a6df, gate c43c at 11:18: **dev 90.0 % / 83.4 % weighted**,
+answers at conf ≥ 0.8 on 81 % of questions at 98.5 % right, AUROC 0.949, ECE 0.032, $0.038 per 1,000, p95 4.0 s. If a
+judge asks "and the build on stage?", say these; the sealed numbers stay test 2's.)
 By source on sealed test 2: Swiss vector plans 99.0 %, IFC models 100 % (397/397), scanned apartment plans
 (CubiCasa) 70.4 % (a VLM alone: 50 % on dev).
 > "When we say we're sure — 79 % of answers — we are right 98 % of the time; calibration error 0.02. Cost: 3 cents
@@ -93,14 +96,15 @@ headless chromium, numbers from `redteam/REPORT.md`). **Say only this (≈ 22 s,
 > "We tried to break it ourselves: over a thousand adversarial questions — rewordings, nine languages, rotated scans,
 > rooms that don't exist, renamed files, a judge's own upload. Every confident mistake had one cause: we checked the
 > number, not that it answered what was asked. Each bar is a round of fixes; the tall ones on the right are this
-> morning's new attacks. On the first 600, all 396 confident answers are right — and it never just refuses."
+> morning's new attacks. On the first 600, all 397 confident answers are right — and it never just refuses."
 (The bars from 09:28 on count only the newest families — uploads, links, lists, rankings, renamed files, relative
-storeys — on builds where every older family is at 0: 14 / 12 / 19 / 18, then 10 and 5 with the 10:47 / 10:54 owner
-heads. The 5 left: CubiCasa uploads (3), "the storey *directly* above this one" (1), one agent confidence bug (1). Redraw after the final
+storeys — on builds where every older family is at 0: 14 / 12 / 19 / 18, then **5 on the final night 637a6df: all
+five are CubiCasa uploads without the style (bug 26)** (pre-merge checks at 10:47 / 10:54 gave 10 / 5 and b656826 6;
+not drawn, see REPORT). Redraw after the final
 build: `python3 experiments/q/bar_count.py MAIN_RUN [V27_RUN] --v26 V26_RUN` gives the bar.)
-(Numbers by stage build — say the line for the build on stage: **the 11:15 merge of the 10:54 heads (pre-merge #11):
-"… all 396 confident answers are right, and no confident answer to a trick question"** (run
-`…-105439-…-all-snap12-e712`; 431 of 431 on v1–v20); pre-merge #10: "… all 398"; night 6025963: "… all 402" (`…-103834-…-all-6025963-f05a`);
+(Numbers by stage build — say the line for the build on stage: **the final night 637a6df (11:13):
+"… all 397 confident answers are right, and no confident answer to a trick question"** (run
+`…-111324-…-all-637a6df-538a`; 432 of 432 on v1–v20); b656826: "… all 398"; pre-merge #11: "… all 396"; pre-merge #10: "… all 398"; night 6025963: "… all 402" (`…-103834-…-all-6025963-f05a`);
 41188a4: "… all 379"; **7a78559 (09:50): "… all 378"** (run `…-094023-…-all-7a78559-2466`; 413 of 413 on
 v1–v20); 0ffd81b: "… all 364" (run `…-092751-…-all-0ffd81b-ba15`); be57171 / 31397eb: "609 … all 360"; bb94fe4 (test 2):
 "494 … 283 of 290"; c1d6149: "564 … 338 of 339"; 62754aa: "609 … 337 of 339". "Never just refuses": 0 of 647
@@ -174,8 +178,8 @@ On older builds more of these break: see the git history of this file (08:20 and
   **On the 11:15 build (pre-merge #11) also right:** "How many doors are on the floor above this one?" (42), "… the
   floor below this one?" (0 — the foundation), "Which floor has no MAGAMISTUBA?" (1.korrus), "Which floor has the
   biggest room?" (1.korrus), "Quale piano ha il maggior numero di porte?" (frigento: Piano 1). **Steer away from:**
-  "the storey *directly* above this one" (answers the open sheet's storey at 0.88), "How many windows does the floor
-  with the most doors have?" (agent: 297 at 0.95). Also "How big is the laundry room?" (870 at 0.30) and "the same area as room X" (returns X's area). If one
+  nothing new from tonight's families on 637a6df ("the storey directly above this one" → 60; "How many windows does
+  the floor with the most doors have?" is capped, no longer 297 at 0.95). Also "How big is the laundry room?" (870 at 0.30) and "the same area as room X" (returns X's area). If one
   of these comes up, open the evidence and say it: "the trace shows what it computed — this is a known failure, it's
   on the failure slide."
 - Esplanades rooms are labelled in Estonian; English room words work and the card says which labels it used:

@@ -125,14 +125,38 @@ def pairs(examples: list[dict]):
             yield r
 
 
+_IMP = re.compile(r"(\d+(?:\s*/\s*\d+)?)\s*(?:\"|''|in(?:ch(?:es)?)?\b)\s*=\s*(\d+)\s*(?:'|ft\b|foot|feet)", re.I)
+_MET = re.compile(r"\b1\s*[:/]\s*(\d+(?:[.,]\d+)?)\b(?!\s*(?:\"|in\b|inch))")
+
+
+def _scale(v) -> float | None:
+    """A drawing scale as one ratio: '1:96', '1/96', '1/8\"=1'-0\"', '1/8 inch = 1 foot' -> 96.0; else None."""
+    s = str(v or "")
+    m = _IMP.search(s)
+    if m:
+        a = m.group(1).replace(" ", "")
+        inch = float(a.split("/")[0]) / float(a.split("/")[1]) if "/" in a else float(a)
+        return float(m.group(2)) * 12 / inch if inch else None
+    m = _MET.search(s)
+    return float(m.group(1).replace(",", ".")) if m else None
+
+
 def report(run: str):
     from analyze import rescore
     rows = rescore([json.loads(line) for line in open(run)])
     ctrl = {r["qid"]: r for r in rows if r["meta"]["kind"] == "control"}
     band = lambda c: "high" if (c or 0) >= 0.8 else "mid" if (c or 0) >= 0.5 else "low"
-    same = lambda a, b: (_num(a) is not None and _num(b) is not None and abs(_num(a) - _num(b)) <= 0.02 * max(1, abs(_num(b)))) \
-        or str(a).strip().lower() == str(b).strip().lower()
-    out, n_changed = [], 0
+    def same(a, b, kind=""):
+        x, y = _num(a), _num(b)
+        if x is not None and kind in ("unit:ft2", "unit:mm"):  # the variant asks in another unit: convert back
+            x = x / FT2 if kind == "unit:ft2" else x / 1000
+        if x is not None and y is not None:
+            return abs(x - y) <= 0.02 * max(1, abs(y))
+        sa, sb = _scale(a), _scale(b)  # '1:96' = '1/8"=1\'-0"' = '1/8 inch = 1 foot'
+        if sa and sb:
+            return abs(sa - sb) <= 0.02 * sb
+        return str(a).strip().lower() == str(b).strip().lower()
+    out, n_changed, n_sure = [], 0, 0
     for r in rows:
         k, m = r["meta"]["kind"], r["meta"]
         if k == "control":
@@ -148,17 +172,20 @@ def report(run: str):
             bad = not r["correct"]
             tag = "WRONG" if bad else "right"
         elif c is not None:
-            bad = not same(r["value"], c["value"]) or band(r["confidence"]) != band(c["confidence"])
+            bad = not same(r["value"], c["value"], k) or band(r["confidence"]) != band(c["confidence"])
             tag = "CHANGED" if bad else "same"
         else:
             bad, tag = False, "?"
         n_changed += bad
+        if bad and max(r["confidence"] or 0, (c or {}).get("confidence") or 0) >= 0.5:
+            n_sure += 1
         if bad:
             base_v = f"{c['value']} @{(c['confidence'] or 0):.2f}" if c else "-"
             out.append(f"- [{k}] {tag}: {r['question'][:90]!r} -> {str(r['value'])[:50]} @{(r['confidence'] or 0):.2f} "
                        f"({r['solver']}); example: {base_v}; gold {r.get('gold')}")
     hi_wrong = [r for r in rows if r.get("correct") is False and (r["confidence"] or 0) >= 0.8]
-    print(f"{len(rows)} rows, {len(ctrl)} examples: {n_changed} variants changed / wrong / unflagged; "
+    print(f"{len(rows)} rows, {len(ctrl)} examples: {n_changed} variants changed / wrong / unflagged "
+          f"({n_sure} with an answer at conf >= 0.5 on either side: look at these first); "
           f"{len(hi_wrong)} scored answers wrong at conf >= 0.8")
     print("\n".join(out))
 
@@ -173,6 +200,11 @@ def main():
     if a.report:
         return report(a.report)
     examples = [json.loads(line) for line in open(a.examples) if line.strip()]
+    nopath = [ex for ex in examples if not ex.get("path")]
+    if nopath:  # text-only examples: stoa.eval needs a drawing on every row (R2 PITFALL 11:10, KeyError 'qid')
+        sys.exit(f"{len(nopath)} of {len(examples)} examples have no 'path' (first: {nopath[0].get('question')!r}).\n"
+                 "Attach drawings first: PYTHONPATH=. python experiments/r2/attach_drawings.py EXAMPLES.txt|jsonl "
+                 "--out WITH_PATHS.jsonl (night-R2), then run this script on WITH_PATHS.jsonl.")
     langs = [x for x in a.translate.split(",") if x]
     out = []
     for ex in examples:

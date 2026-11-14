@@ -18,7 +18,7 @@ answer) vs `20261113-234812-dummy-dev` (template prior), both on dev v2 (hash f4
 **One command for the whole OPEN probe suite** (18 probes, 10,062 rows, ~8 min with 3 streams):
 `PYTHONPATH=. $JUNCTION_VENV/bin/python experiments/F/probe_suite.py run --tag X` then
 `python3 experiments/F/probe_suite.py compare $JUNCTION_SHARED/artifacts/F/probe_suite/X.json` (default base = night
-1a4e2af; lists every lost row). Use it on any change made after Stoa's noon reveal.
+637a6df, the freeze candidate; lists every lost row). Use it on any change made after Stoa's noon reveal.
 
 Night 7a78559 → 1a4e2af (S0 cycles 40–41), paired on 9,410 common rows: **60 won / 8 lost, confident-wrong 67 → 65**.
 All 8 losses are low-confidence flips (≤ 0.61: LoRA counts, an agent sum, a Swedish doors-minus-windows compose).
@@ -52,7 +52,8 @@ detector: they disagree (> 2%) on 10 of 400 dev Swiss area Qs and dxf is right o
 | 1a4e2af (c41) | 92.2 | 7,900 (72.5%) | 99.08% | 73 |
 | 6025963 (c42 r2) | 92.5 | 7,953 (73.0%) | 99.14% | 68 |
 | 9b1abd3 (c43 r1) | 92.6 | 7,808 (71.7%) | 99.58% | 33 |
-| b656826 (c43 r2, freeze) | 92.9 | 7,896 (72.5%) | 99.59% | 32 |
+| b656826 (c43 r2) | 92.9 | 7,896 (72.5%) | 99.59% | 32 |
+| **637a6df (c43 r3, final candidate)** | 92.9 | 7,897 (72.5%) | 99.59% | 32 |
 
 (10,894 paired OPEN rows, 19 probes.) The drop is W2 fd50ee3 (unnamed numbered rooms ≥ 2% of a total → 0.78, from the
 unlabeled-room finding above): the two Swiss apartments wrong in every wording lose their 0.9. What is left at ≥ 0.8 is

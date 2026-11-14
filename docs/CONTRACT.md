@@ -173,7 +173,7 @@ $JUNCTION_VENV/bin/python -m stoa.eval --list        # registered solvers + impo
   - **Recommended layout for new files**: `<ROOT>/data/<source>/<name>.<ext>`, every format of one drawing under one
     stem, an IFC model next to its sheets; then `--split file.jsonl` with absolute paths. Check a new route on such
     copies with `experiments/F/neutralize.py IN OUT --mode hash|name|lone`, and run F's same-gold regression suite
-    with `experiments/F/probe_suite.py run --tag X` / `compare` (baseline = night 1a4e2af).
+    with `experiments/F/probe_suite.py run --tag X` / `compare` (baseline = night 637a6df, the freeze candidate).
 
 ## HTTP API (W4 implements `stoa/api.py`, port 8100)
 
