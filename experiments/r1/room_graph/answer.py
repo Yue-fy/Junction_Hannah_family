@@ -86,6 +86,11 @@ def _evidence(path: str, g: dict, ids: list[str], question: str, items_only: boo
     return out
 
 
+_NEEDS_AREA = re.compile(r"\b(?:area|size|sized|big|bigger|biggest|large|larger|largest|small|smaller|smallest|"
+                         r"square|m2|m²|sq|floor\s+space|wide|widest|fläche|gro(?:ß|ss)|pinta-?ala|suurin|pienin|"
+                         r"superficie|surface|yta|störst)\w*", re.I)
+
+
 def solve(path: str, question: str, backend: str = "local", textlayer: bool | None = None):
     """textlayer: labels + printed areas from W3's OCR text layer (None -> env R1_RG_TEXTLAYER, default off)."""
     import os
@@ -93,7 +98,11 @@ def solve(path: str, question: str, backend: str = "local", textlayer: bool | No
     from stoa.contract import Answer
     if textlayer is None:
         textlayer = os.environ.get("R1_RG_TEXTLAYER", "0") == "1"
-    g = room_graph(path, printed=True, textlayer=textlayer)
+    # printed-area reads = 1-3 VLM calls, most of the cost (W4 08:31). R1_RG_PRINTED=auto reads them only when the
+    # question can need an area: measured on the 78 probe Qs non-area 45 -> 44/55 (the balcony-access questions lose
+    # the printed hints and answer 'outdoor'), so the default stays 'always' (accuracy first; ~$0.0005/Q, local).
+    needs_area = os.environ.get("R1_RG_PRINTED", "always") != "auto" or bool(_NEEDS_AREA.search(question))
+    g = room_graph(path, printed=needs_area or textlayer, textlayer=textlayer)
     if not g:
         return Answer(value=None, solver="room_graph", confidence=0.0,
                       missing=["no room segmentation for this plan (CC5K map not cached and live run unavailable)"])
@@ -107,6 +116,8 @@ def solve(path: str, question: str, backend: str = "local", textlayer: bool | No
     except Exception:  # noqa: BLE001
         js = {}
     value, unit = js.get("value"), js.get("unit")
+    if unit in ("m2", "count") and isinstance(value, str) and not re.search(r"\d", value):
+        unit = None  # a room-name answer tagged 'm2' (W4 08:31: "bathroom" m2 -> the area rule gave 0.4)
     ids = [str(i) for i in (js.get("rooms") or []) if re.fullmatch(r"R\d+", str(i))]
     terms = []
     for t in js.get("terms") or []:

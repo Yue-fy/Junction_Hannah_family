@@ -154,7 +154,7 @@ def test_off_domain_symbol_counts_abstain_and_scans_go_to_text_mode():
     a = s._off_domain("data/swiss_dwellings/x.png", "window", [])
     assert a.value is None and "detector" in a.missing[0]  # no Finnish prior on a Swiss/scan drawing
     assert s._text_mode("data/habs/x_sheet_00001.jpg", "What is the scale of this drawing?")
-    assert not s._text_mode("data/cubicasa5k/x.png", "What is the scale of this drawing?")
+    assert s._text_mode("data/cubicasa5k/x.png", "What is the scale of this drawing?")  # non-count: text mode (W3 c5)
     assert not RasterSolver(text=0)._text_mode("data/habs/x.jpg", "What is the scale of this drawing?")
 
 
@@ -252,7 +252,7 @@ def test_swiss_png_without_twin_goes_to_text_mode(monkeypatch):
     assert R.RasterSolver(twins=0)._text_mode("data/swiss_dwellings/x.png", q)
     monkeypatch.setattr(R, "_siblings", lambda p: {".png": p})
     assert R.RasterSolver()._text_mode("data/swiss_dwellings/x.png", q)
-    assert not R.RasterSolver()._text_mode("data/cubicasa5k/x.png", q)
+    assert R.RasterSolver()._text_mode("data/cubicasa5k/x.png", q)  # non-count questions on CubiCasa: text mode
 
 
 def test_sheet_kind_titles_and_room_questions():
@@ -335,3 +335,54 @@ def test_apartment_net_area_sums_printed_rooms_inside_the_unit_boundary(tmp_path
                  box=[0, 0, 296, 10], residual=1.0, source="layer")
     SB._resolve_unknown([bar], TextLayer(path="x.png", size=(2480, 1753), items=[TextItem("1:200 (A3)", [0, 0, 9, 9])]))
     assert bar.unit == "m"
+
+
+def test_cubicasa_non_count_questions_go_to_text_mode(monkeypatch):
+    """An unseen non-count question on a CubiCasa plan ('area of the living room', printed 'OH 22.8') is read from
+    the text layer; count questions stay with the counting methods."""
+    import stoa.solvers.raster as R
+
+    s = R.RasterSolver()
+    assert s._text_mode("data/cubicasa5k/x.png", "What is the area of the living room (OH) in m²?")
+    assert not s._text_mode("data/cubicasa5k/x.png", "How many rooms have a window?")
+    assert not s._text_mode("data/cubicasa5k/x.png", "Kuinka monta makuuhuonetta on?")
+
+
+def test_label_count_in_a_unit_is_scoped_to_its_boundary(monkeypatch, tmp_path):
+    """'How many rooms labelled X in apartment B' counts inside B's drawn boundary; a unit the plan does not name is a
+    false premise (low confidence, said in `missing`)."""
+    import numpy as np
+    from PIL import Image
+
+    import stoa.solvers.raster as R
+    from stoa.solvers.raster import textlayer as T
+    from stoa.solvers.raster.textlayer import TextItem, TextLayer
+
+    img = np.full((200, 400, 3), 255, np.uint8)
+    img[20:23, 20:380] = img[177:180, 20:380] = (176, 58, 46)
+    img[20:180, 20:23] = img[20:180, 377:380] = img[20:180, 199:202] = (176, 58, 46)
+    p = tmp_path / "u.png"
+    Image.fromarray(img).save(p)
+    tl = TextLayer(path=str(p), size=(400, 200), items=[
+        TextItem("Whg. A", [40, 30, 90, 42]), TextItem("Whg. B", [240, 30, 290, 42]),
+        TextItem("Bad", [50, 100, 70, 110]), TextItem("Bad", [250, 100, 270, 110]), TextItem("Bad", [300, 140, 320, 150])])
+    monkeypatch.setattr(T, "text_layer", lambda *a, **k: tl)
+    s = R.RasterSolver()
+    a = s._text_count(str(p), None, "Bad", [], "How many rooms labelled 'Bad' are there in apartment B?")
+    assert a.value == 2 and a.confidence == 0.85
+    a = s._text_count(str(p), None, "Bad", [], "How many rooms labelled 'Bad' are there in apartment E?")
+    assert a.value == 3 and a.confidence <= 0.1 and "no apartment E" in a.missing[0]
+    assert s._text_count(str(p), None, "Bad", [], "How many rooms labelled 'Bad' are on this floor?").value == 3
+
+
+def test_compared_units_parsing():
+    from stoa.solvers.raster import apartment as A
+    from stoa.solvers.raster.textlayer import TextItem, TextLayer
+
+    tl = TextLayer(path="x.png", size=(100, 100), items=[TextItem(f"Whg. {L}", [0, 0, 1, 1]) for L in "ABCD"])
+    assert A.compared_units("Which apartment on this floor has the largest net floor area?", tl) == (list("ABCD"), "max")
+    assert A.compared_units("Is apartment A larger than apartment B?", tl) == (["A", "B"], "max")
+    assert A.compared_units("Which is smaller, apartment C or D?", tl) == (["C", "D"], "min")
+    assert A.compared_units("Welche Wohnung ist die grösste?", tl) == (list("ABCD"), "max")
+    assert A.compared_units("What is the net floor area of apartment B in m²?", tl) is None
+    assert A.compared_units("Is apartment B the largest?", tl) is None  # one unit named: not handled as a comparison

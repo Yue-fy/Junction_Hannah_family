@@ -51,6 +51,7 @@ DERIVED_CAP = 0.4  # max confidence of a rules-only (0 LLM calls) as-asked answe
 UNSEEN_CAP = 0.5  # (until c72) max confidence of a local-tier / prior answer to a wording that is not a train template
 UNSEEN_SCALE = 0.92  # unseen wording, ONE plain concept: hard's cubicasa paraphrases were 79.2% right at mean conf 0.863
 UNSEEN_MAX = 0.75  # an unseen wording never enters the >= 0.8 'trust' bin (F 04:05, hard2q aggregate)
+XCHECK_DISAGREE = 0.5  # agent vs an unsure rules answer to the same quantity, disagreeing (D19 (5))
 XCHECK_CAP = 0.7  # a disagreeing cross-check (✗) caps confidence (S0 04:00: sealed test, 21 such answers at >= 0.8, 76% right)
 UNSEEN_STRUCT_CAP = 0.35  # unseen wording WITH extra structure (comparison/exclusion words, numbers): F, held-out: 33%
 
@@ -193,9 +194,22 @@ _APT_REFS = [
     # apartment 'D' / "D" / «D» / ‘D’
     (re.compile(r"\b(?:[Aa]partment|[Ff]lat|[Uu]nit)\s+(?:'|\"|«|‘|“)" + _APT_ID + r"(?:'|\"|»|’|”)"), "apartment {id}"),
     (re.compile(r"\bWhg\.\s*" + _APT_ID + r"\b"), "Wohnung {id}"),
+    # F 08:40 (de/fr/it probe: 'Wohneinheit B' 1/40 with 39 confident-wrong, 'logement B' 38): other dwelling nouns
+    (re.compile(r"\b(?:[Dd]ie\s+)?" + _APT_ID + r"-Wohnung\b"), "die Wohnung {id}"),
+    (re.compile(r"\b(?:[Ww]ohneinheit|[Ee]inheit|[Nn]utzungseinheit)\s+" + _APT_ID + r"(?![\w'’])"), "Wohnung {id}"),
+    (re.compile(r"\b(?:[Ll]ogement|[Aa]ppart\.?|[Aa]ppt\.?)\s+" + _APT_ID + r"(?![\w'’])"), "appartement {id}"),
 ]
-_EXCL_AFTER = re.compile(r"\b(balcon(?:y|ies)|terraces?|loggias?|outdoor (?:spaces?|areas?))\s+(?:excluded|not included)\b",
-                         re.I)
+_OUT_EN = r"(?:balcon(?:y|ies)|terraces?|loggias?|outdoor (?:spaces?|areas?))"
+_EXCL_AFTER = re.compile(rf"\b({_OUT_EN}(?:\s*(?:,|and)\s*{_OUT_EN})*)\s+(?:excluded|not included)\b", re.I)
+# fr/de/it fronted exclusions ("…, balcons exclus ?" -> dxf answered the balcony area, F 08:40)
+_OUT_FR, _OUT_DE, _OUT_IT = r"(?:balcons?|terrasses?|loggias?)", r"(?:Balkone?|Terrassen?|Loggien|Loggias?)", \
+    r"(?:balconi|balcone|terrazz[ie]|logge)"
+_EXCL_AFTER_ML = [
+    (re.compile(rf"\b({_OUT_FR}(?:\s*(?:,|et)\s*{_OUT_FR})*)\s+(?:exclus|exclues|non compris(?:es)?)\b", re.I), "sans {x}"),
+    (re.compile(rf"\b({_OUT_DE}(?:\s*(?:,|und)\s*{_OUT_DE})*)\s+(?:ausgenommen|nicht mitgerechnet|ausgeschlossen)\b",
+                re.I), "ohne {x}"),
+    (re.compile(rf"\b({_OUT_IT}(?:\s*(?:,|e)\s*{_OUT_IT})*)\s+(?:esclus[ie]|non compres[ie])\b", re.I), "esclusi {x}"),
+]
 
 
 def normalise_refs(question: str) -> str:
@@ -203,7 +217,74 @@ def normalise_refs(question: str) -> str:
     for rx, fmt in _APT_REFS:
         q = rx.sub(lambda m: (lambda t: t[:1].upper() + t[1:] if m.start() == 0 else t)(fmt.format(id=m.group("id"))), q)
     # "balconies excluded" -> "excluding balconies" (dxf read the fronted form as the balcony area, F 08:28)
-    return _EXCL_AFTER.sub(lambda m: "excluding " + m.group(1), q)
+    q = _EXCL_AFTER.sub(lambda m: "excluding " + m.group(1), q)
+    for rx, fmt in _EXCL_AFTER_ML:
+        q = rx.sub(lambda m: fmt.format(x=m.group(1)), q)
+    return q
+
+
+# D19 (1), F 08:33: a CubiCasa plan is ONE dwelling, so "this apartment / flat / home" is the drawing itself ("How many
+# windows does this apartment have?" went to the agent as a 2-class 'multi' question: 3/30 vs 15/30 on the CC5K route)
+_THIS_DWELLING = re.compile(
+    r"\b(?:this|the|that) (?:whole |entire )?(?:apartment|flat|home|house|dwelling|unit|residence)\b(?! [A-Z0-9]\b)"
+    r"|\b(?:tässä|tämän) (?:asunno\w*|huoneisto\w*)|\b(?:diese[rnms]?|der) Wohnung\b|\b(?:denna|den här) lägenhet\w*"
+    r"|\b(?:cet|l') ?appartement\b|\b(?:questo|quest') ?appartamento\b", re.I)
+
+
+def normalise_scope(question: str, source: str) -> str:
+    if source != "cubicasa5k":
+        return question
+    def native(m: re.Match) -> str:
+        t = m.group(0).lower()
+        if t.startswith(("tässä", "tämän")):
+            return "tässä pohjapiirustuksessa"
+        if "wohnung" in t:
+            return "dieser Grundriss" if t.startswith("diese ") else "diesem Grundriss"
+        if "lägenhet" in t:
+            return "denna planritning"
+        if "appartement" in t:
+            return "ce plan"
+        if "appartamento" in t:
+            return "questa pianta"
+        return "this floor plan"
+
+    return _THIS_DWELLING.sub(native, question)
+
+
+# a rules solver saying it did not apply part of the question: an operation, or a number the question states (D19 (2):
+# ifc "the question gives the number(s) 2.7, which the rules did not use", dxf "... which this rule answer does not use")
+_OP_FLAG = re.compile(r"operat|not appl|did not apply|did not use|does not use", re.I)
+
+
+def _unconsumed_numbers(question: str, canon: str, trace) -> list[str]:
+    """Numbers the question states that neither the canonical question nor any trace line uses (F 08:29, sealed hard3:
+    'wall side area ... walls 2.7 m high' -> the canonical retry dropped the height, 9/9 wrong at 0.95)."""
+    text = " ".join([canon, *map(str, trace)])
+    have = {float(t) for t in re.findall(r"(?<![\w.])\d+(?:\.\d+)?", text.replace(",", "."))}
+    out = []
+    for x in _question_numbers(question):
+        if not any(abs(x - h) <= 1e-9 * max(1.0, abs(x)) for h in have):
+            out.append(str(int(x)) if float(x).is_integer() else f"{x:g}")
+    return out
+
+
+# Q bug 6: "net floor area of room 1.11 ('Zimmer') in cm²?" -> "17.58 m2" @ 0.99, "apartment B in SF" -> "135.38 m2": the
+# canonical rewrite drops the asked unit; a person reads m² as SF. The answer is converted to the unit asked for.
+_ASKED_UNIT = [
+    (re.compile(r"\bin (?:cm²|cm2|cm\^2|square centimet\w*)", re.I), "cm2"),
+    (re.compile(r"\bin (?:mm²|mm2|mm\^2|square millimet\w*)", re.I), "mm2"),
+    (re.compile(r"\b(?:in )?(?:ft²|ft2|ft\^2|sq\.? ?ft|sqft|square f(?:ee|oo)t)\b|\bin SF\b", re.I), "ft2"),
+    (re.compile(r"\bin (?:cubic f(?:ee|oo)t|ft³|ft3|cu\.? ?ft)\b", re.I), "ft3"),
+    (re.compile(r"\bin lit(?:re|er)s?\b", re.I), "l"),
+    (re.compile(r"\bin (?:feet|foot|ft)\b(?!²|2|\^)", re.I), "ft"),
+    (re.compile(r"\bin (?:centimet\w*|cm)\b(?!²|2|\^)", re.I), "cm"),
+    (re.compile(r"\bin (?:millimet\w*|mm)\b(?!²|2|\^)", re.I), "mm"),
+    (re.compile(r"\bin inch(?:es)?\b", re.I), "in"),
+]
+
+
+def _asked_unit(question: str) -> str | None:
+    return next((u for rx, u in _ASKED_UNIT if rx.search(question)), None)
 
 
 def _question_numbers(question: str) -> list[float]:
@@ -216,7 +297,7 @@ def _code_applied_all(question: str, trace) -> bool:
     uses EVERY number of the question: "35 € per door plus 10 € of brushes" -> 'factor 35' alone gave 1610 @ 0.92."""
     # (its op line echoes the rest of the phrase, "factor 35 EUR per door plus 10 euros of bru", so matching numbers
     # against it is not proof: one stated number at most, else the agent does the arithmetic)
-    ops = [str(t) for t in trace if re.match(r"outer operation: (?:factor|per)\b", str(t))]
+    ops = [str(t) for t in trace if re.match(r"outer operation: (?:factor|per|rate)\b", str(t))]  # W1 08:39: 'rate
     return bool(ops) and len(_question_numbers(question)) <= 1
 
 
@@ -256,6 +337,8 @@ ROOM_REL = re.compile(
     r"|\bmistä huoneesta|\bminkä huoneen kautta|\bmihin huoneeseen|\bsuurin huone|\bvon welchem raum|\bdurch welchen raum"
     r"|\bgrö(?:ß|ss)te(?:r|n)? raum|\bfrån vilket rum|\bgenom vilket rum|\bstörsta rummet",
     re.I)
+_AREA_SUM = re.compile(r"\b(?:total|combined|summed|together|sum of)\b[^?]{0,40}\barea|\barea of (?:the )?(?:two|three|all|both)\b|"
+                       r"\barea of [^?]{1,40}\band\b", re.I)
 IMG_EXT = (".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp", ".gif")
 # tier of each solver (cost order); unknown names count as "local"
 TIER = {"dxf": "deterministic", "ifc": "deterministic", "schedule": "deterministic", "pdf_vector": "deterministic",
@@ -423,16 +506,18 @@ class Pipeline(BaseSolver):
             ans.cost.wall_seconds = round(time.perf_counter() - t0, 4)
             return ans
         original = question
-        question = normalise_refs(normalise_numbers(question))
+        question = normalise_scope(normalise_refs(normalise_numbers(question)), source_of(path))
         asked = question
         question, tr_note, tr_cost = self._front_end(question) if self.translate else (question, None, None)
         if question != asked:  # the English translation may say "the B apartment in m²" (hardL_open tr: 321.76 @ 0.95)
-            question = normalise_refs(normalise_numbers(question))
-        plan = decompose(source_of(path), question) if self.compose else None
-        if plan is None:
-            ans = self._solve_atomic(path, question)
-        else:
-            ans = self._solve_composed(path, question, plan)
+            question = normalise_scope(normalise_refs(normalise_numbers(question)), source_of(path))
+        ans = self._per_room(path, question, t0)
+        if ans is None:
+            plan = decompose(source_of(path), question) if self.compose else None
+            if plan is None:
+                ans = self._solve_atomic(path, question)
+            else:
+                ans = self._solve_composed(path, question, plan)
         if tr_cost:
             ans.cost = _cost_of(ans).add(tr_cost)
         if tr_note and question != asked:
@@ -486,6 +571,18 @@ class Pipeline(BaseSolver):
             ans.missing = [("the number is not traced to any value read from the drawing (an estimate); " if not grounded
                             else f"no reliable reading ({ans.solver}, confidence {ans.confidence:.2f}); ")
                            + "a label, table or model property stating it directly would settle it"]
+        want = _asked_unit(asked) if ans.value is not None and _num(ans.value) is not None else None
+        if want and str(ans.unit or "").lower() not in ("", want, "count"):
+            from stoa.eval.scoring import convert
+
+            v = convert(float(ans.value), ans.unit, want)
+            if v is not None and v != float(ans.value):
+                ans.trace.append(f"converted {ans.value} {ans.unit} to {v:.4g} {want} (the question asks in {want})")
+                ans.assumptions = [*ans.assumptions, f"{ans.value} {ans.unit} = {round(v, 2)} {want}"]
+                ans.value, ans.unit = round(v, 2), want
+        if ans.evidence and any(e.bbox or getattr(e, "ifc_guid", None) for e in ans.evidence):
+            # W5 08:32: a LoRA count that got room-segmentation boxes afterwards still said "no located evidence"
+            ans.missing = [m for m in ans.missing if "no located evidence" not in str(m)]
         question = asked
         if question != original:
             ans.trace = [f"question normalised (numbers / apartment references): \"{question[:140]}\""] + list(ans.trace)
@@ -649,6 +746,8 @@ class Pipeline(BaseSolver):
         conf = 1.0
         for a in parts:
             conf *= max(0.0, min(1.0, a.confidence))
+        if plan.op == "list" and parts:  # separate answers, each with its own reading (Q 08:45: 2 sure parts -> 0.39)
+            conf = min(max(0.0, min(1.0, a.confidence)) for a in parts)
         if plan.op == "exists":
             conf = max(conf, parts[0].confidence)
         evidence = []
@@ -756,12 +855,43 @@ class Pipeline(BaseSolver):
         trace.append(f"raster (question as asked): {a.value} {a.unit or ''} at conf {a.confidence:.2f}, unsure")
         return None, ("raster", a)
 
-    def _room_graph_first(self, path: str, question: str, intent: Intent, trace: list[str]):
+    def _per_room(self, path: str, question: str, t0: float) -> Answer | None:
+        """D19 (4), R1 08:27: R1's measured per-room route (experiments.r1.room_graph.route.per_room: room-scoped /
+        relational / superlative questions on a raster, not area questions; 0 fires on every dataset/dev/hard split)
+        BEFORE the composer, which turned "How many windows do the two bedrooms have in total?" into windows + bedrooms.
+        R1's probes v1-v4 (78 by-eye Qs): 54/78 vs pipeline 37/78. cc5k=1 only (D8)."""
+        if not (self.cc5k and source_of(path) == "cubicasa5k") or known_template(question):
+            return None
+        try:
+            from experiments.r1.room_graph.route import per_room
+
+            hit = per_room(question, path)
+        except Exception:  # noqa: BLE001
+            return None
+        if not hit.get("fire"):
+            return None
+        trace = [f"route: {hit.get('why', 'room-scoped question')} -> room graph (R1)"]
+        pre, unsure = self._room_graph_first(path, question, parse(question), trace, force=True)
+        a = pre or (unsure[1] if unsure else None)
+        if a is None or a.value is None:
+            return None
+        out = a.model_copy(deep=True)
+        out.trace = trace + [f"[room_graph] {t}" for t in a.trace[-8:]]
+        out.solver = "pipeline/room_graph"
+        out.cost.wall_seconds = round(time.perf_counter() - t0, 4)
+        return out
+
+    def _room_graph_first(self, path: str, question: str, intent: Intent, trace: list[str], force: bool = False):
         """Per-room / relational question on a CubiCasa-style plan ("Through which room is the sauna entered?", "How
         many windows does the kitchen have?"): R1's room graph (CC5K segmentation + icons + printed areas read by the
         VLM, one local text-LLM call). D8: pretrained CubiCasa5K weights -> cc5k=1 only. Its confidence is a provisional rule (n=54),
         so it never enters the >= 0.8 bin here. -> (accepted | None, unsure (name, answer) | None)."""
-        if not (self.cc5k and source_of(path) == "cubicasa5k" and ROOM_REL.search(question)) or known_template(question):
+        if not (self.cc5k and source_of(path) == "cubicasa5k" and (force or ROOM_REL.search(question))) or \
+                known_template(question):
+            return None, None
+        if not force and not _AREA_SUM.search(question):
+            # R1 08:45: per_room() (before the composer) owns relations / per-room counts; single-room AREAS from the
+            # graph were 3/6 right at conf 0.7 (area AUROC 0.52) -> the in-atomic fallback is for sums the VLM can't add
             return None, None
         try:
             from experiments.r1.room_graph.answer import solve as rg_solve
@@ -821,7 +951,7 @@ class Pipeline(BaseSolver):
             if pre is not None:
                 return pre
             if unsure is not None and not why and self.use_agent and allow_agent and intent.task != "text" and \
-                    source_of(path) != "ifc_bench" and any(re.search(r"operat|not appl|did not apply", m, re.I)
+                    source_of(path) != "ifc_bench" and any(_OP_FLAG.search(str(m))
                                                            for m in unsure[1].missing):
                 # the solver itself says the question has an operation it did not apply: the agent's job
                 why = f"{unsure[0]} flagged an operation it did not apply"
@@ -862,7 +992,7 @@ class Pipeline(BaseSolver):
             trace.append("no train gate for this kind of question: general path by file type")
 
         canon = None
-        op_flag = unsure is not None and any(re.search(r"operat|not appl|did not apply", m, re.I)
+        op_flag = unsure is not None and any(_OP_FLAG.search(str(m))
                                              for m in unsure[1].missing)
         if op_flag:
             trace.append(f"{unsure[0]} flagged an operation it did not apply: no canonical rewrite")
@@ -986,6 +1116,14 @@ class Pipeline(BaseSolver):
             best.confidence = 0.3
             if premise not in best.missing:
                 best.missing = [*best.missing, premise]
+        if canon and canon != question and best.value is not None and best.confidence > 0.5:
+            left = _unconsumed_numbers(question, canon, best.trace + trace)
+            if left:
+                trace.append(f"the question states {', '.join(left[:3])}, which the canonical form and the answer do "
+                             "not use: confidence capped at 0.5")
+                best.confidence = 0.5
+                best.missing = [*best.missing, f"the question states {', '.join(left[:3])}, which this answer does not "
+                                               "use (a height, rate, price or share may change the result)"]
         if self.cc5k and src == "cubicasa5k" and intent.key in CC5K_KEYS and best.value is not None and \
                 best.solver != "raster_cc5k":
             self._cc5k_evidence(path, canon or question, best, trace, intent.key)
@@ -1299,6 +1437,17 @@ class Pipeline(BaseSolver):
         ans.trace.append(note)
         if not same:
             ans.missing = [*ans.missing, f"agent and {n_u} disagree ({ans.value} vs {a_u.value})"]
+            # D19 (5), F 08:27: "bathroom sinks" agent 2 @ 0.9 vs dxf 4 (right) kept the agent at 0.9. A disagreement
+            # is EXPECTED when the rules skipped the question's operation / stated number (they answered the input,
+            # the agent the result); otherwise two readings of the same quantity differ -> neither is sure
+            expected = any(re.search(r"may not be applied|did not use|does not use|operation was not applied(?! to every class)|"
+                                     r"not apply|leaves .* out", str(m)) for m in a_u.missing)
+            numeric = _num(ans.value) is not None and _num(a_u.value) is not None  # a text blob is not a reading
+            if not expected and numeric and max(ans.confidence, a_u.confidence) > XCHECK_DISAGREE:
+                ans.trace.append(f"agent and {n_u} read the same quantity differently: confidence capped at "
+                                 f"{XCHECK_DISAGREE}")
+                ans.confidence = min(ans.confidence, XCHECK_DISAGREE)
+                a_u = a_u.model_copy(update={"confidence": min(a_u.confidence, XCHECK_DISAGREE)})
             if a_u.confidence > ans.confidence:
                 out = a_u.model_copy(deep=True)
                 out.trace = ans.trace + [f"keeping {n_u}: its confidence {a_u.confidence:.2f} > agent {ans.confidence:.2f}"]

@@ -554,6 +554,12 @@ class Agent:
         if not calcs and x is not None and x == int(x):
             # the model rounded the calc result to whole units (5.908 days -> 6): still grounded; keep the exact value
             near = [(v, c, e, w) for v, c, e, w in results if c == -1.0 and abs(v - x) < 1 and v != int(v)]
+            if near and unit == "count":
+                # F 08:29 (sealed hard3 test 1 -> 2 regression): "floor of 6.873 -> 6 people" is the answer to a count
+                # question, not a rounding slip; restoring 6.873 let the fraction guard cap a right 6 at 0.3
+                v = near[-1][0]
+                assumptions.append(f"the agent took the whole part of {round(v, 4)}: {int(x)} (a count is whole)")
+                calcs, near = near[-1:], []
             if near:
                 v = near[-1][0]
                 assumptions.append(f"the agent rounded {round(v, 4)} to {int(x)}; the computed value is reported")
