@@ -511,11 +511,18 @@ class IfcSolver(BaseSolver):
 
     # ------------------------------------------------------------------------------------------------
     _PVM_AGREE = re.compile(r"\b(agree\w*|match(es)?|consistent|same (number|count)|correspond\w*|tally|differ\w*|"
-                            r"discrepan\w*|mismatch\w*)\b")
-    _PVM_PLAN = re.compile(r"\b(plan|drawing|sheet|2d)\b")
-    _PVM_MODEL = re.compile(r"\b(model|ifc|bim|3d)\b")
+                            r"discrepan\w*|mismatch\w*|uberein\w*|ueberein\w*|stimmen|stimmt|overeen\w*|vastaa\w*|"
+                            r"kooskola\w*|sama palju|samma antal|coincid\w*|concord\w*|zgodn\w*|corrispond\w*)\b")
+    _PVM_PLAN = re.compile(r"\b(plan|drawing|sheet|2d|grundriss\w*|zeichnung|plattegrond|tekening|pohjapiirustu\w*|"
+                           r"piirustu\w*|plaan\w*|joonis\w*|ritning\w*|dessin|plano|pianta|rzut\w*)\b")
+    _PVM_MODEL = re.compile(r"\b(model|ifc|bim|3d|modell\w*|malli\w*|mudel\w*|modele|modelo|modello)\b|ifc-")
     _PVM_NOTDRAWN = re.compile(r"\bnot (drawn|shown|visible)\b|\bmissing (from|on) (the |this )?(plan|drawing|sheet)\b|"
-                               r"\bin the model but not\b|\bonly in the model\b|\babsent from the (plan|drawing|sheet)\b")
+                               r"\bin the model but not\b|\bonly in the model\b|\babsent from the (plan|drawing|sheet)\b|"
+                               r"\b(plan|drawing|sheet)s?\b.{0,12}\b(not|n't|never) (show|draw|depict|include|contain)\b|"
+                               r"\b(does|do|did)( not|n't) (this |the )?(floor )?(plan|drawing|sheet) (show|draw|depict|include)\b|"
+                               r"\b(does|do) (this |the )?(floor )?(plan|drawing|sheet) not (show|draw|depict|include)\b")
+    _PVM_KINDS = re.compile(r"\bhow many (section|elevation|facade)s?( drawings?| views?| sheets?| plans?)?\b|"
+                            r"\bnumber of (section|elevation|facade)s?( drawings?| views?| sheets?)?\b")
     _PVM_SHEETS = re.compile(r"\bhow many (floor )?(plan )?(sheets|plans|drawings|floor plans)\b|\bnumber of (floor )?(plan )?"
                              r"(sheets|plans|drawings)\b")
 
@@ -523,6 +530,18 @@ class IfcSolver(BaseSolver):
                           r"\b(every|all|each)\b.{0,50}\b(drawn|shown|depicted|included|visible)\b")
     _PVM_WHICH_SHEET = re.compile(r"\b(which|what)\s+(floor\s+)?(plan\s+)?(sheet|drawing|plan|page)s?\b(?!\s+(level|storey|floor))|"
                                   r"\b(on|in)\s+which\s+(floor\s+)?(plan\s+)?(sheet|drawing|plan|page)s?\b")
+
+    @staticmethod
+    def _storey_asked(idx: IfcIndex, question: str) -> Storey | None:
+        """The storey a question names: a quoted storey name, else an unquoted mention (storey_mention: names,
+        numbers, ordinals, 'ground floor' names)."""
+        for g in _QUOTED_RX.findall(question):
+            n = next((x for x in g if x), "") if isinstance(g, tuple) else g
+            ms = match_storey(idx, n.strip()) if n.strip() else None
+            if ms is not None and ms.score >= 90:
+                return ms.obj
+        i, _ = storey_mention(question, [s_.name for s_ in idx.storeys])
+        return idx.storeys[i] if i is not None else None
 
     def _sheet_of_room(self, model: str, idx: IfcIndex, question: str) -> Answer | None:
         """'Which sheet shows the server room?' (Q v17, was 'the model does not contain any information about sheets'):
@@ -585,7 +604,30 @@ class IfcSolver(BaseSolver):
                           trace=["plan sheets rendered from the model: " + ", ".join(Path(p).name for _, p in plans)],
                           assumptions=["plan sheets = the floor plan files of this model (one per storey drawn); "
                                        "sections and elevations not counted"], missing=[])
+        mk = self._PVM_KINDS.search(qf)
+        if mk and not re.search(r"\b(door|window|room|wall|column)", qf):
+            # 'How many section / elevation drawings belong to this model?' (Q v20): the model's sibling files
+            kind_ = {"facade": "elevation"}.get(mk.group(1) or mk.group(3), mk.group(1) or mk.group(3))
+            folder = abspath(model).parent
+            files = sorted(folder.glob(f"{Path(model).stem}_{kind_}-*.pdf"))
+            rel = [str(Path(model).parent / f.name) for f in files]
+            return Answer(value=len(files), unit="count", confidence=0.8 if files else 0.5,
+                          evidence=[Evidence(file=r, page=0, note=f"{kind_} drawing") for r in rel], solver=self.name,
+                          trace=[f"{kind_} drawings of {Path(model).name}: " + (", ".join(f.name for f in files) or "none")],
+                          assumptions=[f"{kind_} drawings = the {kind_} sheets rendered from this model ({kind_}-*.pdf)"],
+                          missing=[] if files else [f"no {kind_} sheet exists for this model in the dataset"])
         if self._PVM_WHICH_SHEET.search(qf):
+            st_ = self._storey_asked(idx, question) if not re.search(r"\b(room|space)s?\b", qf) else None
+            if st_ is not None:
+                # 'Which sheet is the floor plan of '3.korrus'?', 'Which sheet shows the attic?' (Q v20)
+                plan = plans_of_model(model).get(st_.guid)
+                if plan:
+                    return Answer(value=f"{Path(plan).stem.split('_')[-1]} (storey '{st_.name}')", unit=None,
+                                  confidence=0.9, evidence=[Evidence(file=plan, page=0, note=f"floor plan of '{st_.name}'"),
+                                                            Evidence(file=model, ifc_guid=st_.guid,
+                                                                     note=f"IfcBuildingStorey {st_.name}")],
+                                  solver=self.name, trace=[f"storey '{st_.name}' -> its plan file {Path(plan).name}"],
+                                  assumptions=["sheet = the floor plan rendered for that IfcBuildingStorey"], missing=[])
             ans = self._sheet_of_room(model, idx, question)
             if ans is not None:
                 return ans
@@ -1200,13 +1242,18 @@ class IfcSolver(BaseSolver):
             ans.confidence = 0.85
             ans.missing.append("which storey is meant: read as the highest/lowest storey with rooms or doors; the model "
                                f"also has the level(s) {tf[15:]} beyond it")
+        if "ground_unresolved" in it.notes and ans.value is not None and ans.confidence > 0.5:
+            ans.confidence = 0.5
+            ans.missing.append("which storey is the ground floor: none is named so and none lies at elevation ~0")
         role = next((n for n in it.notes if n.startswith("storey_by_role")), None)
         if role and ans.value is not None:
             cap = 0.6 if role.endswith(":elevation") else 0.85
             if ans.confidence > cap:
                 ans.confidence = cap
                 ans.missing.append("which storey is meant: none is named; picked "
-                                   + ("by elevation (highest below 0)" if cap == 0.6 else "by its basement name"))
+                                   + ("by elevation (highest below 0)" if cap == 0.6 else
+                                      "as the floor with rooms or doors nearest elevation 0" if role.endswith(":ground")
+                                      else "by its basement name"))
         if ctx.get("geo_external") and ans.value is not None:
             ans.confidence = min(ans.confidence, 0.6)
         if ctx.get("material_unknown") and ans.value is not None:
@@ -2365,6 +2412,24 @@ class IfcSolver(BaseSolver):
                 it.notes.append("storey_by_role" + ("" if named else ":elevation"))
                 trace.append(f"'{mb_.group(0)}' -> storey '{pick.name}' ("
                              + ("named as a basement" if named else f"highest storey below 0: {pick.elevation:.2f} m") + ")")
+        # "the ground floor / ground level" with no storey NAMED so (parse.storey_mention knows 'EG', 'Erdgeschoss', 'GF',
+        # '00 Begane grond', '0'): the used storey nearest elevation 0 (esplanades '1.korrus', clinic 'First Floor',
+        # warmond '1. Level'). F 09:24: the role never became a storey -> whole model at 0.97 (smiley walls 281 vs 81)
+        from stoa.solvers.ifc.parse import _GROUND_Q
+
+        mg_ = _GROUND_Q.search(fold(_QUOTED_RX.sub(" ", question)))
+        if mg_ and not it.names and idx.storeys and \
+                storey_mention(question, [s_.name for s_ in idx.storeys])[0] is None:
+            pool = [st for st in used_storeys(idx, own_storeys(idx)) if st.elevation is not None]
+            pick = min(pool, key=lambda st: abs(st.elevation)) if pool else None
+            if pick is not None and abs(pick.elevation) <= 0.6:
+                it.names = [pick.name]
+                it.notes.append("storey_by_role:ground")
+                trace.append(f"'{mg_.group(0)}' -> storey '{pick.name}' (the floor with rooms or doors nearest elevation 0: "
+                             f"{pick.elevation:.2f} m)")
+            else:
+                it.notes.append("ground_unresolved")
+                trace.append(f"'{mg_.group(0)}': no storey named so and none at elevation ~0")
         # "compared to": show both values
         if re.search(r"\b(compared (to|with)|versus|vs\.?)\b", qf) and len(it.names) >= 2 and it.op in (None, "sum"):
             it.op = "compare"

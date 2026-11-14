@@ -102,3 +102,35 @@ def test_plan_and_sheet(solver, q, want, not_want):
     v = str(a.value)
     assert all(re.search(x, v) for x in want), v
     assert not any(re.search(x, v) for x in not_want), v
+
+
+SMILEY_IFC = "data/ifc_models/kit-smiley-west_ac-20-smiley-west-10-bldg.ifc"
+SMILEY_1OG = "data/ifc_models/kit-smiley-west_ac-20-smiley-west-10-bldg_plan-03-1-og.pdf"
+WARM_IFC = "data/ifc_models/bimspeed-warmond_ar.ifc"
+
+
+@need
+@pytest.mark.parametrize("path,q,n", [
+    (SMILEY_IFC, "How many walls are there on the ground floor?", 81),   # 'EG' by name (F 09:24: 281 whole model)
+    (SMILEY_IFC, "Count the walls at ground level.", 81),
+    (SMILEY_IFC, "Wie viele Türen gibt es im Erdgeschoss?", 50),
+    ("data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc", "How many doors are on the ground floor?", 46),  # elevation 0
+    (WARM_IFC, "How many doors are on the ground floor?", 46),  # '1. Level' at 0.0, not 'Entrance' at -1.6
+])
+def test_ground_floor_role(solver, path, q, n):
+    a = solver.solve(path, q)
+    assert a.value == n
+
+
+@need
+@pytest.mark.parametrize("path,q,want", [
+    (ESPL, "How many of the model's windows on '1.korrus' does this drawing not show?", r"^3$"),
+    (ESPL, "Stimmen Grundriss und IFC-Modell bei der Anzahl der Fenster überein?", r"^no\b"),
+    (ESPL, "Which sheet is the floor plan of '3.korrus'?", r"plan-03-3-korrus"),
+    (SMILEY_1OG, "Which sheet shows the ground floor?", r"plan-02-eg"),
+    ("data/ifc_models/bimspeed-warmond_ar_plan-03-1-level.pdf", "How many section drawings belong to this model?", r"^2$"),
+    ("data/ifc_models/bimspeed-warmond_ar_plan-03-1-level.pdf", "Which sheet shows the attic?", r"plan-08-attic"),
+])
+def test_v20_links(solver, path, q, want):
+    a = solver.solve(path, q)
+    assert re.search(want, str(a.value)), a.value

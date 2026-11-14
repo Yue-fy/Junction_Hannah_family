@@ -304,6 +304,14 @@ _ORD = {"basement": -1, "ground": 0, "first": 1, "second": 2, "third": 3, "fourt
         "seventh": 7, "eighth": 8, "ninth": 9, "tenth": 10, "eleventh": 11, "twelfth": 12}
 
 
+# 'ground floor' in other words / languages (the storey role, not a name)
+_GROUND_Q = re.compile(r"\b(ground)[- ]?(?:floor|level|storey|story)\b|\b(?:at|on) (ground|grade|street) level\b|"
+                       r"\b(erdgeschoss|parterre|rez[- ]de[- ]chaussee|begane grond|pohjakerros|katutaso|parter|planta baja|"
+                       r"piano terra|pianoterra|bottenvaning\w*|stueetage|stuen|maapinnal|esimene korrus)\b")
+_GROUND_NAME = re.compile(r"^\s*(eg|gf|bg|rdc|pt|e0+)(?![a-z0-9])|\b(erdgeschoss|ground( floor| level)?|begane grond|"
+                          r"rez[- ]de[- ]chaussee|parter|pohjakerros|piano terra|planta baja|bottenvaning|stueetage)\b")
+
+
 def storey_mention(question: str, storey_names: list[str]) -> tuple[int | None, str]:
     """Index into storey_names of an UNQUOTED storey mention ("on the 1.OG floor", "level 4", "second floor"),
     or (None, why). Names are matched as whole words (folded), numbers via the storey name's own number."""
@@ -322,9 +330,9 @@ def storey_mention(question: str, storey_names: list[str]) -> tuple[int | None, 
     if m:
         num = int(m.group(1))
     else:
-        m = re.search(r"\b(" + "|".join(_ORD) + r")\s+(?:floor|level|storey|story)\b", t)
+        m = re.search(r"\b(" + "|".join(_ORD) + r")\s+(?:floor|level|storey|story)\b", t) or _GROUND_Q.search(t)
         if m:
-            num = _ORD[m.group(1)]
+            num = _ORD.get(m.group(1), 0)
     if num is None:
         return None, "no storey mentioned"
     lead = [i for i, n in enumerate(storey_names) if (mm := re.match(r"\s*(-?\d+)", n or "")) and int(mm.group(1)) == num]
@@ -334,6 +342,12 @@ def storey_mention(question: str, storey_names: list[str]) -> tuple[int | None, 
     named = [i for i, n in enumerate(storey_names) if word and re.search(r"\b" + word + r"\b", fold(n or ""))]
     if len(named) == 1:
         return named[0], f"'{m.group(0).strip()}' -> storey '{storey_names[named[0]]}' (ordinal word)"
+    if num == 0:
+        # 'ground floor' -> the storey NAMED as one (smiley 'EG', fzk 'Erdgeschoss', 'GF', 'RDC', 'Begane grond'; F 09:24:
+        # smiley 'walls on the ground floor' was the whole model, 281 @ 0.97)
+        gw = [i for i, n in enumerate(storey_names) if _GROUND_NAME.search(fold(n or ""))]
+        if len(gw) == 1:
+            return gw[0], f"'{m.group(0).strip()}' -> storey '{storey_names[gw[0]]}' (named as the ground floor)"
     # the sign matters: 'basement floor' (-1) is not '1.OG' (Finnish 'kellarikerros' -> 'basement floor' -> 1.OG @ 0.75)
     rx_n = (r"-\s*0*" + str(abs(num)) if num < 0 else r"(?<![\d.\-])0*" + str(num)) + r"(?![\d])"
     anyn = [i for i, n in enumerate(storey_names) if re.search(rx_n, n or "")]
