@@ -529,5 +529,8 @@ every detected window is in the right room, entrance and balcony doors found; fa
 region (flagged by the two MH labels), a washroom 'PS' called sauna because a bench icon touched it.
 Limits: the 8% of bedrooms with no window are missed windows (the detector's known window recall); disconnected
 graphs come from undetected doors; D8 (pretrained CC5K) → cc5k=1 path only; areas carry the door-scale band (8e).
+New drawings: room_graph(path) runs the CC5K model once (torch env subprocess, CC5K_PYTHON) when no cached map
+exists and saves rooms + icons to artifacts/R1/cc5k_seg_live/; an uncached copy of -7607 gave the identical graph
+in 4.7 s. Maps are keyed by file stem, so two different plans with the same file name would collide.
 How to use: answer a per-room question from the graph with the region box + icon boxes as evidence, and quote the
 room's label; if the region is `merged`, say so and answer for the region ("these two bedrooms have 2 windows").
