@@ -30,6 +30,9 @@ def correct(r, v):
     acc = r.get("meta", {}).get("accept_re")
     if acc:
         return bool(re.search(acc, str(v)))
+    items = r.get("meta", {}).get("items")  # Q's red-team rows: every item regex must match (two-part answers)
+    if items and all(isinstance(p, str) for p in items):
+        return all(re.search(p, str(v), re.I) for p in items)
     return str(g).lower() in s
 
 

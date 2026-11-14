@@ -125,3 +125,22 @@ def red_near(rgb: np.ndarray, d: dict, px_per_m: float) -> int:
     p = rgb[y0:y1, x0:x1].astype(int)
     m = (abs(p[..., 0] - 176) < 40) & (abs(p[..., 1] - 58) < 40) & (abs(p[..., 2] - 46) < 40)
     return int(m.sum())
+
+
+DOOR_LEAF_M = 0.86  # median DXF door radius on 60 TRAIN Swiss floors (per-floor medians 0.66-1.07)
+
+
+def scale_from_arcs(png: str) -> tuple[float | None, int]:
+    """(px per m, #arcs) WITHOUT a scale bar: the median radius of the stronger half of the swing arcs found over
+    12 px .. long side / 25, read as a standard door leaf (DOOR_LEAF_M). Swiss dev (100 floors, native scale):
+    within 10% of the bar on 71/97, 15% on 87/97 (experiments/w3/doorwin/windows_doorscale.py). (None, n) on < 3 arcs.
+    detect() gets a pseudo-scale of 46 px per 'm' so its 1:200 upscale rule does not fire."""
+    import statistics
+
+    w = max(Image.open(png).size)
+    lo, hi, ps = 12.0, max(40.0, w / 25), 46.0
+    dets = detect(png, ps, r_m=(lo / ps, hi / ps))
+    if len(dets) < 3:
+        return None, len(dets)
+    top = sorted(dets, key=lambda d: -d["score"])[: max(3, len(dets) // 2)]
+    return statistics.median(d["r_px"] for d in top) / DOOR_LEAF_M, len(dets)

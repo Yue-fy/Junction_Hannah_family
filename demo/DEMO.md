@@ -93,14 +93,14 @@ headless chromium, numbers from `redteam/REPORT.md`). **Say only this (≈ 22 s,
 > "We tried to break it ourselves: over a thousand adversarial questions — rewordings, nine languages, rotated scans,
 > rooms that don't exist, renamed files, a judge's own upload. Every confident mistake had one cause: we checked the
 > number, not that it answered what was asked. Each bar is a round of fixes; the tall ones on the right are this
-> morning's new attacks. On the first 600, all 398 confident answers are right — and it never just refuses."
+> morning's new attacks. On the first 600, all 396 confident answers are right — and it never just refuses."
 (The bars from 09:28 on count only the newest families — uploads, links, lists, rankings, renamed files, relative
-storeys — on builds where every older family is at 0: 14 / 12 / 19 / 18, then 10 with the 10:47 owner heads. The 10
-left: "the floor above this one" (4, W1), CubiCasa uploads (4), one ranking, one agent flake. Redraw after the final
+storeys — on builds where every older family is at 0: 14 / 12 / 19 / 18, then 10 and 5 with the 10:47 / 10:54 owner
+heads. The 5 left: CubiCasa uploads (3), "the storey *directly* above this one" (1), one agent confidence bug (1). Redraw after the final
 build: `python3 experiments/q/bar_count.py MAIN_RUN [V27_RUN] --v26 V26_RUN` gives the bar.)
-(Numbers by stage build — say the line for the build on stage: **the 11:15 merge of the 10:47 heads (pre-merge #10):
-"… all 398 confident answers are right, and no confident answer to a trick question"** (run
-`…-104643-…-all-snap11-83bd`; 433 of 433 on v1–v20); night 6025963: "… all 402" (`…-103834-…-all-6025963-f05a`);
+(Numbers by stage build — say the line for the build on stage: **the 11:15 merge of the 10:54 heads (pre-merge #11):
+"… all 396 confident answers are right, and no confident answer to a trick question"** (run
+`…-105439-…-all-snap12-e712`; 431 of 431 on v1–v20); pre-merge #10: "… all 398"; night 6025963: "… all 402" (`…-103834-…-all-6025963-f05a`);
 41188a4: "… all 379"; **7a78559 (09:50): "… all 378"** (run `…-094023-…-all-7a78559-2466`; 413 of 413 on
 v1–v20); 0ffd81b: "… all 364" (run `…-092751-…-all-0ffd81b-ba15`); be57171 / 31397eb: "609 … all 360"; bb94fe4 (test 2):
 "494 … 283 of 290"; c1d6149: "564 … 338 of 339"; 62754aa: "609 … 337 of 339". "Never just refuses": 0 of 647
@@ -171,10 +171,11 @@ On older builds more of these break: see the git history of this file (08:20 and
   plan-02-eg), "Which storey does this sheet show, and does its door count match?" (both halves), rankings that name a
   tie ("Which floor has the most rooms?" → "2.korrus and 3.korrus and 4.korrus (tie, 60 each)" at 0.56), "the three
   largest rooms on '1.korrus'" (0.90), "the total area of the three largest rooms" (232.88 m²), "top floor" (5.korrus).
-  **Steer away from (bugs 27–28, W1, fixes pending at 10:46):** "the floor above / below this one" (answers the open
-  sheet's own storey at 0.98), "Which floor has *no* X?" (lists the floors that have X), "Of the floors …, which has
-  the fewest?" (answers the smallest room), the Italian / German which-floor and top-3 wordings ("Quale piano ha …" →
-  a count). Also "How big is the laundry room?" (870 at 0.30) and "the same area as room X" (returns X's area). If one
+  **On the 11:15 build (pre-merge #11) also right:** "How many doors are on the floor above this one?" (42), "… the
+  floor below this one?" (0 — the foundation), "Which floor has no MAGAMISTUBA?" (1.korrus), "Which floor has the
+  biggest room?" (1.korrus), "Quale piano ha il maggior numero di porte?" (frigento: Piano 1). **Steer away from:**
+  "the storey *directly* above this one" (answers the open sheet's storey at 0.88), "How many windows does the floor
+  with the most doors have?" (agent: 297 at 0.95). Also "How big is the laundry room?" (870 at 0.30) and "the same area as room X" (returns X's area). If one
   of these comes up, open the evidence and say it: "the trace shows what it computed — this is a known failure, it's
   on the failure slide."
 - Esplanades rooms are labelled in Estonian; English room words work and the card says which labels it used:

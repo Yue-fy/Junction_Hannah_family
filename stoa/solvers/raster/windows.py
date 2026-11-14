@@ -18,6 +18,7 @@ from PIL import Image
 
 CONF = 0.4          # exact where answered: TRAIN held-out 9/32, Swiss dev (twins=0) 34/75 -> pooled 0.40
 MIN_PX_PER_M = 45   # below this (1:200 renders) the window lines merge
+CONF_DOORSCALE = 0.35  # no bar, scale from door arcs: Swiss dev 28/72 exact (bar 34/74); doorscale=1 only
 WHITE = 200
 LINE_MAX = 4        # px: a thin line crossed at up to ~60 degrees
 INNER_MIN = 110     # ink mass of a glass line (grey 59 1-px line = 196; antialiased the same)

@@ -56,13 +56,15 @@ def build() -> str:
         for src, cc in sorted(by_src.items()):
             L.append(f"| {src} | {cc.get('supports', 0)} | {cc.get('wrong', 0)} | {cc.get('cant_tell', 0)} |")
         flagged = [a for a in done if (a["verdict"] == "wrong") or (a["verdict"] == "supports" and a.get("matches_reference") is False)
-                   or a.get("comment")]
+                   or a.get("comment") or a.get("correct_value")]
         if flagged:
             L += ["", "Items worth a look (✗, ✓ although we differ from the reference, or any comment):", "",
-                  "| item | verdict | ours | reference | matches ref | question | comment |", "|---|---|---|---|---|---|---|"]
+                  "| item | verdict | ours | reference | matches ref | expert's value | question | comment |",
+                  "|---|---|---|---|---|---|---|---|"]
             for a in flagged:
                 L.append(f"| {a['item_id']} | {VERDICT.get(a['verdict'], a['verdict'])} | {_clip(a.get('our_value'), 30)} "
                          f"{a.get('our_unit') or ''} | {_clip(a.get('gold'), 30)} | {a.get('matches_reference')} | "
+                         f"{_clip(a.get('correct_value'), 30)} | "
                          f"{_clip(a.get('question'), 90)} | {_clip(a.get('comment'), 200)} |")
     L.append("")
 
