@@ -33,6 +33,10 @@ from stoa.contract import Answer, Cost, Evidence
 from stoa.data import abspath, siblings, source_of
 
 MAX_STEPS = 7
+# Q 05:09 (cost red team): the 3% most expensive questions were 53% of the cost, all ones we can't answer ("Who is the
+# architect?" 13 LLM calls / 76.7k tokens -> 0.20). Once this much is spent with no reading above BUDGET_CONF, the next
+# step is the last one (a grounded chain - ask, calc, answer - has a sure reading long before)
+BUDGET_CALLS, BUDGET_TOKENS, BUDGET_CONF = 6, 30000, 0.5
 SCOPE_PENALTY = 0.6  # an ask that names none of the question's quoted names (storey, room, label) is about another scope
 SYSTEM = """You answer one question about a construction drawing or building model by calling tools, step by step.
 Tools (one per step):
@@ -334,8 +338,9 @@ class Agent:
         _f = parse(question).filters
         names = {str(_f[k]).strip().lower() for k in ("storey", "model") if _f.get(k)}
         names = {n for n in names if n}  # token match below, so short storey names ('1', '0') are safe
+        over = False  # the per-question budget is spent without a sure reading
         for step in range(self.max_steps):
-            force = step == self.max_steps - 1
+            force = step == self.max_steps - 1 or over
             if force:
                 msgs.append({"role": "user", "content": "Last step: call answer now with your best value."})
             try:
@@ -387,6 +392,13 @@ class Agent:
                 if n_bad >= 3:
                     break
             msgs.append({"role": "user", "content": f"RESULT of {tool}: {obs[:3600]}"})
+            if not over and (cost.llm_calls >= BUDGET_CALLS or cost.llm_tokens_in >= BUDGET_TOKENS) and \
+                    max((c for _, c, _, _ in results if c >= 0), default=0.0) < BUDGET_CONF:
+                over = True
+                trace.append(f"budget: {cost.llm_calls} model calls / {cost.llm_tokens_in} tokens and no reading above "
+                             f"{BUDGET_CONF} -> answering now")
+                missing.append(f"stopped after {cost.llm_calls} model calls without a sure reading; the drawing may not "
+                               "show this (a label, table or model property stating it would settle it)")
         ans = self._finish(final, unit, results, evidence, trace, assumptions, missing, cost, t0, question)
         if src == "swiss_dwellings" and self.ask_fn is not None and ans.value is not None and ans.confidence > 0.25:
             try:
