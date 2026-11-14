@@ -429,6 +429,11 @@ p10–p90 35–103).
 are fragments or merges of the printed room. Rooms get their own constant (0.86 m; regions are smaller than printed
 net areas). Their 80% band covers 81%, so it is honest but wide (true = est × [0.71, 2.57]): always show it.
 
+**Scale-free questions** (`relative.py`, 45 plans with ≥ 3 printed rooms, 1,129 pairs): "is A bigger than B?" from
+region pixels is right 84% (87% when the sizes differ by ≥ 25%); "which room is largest?" 60%; an area ratio A/B errs
+by 19.5% (median). The ratio error is about the room-area error (21%), so for single rooms the limit is the
+segmentation, not the scale.
+
 **Within the 2% scoring tolerance:** 7–8% of plans (VLM 5%). A door-derived area is an honest estimate, not a scored answer.
 The value is in the interval, the assumptions and the evidence (doors measured, regions summed).
 
