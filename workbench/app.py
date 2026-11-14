@@ -331,7 +331,38 @@ def post_rule(r: RuleIn):
 
 @app.get("/api/rules")
 def get_rules():
-    return {"rules": store.read("rules")[::-1]}
+    rules = store.read("rules")
+    try:
+        stats = _rule_stats(len(rules))
+    except Exception:  # noqa: BLE001
+        stats = {}
+    out = []
+    for i, r in enumerate(rules, 1):
+        out.append({**r, "check": stats.get(i)})
+    return {"rules": out[::-1], "checked_on": _RULE_CACHE.get("desc")}
+
+
+_RULE_CACHE: dict = {}
+
+
+def _rule_stats(n_rules: int) -> dict:
+    """Per-rule test against our latest full dev run (cached per rules count + predictions file)."""
+    from workbench import rules_check
+
+    pred = rules_check.latest_dev_preds()
+    if not pred:
+        return {}
+    key = (n_rules, pred, Path(pred).stat().st_mtime_ns)
+    if _RULE_CACHE.get("key") != key:
+        if _RULE_CACHE.get("pred") != pred:
+            _RULE_CACHE["preds"] = rules_check.load_preds(pred)
+            _RULE_CACHE["pred"] = pred
+        res = rules_check.check(store.read("rules"), _RULE_CACHE["preds"])
+        _RULE_CACHE["stats"] = {r["i"]: {k: r.get(k) for k in ("touched", "touched_wrong", "flagged", "flagged_wrong",
+                                                                   "skip")} | {"examples": r["examples"][:3]} for r in res}
+        _RULE_CACHE["key"] = key
+        _RULE_CACHE["desc"] = f"{len(_RULE_CACHE['preds'])} answers of our latest dev run ({Path(pred).name[:15]})"
+    return _RULE_CACHE["stats"]
 
 
 def _report() -> None:

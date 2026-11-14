@@ -145,8 +145,8 @@
 <section id="tab-rules" class="tabpane" hidden>
   <div class="howto">
     <b>How to use:</b> write down what a plausible value looks like (e.g. a door is 0.7–1.2 m wide) and why.
-    Our system uses these ranges to flag impossible answers and to state its uncertainty.
-    The big box below is for error-propagation rules ("1% scale error → about 2% area error").
+    Each rule is tested at once against our ~2,200 test answers (right column): a good rule catches our wrong answers, not the right ones.
+    The big box is for error-propagation rules ("1% scale error → about 2% area error").
   </div>
   <div class="rules-grid">
     <form id="rule-form" class="card">
@@ -164,7 +164,8 @@
     </form>
     <div class="card">
       <h3>Rules so far (<span id="rule-count">0</span>)</h3>
-      <table id="rule-table"><thead><tr><th>What</th><th>Range</th><th>Why / uncertainty</th></tr></thead><tbody></tbody></table>
+      <div id="rule-checked-on" class="hint small"></div>
+      <table id="rule-table"><thead><tr><th>What</th><th>Range</th><th>Why / uncertainty</th><th>Against our answers</th></tr></thead><tbody></tbody></table>
     </div>
   </div>
 </section>

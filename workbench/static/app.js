@@ -605,9 +605,18 @@ const rules = {
   async load() {
     const r = await api("api/rules");
     $("#rule-count").textContent = r.rules.length;
+    $("#rule-checked-on").textContent = r.checked_on ? `Tested on ${r.checked_on}.` : "";
+    const chk = (c) => {
+      if (!c) return "";
+      if (c.skip) return `<small>not testable (${esc(c.skip)})</small>`;
+      if (!c.touched) return `<small>no matching question in our test set</small>`;
+      const ex = (c.examples || []).map((e) => `<li>${esc(e.question.slice(0, 90))} → <b>${esc(e.value)} ${esc(e.unit || "")}</b> (reference ${esc(e.gold)})</li>`).join("");
+      return `applies to ${c.touched} answers; <b>${c.flagged}</b> outside the range` +
+        (c.flagged ? ` (${c.flagged_wrong} of them wrong)` : "") + (ex ? `<details><summary><small>examples</small></summary><ul class="small">${ex}</ul></details>` : "");
+    };
     $("#rule-table tbody").innerHTML = r.rules.map((x) => `<tr><td>${esc(x.what || "—")}</td>
       <td>${x.min != null || x.max != null ? `${esc(x.min ?? "?")} – ${esc(x.max ?? "?")} ${esc(x.unit || "")}` : "—"}</td>
-      <td>${esc(x.why || "")}${x.uncertainty ? `<br><i>${esc(x.uncertainty)}</i>` : ""}</td></tr>`).join("");
+      <td>${esc(x.why || "")}${x.uncertainty ? `<br><i>${esc(x.uncertainty)}</i>` : ""}</td><td>${chk(x.check)}</td></tr>`).join("");
   },
 };
 $("#rule-form").addEventListener("submit", async (e) => {
