@@ -534,3 +534,44 @@ exists and saves rooms + icons to artifacts/R1/cc5k_seg_live/; an uncached copy 
 in 4.7 s. Maps are keyed by file stem, so two different plans with the same file name would collide.
 How to use: answer a per-room question from the graph with the region box + icon boxes as evidence, and quote the
 room's label; if the region is `merged`, say so and answer for the region ("these two bedrooms have 2 windows").
+
+### 8i. Room graph vs the VLM and the pipeline on per-room questions (by-eye probe, leak-free plans)
+Why: 8h validated the graph's internals; this measures whether it answers the per-room questions a harder test
+may ask, against what the team ships today. Gold was written BY EYE (zoomed crops for every door/fixture call)
+before any method ran, on dev plans from CubiCasa5K's official TEST list (so D8 leak-free).
+Set v1 (development: 29 Qs, 8 plans) was used to find and fix failures; set v2 (confirmation: 14 Qs, 3 new plans)
+was written after the fixes were frozen. Files: `experiments/r1/room_graph/probe/probe_v1.jsonl`, `probe_v2.jsonl`
+(gold + how verified), `run.py answer|score`. Kinds: which room the sauna / walk-in closet / balcony / porch is
+entered from; windows or doors of a named room; rooms with a toilet; rooms off the hall; largest room; summed
+printed areas; total area.
+
+Method "graph": `graph_text(room_graph(path, printed=True))` + the question → local Qwen3-VL-8B as a TEXT model
+(no image), system prompt with a Finnish room-code glossary, JSON answer. ~1.4–1.6k tokens in / 60 out per
+question + one cached VLM call per plan that reads printed areas (8e) + CC5K on CPU (cached, or ~3–10 s live).
+
+| Method | v1 (dev, 29) | v2 (confirm, 14) | counts v2 | areas v2 | text v2 |
+|---|---:|---:|---:|---:|---:|
+| pipeline (night dde6347, default) | 17 | 6 | 1/4 | 1/3 | 4/7 |
+| vlm_direct (base VLM, image) | 19 | 6 | 1/4 | 1/3 | 4/7 |
+| VLM + image + my glossary/JSON prompt | 21 | 9 | 1/4 | 1/3 | 7/7 |
+| **room graph + 8B text LLM (final code)** | **25** | **11** | **3/4** | **2/3** | 6/7 |
+Paired (exact McNemar): v2 graph vs pipeline 5 right-only vs 0 (p = 0.062), vs vlm_direct 5 vs 0 (p = 0.062);
+v1 vs pipeline 10 vs 2 (p = 0.039). Small n: the direction is consistent on both sets, the size is not pinned down.
+Where it wins: windows/doors of ONE room (VLMs answer the whole plan's count or guess 2), "through which room is the
+sauna entered" (6 such questions over v1+v2: pipeline 1/6, vlm_direct 1/6, graph 6/6; the VLM paths answer 'living
+room' / 'master bedroom' from layout priors), sums of printed room areas.
+Fixes made on v1 (generic, all listed as known failures in 8h before the probe): (1) the printed label's room kind
+overrides the CC5K class when they disagree ('H' segmented as undefined → bedroom; CC5K class kept as
+`cls_cc5k`); (2) printed areas attached to rooms (`printed=True`; also numbers inside labels such as
+'MAKUUHUONE 13,1', which the area reader misses because there is no unit); (3) a region holding two printed room
+areas is flagged `merged`; (4) the text says printed areas are exact and estimates ±50%. v1 went 22 → 25.
+Remaining failures (v2): plan text rotated 90° → no printed areas or labels read → the LLM sums rough estimates
+(37.5 asked, 44.5 answered; fix: retry the area reader on the rotated image when it finds nothing); LLM arithmetic
+slips (12.5 + 12.0 → 24.0; route sums through a calculator, as W4's agent does); a toilet count of 3 for 2 by every
+method (a shower read as a toilet); 'porch entered from' → entry (the porch door was not linked to the living room).
+PITFALL found on the way (pipeline, not the graph): per-room counts get whole-plan answers. "How many windows does the
+living room have?" → raster_cc5k's drawing count 3 (gold 1); "windows of the two bedrooms in total" → compose
+parses windows + bedrooms = 6; "doors of the kitchen" → agent 2; "rooms that contain a toilet seat" → WC-room count 1
+at conf 0.75. Confidence was ≤ 0.48 on all but the last, so calibration mostly held; the scope was lost.
+How to use: an agent tool `room_graph(path)` → graph_text for cubicasa-style rasters whenever the question names a
+room or a relation (of the kitchen / entered from / next to / opens onto / largest room / area of the bedrooms).
