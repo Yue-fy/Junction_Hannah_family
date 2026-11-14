@@ -48,6 +48,8 @@ SECOND = [
      "What kind of drawing is this (floor plan, elevation, section, site plan)?"),
 ]
 SECOND_SOLVER = ("vlm_direct", {"backend": "nvidia"})
+# "Show where" on CubiCasa answers without evidence: the label reader (raster) answers the same question.
+LOCATE = [("data/cubicasa5k/colorful-4539.png", "Kuinka monta makuuhuonetta (MH) pohjapiirustuksessa on?")]
 
 
 def main() -> None:
@@ -55,11 +57,12 @@ def main() -> None:
     ap.add_argument("--api", default="http://127.0.0.1:8100")
     args = ap.parse_args()
     out = []
-    jobs = [(p, q, None) for p, q in QUESTIONS] + [(p, q, SECOND_SOLVER) for p, q in SECOND]
+    jobs = ([(p, q, None) for p, q in QUESTIONS] + [(p, q, SECOND_SOLVER) for p, q in SECOND]
+            + [(p, q, ("raster", {})) for p, q in LOCATE])
     for path, q, solver in jobs:
         body = {"path": path, "question": q}
         if solver:
-            body.update(solver=solver[0], solver_args=solver[1])
+            body.update(solver=solver[0], **({"solver_args": solver[1]} if solver[1] else {}))
         req = urllib.request.Request(f"{args.api}/ask", data=json.dumps(body).encode(),
                                      headers={"Content-Type": "application/json"})
         with urllib.request.urlopen(req, timeout=600) as r:
@@ -68,7 +71,7 @@ def main() -> None:
         rec = {"path": path, "question": q, "answer": ans, "recorded_at": time.strftime("%Y-%m-%d %H:%M"),
                "api": args.api}
         if solver:
-            rec.update(solver=solver[0], solver_args=solver[1])
+            rec.update(solver=solver[0], **({"solver_args": solver[1]} if solver[1] else {}))
         out.append(rec)
         print(f"{path.split('/')[-1][:48]:48} {ans.get('value')!s:>10} {ans.get('unit')} conf={ans.get('confidence')} "
               f"{ans.get('solver')} ev={len(ans.get('evidence', []))}")

@@ -435,6 +435,24 @@ async function showAnswer(a: Answer, roundTripMs: number) {
       $<HTMLTextAreaElement>("question").value = q;
       void runAsk();
     },
+    onLocate: async () => {
+      // the label reader answers the same question; its label boxes become the evidence, with a cross-check line
+      const t0 = performance.now();
+      const r = await ask(askedPath, askedQ, "raster");
+      if (state.file?.path !== askedPath) return;
+      const same = r.value !== null && Number(r.value) === Number(a.value);
+      const ev = (r.evidence ?? []).filter((e) => e.bbox);
+      const check = r.value === null ? `label reader: no answer (${(r.missing ?? [])[0] ?? "no labels for this kind of room"})`
+        : `cross-check: label reader counts ${r.value} label${Number(r.value) === 1 ? "" : "s"} ${same ? "✓" : `✗ (answer ${a.value})`}`;
+      const a2: Answer = {
+        ...a, cached: a.cached,
+        evidence: ev.map((e, i) => ({ ...e, note: `label reader: ${e.note ?? ""}${i === 0 ? `; ${check}` : ""}` })),
+        trace: [...(a.trace ?? []), `${check} — raster label reader, ${Math.round(performance.now() - t0)} ms (labels read once per drawing, cached)`],
+        missing: ev.length ? (a.missing ?? []).filter((m) => !/no located evidence/i.test(m)) : a.missing,
+      };
+      if (!ev.length) a2.evidence = [{ file: askedPath, note: check } as Answer["evidence"][number]];
+      await showAnswer(a2, 0);
+    },
     onSecondOpinion: async () => {
       const t0 = performance.now();
       const answer = await secondOpinion(askedPath, askedQ);
@@ -503,7 +521,7 @@ function focusEvidence(i: number) {
 }
 
 // --- demo tour: five steps, each one sentence for the presenter ----------------------------------------
-const TOUR: { file: string; q: string; note: string; bench?: boolean; second?: boolean }[] = [
+const TOUR: { file: string; q: string; note: string; bench?: boolean; second?: boolean; locate?: boolean }[] = [
   { file: "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
     q: "What is the net floor area of the room 'KORIDOR (119)' on '1.korrus', in m²?",
     note: "Area from the IFC model, shown on the drawing and in 3D: same room, same GlobalId." },
@@ -518,7 +536,7 @@ const TOUR: { file: string; q: string; note: string; bench?: boolean; second?: b
     note: "Model-wide question: evidence on five sheets. Click a sheet chip to open it." },
   { file: "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
     q: "What share of the total room area on '1.korrus' does the room 'KORIDOR (119)' take, in percent?",
-    note: "A question no template covers: a small local model plans the steps (ask, ask, calc), the numbers come from the solvers with their evidence, and the arithmetic is done in code." },
+    note: "A question no template covers: the IFC solver reads the operator itself, computes part ÷ whole in code (see 'Why') and marks every room it summed. No model call. Questions no solver can read go to a small planning agent (ask → calc → answer)." },
   { file: "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
     q: "How many doors (interior doors and entrance doors together) are drawn on this floor plan?",
     note: "Vector drawing: doors counted on the CAD layer and mapped back onto the PDF." },
@@ -526,8 +544,8 @@ const TOUR: { file: string; q: string; note: string; bench?: boolean; second?: b
     q: "Wie viele Türen und Fenster sind insgesamt auf diesem Grundriss eingezeichnet?",
     note: "A German question that combines two counts: it is split into two sub-questions, each answered and cross-checked, and the sum is done in code." },
   { file: "data/cubicasa5k/colorful-4539.png",
-    q: "Kuinka monta makuuhuonetta (MH) pohjapiirustuksessa on?",
-    note: "A scanned Finnish apartment plan, asked in Finnish: the room labels are read once per drawing by the local vision model, and each counted bedroom label ('MH') is marked on the image." },
+    q: "Kuinka monta makuuhuonetta (MH) pohjapiirustuksessa on?", locate: true,
+    note: "A scanned Finnish apartment plan, asked in Finnish: our fine-tuned 8B vision model counts the bedrooms; 'Show where' reads the room labels and marks each 'MH', so the count can be checked in seconds." },
   { file: "data/habs/vi0026_sheet_00003.jpg",
     q: "What kind of drawing is this (floor plan, elevation, section, site plan)?", second: true,
     note: "Historical scan (HAER, 1977) with no text layer: a local vision model answers but is unsure, so we ask NVIDIA Nemotron (hosted) for a second opinion, one paid call. Below: the other sheets of the same survey, linked." },
@@ -565,6 +583,7 @@ $("tourBtn").addEventListener("click", async () => {
   } else $<HTMLTextAreaElement>("question").value = t.q;
   await runAsk();
   if (t.second) document.querySelector<HTMLButtonElement>("#card .second-btn")?.click();
+  if (t.locate) document.querySelector<HTMLButtonElement>("#card .locate-btn")?.click();
 });
 
 // --- boot ---------------------------------------------------------------------------------------------------
