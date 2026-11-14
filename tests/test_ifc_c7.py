@@ -189,3 +189,23 @@ def test_v24_lists(solver, q, want, not_want):
     v = str(solver.solve(DUPLEX_IFC, q).value)
     assert all(re.search(x, v) for x in want), v
     assert not any(re.search(x, v) for x in not_want), v
+
+
+@need
+@pytest.mark.parametrize("q,want,not_want", [   # W5 09:47
+    ("Which floor has the most rooms?", [r"2\.korrus", r"3\.korrus", r"4\.korrus"], [r"1\.korrus"]),
+    ("Which floor has the fewest rooms?", [r"1\.korrus"], [r"Katus", r"Vundament"]),
+    ("What are the three largest rooms on '1.korrus'?", [r"\b101\b", r"\b105\b", r"\b119\b"], [r"\b114\b"]),
+    ("What are the 3 smallest rooms on '1.korrus'?", [r"6-2", r"\b120\b", r"\b118\b"], []),
+])
+def test_w5_rankings(solver, q, want, not_want):
+    a = solver.solve(ESPL, q)
+    v = str(a.value)
+    assert all(re.search(x, v) for x in want), v
+    assert not any(re.search(x, v) for x in not_want), v
+
+
+@need
+def test_topk_evidence(solver):
+    a = solver.solve(ESPL, "What are the three largest rooms on '1.korrus'?")
+    assert len({e.ifc_guid for e in a.evidence if e.ifc_guid}) == 3 and a.confidence >= 0.8

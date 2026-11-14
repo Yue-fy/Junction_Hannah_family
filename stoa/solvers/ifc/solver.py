@@ -2401,6 +2401,19 @@ class IfcSolver(BaseSolver):
             vals = [(v, e) for v, e in vals if e.guid not in zs]
             conf = min(conf, 0.85)
         order = sorted(vals, key=lambda x: x[0], reverse=big)
+        topk = next((int(n[5:]) for n in it.notes if n.startswith("topk:")), 0)
+        if topk >= 2:
+            top = order[:topk]
+            nxt = order[topk] if len(order) > topk else None
+            tie_b = nxt is not None and abs(nxt[0] - top[-1][0]) <= 0.005 + 0.0002 * abs(top[-1][0])
+            trace.append(f"{'largest' if big else 'smallest'} {len(top)} of {len(vals)} rooms {where_s}: "
+                         + "; ".join(f"{lab_of(e)} {v:.2f} m²" for v, e in top))
+            txt = "; ".join(f"{lab_of(e)} ({v:.2f} m²)" for v, e in top)
+            if tie_b:
+                txt += f" (tie at {top[-1][0]:.2f} m² with {lab_of(nxt[1])})"
+            return Answer(value=txt, unit=None, confidence=conf * 0.9 * (0.85 if tie_b else 1.0),
+                          evidence=[self._ev(model, e, f"#{i + 1} {lab_of(e)} {v:.2f} m²") for i, (v, e) in enumerate(top)],
+                          trace=trace, solver=self.name, assumptions=assumptions, missing=missing)
         v0, e0 = order[min(rank, len(order)) - 1]
         lab = lab_of(e0)
         trace.append(f"{'largest' if big else 'smallest'}{f' #{rank}' if rank > 1 else ''} of {len(vals)} rooms "
@@ -2595,6 +2608,32 @@ class IfcSolver(BaseSolver):
             it.notes.append("threshold_list")
             trace.append("threshold list: which rooms pass")
         # ranks and medians: "the second largest room", "median room area"
+        # 'Which floor has the most rooms?' is a COUNT ranking (W5 09:47: ranked by room area @ 0.86, 'floor' read as floor
+        # area); only an area word or unit makes it an area ranking
+        mc_ = re.search(r"\b(most|fewest|least|greatest number of|highest number of|largest number of|lowest number of|"
+                        r"smallest number of)\s+(?:\w+\s+){0,2}?(rooms?|spaces?|doors?|windows?|walls?|columns?|stairs?|"
+                        r"slabs?|beams?)\b", qf)
+        if mc_ and it.metric in ("area", "text") and not re.search(r"\b(area|m2|square|sq|size|surface|volume|m3|length|"
+                                                                  r"large|big|small)\b", qf.replace(mc_.group(0), " ")):
+            it.metric = "count"
+            if it.op in (None, "max", "min"):
+                it.op = "argmin" if mc_.group(1) in ("fewest", "least", "lowest number of", "smallest number of") else "argmax"
+            trace.append(f"'{mc_.group(0)}' ranks by count, not by area")
+        # 'the three largest rooms', 'top 5 rooms', 'the 3 smallest rooms': a top-k list (W5 09:47: an LLM list @ 0.40)
+        _nw = {"two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10}
+        mk_ = re.search(r"\b(?:top\s+)?(\d{1,2}|two|three|four|five|six|seven|eight|nine|ten)\s+(largest|biggest|smallest|"
+                        r"tiniest)\s+(rooms|spaces)\b|\btop\s+(\d{1,2}|two|three|four|five|six|seven|eight|nine|ten)\s+"
+                        r"(rooms|spaces)\b", qf)
+        if mk_ and it.kind in ("space", None):
+            k_ = mk_.group(1) or mk_.group(4)
+            k = int(k_) if k_.isdigit() else _nw[k_]
+            if 2 <= k <= 20:
+                small = (mk_.group(2) or "") in ("smallest", "tiniest")
+                it.op, it.which, it.kind, it.top_n, it.mod = ("argmin" if small else "argmax"), True, "space", False, None
+                if it.metric in ("text", "count"):
+                    it.metric = "area"
+                it.notes.append(f"topk:{k}")
+                trace.append(f"top-{k} list of the {'smallest' if small else 'largest'} rooms")
         mr = re.search(r"\b(second|third|fourth|fifth|2nd|3rd|4th|5th)[- ](largest|biggest|smallest)\b", qf)
         if mr and it.kind in ("space", None):
             k = {"second": 2, "third": 3, "fourth": 4, "fifth": 5, "2nd": 2, "3rd": 3, "4th": 4, "5th": 5}[mr.group(1)]
