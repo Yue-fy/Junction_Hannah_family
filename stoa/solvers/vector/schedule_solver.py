@@ -235,6 +235,22 @@ def _complex(question: str, res: dict) -> bool:
     return len(stm) >= 4 or bool(COMPLEX_Q.search(question))
 
 
+def _echoes_question_number(value, question: str) -> bool:
+    """A numeric answer equal to a number written in the question ('room 0.1', 'unit 115', 'level 2'), unless the
+    question is a yes/no or compares with that number ('more than 50', 'is it 12 m²?')."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        m = re.fullmatch(r"\s*(-?\d+(?:[.,]\d+)?)\s*(?:m²|m2|sf|ft2|ft|m)?\s*", str(value or ""))
+        if not m:
+            return False
+        value = float(m.group(1).replace(",", "."))
+    if re.search(r"\b(?:more|less|fewer|greater|smaller|larger|bigger|over|under|above|below|at least|at most|exceed)"
+                 r"\w*\s+(?:than\s+)?\d|^\s*(?:is|are|does|do|was|were|has|have|can)\b", question, re.I):
+        return False
+    nums = {float(x.replace(",", ".")) for x in
+            re.findall(r"(?<![\w.'])-?\d+(?:[.,]\d+)?(?!\s*(?:st|nd|rd|th)\b)(?![\w.]*\d)", question)}
+    return float(value) in nums
+
+
 def _clean(name: str) -> str:
     return re.sub(r"\W+", "_", name).strip("_").lower()[:30] or "table"
 
@@ -393,6 +409,27 @@ class ScheduleSolver(BaseSolver):
                 value, unit = d.replace("' - ", "'-"), None
         if unit not in ("count", "ft2", "m2", "ft", "m", None):
             unit = None
+        if isinstance(value, (int, float)) and not isinstance(value, bool) and unit in ("ft", None) and \
+                not COMPLEX_Q.search(question) and not re.search(r"how many|number of|count", question, re.I):
+            # a plain lookup whose number is not printed in its cited rows but sits within a foot of a printed
+            # feet-inch dimension there: the code converted/shifted it (Q/W4 v21: "22' - 5\"" -> 21.92 = 22.42 - 0.5
+            # in some runs); answer the printed dimension
+            texts = []
+            for u in res.get("used", []):
+                for df in tables.values():
+                    hit = df[df["row_id"] == u] if "row_id" in df.columns else df.iloc[0:0]
+                    if len(hit):
+                        texts.append(" | ".join(str(v) for k, v in hit.iloc[0].items() if k != "row_id"))
+                        break
+            dims = {re.sub(r"(\d+')\s*-\s*(\d)", r"\1-\2", m.group(0).strip()): sheettext._ftin(m.group(0))
+                    for t in texts for m in sheettext.DIM_IN_ROW.finditer(t)}
+            dims = {d: v for d, v in dims.items() if v is not None}
+            if dims and all(abs(v - float(value)) > 0.005 for v in dims.values()):
+                near = sorted((abs(v - float(value)), d) for d, v in dims.items() if abs(v - float(value)) < 1.0)
+                if len(near) == 1 or (len(near) > 1 and near[0][0] < near[1][0] - 0.1):
+                    trace.append(f"lookup check: {value} is not printed in the cited rows; the printed dimension "
+                                 f"{near[0][1]!r} is -> answered it")
+                    value, unit = near[0][1], None
         row_label = {}
         if "text" in tables:
             for _, row in tables["text"].iterrows():
@@ -509,6 +546,9 @@ class ScheduleSolver(BaseSolver):
             missing = [x for x in missing if not x.startswith("two independent table queries")]
             evidence = [Evidence(file=path, page=0, bbox=[round(v, 1) for v in boxes[i]], bbox_space="pdf_pt",
                                  note=row_label.get(i, f"table row {i}")) for i in det_rows if i in boxes]
+        if _echoes_question_number(value, question):
+            conf = min(conf, 0.2)
+            missing.append(f"the answer {value!r} is a number written in the question, not a value read for it")
         if isinstance(value, str) and value.strip().upper() in tableqa.id_tokens(question, path):
             conf = min(conf, 0.2)  # the answer only repeats an identifier from the question
             missing.append(f"the answer {value!r} repeats the question's identifier; the table row was not found")
@@ -600,6 +640,12 @@ class ScheduleSolver(BaseSolver):
         elif res["op"] == "count" and re.search(r"\b(types?|marks?|kinds?)\b", question, re.I):
             conf = min(conf, 0.4)  # counting types/marks = reading a type list (a schedule) that was not rebuilt
             missing.append("counting types/marks needs a schedule table, which could not be rebuilt from the text")
+        if _echoes_question_number(res["value"], question):
+            # F 09:39: IFC sheet without its model, "net floor area of the room 'Hall (0.1)'" -> 0.1 m² @0.65 (5/5)
+            conf = min(conf, 0.2)
+            missing.append(f"the answer {res['value']!r} is a number written in the question (an id or room number), "
+                           "not a value read for it")
+            trace.append("guard: the answer repeats a number of the question -> confidence <= 0.2")
         assumptions = [f"read from {len(evidence)} printed text group(s) of the sheet (room/unit tags, notes, title "
                        "block); stacked lines within ~0.6 line heights were grouped into one tag"]
         if res["op"] in ("count", "sum", "max", "min", "mean"):

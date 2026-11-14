@@ -1,0 +1,15 @@
+# 'this building' = whole model; storey words still win (written with the fix; F 10:22)
+PATH bimspeed-gdynia_ruchu-oporu-18_plan-01-foundation.pdf
+How many doors are in this building?
+How many doors does this building's ground floor have?
+How many doors are on this plan?
+How many doors are on this floor plan?
+Wie viele Türen hat dieses Gebäude?
+Combien de portes y a-t-il dans ce bâtiment ?
+Hoeveel deuren heeft dit gebouw?
+Kuinka monta ovea tässä rakennuksessa on?
+What is the total floor area of all rooms in this building?
+PATH kit-smiley-west_ac-20-smiley-west-10-bldg_plan-01-kg.pdf
+How many stairs are in this building?
+How many stairs are on this sheet?
+How many stairs are there in the basement of this building?

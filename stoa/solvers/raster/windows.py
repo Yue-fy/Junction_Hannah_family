@@ -4,7 +4,8 @@ dark, and 2 glass lines, grey ~59) on white. Profile scan per column (horizontal
 lines told apart by ink mass (a tilted 1-px line is antialiased over 2 px, so its min value says little), then runs of
 matching columns = one window (a mullion breaks the run; tilted walls are followed).
 TRAIN Swiss floors at 1:100 (experiments/w3/doorwin/windows.py; DXF window items mapped to PNG px): thresholds set on
-20 floors; held-out 32 floors exact 10 (31%), +-1 15, within 10% 18; all 51: recall 0.85, precision 0.93.
+20 floors; held-out 32 floors exact 9 (28%), +-1 19, within 10% 20; all 51: recall 0.89, precision 0.94 (no ink test
+below 6.5 px spacing: exact 16 -> 15, +-1 24 -> 29; Swiss dev exact 34 = 34, +-1 45 -> 48).
 1:200 sheets (~30 px/m): recall 0.65, 0/9 exact (the glass lines render as dark as the faces; relaxing the ink test
 and rejecting a 5th equally spaced line (stairs) cost 1:100 3 exact floors and did not fix 1:200): None there.
 
@@ -15,7 +16,7 @@ from __future__ import annotations
 import numpy as np
 from PIL import Image
 
-CONF = 0.4          # exact where answered: TRAIN held-out 10/32, Swiss dev (twins=0) 34/75 -> pooled 0.41
+CONF = 0.4          # exact where answered: TRAIN held-out 9/32, Swiss dev (twins=0) 34/75 -> pooled 0.40
 MIN_PX_PER_M = 45   # below this (1:200 renders) the window lines merge
 WHITE = 200
 LINE_MAX = 4        # px: a thin line crossed at up to ~60 degrees
@@ -23,6 +24,7 @@ INNER_MIN = 110     # ink mass of a glass line (grey 59 1-px line = 196; antiali
 INNER_RATIO = 1.5   # the two glass lines carry similar ink
 OUTER_K = 1.12      # a wall face (black 1-px = 255..275) carries more ink than a glass line (~197)
 OUTER_MIN_V = 100   # a wall face reaches at least this dark somewhere
+SMALL_GAP = 6.5     # px: below this line spacing (thin walls) antialiasing mixes glass and faces: no ink test
 
 
 def _runs(prof: np.ndarray):
@@ -51,11 +53,13 @@ def _hits(g: np.ndarray, smin: float, smax: float, ratio: float = 1.35):
             if any(r[1] - r[0] > LINE_MAX for r in q):
                 continue
             m = [r[3] for r in q]
-            if min(m[1], m[2]) < INNER_MIN or max(m[1], m[2]) > INNER_RATIO * min(m[1], m[2]):
-                continue
-            if min(m[0], m[3]) < OUTER_K * max(m[1], m[2]) or min(q[0][2], q[3][2]) > OUTER_MIN_V:
-                continue
             gaps = [cen[i + 1] - cen[i], cen[i + 2] - cen[i + 1], cen[i + 3] - cen[i + 2]]
+            if min(q[0][2], q[3][2]) > OUTER_MIN_V:
+                continue
+            if sum(gaps) / 3 >= SMALL_GAP and (
+                    min(m[1], m[2]) < INNER_MIN or max(m[1], m[2]) > INNER_RATIO * min(m[1], m[2]) or
+                    min(m[0], m[3]) < OUTER_K * max(m[1], m[2])):
+                continue  # below SMALL_GAP px antialiasing mixes the grey glass and the black faces: no ink test
             if min(gaps) >= smin and max(gaps) <= smax and max(gaps) <= ratio * min(gaps):
                 out.append((x, cen[i], cen[i + 3]))
     return out

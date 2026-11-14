@@ -74,3 +74,17 @@ def test_swiss_totals_are_compared_with_totals_not_one_room():
     apt = crosscheck(SWISS, {"task": "area", "target": "apartment", "scope": "apartment", "filters": {"apartment": "Z"}},
                      {"value": 50.0, "evidence": ev})
     assert apt is None  # unknown apartment: no comparison rather than a false ✗
+
+
+def test_swiss_total_unnamed_rooms_are_not_a_check():
+    """W2 10:25: unnamed numbered rooms (>= 2% of the total) make the polygon sum a reading choice: '?', never ✓."""
+    from stoa.kg.graph import _swiss_total_check
+
+    rooms = [{"number": "1.01", "name": "Bain", "apartment": "B", "area_m2_dxf": 50.0, "area_m2_printed": 50.0},
+             {"number": "1.02", "name": "Séjour", "apartment": "B", "area_m2_dxf": 47.0, "area_m2_printed": 47.0},
+             {"number": "1.03", "name": "", "apartment": "B", "area_m2_dxf": 3.0}]
+    note = _swiss_total_check(100.0, "apartment", {"apartment": "B"}, rooms)
+    assert "✓" not in note and "reading choice" in note
+    assert "✗" in _swiss_total_check(120.0, "apartment", {"apartment": "B"}, rooms)
+    rooms[2]["name"] = "Réduit"  # all named -> the sums are a check again
+    assert "✓" in _swiss_total_check(100.0, "apartment", {"apartment": "B"}, rooms)
