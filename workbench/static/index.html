@@ -50,7 +50,7 @@ if (!location.pathname.endsWith("/")) location.replace(location.pathname + "/" +
       <h2 id="audit-question" class="question"></h2>
       <div class="answers">
         <div class="ans ours"><div class="lbl">Our answer</div><div id="audit-answer" class="val"></div>
-          <div id="audit-conf" class="conf"></div><div id="audit-cost" class="conf cost"></div></div>
+          <div id="audit-conf" class="conf"></div><div id="audit-cost" class="conf cost"></div><div id="audit-flags"></div></div>
         <div class="ans ref"><div class="lbl">Reference answer (dataset)</div><div id="audit-ref" class="val"></div>
           <div id="audit-match" class="conf"></div></div>
       </div>
@@ -161,7 +161,8 @@ if (!location.pathname.endsWith("/")) location.replace(location.pathname + "/" +
 <section id="tab-rules" class="tabpane" hidden>
   <div class="howto">
     <b>How to use:</b> write down what a plausible value looks like (e.g. a door is 0.7–1.2 m wide) and why.
-    Each rule is tested at once against our ~2,200 test answers (right column): a good rule catches our wrong answers, not the right ones.
+    Each rule is tested at once against our ~2,200 test answers (right column): a good rule catches our wrong answers, not the right ones;
+    an answer that breaks one of your rules is marked ⚠ in the other two tabs.
     The big box is for error-propagation rules ("1% scale error → about 2% area error").
   </div>
   <div class="rules-grid">

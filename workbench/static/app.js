@@ -326,6 +326,7 @@ const audit = {
     $("#audit-ref").classList.toggle("long", String(d.reference).length > 30);
     $("#audit-conf").textContent = confWords(d.confidence);
     $("#audit-cost").textContent = costWords(d.cost);
+    $("#audit-flags").innerHTML = (d.rule_flags || []).map((f) => `<div class="ruleflag">⚠ ${esc(f)}</div>`).join("");
     $("#audit-ref").textContent = d.reference ?? "none yet";
     $("#audit-match").textContent = d.reference == null ? "no reference: please judge from the drawing, and type the right answer below if you know it" :
       d.matches_reference === true ? "our answer matches it" :
@@ -479,6 +480,7 @@ const asker = {
       res.innerHTML = `<div class="lbl">Our system says</div><div class="big">${esc(r.answer)}</div>
         <div>${confWords(r.confidence)} · ${esc(r.solver)} · ${cost.wall_seconds ?? "?"} s${cost.llm_calls ? ` · ${cost.llm_calls} model call(s)` : ""}</div>
         ${mine ? `<div>Your answer: <b>${esc(mine)} ${esc($("#q-unit").value)}</b></div>` : ""}
+        ${(r.rule_flags || []).map((f) => `<div class="ruleflag">⚠ ${esc(f)}</div>`).join("")}
         <div class="notes" id="q-notes"></div>
         <details open><summary>Evidence (<span id="q-ev-n">0</span>)</summary><ol id="q-evidence" class="evlist"></ol></details>
         <details><summary>How our system worked it out</summary><ol class="trace">${(r.trace || []).map((t) => `<li>${esc(t)}</li>`).join("")}</ol></details>`;

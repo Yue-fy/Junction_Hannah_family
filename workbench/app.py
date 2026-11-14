@@ -259,8 +259,20 @@ def audit_item(item_id: str):
             "assumptions": it.get("assumptions") or [], "missing": it.get("missing") or [],
             "trace": it.get("trace") or [], "solver": it.get("solver"), "views": views, "other_evidence": other,
             "cost": {**(it.get("cost") or {}), "latency_s": it.get("latency_s")},
+            "rule_flags": _rule_flags(it["question"], it.get("value"), it.get("unit"), it.get("type")),
             "drawing_name": catalog.human_name(it["path"]), "credit": catalog.credit_line(it["path"]),
             "last": last}
+
+
+def _rule_flags(question: str, value, unit, typ=None) -> list[str]:
+    """Her sanity rules that this answer breaks (shown next to our answer; never changes it)."""
+    try:
+        from workbench.rules_check import violations
+
+        rules = store.read("rules")
+        return violations(rules, question, value, unit, typ) if rules else []
+    except Exception:  # noqa: BLE001
+        return []
 
 
 class AuditIn(BaseModel):
@@ -385,7 +397,8 @@ def run_pipeline(path: str, question: str) -> dict:
     return {"ok": True, "answer": _fmt_value(ans.value, ans.unit), "value": ans.value, "unit": ans.unit,
             "confidence": ans.confidence, "assumptions": ans.assumptions, "missing": ans.missing,
             "trace": ans.trace[-25:], "solver": ans.solver, "evidence": out.get("evidence") or [],
-            "cost": out["cost"], "views": views, "other_evidence": other}
+            "cost": out["cost"], "views": views, "other_evidence": other,
+            "rule_flags": _rule_flags(question, ans.value, ans.unit)}
 
 
 @app.post("/api/ask")
