@@ -8,6 +8,7 @@ dataset's definition relies on are tagged ambiguous. OPEN probe (dev drawings): 
 """
 from __future__ import annotations
 
+import collections
 import hashlib
 import json
 import os
@@ -176,26 +177,181 @@ KINDS_ML = {
 }
 
 
+# v7 (c225, 08:45): CubiCasa casual Finnish / English wordings (the LoRA was trained on the dataset's long wordings;
+# does a judge's wording still reach it?). Base = the EN or FI dataset template of the same concept and drawing.
+def _either(en, fi):
+    return r"^(?:" + re.escape(en) + "|" + re.escape(fi) + r")$"
+
+
+KINDS_CC = {
+    "cc7_windows": (_either("How many windows are shown on this floor plan?", "Kuinka monta ikkunaa pohjapiirustuksessa on?"), {
+        "fi_asunto": ("Montako ikkunaa asunnossa on?", False),
+        "fi_plan": ("Montako ikkunaa tässä pohjapiirroksessa on?", False),
+        "fi_laske": ("Laske ikkunat.", False),
+        "en_plain": ("How many windows are there?", False),
+    }),
+    "cc7_wc": (_either("How many toilet bowls (WC seats) are drawn on this floor plan?",
+                       "Kuinka monta WC-istuinta pohjapiirustukseen on piirretty?"), {
+        "fi_asunto": ("Montako WC-istuinta tässä asunnossa on?", False),
+        "fi_pontto": ("Kuinka monta wc-pönttöä piirustuksessa on?", False),
+        "en_toilets_plan": ("How many toilets are drawn on the plan?", False),
+    }),
+    "cc7_floors": (_either("How many floors (storeys) does this floor plan show?",
+                           "Kuinka monta kerrosta pohjapiirustuksessa on esitetty?"), {
+        "en_storeys_home": ("How many storeys does this home have?", False),
+        "en_levels": ("How many levels are shown?", False),
+        "fi_asunto": ("Montako kerrosta asunnossa on?", False),
+        "en_floors_plain": ("How many floors?", False),
+    }),
+    "cc7_showers": (_either("How many showers and bathtubs are drawn on this floor plan in total?",
+                            "Kuinka monta suihkua ja kylpyammetta pohjapiirustukseen on piirretty yhteensä?"), {
+        "en_plus": ("How many showers plus bathtubs are there?", False),
+        "en_together": ("Count the showers and bathtubs together.", False),
+        "fi_yhteensa": ("Montako suihkua ja ammetta asunnossa on yhteensä?", False),
+    }),
+    "cc7_sinks": (_either("How many sinks and wash basins (kitchen and bathroom combined; a double-bowl sink counts as one) "
+                          "are drawn on this floor plan?",
+                          "Kuinka monta pesu- ja tiskiallasta (keittiö ja kylpytilat yhteensä; kaksoisallas lasketaan "
+                          "yhdeksi) pohjapiirustukseen on piirretty?"), {
+        "en_total": ("How many sinks are there in total, kitchen and bathroom together?", False),
+        "fi_altaat": ("Montako allasta asunnossa on keittiössä ja kylpyhuoneessa yhteensä?", False),
+    }),
+    "cc7_saunas": (_either("How many saunas are on this floor plan?", "Kuinka monta saunaa pohjapiirustuksessa on?"), {
+        "fi_asunto": ("Montako saunaa asunnossa on?", False),
+        "en_plain": ("How many saunas are there?", False),
+    }),
+    "cc7_doors": (_either("How many doors are shown on this floor plan? Count doorways fitted with a door; open doorways "
+                          "without a door leaf do not count.",
+                          "Kuinka monta ovea pohjapiirustuksessa on? Laske oviaukot, joissa on ovi; pelkkiä oviaukkoja "
+                          "ilman ovilehteä ei lasketa."), {
+        "en_plain": ("How many doors are there?", False),
+        "fi_asunto": ("Montako ovea asunnossa on?", False),
+    }),
+    "cc7_kitchens": (_either("How many kitchens (including kitchenettes, open kitchens and utility kitchens) are on this "
+                             "floor plan?",
+                             "Kuinka monta keittiötä (myös keittokomerot, avo- ja tupakeittiöt sekä apukeittiöt) "
+                             "pohjapiirustuksessa on?"), {
+        "en_short": ("How many kitchens are there, kitchenettes included?", False),
+        "fi_asunto": ("Montako keittiötä asunnossa on?", True),
+    }),
+    "cc7_bedrooms": (_either("How many bedrooms (makuuhuone, usually marked MH) are on this floor plan?",
+                             "Kuinka monta makuuhuonetta (MH) pohjapiirustuksessa on?"), {
+        "fi_asunto": ("Montako makuuhuonetta asunnossa on?", False),
+        "en_home": ("How many bedrooms does this home have?", False),
+    }),
+    "cc7_bathrooms": (_either("How many bathrooms or washrooms (e.g. KH, KPH, PH, PESUH, SH) are on this floor plan, not "
+                              "counting separate WC rooms?",
+                              "Kuinka monta kylpy- tai pesuhuonetta (esim. KH, KPH, PH, PESUH, SH) pohjapiirustuksessa on, "
+                              "erillisiä WC-tiloja lukuun ottamatta?"), {
+        "en_short": ("How many bathrooms are there (not counting separate toilets)?", False),
+        "fi_asunto": ("Montako kylpyhuonetta asunnossa on, erillisiä vessoja lukuun ottamatta?", False),
+    }),
+}
+
+
+# v8 (c225, 08:50): IFC wordings in languages a Nordic/Baltic/central-European judge might type (dataset IFC
+# templates are English and Dutch). Up to 4 bases per model (distinct rooms/storeys).
+_IFC_ROOM_ANY = (r"^(?:What is the net floor area of the room|Wat is de netto vloeroppervlakte van de ruimte) "
+                 r"'(?P<R>[^']+)' (?:on|op) '(?P<S>[^']+)', in m²\?$")
+_IFC_COUNT_EN = r"^How many (?P<K>walls|doors|windows|rooms \(spaces\)) are shown on the floor plan of '(?P<S>[^']+)'\?$"
+_NOUNS = {"de": {"walls": "Wände", "doors": "Türen", "windows": "Fenster", "rooms": "Räume"},
+          "fi": {"walls": "seinää", "doors": "ovea", "windows": "ikkunaa", "rooms": "huonetta"},
+          "nl": {"walls": "muren", "doors": "deuren", "windows": "ramen", "rooms": "ruimtes"},
+          "et": {"walls": "seina", "doors": "ust", "windows": "akent", "rooms": "ruumi"},
+          "sv": {"walls": "väggar", "doors": "dörrar", "windows": "fönster", "rooms": "rum"}}
+KINDS_IFC = {
+    "ifc8_room": (_IFC_ROOM_ANY, {
+        "de": ("Wie groß ist der Raum '{R}' im Geschoss '{S}'?", False),
+        "fi": ("Mikä on tilan '{R}' pinta-ala kerroksessa '{S}'?", False),
+        "et": ("Kui suur on ruum '{R}' korrusel '{S}'?", False),
+        "sv": ("Hur stor är rummet '{R}' på våning '{S}'?", False),
+        "fr": ("Quelle est la surface de la pièce '{R}' au niveau '{S}' ?", False),
+        "nl_casual": ("Hoe groot is de ruimte '{R}' op '{S}'?", False),
+        "en_sqm": ("How many square metres is the room '{R}' on '{S}'?", False),
+    }),
+    "ifc8_count": (_IFC_COUNT_EN, {
+        "de": ("Wie viele {N_de} gibt es im Geschoss '{S}'?", False),
+        "fi": ("Montako {N_fi} kerroksessa '{S}' on?", False),
+        "nl": ("Hoeveel {N_nl} zijn er op '{S}'?", False),
+        "et": ("Mitu {N_et} on korrusel '{S}'?", False),
+        "sv": ("Hur många {N_sv} finns det på våning '{S}'?", False),
+    }),
+}
+
+
+# v9 (c225, 08:50): Swiss room / label / fixture questions in German, French and Italian (bases: English dev templates).
+_ROOM_EN = r"^What is the net floor area of room (?P<N>\d+\.\d+) \('(?P<S>[^']+)'\) in m²\?$"
+KINDS_ML2 = {
+    "ml_room": (_ROOM_EN, {
+        "de_raum": ("Wie groß ist Raum {N}?", False),
+        "de_zimmer_label": ("Fläche von Zimmer {N} ({S}) in m²?", False),
+        "fr_piece": ("Quelle est la surface de la pièce {N} ?", False),
+        "fr_local": ("Surface du local {N} en m² ?", False),
+        "it_locale": ("Quanto è grande il locale {N}?", False),
+    }),
+    "ml_count_label": (r"^How many rooms labelled '(?P<S>[^']+)' are there on this floor\?$", {
+        "de_heissen": ("Wie viele Räume heißen '{S}'?", False),
+        "de_anzahl": ("Anzahl der Räume mit der Bezeichnung {S}?", False),
+        "fr_nommees": ("Combien de pièces sont nommées '{S}' ?", False),
+        "it_chiamano": ("Quanti locali si chiamano '{S}'?", False),
+    }),
+    "ml_area_label": (r"^What is the total net area in m² of all rooms labelled '(?P<S>[^']+)' on this floor\?$", {
+        "de_gesamt": ("Gesamtfläche aller Räume '{S}' in m²?", False),
+        "de_zusammen": ("Wie viel Fläche haben alle '{S}' zusammen?", False),
+        "fr_totale": ("Surface totale des pièces '{S}' ?", False),
+        "it_totale": ("Superficie totale dei locali '{S}'?", False),
+    }),
+    "ml_doors": (r"^How many doors \(interior doors and entrance doors together\) are drawn on this floor plan\?$", {
+        "de": ("Wie viele Türen hat dieses Geschoss?", False),
+        "fr": ("Combien de portes y a-t-il sur ce plan ?", False),
+        "it": ("Quante porte ci sono in questa pianta?", False),
+    }),
+    "ml_windows": (r"^How many windows are drawn on this floor plan\?$", {
+        "de": ("Wie viele Fenster sind eingezeichnet?", False),
+        "fr": ("Combien de fenêtres sur ce plan ?", False),
+        "it": ("Quante finestre ci sono?", False),
+    }),
+    "ml_washbasins": (r"^How many washbasins are drawn on this floor plan\?$", {
+        "de_lavabo": ("Wie viele Lavabos gibt es auf diesem Plan?", False),
+        "de_waschbecken": ("Anzahl Waschbecken?", False),
+        "fr": ("Combien de lavabos ?", False),
+        "it": ("Quanti lavabi ci sono?", False),
+    }),
+    "ml_bathtubs": (r"^How many bathtubs are drawn on this floor plan\?$", {
+        "de": ("Wie viele Badewannen?", False),
+        "fr": ("Combien de baignoires ?", False),
+        "it": ("Quante vasche da bagno?", False),
+    }),
+}
+
+
 def main():
     ml = "--ml" in sys.argv
-    argv = [a for a in sys.argv[1:] if a != "--ml"]
+    cc = "--cc" in sys.argv
+    ifc8 = "--ifc" in sys.argv
+    ml2 = "--ml2" in sys.argv
+    argv = [a for a in sys.argv[1:] if a not in ("--ml", "--cc", "--ifc", "--ml2")]
     n = int(argv[0]) if argv else 30
     dev_all = load_split("dev")
     out = os.path.join(os.environ["JUNCTION_SHARED"], "artifacts", "F",
-                       "apt_wording_ml.jsonl" if ml else "apt_wording.jsonl")
+                       "apt_wording_ml.jsonl" if ml else "apt_wording_cc.jsonl" if cc else
+                       "apt_wording_ifc.jsonl" if ifc8 else "apt_wording_ml2.jsonl" if ml2 else
+                       "apt_wording.jsonl")
     total = 0
     with open(out, "w", encoding="utf-8") as f:
-        for kind, (rx, wordings) in (KINDS_ML if ml else KINDS).items():
-            bases, seen = [], set()
-            source = ("ifc_models" if kind.startswith("ifc_") else "cubicasa5k" if kind.startswith("cc_")
+        for kind, (rx, wordings) in (KINDS_ML if ml else KINDS_CC if cc else KINDS_IFC if ifc8 else KINDS_ML2 if ml2 else KINDS).items():
+            bases, seen = [], collections.Counter()
+            per_path = 4 if kind.startswith("ifc8") else 1
+            source = ("ifc_models" if kind.startswith("ifc") else "cubicasa5k" if kind.startswith("cc")
                       else "swiss_dwellings")
             for q in dev_all:
                 m = re.match(rx, q.question) if q.source == source else None
-                if m and q.path not in seen:
-                    seen.add(q.path)
+                if m and seen[q.path] < per_path:
+                    seen[q.path] += 1
                     g = m.groupdict()
                     if "K" in g:
                         g["N"] = g["K"].replace(" (spaces)", "")
+                        g.update({f"N_{lang}": nouns[g["N"]] for lang, nouns in _NOUNS.items()})
                     bases.append((q, g))
             random.Random(7).shuffle(bases)
             for q, g in bases[:n]:
