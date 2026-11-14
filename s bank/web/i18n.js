@@ -1632,6 +1632,45 @@ const EXPERIENCE_V2_MESSAGES = {
 };
 for (const [key, values] of Object.entries(EXPERIENCE_V2_MESSAGES)) { EN["v2."+key]=values[0]; FI["v2."+key]=values[1]; SV["v2."+key]=values[2]; }
 
+const AGENT_MESSAGES = {
+  title: ['Coach','Valmentaja','Coach'],
+  newChat: ['New chat','Uusi keskustelu','Ny chatt'],
+  context: ['Account & dates','Tili ja päivämäärät','Konto och datum'],
+  conversation: ['Conversation','Keskustelu','Samtal'],
+  work: ['How I worked this out','Näin selvitin asian','Så räknade jag ut det'],
+  suggestions: ['Continue the conversation','Jatka keskustelua','Fortsätt samtalet'],
+  looking: ['Looking at your transactions…','Tarkastelen tapahtumiasi…','Tittar på dina transaktioner…'],
+  calculating: ['Working through your question…','Selvitän kysymystäsi…','Arbetar med din fråga…'],
+  mode: ['AI coach · numbers verified against your transactions','Tekoälyvalmentaja · luvut tarkistettu tapahtumistasi','AI-coach · siffrorna kontrollerade mot dina transaktioner'],
+  chart: ['Recorded amounts','Kirjatut summat','Registrerade belopp'],
+  'starter.where': ['Where did my money go this month?','Mihin rahani menivät tässä kuussa?','Vart gick mina pengar den här månaden?'],
+  'starter.save': ['How could I save more?','Miten voisin säästää enemmän?','Hur skulle jag kunna spara mer?'],
+  'starter.compare': ['How do I compare with others my age?','Miten kulutukseni vertautuu ikäisiini?','Hur ser min konsumtion ut jämfört med andra i min ålder?'],
+  'starter.baskets': ['Explain the three baskets','Selitä kolme koria','Förklara de tre korgarna'],
+  'action.create_goal': ['Review goal','Tarkista tavoite','Granska mål'],
+  'action.save_scenario': ['Review spending scenario','Tarkista menoskenaario','Granska utgiftsscenario'],
+  'action.open_view': ['Open view','Avaa näkymä','Öppna vy'],
+  scenarioReview: ['Reduce {category} by {percent}% for {month}.','Vähennä luokan {category} menoja {percent} % ajalta {month}.','Minska {category} med {percent} % för {month}.'],
+  scenarioHelp: ['This saves a planning scenario. It does not change your transactions or move money.','Tämä tallentaa suunnitteluskenaarion. Se ei muuta tapahtumiasi eikä siirrä rahaa.','Detta sparar ett planeringsscenario. Det ändrar inte dina transaktioner och flyttar inga pengar.'],
+  confirmScenario: ['Confirm & save scenario','Vahvista ja tallenna skenaario','Bekräfta och spara scenario'],
+  'step.get_overview': ['Reviewed your account overview','Tarkastelin tilisi yleiskuvaa','Granskade kontoöversikten'],
+  'step.spending_total': ['Counted spending in the selected period','Laskin valitun ajanjakson menot','Räknade utgifterna under vald period'],
+  'step.compare_periods': ['Compared spending across the selected periods','Vertasin valittujen ajanjaksojen menoja','Jämförde utgifter mellan valda perioder'],
+  'step.monthly_trend': ['Reviewed monthly spending','Tarkastelin kuukausimenoja','Granskade månadsutgifter'],
+  'step.list_transactions': ['Reviewed matching transactions','Tarkastelin vastaavia tapahtumia','Granskade matchande transaktioner'],
+  'step.safe_to_spend': ['Estimated spending room after reserves and bills','Arvioin käyttövaran puskurin ja laskujen jälkeen','Uppskattade utrymmet efter buffert och räkningar'],
+  'step.forecast_30_days': ['Reviewed the cash-flow forecast','Tarkastelin kassavirtaennustetta','Granskade kassaflödesprognosen'],
+  'step.what_if_reduce': ['Calculated an unsaved spending adjustment','Laskin tallentamattoman menomuutoksen','Beräknade en osparad utgiftsändring'],
+  'step.goal_plan': ['Calculated a goal plan without saving it','Laskin tavoitesuunnitelman tallentamatta sitä','Beräknade en målplan utan att spara den'],
+  'step.list_goals': ['Reviewed saved goals','Tarkastelin tallennettuja tavoitteita','Granskade sparade mål'],
+  'step.payday_pattern': ['Reviewed salary timing and balances','Tarkastelin palkan ajoitusta ja saldoja','Granskade lönetidpunkter och saldon'],
+  'step.recurring_payments': ['Reviewed recurring payments','Tarkastelin toistuvia maksuja','Granskade återkommande betalningar'],
+  'step.calculate': ['Calculated using sourced figures','Laskin lähteisiin perustuvilla luvuilla','Räknade med källbelagda siffror'],
+  'step.explain_concept': ['Checked the financial glossary','Tarkistin taloussanaston','Kontrollerade den ekonomiska ordlistan'],
+  'step.propose_action': ['Prepared an optional next step','Valmistelin valinnaisen seuraavan askeleen','Förberedde ett valfritt nästa steg'],
+};
+for (const [key, values] of Object.entries(AGENT_MESSAGES)) { EN['agent.'+key]=values[0]; FI['agent.'+key]=values[1]; SV['agent.'+key]=values[2]; }
+
 export const MESSAGES = Object.freeze({
   en: Object.freeze(EN),
   fi: Object.freeze(FI),

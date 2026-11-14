@@ -31,7 +31,7 @@ fixture=(path,customer)=>path==='/api/coach'?vatAnswer:originalFixture(path,cust
 get('ask-coach').listeners.click();
 const vat=new Element('vat-question');vat.setAttribute('data-open-vat','');calls.length=0;
 await documentListeners.click({target:vat});await settle();
-const requests=calls.filter(call=>call.path==='/api/coach');assert.equal(requests.length,1);
+const requests=calls.filter(call=>call.path==='/api/agent');assert.equal(requests.length,1);
 assert.equal(requests[0].body.message,'How much VAT is inside my purchases?');
 assert.equal(requests[0].body.month,'2026-09');assert.equal(requests[0].customer,'CUST00001');
 assert.equal(app.state.view,'coach');assert.equal(get('coach-view').hidden,false);assert.equal(get('trends-view').hidden,true);
@@ -72,7 +72,7 @@ await documentListeners.click({target:evidence});await settle();
 const rowsRequest=calls.filter(call=>call.path==='/api/transactions').at(-1);
 assert.equal(rowsRequest.query.start,'2026-03-01');assert.equal(rowsRequest.query.end,'2026-08-31');
 assert.deepEqual(app.state.rows.map(row=>row.transaction_ref),['investment-scope-row']);
-assert.equal(calls.filter(call=>call.method==='POST'&&call.path!=='/api/coach').length,0);
+assert.equal(calls.filter(call=>call.method==='POST'&&!['/api/agent','/api/coach'].includes(call.path)).length,0);
 ''')
 
     def test_home_financing_question_hydrates_historical_records_without_current_mortgage_claims(self):
@@ -97,7 +97,7 @@ assert.ok(visible.includes('a past application'));
 assert.ok(visible.includes('do not establish a current mortgage, household finances, available savings, or a new lending decision'));
 assert.ok(visible.includes('Application review recorded'));
 assert.ok(!visible.includes('mortgage:internal-id'));
-assert.equal(calls.filter(call=>call.method==='POST'&&call.path!=='/api/coach').length,0);
+assert.equal(calls.filter(call=>call.method==='POST'&&!['/api/agent','/api/coach'].includes(call.path)).length,0);
 const next=get('coach-response').children.find(child=>child?.onclick);assert.ok(next);next.onclick();
 assert.equal(app.state.view,'goals');assert.equal(get('wish-title').dataset.template,'home');
 assert.equal(get('goal-planner').open,false);
@@ -160,7 +160,7 @@ assert.ok(received.includes('not earned income'));
 const originalFetch=globalThis.fetch;
 globalThis.fetch=async(url,options)=>{
  const parsed=new URL(url,'http://local');
- if(parsed.pathname==='/api/coach'){const body=JSON.parse(options.body),fixture=Object.values(bank).find(item=>item.message===body.message);assert.ok(fixture);return {ok:true,json:async()=>({ok:true,data:fixture.answer})};}
+ if(['/api/agent','/api/coach'].includes(parsed.pathname)){const body=JSON.parse(options.body),fixture=Object.values(bank).find(item=>item.message===body.message);assert.ok(fixture);return {ok:true,json:async()=>({ok:true,data:offlineAnswer(fixture.answer,parsed.pathname)})};}
  if(parsed.pathname==='/api/transactions'){assert.equal(parsed.searchParams.get('start'),'2026-08-01');assert.equal(parsed.searchParams.get('end'),'2026-08-31');const fixture=parsed.searchParams.get('category')==='Restaurants'?bank.average:bank.income;return {ok:true,json:async()=>({ok:true,data:fixture.rows})};}
  return originalFetch(url,options);
 };
@@ -183,7 +183,7 @@ for(const name of ['average','income']){
     def test_missing_purchase_context_offers_a_supported_planning_form(self):
         self.node_app(r'''
 const originalFetch=globalThis.fetch;
-globalThis.fetch=async(url,options)=>new URL(url,'http://local').pathname==='/api/coach'?{ok:true,json:async()=>({ok:true,data:{intent:'explain_change',source:'deterministic',needs_clarification:true,clarification_code:'affordability_context',clarification_question:'What would you like to buy, how much will it cost, and when?'}})}:originalFetch(url,options);
+globalThis.fetch=async(url,options)=>['/api/agent','/api/coach'].includes(new URL(url,'http://local').pathname)?{ok:true,json:async()=>({ok:true,data:offlineAnswer({intent:'explain_change',source:'deterministic',needs_clarification:true,clarification_code:'affordability_context',clarification_question:'What would you like to buy, how much will it cost, and when?'},new URL(url,'http://local').pathname)})}:originalFetch(url,options);
 await app.askCoach('Can I afford it?');
 assert.ok(get('coach-response').innerHTML.includes('how much will it cost'));
 const action=get('coach-response').children.filter(child=>child?.onclick).at(-1);
@@ -206,7 +206,7 @@ assert.ok(!html.includes('Average purchase'),'Income must not be framed as an ou
         self.node_app(r'''
 const exp=await import('data:text/javascript;base64,'+Buffer.from(sources['experience.js']).toString('base64'));
 const store=exp.createExperienceStore(null,'CUST00001'),originalFetch=globalThis.fetch;
-globalThis.fetch=async(url,options)=>new URL(url,'http://local').pathname==='/api/coach'?{ok:true,json:async()=>({ok:true,data:{intent:'transaction_statistics',source:'deterministic',explanation_blocks:[{text:'A plain explanation of the selected records.'}],tool_kind:'transaction_statistics',tool_result:{start:'2026-09-01',end:'2026-09-30',filters:{category:'Restaurants'},outflow_total_cents:22570,transaction_count:10,outflow_count:10,average_outflow_cents:2257,transaction_refs:[]}}})}:originalFetch(url,options);
+globalThis.fetch=async(url,options)=>['/api/agent','/api/coach'].includes(new URL(url,'http://local').pathname)?{ok:true,json:async()=>({ok:true,data:offlineAnswer({intent:'transaction_statistics',source:'deterministic',explanation_blocks:[{text:'A plain explanation of the selected records.'}],tool_kind:'transaction_statistics',tool_result:{start:'2026-09-01',end:'2026-09-30',filters:{category:'Restaurants'},outflow_total_cents:22570,transaction_count:10,outflow_count:10,average_outflow_cents:2257,transaction_refs:[]}},new URL(url,'http://local').pathname)})}:originalFetch(url,options);
 store.save({style:'gentle'});await app.askCoach('How much did I spend on restaurants?');
 const gentle=get('coach-response').innerHTML;
 assert.ok(gentle.includes('data-coaching-style="gentle"'));
@@ -226,7 +226,7 @@ assert.equal(store.load().consent,false,'Style changes must not enable remembere
 const exp=await import('data:text/javascript;base64,'+Buffer.from(sources['experience.js']).toString('base64'));
 const store=exp.createExperienceStore(null,'CUST00001');store.forget();calls.length=0;
 await app.askCoach('I want to save for a car.');
-assert.equal(calls.filter(call=>call.path==='/api/coach').length,0,'A bounded preference declaration needs no banking query or model call');
+assert.equal(calls.filter(call=>call.path==='/api/agent').length,0,'A bounded preference declaration needs no banking query or model call');
 assert.equal(store.load().focus,'flexibility','The preference must remain a proposal');
 assert.ok(get('coach-response').innerHTML.includes('without choosing an amount or deadline'));
 assert.ok(get('coach-response').innerHTML.includes('data-confirm-memory'));
@@ -248,8 +248,8 @@ const store=exp.createExperienceStore(null,'CUST00001');store.save({focus:'trave
 const originalFetch=globalThis.fetch;
 globalThis.fetch=async(url,options)=>{
  const path=new URL(url,'http://local').pathname;
- if(path==='/api/coach')return {ok:true,json:async()=>({ok:true,data:{intent:'spending_adjustment',source:'deterministic',tool_kind:'spending_adjustment_preview',explanation_blocks:[{text:'An optional shopping scenario.'}],tool_result:{start:'2026-09-01',end:'2026-09-30',category:'Lifestyle',percent:'20',actual_total_cents:20000,adjustable_base_cents:20000,modeled_monthly_contribution_cents:4000,transaction_refs:['shopping-row']}}})};
- if(path==='/api/scenarios'){const body=JSON.parse(options.body);assert.equal(body.category,'Lifestyle');assert.equal(body.confirmed,true);return {ok:true,json:async()=>({ok:true,data:{scenario:{id:'personal-scenario',category:'Lifestyle',modeled_monthly_contribution_cents:4000}}})};}
+ if(['/api/agent','/api/coach'].includes(path))return {ok:true,json:async()=>({ok:true,data:offlineAnswer({intent:'spending_adjustment',source:'deterministic',tool_kind:'spending_adjustment_preview',explanation_blocks:[{text:'An optional shopping scenario.'}],tool_result:{start:'2026-09-01',end:'2026-09-30',category:'Lifestyle',percent:'20',actual_total_cents:20000,adjustable_base_cents:20000,modeled_monthly_contribution_cents:4000,transaction_refs:['shopping-row']}},new URL(url,'http://local').pathname)})};
+ if(path==='/api/scenarios'){const body=JSON.parse(options.body);assert.equal(body.category,'Lifestyle');assert.equal(body.confirmed,true);return {ok:true,json:async()=>({ok:true,data:offlineAnswer({scenario:{id:'personal-scenario',category:'Lifestyle',modeled_monthly_contribution_cents:4000}},new URL(url,'http://local').pathname)})};}
  return originalFetch(url,options);
 };
 await app.askCoach('How much could I save if I reduced shopping by 20%?');
@@ -323,8 +323,8 @@ const queryScope={customer_id:'CUST00001',account_id:'ACC000001',start:'2026-08-
 const originalFetch=globalThis.fetch;
 globalThis.fetch=async(url,options)=>{
  const response=await originalFetch(url,options);
- if(new URL(url,'http://local').pathname!=='/api/coach')return response;
- return {...response,json:async()=>({ok:true,data:{intent:'transaction_statistics',source:'deterministic',query_scope:queryScope,explanation_blocks:[{text:'Restaurant spending in August.'}],tool_kind:'transaction_statistics',tool_result:{start:'2026-08-01',end:'2026-08-31',filters:{category:'Restaurants'},outflow_total_cents:11543,metric_value_cents:11543,transaction_count:10,outflow_count:10,average_outflow_cents:1154,transaction_refs:['august-row']}}})};
+ if(!['/api/agent','/api/coach'].includes(new URL(url,'http://local').pathname))return response;
+ return {...response,json:async()=>({ok:true,data:offlineAnswer({intent:'transaction_statistics',source:'deterministic',query_scope:queryScope,explanation_blocks:[{text:'Restaurant spending in August.'}],tool_kind:'transaction_statistics',tool_result:{start:'2026-08-01',end:'2026-08-31',filters:{category:'Restaurants'},outflow_total_cents:11543,metric_value_cents:11543,transaction_count:10,outflow_count:10,average_outflow_cents:1154,transaction_refs:['august-row']}},new URL(url,'http://local').pathname)})};
 };
 assert.equal(app.state.selectedMonth,'2026-09');
 await app.askCoach('How much did I spend on restaurants in August 2026?');
@@ -417,7 +417,7 @@ assert.ok(get('personalization-card').innerHTML.includes('id="personalization-ti
 assert.ok(get('personalization-card').innerHTML.includes('this visit only'));
 const question=get('home-coach-question').dataset.directQuestion;
 await documentListeners.click({target:get('home-coach-question')});await settle();
-assert.equal(calls.filter(call=>call.path==='/api/coach').at(-1).body.message,question);
+assert.equal(calls.filter(call=>call.path==='/api/agent').at(-1).body.message,question);
 assert.equal(app.state.view,'coach');
 ''')
 

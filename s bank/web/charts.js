@@ -89,6 +89,16 @@ export function comparisonChart(data) {
   }).join('');
   return svg(ct('chart.comparison',{},'Restaurant spending comparison'), rows.map((row,i)=>`${labels[i]}: ${euro(row.total_cents)}, ${ct('chart.purchases',{count:row.count},'{count} purchases')}`).join('. '), bars, 135);
 }
+export function barChart(series) {
+  const rows=(series||[]).filter(row=>Number.isSafeInteger(row.value_cents));
+  if(!rows.length)return '';
+  const min=Math.min(0,...rows.map(row=>row.value_cents)),max=Math.max(0,...rows.map(row=>row.value_cents)),range=max-min||1,zero=-min/range*330;
+  const body=rows.map((row,index)=>{
+    const y=index*65,position=(row.value_cents-min)/range*330,label=String(row.label??'');
+    return `<text x="0" y="${y+12}" class="chart-label"><title>${esc(label)}</title>${esc(label.length>44?label.slice(0,41)+'…':label)}</text><text x="330" y="${y+30}" text-anchor="end" class="chart-value">${esc(euro(row.value_cents))}</text><rect x="0" y="${y+39}" width="330" height="16" rx="4" fill="#e8ecdf"/><rect x="${Math.min(zero,position)}" y="${y+39}" width="${Math.abs(position-zero)}" height="16" rx="4" fill="#466d48"/>`;
+  }).join('');
+  return svg(ct('agent.chart',{},'Recorded amounts'),rows.map(row=>`${row.label}: ${euro(row.value_cents)}`).join('. '),body,rows.length*65);
+}
 export function trendChart(rows) {
   if (!rows?.length) return empty(ct('chart.noTrend',{},'No complete periods available for this trend.'));
   const values=rows.map(row=>Number(row.total_cents ?? row.consumption_cents ?? row.value_cents ?? 0));

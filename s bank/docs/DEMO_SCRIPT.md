@@ -2,7 +2,19 @@
 
 Start the project with the repository-root commands in the [README](../README.md). Reuse the existing database and preserve saved customer work. If a fresh import is needed, use a separate output path. The six customer names are aliases for synthetic accounts, not biographies.
 
-This is a recording script, not evidence of a completed browser walkthrough. Approved CUA access to the local origin is currently blocked; phone, tablet, desktop and live-AI acceptance remain unverified. See [V2 acceptance](EXPERIENCE_V2_ACCEPTANCE.md). Gemini is unconfigured: demonstrate bounded deterministic coaching, not unrestricted language understanding.
+The Coach page now uses the tool-calling agent when configured, with the existing deterministic answer as fallback. DeepSeek is configured through the ignored local environment; Gemini remains an alternative. Verification details and limits are recorded in [the development log](DEVELOPMENT_LOG.md). Historical V2 acceptance documents describe their earlier runs, not a fresh acceptance claim for this build.
+
+## Agent chat walkthrough
+
+1. Open Coach and check the account/month chip. Ask `How much did I spend on restaurants in September?`. The footer identifies an AI answer or offline fallback; do not present a fallback as live AI.
+2. Ask `What about groceries then?`, then `Compare restaurants with August`. Check the same period/context, returned amounts and the comparison chart. Open **How I worked this out**, then an evidence item to inspect matching transactions.
+3. Ask `How much could I save if I reduced dining out by 20%?`. If offered, open **Review spending scenario**. Nothing is saved until **Confirm & save scenario**; the existing goal planner can then link the saved scenario.
+4. Try `I want to save EUR 3000 for Italy by June 2027`. A goal proposal opens an editable form; inspect its amount/date before confirming. No money is moved by this prototype.
+5. Use **New chat**, change month through the scope chip, and change persona to check that prior messages clear. At `/device-preview.html`, inspect 375×812, 390×844 and desktop layouts with three exchanges.
+
+The current minimum packages do not include open-data benchmarks, the generic exploration tool or the newer payday-horizon calculation. Do not claim those capabilities. A missing peer comparison must stay unavailable. Model wording and optional cards can vary; broader live conversational evaluation remains separate work.
+
+The three original stories below describe the deterministic flows and their recorded dataset values. Use them as offline demonstrations; they are not promises that every live-agent answer chooses the same wording, card or action.
 
 ## The four-page journey
 
@@ -44,7 +56,7 @@ The dataset contains no spouse, children or household composition. Any family-ho
 - **Preferences and Journal:** let the customer choose a focus, protected categories and coaching style. Inspect source-backed money moments and editable notes; do not infer holidays, motives or life events from a payment. Browser memory is optional and can be revoked. Milestones use only entered saved amounts.
 - **Investment transfers:** ask `Show my investment transfers`. Read the inline period and deposits/withdrawals. These account transfers do not establish holdings, returns, risk or investment advice. Incoming transfers are not earned income; credited salary does not establish gross pay before tax.
 - **Tax and VAT:** all six personas have no explicit tax records in the current dataset. Missing records do not establish zero tax paid or owed. VAT is estimated inside purchases from date/category mappings, not income tax or personal liability. Review coverage and assumptions; do not add VAT to spending again.
-- **Tax planning:** in **Coach → More ways to explore → Tax & VAT**, enter a user-declared amount, due date and where any existing set-aside is held. Inspect monthly set-aside, protected balance, reserve and any funding gap. This remains an unsaved planning scenario, not tax advice.
+- **Tax planning:** in **Coach → account/month chip → More ways to explore → Tax & VAT**, enter a user-declared amount, due date and where any existing set-aside is held. Inspect monthly set-aside, protected balance, reserve and any funding gap. This remains an unsaved planning scenario, not tax advice.
 
 ## Baseline and recording checks
 
@@ -53,8 +65,8 @@ All amounts above are audit baselines for the stated synthetic account and perio
 - Complete the authorized rendered walkthrough before recording. Target 390 × 844 for the primary recording, then check 320, 768 and 1440 CSS-pixel widths using the approved surface and existing device-preview page.
 - Check EN/FI/SV copy, category selection, evidence, keyboard focus, conversation navigation, composer visibility, error/retry and persona isolation.
 - Keep the synthetic-data disclosure visible at least once. Do not expose keys, terminal environment, raw CSV or personal messages.
-- Claim live Gemini only after a configured response's diagnostic source proves a successful provider call. Older screenshots and prior test totals do not validate V2.
+- Claim a live model answer only when the footer/response identifies the agent, using the configured provider. Numeric verification or provider failure can trigger offline fallback even when a key is configured. Older screenshots and prior test totals do not validate a later build.
 
 ## Conversation repair check
 
-On Alex / September 2026, ask `I want to go see a movie this week`, then answer `€20`. The first turn should ask for a total budget; the second should explain the dated planning comparison in prose. It must not substitute September Entertainment spending. Calculation details remain optional. Ask `How much did I spend on restaurants?` to see the exact observed EUR 225.70 stated in a sentence before supporting details. Ask `How much tax do I owe?` to see the data limit and declared-payment planner, rather than a historical-tax total. These are bounded local paths; live Gemini and rendered browser acceptance remain unverified.
+On Alex / September 2026 with offline coaching, ask `I want to go see a movie this week`, then answer `€20`. The first turn should ask for a total budget; the second should explain the dated planning comparison in prose. It must not substitute September Entertainment spending. Calculation details remain optional. Ask `How much did I spend on restaurants?` to see the exact observed EUR 225.70 stated in a sentence before supporting details. Ask `How much tax do I owe?` to see the data limit and declared-payment planner, rather than a historical-tax total. These are bounded local paths; live agent responses need separate semantic checks. Current browser and DeepSeek evidence is recorded in the development log.

@@ -57,9 +57,9 @@ assert.equal(store.load().consent,false);
 await select('CUST00676');
 assert.equal(get('wish-title').value,'');assert.ok(!get('coach-response').textContent.includes('A calmer winter'));
 documentListeners.click({target:goals});assert.ok(!get('wishes-list').textContent.includes('A calmer winter'));
-const questionsBefore=calls.filter(call=>call.path==='/api/coach').length;
+const questionsBefore=calls.filter(call=>call.path==='/api/agent').length;
 await documentListeners.click({target:explore});await settle();
-assert.equal(calls.filter(call=>call.path==='/api/coach').length,questionsBefore,'An old wish action cannot cross into another persona');
+assert.equal(calls.filter(call=>call.path==='/api/agent').length,questionsBefore,'An old wish action cannot cross into another persona');
 assert.deepEqual(store.load().wishes,before);
 ''')
 
@@ -94,7 +94,7 @@ for(const action of ['forget','revoke']){
     def test_a_ten_percent_dining_preview_keeps_its_percentage_when_saved(self):
         self.node_app(r'''
 const originalFetch=globalThis.fetch;
-globalThis.fetch=async(url,options)=>new URL(url,'http://local').pathname==='/api/coach'?{ok:true,json:async()=>({ok:true,data:{intent:'simulate_adjustment',tool_kind:'spending_adjustment_preview',source:'deterministic',explanation_blocks:[{text:'A ten percent experiment.'}],tool_result:{category:'Restaurants',percent:10,start:'2026-09-01',end:'2026-09-30',actual_total_cents:22570,adjustable_base_cents:22570,modeled_monthly_contribution_cents:2257,transaction_refs:[]}}})}:originalFetch(url,options);
+globalThis.fetch=async(url,options)=>['/api/agent','/api/coach'].includes(new URL(url,'http://local').pathname)?{ok:true,json:async()=>({ok:true,data:offlineAnswer({intent:'simulate_adjustment',tool_kind:'spending_adjustment_preview',source:'deterministic',explanation_blocks:[{text:'A ten percent experiment.'}],tool_result:{category:'Restaurants',percent:10,start:'2026-09-01',end:'2026-09-30',actual_total_cents:22570,adjustable_base_cents:22570,modeled_monthly_contribution_cents:2257,transaction_refs:[]}},new URL(url,'http://local').pathname)})}:originalFetch(url,options);
 await app.askCoach('How much could I save if I reduced dining out by 10%?');
 const savesBefore=calls.filter(c=>c.path==='/api/scenarios').length;
 const action=get('coach-response').children.filter(child=>child?.onclick).at(-1);
@@ -150,7 +150,7 @@ assert.ok(visible.includes('€1,210.00'));assert.ok(visible.includes('€1,186.
 assert.ok(visible.includes('past variation, not a probability'));
 assert.equal(app.state.selectedMonth,'2026-09');
 assert.equal(app.state.view,'coach');
-assert.equal(calls.filter(call=>call.method==='POST'&&call.path!=='/api/coach').length,0);
+assert.equal(calls.filter(call=>call.method==='POST'&&!['/api/agent','/api/coach'].includes(call.path)).length,0);
 ''')
 
     def test_failed_question_retains_the_successful_transcript_and_retries_the_same_question(self):
@@ -158,10 +158,10 @@ assert.equal(calls.filter(call=>call.method==='POST'&&call.path!=='/api/coach').
 const originalFetch=globalThis.fetch;let attempts=0;
 globalThis.fetch=async(url,options)=>{
  const response=await originalFetch(url,options);
- if(new URL(url,'http://local').pathname!=='/api/coach')return response;
+ if(!['/api/agent','/api/coach'].includes(new URL(url,'http://local').pathname))return response;
  attempts++;
  if(attempts===2)return {ok:false,status:503,json:async()=>({ok:false,error:{message:'Coach temporarily unavailable'}})};
- return {ok:true,json:async()=>({ok:true,data:{source:'deterministic',intent:'transaction_statistics',explanation_blocks:[{text:attempts===1?'First verified answer':'Retried verified answer'}]}})};
+ return {ok:true,json:async()=>({ok:true,data:offlineAnswer({source:'deterministic',intent:'transaction_statistics',explanation_blocks:[{text:attempts===1?'First verified answer':'Retried verified answer'}]},new URL(url,'http://local').pathname)})};
 };
 const submit=message=>{get('coach-input').value=message;get('coach-form').listeners.submit({preventDefault(){},submitter:new Element('send')});};
 submit('Show my spending');await settle();
@@ -174,8 +174,8 @@ assert.equal(get('coach-response').attributes['aria-busy'],'false');assert.equal
 const retry=get('coach-live-status').children.find(child=>typeof child.onclick==='function');
 assert.ok(retry,'A failed question must have a reachable retry action');
 await retry.onclick();await settle();
-assert.equal(calls.filter(call=>call.path==='/api/coach').length,3);
-assert.equal(calls.filter(call=>call.path==='/api/coach').at(-1).body.message,'What changed in August?');
+assert.equal(calls.filter(call=>call.path==='/api/agent').length,3);
+assert.equal(calls.filter(call=>call.path==='/api/agent').at(-1).body.message,'What changed in August?');
 assert.equal(app.state.conversation.length,2);
 assert.ok(get('coach-response').textContent.includes('First verified answer'));
 assert.ok(get('coach-response').textContent.includes('Retried verified answer'));
@@ -189,7 +189,7 @@ fixture=(path,customer)=>path==='/api/coach'?{source:'deterministic',intent:'tra
 get('coach-input').value='Show my restaurant spending';
 get('coach-form').listeners.submit({preventDefault(){},submitter:new Element('send')});await settle();
 assert.ok(get('coach-response').textContent.includes('Alex private answer'));assert.ok(app.state.queryScope);
-const delayed=hold('/api/coach');get('coach-input').value='What about the previous month?';
+const delayed=hold('/api/agent');get('coach-input').value='What about the previous month?';
 get('coach-form').listeners.submit({preventDefault(){},submitter:new Element('send')});await delayed.started;
 await select('CUST00676');
 assert.equal(get('coach-response').textContent,'');assert.equal(get('coach-response').innerHTML,'');
@@ -200,7 +200,7 @@ assert.equal(get('coach-response').textContent,'','A late Alex answer must not r
 assert.deepEqual(app.state.conversation,[]);assert.equal(app.state.queryScope,null);
 get('coach-input').value='Show my spending';
 get('coach-form').listeners.submit({preventDefault(){},submitter:new Element('send')});await settle();
-const latest=calls.filter(call=>call.path==='/api/coach').at(-1);
+const latest=calls.filter(call=>call.path==='/api/agent').at(-1);
 assert.equal(latest.customer,'CUST00676');assert.ok(!('previous_query' in latest.body));
 assert.ok(get('coach-response').textContent.includes('Robin current answer'));
 assert.ok(!get('coach-response').textContent.includes('Alex private answer'));
@@ -215,7 +215,7 @@ assert.equal(get('coach-input').value,'A private question about Alex','Ordinary 
 await select('CUST00676');
 assert.equal(get('coach-input').value,'','A draft cannot carry over to another customer');
 get('coach-form').listeners.submit({preventDefault(){},submitter:new Element('send')});await settle();
-assert.equal(calls.filter(call=>call.path==='/api/coach').length,0,'The old draft must not submit in the new customer context');
+assert.equal(calls.filter(call=>call.path==='/api/agent').length,0,'The old draft must not submit in the new customer context');
 get('coach-input').value='What about this month?';
 get('selected-month').value='2026-08';get('selected-month').listeners.change();await settle();
 assert.equal(get('coach-input').value,'','A period change clears a question tied to the old scope');
@@ -247,7 +247,7 @@ for(const change of ['persona','month','language','language-round-trip','new-con
   if(change==='language-round-trip'){get('language').value=initialLanguage;get('language').listeners.change();}
  }
  delayed.release();await settle();pending=null;
- assert.equal(calls.filter(call=>call.path==='/api/coach').length,0,'An obsolete story must not send a question after '+change+' changes');
+ assert.equal(calls.filter(call=>call.path==='/api/agent').length,0,'An obsolete story must not send a question after '+change+' changes');
  assert.deepEqual(app.state.conversation,[]);
 }
 ''')
@@ -261,7 +261,7 @@ for(const [locale,question] of Object.entries({en:'What is safe for me to spend 
  const starter=get('home-coach-question');
  assert.equal(starter.dataset.directQuestion,question,'The emitted Home starter must be a supported '+locale+' question');
  await documentListeners.click({target:starter});await settle();
- assert.equal(calls.filter(call=>call.path==='/api/coach').at(-1).body.message,question);
+ assert.equal(calls.filter(call=>call.path==='/api/agent').at(-1).body.message,question);
 }
 ''')
 

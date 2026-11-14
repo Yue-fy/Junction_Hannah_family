@@ -95,12 +95,12 @@ class WebContractTests(unittest.TestCase):
 
     def node_app(self, body):
         """Execute the real app with a small DOM boundary and scoped API fixtures."""
-        sources = {name: self.read(name) for name in ('app.js', 'api.js', 'state.js', 'charts.js', 'i18n.js', 'experience.js', 'presentation.js', 'coach-narrative.js')}
+        sources = {name: self.read(name) for name in ('app.js', 'api.js', 'state.js', 'charts.js', 'i18n.js', 'experience.js', 'presentation.js', 'coach-narrative.js', 'coach-chat.js')}
         harness = r'''
 import assert from 'node:assert/strict';
 const elements = new Map(), documentListeners = {}, calls=[];
 class Element {
- constructor(id=''){this.id=id;this.textContent='';this.innerHTML='';this.value='';this.hidden=false;this.disabled=false;this.open=false;this.dataset={};this.listeners={};this.attributes={};this.children=[];this.classList={remove(){}};}
+ constructor(id=''){this.id=id;this.textContent='';this.innerHTML='';this.value='';this.hidden=false;this.disabled=false;this.open=false;this.dataset={};this.listeners={};this.attributes={};this.children=[];this.style={};this.scrollHeight=48;this.classList={remove(){}};}
  get textContent(){return this._textContent;}
  set textContent(value){this._textContent=String(value??'');this._innerHTML=this._textContent;this.children=[];}
  get innerHTML(){return this._innerHTML;}
@@ -122,7 +122,10 @@ globalThis.window={scrollTo(){}};
 const comparison={customer_id:'CUST00001',account_id:'ACC000001',current:{start:'2026-09-01',end:'2026-09-30',total_cents:22570,count:10,average_cents:2257,transaction_refs:['restaurant-current']},previous:{start:'2026-08-01',end:'2026-08-31',total_cents:11543,count:10,average_cents:1154,transaction_refs:['restaurant-previous']},delta_cents:11027,count_delta:0,fact_id:'restaurant-fact'};
 const scenario={id:'scenario-a',customer_id:'CUST00001',category:'Restaurants',adjustable_base_cents:18923,monthly_contribution_cents:3785,excluded_transaction_refs:['restaurant-one-off']};
 let pending=null;
+// Existing offline fixtures exercise the same legacy renderer inside the new envelope.
+const offlineAnswer=(legacy,path)=>path==='/api/agent'?{source:'deterministic',fallback_reason:'not_configured',legacy}:legacy;
 function fixture(path,customer){
+ if(path==='/api/agent')return {source:'deterministic',fallback_reason:'not_configured',legacy:fixture('/api/coach',customer)};
  if(path==='/api/overview')return {customer_id:customer,account_id:customer==='CUST00001'?'ACC000001':'ACC000676',month:'2026-09',observed_start:'2024-10-03',observed_end:'2026-09-30',latest_balance_cents:10000,latest_balance_date:'2026-09-30',flows:[],scenarios:[]};
  if(path==='/api/comparison')return {...comparison,customer_id:customer};
  if(path==='/api/transactions')return {transactions:[{transaction_ref:'restaurant-one-off',category:'Restaurants',date:'2026-09-10',amount_cents:-3647}]};
@@ -170,7 +173,7 @@ const operations=[
  ['/api/goals',()=>app.createGoal()],
  ['/api/goals/link',()=>{get('link-goal').listeners.click();return app.createGoal();}],
  ['/api/goals',()=>app.loadGoals()],
- ['/api/coach',()=>app.askCoach('Explain my pattern')],
+ ['/api/agent',()=>app.askCoach('Explain my pattern')],
  ['/api/forecast',()=>{const button=get('apply-preview');return documentListeners.click({target:button});}],
  ['/api/undo',()=>get('undo-action').listeners.click({currentTarget:get('undo-action')})],
  ['/api/reset',()=>get('reset-demo').listeners.click({currentTarget:get('reset-demo')})]
@@ -250,7 +253,7 @@ assert.equal(calls.filter(c=>c.path==='/api/comparison').at(-1).query.comparison
 for(const path of ['/api/overview','/api/comparison','/api/transactions','/api/trends','/api/investments'])assert.equal(calls.filter(c=>c.path===path).at(-1).query.month,'2026-08',path);
 assert.equal(calls.filter(c=>c.path==='/api/trends').at(-1).query.months,'6');
 assert.equal(calls.filter(c=>c.path==='/api/scenarios').at(-1).body.month,'2026-08');
-assert.equal(calls.filter(c=>c.path==='/api/coach').at(-1).body.month,'2026-08');
+assert.equal(calls.filter(c=>c.path==='/api/agent').at(-1).body.month,'2026-08');
 const safe=calls.filter(c=>c.path==='/api/safe-to-spend').at(-1);assert.equal(safe.query.as_of,'2026-08-31');assert.equal(safe.query.reserve_floor_cents,'50000');
 assert.ok(!get('story-description').textContent.includes('September'));
 ''')
@@ -261,7 +264,7 @@ get('language').value='fi';get('language').listeners.change();await settle();
 assert.equal(document.documentElement.lang,'fi');assert.ok(get('scenario-amount').innerHTML.includes('€')||!app.state.scenario);
 assert.ok(get('selected-month').innerHTML.includes('syyskuu 2026'),'Month choices must follow product locale, independent of the OS');
 await app.ensureScenario();assert.ok(get('scenario-amount').innerHTML.includes('37,85'));assert.ok(get('scenario-detail').textContent.includes('20'));
-await app.askCoach('Mikä muuttui?');assert.equal(calls.filter(c=>c.path==='/api/coach').at(-1).body.locale,'fi');
+await app.askCoach('Mikä muuttui?');assert.equal(calls.filter(c=>c.path==='/api/agent').at(-1).body.locale,'fi');
 assert.match(get('coach-response').innerHTML,/<div class="coach-prose"><p>[^<]+<\/p>/,'The factual response needs a readable paragraph boundary');
 assert.ok(get('coach-response').innerHTML.includes('225,70'),'Factual prose must use the selected locale');
 get('language').value='sv';get('language').listeners.change();await settle();assert.equal(document.documentElement.lang,'sv');
@@ -273,7 +276,7 @@ assert.ok(get('goal-submit').textContent.includes('Skapa'));
 assert.ok(get('safe-content').innerHTML.includes('€123.45'));assert.ok(get('safe-content').innerHTML.includes('€500.00'));
 assert.ok(get('investment-content').innerHTML.includes('€200.00'));assert.ok(get('investment-content').innerHTML.includes('€50.00'));
 assert.ok(get('vat-content').innerHTML.includes('mapping coverage'));assert.ok(get('vat-content').innerHTML.includes('Excise'));
-const originalFetch=globalThis.fetch;globalThis.fetch=async(url,options)=>{const path=new URL(url,'http://local').pathname;if(path==='/api/safe-to-spend')return {ok:true,json:async()=>({ok:true,data:{available:false,needs_history:true}})};if(path==='/api/investments')return {ok:false,status:503,json:async()=>({ok:false,error:{message:'Unavailable'}})};return originalFetch(url,options);};
+const originalFetch=globalThis.fetch;globalThis.fetch=async(url,options)=>{const path=new URL(url,'http://local').pathname;if(path==='/api/safe-to-spend')return {ok:true,json:async()=>({ok:true,data:offlineAnswer({available:false,needs_history:true},new URL(url,'http://local').pathname)})};if(path==='/api/investments')return {ok:false,status:503,json:async()=>({ok:false,error:{message:'Unavailable'}})};return originalFetch(url,options);};
 await app.load();assert.ok(get('safe-content').innerHTML.includes('history'));assert.ok(get('investment-content').innerHTML.includes('unavailable'));
 ''')
 
@@ -313,15 +316,15 @@ assert.ok(get('tax-plan-result').innerHTML.includes('€133.34'));assert.ok(get(
 calls.length=0;
 const taxi=get('directory-taxi');taxi.dataset.coachQuestion='coach.question.taxi';
 await documentListeners.click({target:taxi});await settle();
-const coachCall=calls.filter(item=>item.path==='/api/coach').at(-1);assert.ok(coachCall);assert.equal(coachCall.body.message,'How much did I spend on taxis last month?');
+const coachCall=calls.filter(item=>item.path==='/api/agent').at(-1);assert.ok(coachCall);assert.equal(coachCall.body.message,'How much did I spend on taxis last month?');
 get('language').value='sv';get('language').listeners.change();await settle();
 const tax=get('directory-tax');tax.dataset.coachQuestion='coach.question.taxRecords';await documentListeners.click({target:tax});await settle();
-assert.equal(calls.filter(item=>item.path==='/api/coach').at(-1).body.message,'Kontrollera uttryckliga skatteuppgifter den här månaden');
+assert.equal(calls.filter(item=>item.path==='/api/agent').at(-1).body.message,'Kontrollera uttryckliga skatteuppgifter den här månaden');
 const vehicle=get('directory-vehicle');vehicle.dataset.goalTemplate='vehicle';documentListeners.click({target:vehicle});
 assert.equal(app.state.view,'goals');assert.equal(get('goal-template').value,'vehicle');assert.ok(get('goal-name').value);assert.equal(get('goal-name').focused,true);
 const vat=get('directory-vat');vat.setAttribute('data-open-vat','');await documentListeners.click({target:vat});await settle();
 assert.equal(app.state.view,'coach');assert.equal(get('coach-view').hidden,false);
-assert.equal(calls.filter(item=>item.path==='/api/coach').at(-1).body.message,'Hur mycket moms ingår i mina köp?');
+assert.equal(calls.filter(item=>item.path==='/api/agent').at(-1).body.message,'Hur mycket moms ingår i mina köp?');
 ''')
 
     def test_persona_and_language_changes_clear_scoped_coach_evidence(self):
@@ -338,11 +341,11 @@ assert.equal(get('coach-debug').hidden,true);assert.equal(get('coach-debug-conte
 const originalFetch=globalThis.fetch;
 globalThis.fetch=async(url,options)=>{
  const path=new URL(url,'http://local').pathname;
- if(path==='/api/coach'){
+ if(['/api/agent','/api/coach'].includes(path)){
   const body=JSON.parse(options.body);
-  if(body.message==='transport')return {ok:true,json:async()=>({ok:true,data:{intent:'spending_adjustment',source:'deterministic',tool_kind:'spending_adjustment_preview',explanation_blocks:[{text:'Transport preview.'}],tool_result:{category:'Transportation',percent:'20',actual_total_cents:20000,adjustable_base_cents:15000,modeled_monthly_contribution_cents:3000,transaction_refs:['transport-row']}}})};
-  if(body.message==='tax')return {ok:true,json:async()=>({ok:true,data:{intent:'observed_tax_evidence',source:'deterministic',tool_kind:'observed_tax_evidence',explanation_blocks:[{text:'No explicit tax rows.'}],tool_result:{available:false,transaction_refs:[]}}})};
-  return {ok:true,json:async()=>({ok:true,data:{intent:'transaction_statistics',source:'deterministic',fallback_reason:'gemini_unavailable',tool_source:'local_statistics',tool_kind:'transaction_statistics',tool_fact_id:'taxi-fact',parameters:{period:'2026-09'},explanation_blocks:[{text:'Verified transport activity.'}],tool_result:{start:'2026-09-01',end:'2026-09-30',filters:{category:'Transportation'},outflow_total_cents:26680,transaction_count:6,average_outflow_cents:4447,largest_outflow:{amount_cents:6216,date:'2026-09-20'},transaction_refs:['taxi-row']}}})};
+  if(body.message==='transport')return {ok:true,json:async()=>({ok:true,data:offlineAnswer({intent:'spending_adjustment',source:'deterministic',tool_kind:'spending_adjustment_preview',explanation_blocks:[{text:'Transport preview.'}],tool_result:{category:'Transportation',percent:'20',actual_total_cents:20000,adjustable_base_cents:15000,modeled_monthly_contribution_cents:3000,transaction_refs:['transport-row']}},new URL(url,'http://local').pathname)})};
+  if(body.message==='tax')return {ok:true,json:async()=>({ok:true,data:offlineAnswer({intent:'observed_tax_evidence',source:'deterministic',tool_kind:'observed_tax_evidence',explanation_blocks:[{text:'No explicit tax rows.'}],tool_result:{available:false,transaction_refs:[]}},new URL(url,'http://local').pathname)})};
+  return {ok:true,json:async()=>({ok:true,data:offlineAnswer({intent:'transaction_statistics',source:'deterministic',fallback_reason:'gemini_unavailable',tool_source:'local_statistics',tool_kind:'transaction_statistics',tool_fact_id:'taxi-fact',parameters:{period:'2026-09'},explanation_blocks:[{text:'Verified transport activity.'}],tool_result:{start:'2026-09-01',end:'2026-09-30',filters:{category:'Transportation'},outflow_total_cents:26680,transaction_count:6,average_outflow_cents:4447,largest_outflow:{amount_cents:6216,date:'2026-09-20'},transaction_refs:['taxi-row']}},new URL(url,'http://local').pathname)})};
  }
  return originalFetch(url,options);
 };
@@ -385,7 +388,7 @@ window.SCoachHost={attach_modeled_contribution:()=>hostCalls++};
 globalThis.fetch=async(url,options)=>{
  const response=await originalFetch(url,options),path=new URL(url,'http://local').pathname;
  if(path==='/api/goals/link'){committed=true;throw new Error('Link response lost');}
- if(path==='/api/goals'&&options.method==='GET'&&committed)return {ok:true,json:async()=>({ok:true,data:{goals:[{id:'goal-a',name:'Saved',linked_scenarios:[scenario],modeled_scenario_contribution_cents:3785}]}})};
+ if(path==='/api/goals'&&options.method==='GET'&&committed)return {ok:true,json:async()=>({ok:true,data:offlineAnswer({goals:[{id:'goal-a',name:'Saved',linked_scenarios:[scenario],modeled_scenario_contribution_cents:3785}]},new URL(url,'http://local').pathname)})};
  return response;
 };
 await assert.rejects(()=>app.createGoal(),/Link response lost/);await app.createGoal();

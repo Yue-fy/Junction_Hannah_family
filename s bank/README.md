@@ -4,13 +4,15 @@ S-Coach is a mobile-first, desktop-adaptive financial coach for the Junction 202
 
 The prototype runs locally by default. It uses no real customer data, makes no payments or credit decisions, and requires no third-party package for its core flow.
 
-**Current status:** V2 has four primary pages—Home, Spending, Coach and Goals—with one spending ring, a full conversation page, title-only wishes and three guided customer stories. Coach now answers in prose first, keeps calculations behind supporting disclosures, and distinguishes everyday purchase plans from historical questions. It remains a local prototype; rendered desktop/mobile acceptance and live Gemini remain unverified. See the [conversation and logic audit](docs/CONVERSATION_REPAIR_ACCEPTANCE.md).
+**Current status:** V2 has four primary pages—Home, Spending, Coach and Goals—with one spending ring, a full conversation page, title-only wishes and three guided customer stories. WP1, WP2 and WP6 connect the tool-calling agent, bounded conversation history and mobile chat. Current Coach acceptance covers 375×812, 390×844 and 1280×800 in Chrome, including three exchanges, evidence and confirmation flows. A real three-turn DeepSeek smoke check passed on synthetic data. Broader usability, other browser engines and live Gemini generation remain unverified; see the [development log](docs/DEVELOPMENT_LOG.md).
 
-### Agent backend and conversation memory (WP1–WP2)
+### Agent chat (WP1, WP2 and WP6)
 
-`POST /api/agent` adds a function-calling backend for DeepSeek and Gemini with read-only calculation tools, a numeric provenance check and an automatic offline fallback. It accepts up to eight previous user/coach text messages, each at most 600 characters. Previous tool results are not replayed; the model calls tools again for fresh account facts. `/api/coach` and the current web conversation retain their existing behavior until WP6 connects the mobile agent chat.
+The Coach page calls `POST /api/agent`, a function-calling backend for DeepSeek and Gemini with read-only calculation tools, a numeric provenance check and an automatic offline fallback. It accepts up to eight previous user/coach text messages, each at most 600 characters. Previous tool results are not replayed; the model calls tools again for fresh account facts. Deterministic responses use the existing `/api/coach` renderer and calculation flows.
 
-The frontend request helper `createAPI(customerId).agent(message, {month, locale, conversation})` extracts only visible text from the matching customer/month/language, drops older messages and clips text without changing the displayed conversation. New-question and scope-change resets clear the source conversation. This helper is ready for the WP6 page integration; it does not persist transcripts.
+The frontend request helper `createAPI(customerId).agent(message, {month, locale, conversation})` extracts only visible text from the matching customer/month/language, drops older messages and clips text without changing the displayed conversation. New-chat and scope-change resets clear the source conversation. The page retains at most twenty exchanges and does not persist transcripts. Explicit preference declarations keep their local consent flow.
+
+Coach uses a compact account/month bar, a separately scrolling message area and a multiline composer above navigation. Enter sends; Shift+Enter adds a line. Agent responses show plain text, verified highlights/charts, expandable steps and transaction sources, and suggestions on the latest answer. Goal proposals open the editable planner; spending scenarios require a separate confirmation before saving. The mode line distinguishes an agent answer from offline coaching. The developer-only `/device-preview.html` includes 375×812, 390×844 and desktop presets.
 
 The server loads `s bank/.env` at startup without overriding existing shell variables. Configure `DEEPSEEK_API_KEY` and optionally `DEEPSEEK_MODEL` (default `deepseek-flash`). DeepSeek takes priority when its key is present; otherwise the agent uses `GEMINI_API_KEY` and `GEMINI_MODEL` (default `gemini-3-flash-preview`). This file is ignored by Git. Model selection is configurable, but another model's availability and latency must be verified against the same tool loop. No SDK or backend dependency is required.
 
@@ -39,7 +41,7 @@ The current information hierarchy is recorded in [EXPERIENCE_V2_PLAN.md](docs/EX
 <details>
 <summary>Earlier prototype screenshots — before the current redesign</summary>
 
-**These four images show the prior interface, captured on 14 November 2026. They do not show the V2 four-page layout, Coach page or wishes. No fresh browser capture of the redesign is claimed.** They are retained as historical project examples using synthetic data.
+**These four images show the prior interface, captured on 14 November 2026. They do not show the V2 four-page layout, Coach page or wishes.** They are retained as historical project examples using synthetic data; current WP6 browser verification is recorded separately in the development log.
 
 ### Earlier desktop overview
 
@@ -130,28 +132,28 @@ The JSON envelope contains `ok` and `data`. Health reports file presence as `dat
 | Connection refused | Keep the server terminal running and check its printed URL. |
 | Missing Kai persona | The database may be from an older import. Build to a new filename and start with that file. |
 
-## Optional Gemini configuration
+## Optional model configuration
 
-The guided demo works without an API key, subject to the known question limitations below. Gemini is optional and uses the Gemini API. Create or edit the ignored `s bank/.env` using the names in [.env.example](.env.example):
+The guided demo works without an API key, subject to the known question limitations below. Create or edit the ignored `s bank/.env` with the provider you intend to use:
 
 ```dotenv
-GEMINI_API_KEY=your-key
-GEMINI_MODEL=gemini-3-flash-preview
+DEEPSEEK_API_KEY=your-key
+DEEPSEEK_MODEL=deepseek-flash
+# Alternatively, omit the DeepSeek key and configure Gemini:
+# GEMINI_API_KEY=your-key
+# GEMINI_MODEL=gemini-3-flash-preview
 ```
 
-**The application does not automatically load `.env`.** Load your own trusted file into the shell before starting the server:
+The command-line server loads this file at startup. Existing shell variables take precedence. Restart after changing configuration:
 
 ```bash
-set -a
-. "./s bank/.env"
-set +a
 PYTHONPATH="s bank" python3 -m scoach \
   --db "s bank/var/scoach.sqlite3" --host 127.0.0.1 --port 8088
 ```
 
-Restart an already running server after changing environment configuration. `data.gemini_configured: true` in health only means configuration is present; it does not prove the key or remote model works. The latest local check had Gemini unconfigured. Live provider and arbitrary-language behavior remain unverified.
+Health configuration flags only mean credentials are present; they do not prove the remote model works. DeepSeek generation has passed the documented synthetic smoke checks. Gemini's last generation attempt was quota-blocked. Additional languages and broader conversational quality still need live evaluation.
 
-Never commit a real key. Gemini receives an allowlisted, minimized context—not customer/account IDs, raw ledger rows, transaction references, mortgage event notes, or unrestricted actions. It may select an intent and phrase cited nonnumeric copy; Python performs every financial calculation. A bounded failure returns a deterministic answer with a diagnostic fallback reason. Enabling Gemini does not add missing receipt items, holdings, verified tax liabilities, or unrestricted conversation memory.
+Never commit a real key. The agent receives sanitized conversation text and bounded tool results; local evidence references reopen transactions in the client. Python performs financial calculations, and the number checker rejects unsupported numeric tokens. A bounded failure returns a deterministic answer with a diagnostic fallback reason. Model access does not add missing receipt items, holdings, verified tax liabilities or unrestricted conversation memory.
 
 ## Tests
 
@@ -159,13 +161,16 @@ Never commit a real key. Gemini receives an allowlisted, minimized context—not
 PYTHONPATH="s bank" python3 -m unittest discover -s "s bank/tests" -v
 ```
 
-HTTP integration tests need permission to bind a local test port. JavaScript checks use Node.js and are skipped when it is unavailable. The optional real-browser suite needs an existing Playwright installation and Chrome; set `SCOACH_PLAYWRIGHT_PATH` to the absolute module path to include it. Otherwise that browser test is skipped. No package installation is needed for the core Python tests.
+HTTP integration tests need permission to bind a local test port. JavaScript checks use Node.js and are skipped when it is unavailable. No package installation is needed for the core Python tests. The current rendered chat test needs an existing Playwright installation and Chrome:
 
-Latest verification on 14 November 2026: **360 tests passed and one optional browser test skipped** out of 361 discovered. This includes planned-purchase intent and bounded price replies, natural-language tool summaries, retained actions and evidence scope, tax planning/liability separation, goal retry/link boundaries, title-only wishes and existing financial regressions. Independent source review found no remaining Critical/Important issues after repairs. JavaScript syntax and whitespace checks passed. Node-backed interaction tests use a minimal DOM, not a rendered browser. See the [conversation and logic audit](docs/CONVERSATION_REPAIR_ACCEPTANCE.md) for the current verification and remaining checks.
+```bash
+SCOACH_CHAT_PLAYWRIGHT_PATH="/absolute/path/to/node_modules/playwright" \
+  PYTHONPATH="s bank" python3 -m unittest discover -s "s bank/tests" -q
+```
 
-Before this redesign, an integration run passed 177 tests including the browser suite. That browser run and the four screenshots describe the earlier interface; they do not establish fresh rendered visual acceptance. A live Gemini call has not been verified.
+The chat test creates a temporary synthetic database, scripts agent responses at the HTTP boundary and exercises real layout, keyboard sending, pending state, suggestion history, exact evidence, confirmed scenario saving, editable goal proposals and scope resets. `SCOACH_SCREENSHOT_DIR` optionally saves rendered phone/desktop captures. The older pre-redesign browser flow is separately opted in with `SCOACH_PLAYWRIGHT_PATH`; it is not part of the current rendered chat acceptance.
 
-The browser tool's saved origin permission currently blocks a rendered walkthrough. The user can inspect the local app and device preview manually; no alternate browser route is used to bypass that permission. Browser usability and live Gemini validation remain separate from calculation/helper assertions.
+Latest WP6 verification on 15 November 2026: **417 tests passed and one older optional browser flow skipped**, out of 418 discovered, including the new rendered chat test. Details are in the [development log](docs/DEVELOPMENT_LOG.md). After the native browser-control tool became unreliable, the user authorized a temporary Playwright installation. It used existing Chrome without changing project dependencies. Real DeepSeek checks are separate from scripted browser and minimal-DOM tests; neither establishes general conversational quality or human usability.
 
 ## Try the demo
 
@@ -191,12 +196,12 @@ The safe-to-spend example uses the data reference date **2026-09-30**, a seven-d
 
 ## Known limitations
 
-- **Bounded language:** this is a defined financial-query experience, not unrestricted conversation. Supported merchant codes identify taxis, pharmacies and doctors; the data cannot reveal receipt items or specific brands. Empty merchant-code results mean no identified rows, not proof of no real-world spending.
-- **Dates and definitions:** supported months, ISO date ranges and relative months are resolved locally. Other expressions ask for clarification. Average per purchase is supported; average per calendar month is not currently calculated. Unsupported filters must not be silently dropped.
-- **Conversation scope:** follow-ups reuse a validated previous query, with customer/account checks and explicit reset. This is not long-term transcript memory or general reasoning over every earlier message.
+- **Bounded tools:** the agent can compose the available read-only calculations; offline coaching supports defined query patterns. Supported merchant codes identify taxis, pharmacies and doctors; the data cannot reveal receipt items or specific brands. Empty merchant-code results mean no identified rows, not proof of no real-world spending.
+- **Dates and definitions:** dates and filters must be supported by the selected calculation tool. The offline path resolves its supported month/range expressions locally and asks for clarification for unsupported definitions. Numeric provenance alone does not establish semantic correctness.
+- **Conversation scope:** the agent receives at most eight recent text messages, scoped to customer, month and language. Tool results are refreshed each request. The page retains twenty exchanges until reset; this is not long-term transcript memory. Offline follow-ups retain their bounded validated-query behavior.
 - **Personalization:** remembered preferences and notes are browser-local demo data, without real authentication. A shared browser can expose that profile. Only structured preferences guide current suggestions; free-form reflections are not sent as model instructions. Storage failures are disclosed, including failure to delete saved data.
 - **Data boundaries:** the source does not establish gross income tax, investment performance, individual holdings, current loan approval, or personal motivations. Forecasts and safe-to-spend remain planning estimates.
-- **Language and verification:** the interface supports EN/FI/SV and bounded offline query patterns. Free-form Chinese and additional query languages require configured Gemini and have not been validated live. Current human usability and browser verification must be recorded separately from automated tests.
+- **Language and verification:** the interface supports EN/FI/SV. Broader live query-language quality remains unverified with either provider. Human usability and native mobile keyboard/safe-area behavior require separate device checks.
 
 See the [40-turn customer acceptance guide](docs/USER_TEST_JOURNEYS.md) for expected definitions, clarifications, multi-turn behavior, privacy choices and useful next actions. Exact SQL sums alone cannot establish that the intended question was answered.
 

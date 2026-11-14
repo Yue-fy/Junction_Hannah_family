@@ -13,7 +13,7 @@
     .preset-list{display:grid;gap:8px}.preset{display:grid;grid-template-columns:1fr auto;gap:12px;text-align:left;border:1px solid var(--line);border-radius:11px;background:#17382a;padding:11px 12px;min-height:46px;cursor:pointer}.preset span:last-child{color:#a9c7b7;font-variant-numeric:tabular-nums}.preset[aria-pressed=true]{border-color:var(--accent);background:#1d4935;box-shadow:inset 3px 0 var(--accent)}
     .toggle-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:18px}.toggle{border:1px solid var(--line);border-radius:11px;background:#17382a;padding:10px;min-height:48px;cursor:pointer}.toggle[aria-pressed=true]{border-color:var(--accent);color:#bfffd6}.dev-note{font-size:12px;line-height:1.6;color:#bcd1c5;margin:22px 0 0;padding-top:18px;border-top:1px solid var(--line)}
     .workspace{min-width:0;display:grid;grid-template-rows:auto minmax(0,1fr)}.readout{display:flex;justify-content:space-between;gap:20px;align-items:center;padding:13px 22px;background:#102d21;border-bottom:1px solid var(--line);font-size:13px}.readout strong{font-variant-numeric:tabular-nums}.readout span{color:#bcd1c5}
-    .stage{position:relative;min-height:0;overflow:auto;padding:28px;display:flex;justify-content:center;align-items:flex-start;background-image:linear-gradient(#ffffff08 1px,transparent 1px),linear-gradient(90deg,#ffffff08 1px,transparent 1px);background-size:24px 24px}.frame-space{position:relative;flex:0 0 auto}.frame{position:absolute;top:0;left:50%;transform-origin:top center;background:#fff;border:1px solid #6d8b7b;border-radius:24px;overflow:hidden;box-shadow:0 22px 80px #0008}.frame[data-preset=desktop]{border-radius:12px}.frame iframe{display:block;width:100%;height:100%;border:0;background:#fff}
+    .stage{position:relative;min-height:0;overflow:auto;padding:28px;display:flex;justify-content:center;align-items:flex-start;background-image:linear-gradient(#ffffff08 1px,transparent 1px),linear-gradient(90deg,#ffffff08 1px,transparent 1px);background-size:24px 24px}.frame-space{position:relative;flex:0 0 auto}.frame{box-sizing:content-box;position:absolute;top:0;left:50%;transform-origin:top center;background:#fff;border:1px solid #6d8b7b;border-radius:24px;overflow:hidden;box-shadow:0 22px 80px #0008}.frame[data-preset=desktop]{border-radius:12px}.frame iframe{display:block;width:100%;height:100%;border:0;background:#fff}
     @media(max-width:760px){.layout{grid-template-columns:1fr}.controls{border-right:0;border-bottom:1px solid var(--line)}.preset-list{grid-template-columns:1fr 1fr}.stage{min-height:70vh}.readout{position:sticky;top:0;z-index:2}.dev-note{margin-top:16px}}
     @media(max-width:430px){.preset-list{grid-template-columns:1fr}.toggle-grid{grid-template-columns:1fr}.readout{align-items:flex-start;flex-direction:column;gap:3px}.stage{padding:18px}}
     @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important}}
@@ -31,6 +31,7 @@
         <div class="preset-list">
           <button class="preset" type="button" data-preset="small-phone" aria-pressed="false"><span>Small phone</span><span>320 × 568</span></button>
           <button class="preset" type="button" data-preset="compact-phone" aria-pressed="false"><span>Compact phone</span><span>375 × 667</span></button>
+          <button class="preset" type="button" data-preset="chat-phone" aria-pressed="false"><span>Tall compact</span><span>375 × 812</span></button>
           <button class="preset" type="button" data-preset="current-phone" aria-pressed="true"><span>Current compact</span><span>390 × 844</span></button>
           <button class="preset" type="button" data-preset="large-phone" aria-pressed="false"><span>Large phone</span><span>412 × 915</span></button>
           <button class="preset" type="button" data-preset="tablet" aria-pressed="false"><span>Tablet</span><span>768 × 1024</span></button>
@@ -58,6 +59,7 @@
     const PRESETS = Object.freeze({
       'small-phone': Object.freeze({label:'Small phone',width:320,height:568}),
       'compact-phone': Object.freeze({label:'Compact phone',width:375,height:667}),
+      'chat-phone': Object.freeze({label:'Tall compact',width:375,height:812}),
       'current-phone': Object.freeze({label:'Current compact',width:390,height:844}),
       'large-phone': Object.freeze({label:'Large phone',width:412,height:915}),
       'tablet': Object.freeze({label:'Tablet',width:768,height:1024}),

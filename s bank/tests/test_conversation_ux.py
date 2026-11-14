@@ -76,7 +76,7 @@ assert.ok(request.body.message.includes('movie'));assert.ok(request.body.message
 assert.ok(!('previous_query' in request.body));
 assert.equal(app.state.conversation.at(-1).message,'€20','The customer still sees the reply they typed');
 await select('CUST00676');await app.askCoach('€30');
-assert.equal(calls.filter(call=>call.path==='/api/coach').at(-1).body.message,'€30','A price must not continue another customer’s plan');
+assert.equal(calls.filter(call=>call.path==='/api/agent').at(-1).body.message,'€30','A price must not continue another customer’s plan');
 ''')
 
     def test_spending_ring_rows_use_the_same_consumption_filter_as_the_chart(self):

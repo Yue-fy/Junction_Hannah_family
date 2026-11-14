@@ -1,10 +1,11 @@
 import { createAPI } from './api.js';
 import { createState, selectPersona, money, escapeHTML as esc, dateLabel, eurosToCents, forecastRows, setFormattingLocale, shiftMonth, monthEnd, monthLabel } from './state.js';
-import { comparisonChart, trendChart, runwayChart, goalChart, configureCharts, spendingRing, categoryPalette, categoryIcon } from './charts.js';
+import { comparisonChart, trendChart, runwayChart, barChart, goalChart, configureCharts, spendingRing, categoryPalette, categoryIcon } from './charts.js';
 import { createI18n } from './i18n.js';
 import { createExperienceStore, suggestedMemory, ux, buildJournal } from './experience.js';
 import { spendingCategories, forecastSummary, toolScope, milestoneFor } from './presentation.js';
 import { coachNarrative } from './coach-narrative.js';
+import { agentTurnHTML } from './coach-chat.js';
 
 const state = createState();
 let api = createAPI(state.customerId);
@@ -21,6 +22,7 @@ let localStore=null;try{localStore=globalThis.localStorage||null;}catch{}
 function experience(){if(!experienceStores.has(state.customerId))experienceStores.set(state.customerId,createExperienceStore(localStore,state.customerId));return experienceStores.get(state.customerId);}
 const evidenceRegistry=new Map();let evidenceSequence=0;
 let memoryProposal=null, noteEditing=null, tourStep=0, coachSequence=0;
+let coachPending=null, coachTimer=null, agentProposal=null, actionSequence=0;
 function sourceButton(refs=[],scope={}){
   if(!refs.length)return '';
   const key='source-'+(++evidenceSequence);
@@ -77,13 +79,14 @@ function notify(message, retry=false) {
 }
 async function perform(button, action) {
   if(state.busy) return;
+  const operation=++actionSequence;
   const context=captureContext();
   state.busy=true;
   const original=button?.textContent;
   if(button){button.dataset.loadingLabel=original;button.disabled=true;button.textContent=t('loading.action');}
   try { await action(context); }
   catch(error){if(isCurrent(context)&&!(error instanceof StaleResponse))explainError(error);}
-  finally {if(isCurrent(context)){state.busy=false;if(button){button.disabled=false;if(button.dataset.loadingLabel&&button.textContent===t('loading.action'))button.textContent=original;delete button.dataset.loadingLabel;}}}
+  finally {if(isCurrent(context)&&operation===actionSequence){state.busy=false;if(button){button.disabled=false;if(button.dataset.loadingLabel&&button.textContent===t('loading.action'))button.textContent=original;delete button.dataset.loadingLabel;}}}
 }
 function openDialog(id) {
   if(id==='coach-dialog'){closeDialogs();navigate('coach');$('coach-input').focus();return;}
@@ -119,6 +122,7 @@ function renderHandoffProgress(pending){
   }
 }
 function clearScopedViews({preserveLoading=false}={}){
+  clearCoachPending(true);agentProposal=null;
   closeDialogs();clearFilter();clearHandoff();state.transactionEvidence=null;
   state.queryScope=null;state.conversation=[];memoryProposal=null;evidenceRegistry.clear();coachSequence++;
   if(!preserveLoading)for(const button of document.querySelectorAll('[data-loading-label]')){button.disabled=false;button.textContent=button.dataset.loadingLabel;delete button.dataset.loadingLabel;}
@@ -142,6 +146,7 @@ function navigate(view) {
   if(!['home','trends','coach','goals','journal'].includes(view))view='home';
   clearFilter();clearHandoff();
   state.view=view;
+  document.documentElement.setAttribute('data-current-view',view);
   for(const name of ['home','trends','coach','goals','journal']) $(name+'-view').hidden=name!==view;
   $('persona-panel').hidden=true;$('persona-button').setAttribute('aria-expanded','false');
   if(view==='journal')renderPersonalization();
@@ -154,8 +159,10 @@ function navigate(view) {
 function renderCoachContext(){
   const period=state.selectedMonth?monthLabel(state.selectedMonth):copy('Loading records','Ladataan tietoja','Läser in uppgifter');
   text('app-data-context',`${copy('Synthetic demo','Synteettinen demo','Syntetisk demo')} · ${names[state.customerId]} · ${period}`);
+  text('coach-scope-button',`${names[state.customerId]} · ${period}`);
+  $('coach-month').innerHTML=$('selected-month').innerHTML;$('coach-month').value=state.selectedMonth||'';
   $('coach-scope').innerHTML=`<strong>${esc(names[state.customerId]||'')} · ${esc(period)}</strong><p class="small-text">${esc(copy('One recorded account. Other accounts and household finances are not included.','Yksi kirjattu tili. Muut tilit ja kotitalouden talous eivät sisälly tietoihin.','Ett registrerat konto. Andra konton och hushållets ekonomi ingår inte.'))}</p>${state.overview?.latest_balance_date?`<p class="small-text">${esc(copy('Latest balance record','Viimeisin saldotieto','Senaste saldouppgift'))}: ${dateLabel(state.overview.latest_balance_date)}</p>`:''}`;
-  $('coach-empty').hidden=state.conversation.length>0;
+  $('coach-empty').hidden=state.conversation.length>0||Boolean(coachPending);
 }
 function renderHomeSnapshot(){
   const rows=(state.overview?.flows||[]).filter(row=>['fixed_obligation','flexible_essential','discretionary','needs_review'].includes(row.role));
@@ -621,6 +628,26 @@ async function submitTaxPlan(context=captureContext()){
 function clearCoachEvidence(turns=state.conversation){
   for(const turn of turns)for(const key of turn.evidenceKeys||[])evidenceRegistry.delete(key);
 }
+function agentTurn(id){
+  return state.conversation.find(turn=>turn.id===id&&turn.response.source==='agent'&&isCurrent(turn.context)&&turn.context.locale===i18n.locale);
+}
+function reviewAgentAction(turn,index){
+  const action=turn.response.actions?.[index],params=action?.params;
+  if(!params)return;
+  if(action.kind==='open_view'&&['home','trends','goals','coach'].includes(params.view)){navigate(params.view);return;}
+  if(action.kind==='create_goal'){
+    closeDialogs();navigate('goals');$('goal-planner').open=true;
+    $('goal-template').value='custom';$('goal-name').value=params.name;
+    $('goal-target').value=(params.target_cents/100).toFixed(2);$('goal-date').value=params.target_date;
+    $('goal-saved').value='0';$('goal-reserve').value='500';$('goal-target').focus();return;
+  }
+  if(action.kind==='save_scenario'){
+    const saved=turn.savedActions?.[index];if(saved){beginGoalHandoff(saved);return;}
+    agentProposal={turn,index,params:{name:params.name,category:params.category,percent:params.percent,month:params.month},context:turn.context};
+    text('agent-action-description',t('agent.scenarioReview',{category:categoryName(params.category),percent:params.percent,month:monthLabel(params.month)}));
+    text('agent-action-status','');openDialog('agent-action-dialog');
+  }
+}
 function configureCoachAction(turn,action){
   const {response,message,wish,declaredPreference}=turn;
   if(response.needs_clarification&&!['plan_tax','plan_goal'].includes(response.intent)&&!['affordability_context','inference_unavailable','exploratory_goal'].includes(response.clarification_code))return false;
@@ -634,7 +661,7 @@ function configureCoachAction(turn,action){
       action.onclick=()=>perform(action,async next=>{const preview=response.tool_result;const saved=await request(next,'post','/api/scenarios',{month:preview.start?.slice(0,7)||next.month,category:preview.category,percent:preview.percent,name:copy('My personal goal plan','Oma tavoitesuunnitelmani','Min personliga målplan'),confirmed:true});const focus=experience().load().focus,template=focus==='travel'?'trip':focus==='flexibility'?'custom':focus;beginGoalHandoff(saved.scenario||saved,template);});
     }
     else if(response.tool_kind==='three_basket_profile'){action.textContent=t('money.title')+' ↗';action.onclick=()=>{closeDialogs();navigate('trends');$('money-title').scrollIntoView({block:'start'});};}
-    else if(response.tool_kind==='observed_tax_evidence'||response.intent==='plan_tax'){action.textContent=t('taxPlan.title')+' ↗';action.onclick=()=>{$('coach-more').open=true;$('coach-tax').open=true;$('coach-tax').scrollIntoView({block:'start'});$('tax-plan-amount').focus();};}
+    else if(response.tool_kind==='observed_tax_evidence'||response.intent==='plan_tax'){action.textContent=t('taxPlan.title')+' ↗';action.onclick=()=>{openDialog('coach-context-dialog');$('coach-more').open=true;$('coach-tax').open=true;$('coach-tax').scrollIntoView({block:'start'});$('tax-plan-amount').focus();};}
     else if(response.intent==='preview_cashflow'||response.intent==='safe_to_spend'||response.intent==='investment_cashflow'){action.textContent=copy('See this calculation','Katso tämä laskelma','Visa denna beräkning')+' ↗';action.onclick=()=>{const details=$('coach-support-'+turn.id);details.open=true;details.scrollIntoView({block:'nearest'});};}
     else if(response.intent==='plan_goal'){action.textContent=(wish?t('v2.goal.explore'):t('v2.wish.save'))+' ↗';action.onclick=()=>{closeDialogs();navigate('goals');if(wish){$('wishes-list').scrollIntoView({block:'nearest'});return;}const focus=declaredPreference?.value,template=focus==='travel'?'trip':focus==='flexibility'?'custom':focus||'custom';$('wish-title').value=template==='custom'?message.slice(0,80):t('goal.template.'+template);$('wish-title').dataset.template=template;$('wish-title').focus();};}
     else if(response.intent==='home_financing_history'){action.textContent=t('v2.wish.home')+' ↗';action.onclick=()=>{closeDialogs();navigate('goals');$('wish-title').dataset.template='home';$('wish-title').value=t('goal.template.home');$('wish-title').focus();};}
@@ -643,27 +670,53 @@ function configureCoachAction(turn,action){
   if(hasAction){const invoke=action.onclick;action.onclick=(...args)=>{if(!isCurrent(turn.context)||turn.context.locale!==i18n.locale||!state.conversation.includes(turn))return;return invoke(...args);};}
   return hasAction;
 }
+function resizeCoachInput(){
+  const input=$('coach-input');input.style.height='auto';input.style.height=Math.min(112,Math.max(48,input.scrollHeight))+'px';
+}
+function scrollCoach(){ $('coach-end').scrollIntoView({block:'end'}); }
+function clearCoachPending(cancel=false){
+  if(coachTimer!==null){clearInterval(coachTimer);coachTimer=null;}
+  if(cancel&&coachPending){actionSequence++;state.busy=false;}
+  coachPending=null;text('coach-pending','');text('coach-live-status','');
+  $('coach-send').disabled=false;
+  if($('coach-send').dataset.loadingLabel){$('coach-send').textContent=$('coach-send').dataset.loadingLabel;delete $('coach-send').dataset.loadingLabel;}
+  $('coach-response').setAttribute('aria-busy','false');
+}
 async function askCoach(message,context=captureContext(),wish=null){
-  assertCurrent(context);if(state.view!=='coach')navigate('coach');const sequence=++coachSequence;text('coach-live-status',t('loading.coach'));$('coach-response').setAttribute('aria-busy','true');memoryProposal=null;
+  assertCurrent(context);if(coachPending)return;
+  closeDialogs();
+  if(state.view!=='coach')navigate('coach');
+  const sequence=++coachSequence;coachPending={sequence,context};memoryProposal=null;
+  $('coach-send').disabled=true;$('coach-response').setAttribute('aria-busy','true');
+  $('coach-pending').innerHTML=`<p class="coach-turn-user">${esc(message)}</p><div class="coach-typing" aria-hidden="true"><i></i><i></i><i></i></div>`;
+  let phase=0;text('coach-live-status',t('agent.looking'));
+  coachTimer=setInterval(()=>{phase++;text('coach-live-status',t(phase%2?'agent.calculating':'agent.looking'));},4500);
+  renderCoachContext();scrollCoach();
   try{
     const previousTurn=state.conversation.at(-1);
     const priceReply=message.trim().match(/^(?:(?:EUR|€)\s*)?(\d{1,6}(?:[.,]\d{1,2})?)(?:\s*(?:EUR|€|euros?))?[.!]?$/i);
     const continuingPurchase=priceReply&&previousTurn?.response?.clarification_code==='planned_purchase_cost'&&previousTurn.context&&isCurrent(previousTurn.context)&&previousTurn.context.locale===context.locale;
     const requestMessage=continuingPurchase?`${previousTurn.requestMessage||previousTurn.message}\nMy total budget is EUR ${priceReply[1].replace(',','.')}.`:message;
+    // Explicit preference declarations retain their local consent flow.
     const declaredPreference=suggestedMemory(message,context.locale);
-    let response=declaredPreference?{
+    const envelope=declaredPreference?{source:'deterministic'}:await context.api.agent(message,{month:context.month,locale:context.locale,conversation:state.conversation});
+    assertCurrent(context);if(context.locale!==i18n.locale||sequence!==coachSequence)return;
+    let response=envelope.source==='agent'?envelope:declaredPreference?{
       intent:declaredPreference.field==='focus'?'plan_goal':'preference_proposal',source:'local_preferences',needs_clarification:false,
       explanation_blocks:[{text:declaredPreference.field==='focus'?copy('A direction is enough to start. You can keep this as a wish without choosing an amount or deadline. Would you like to explore your spending first, or keep the wish for later?','Suunta riittää alkuun. Voit säilyttää tämän toiveena ilman summaa tai määräaikaa. Haluatko ensin tutkia menojasi vai säilyttää toiveen myöhemmäksi?','En riktning räcker för att börja. Du kan spara önskan utan belopp eller datum. Vill du utforska dina utgifter först eller spara önskan till senare?'):copy('You choose how your coach helps. Confirm the preference below to use it; nothing has been remembered yet.','Sinä päätät, miten valmentajasi auttaa. Vahvista toive alta, jos haluat käyttää sitä. Mitään ei ole vielä tallennettu.','Du väljer hur din coach hjälper. Bekräfta önskemålet nedan om du vill använda det. Inget har sparats ännu.')}],
-    }:await request(context,'post','/api/coach',{message:requestMessage,month:context.month,locale:context.locale,...(state.queryScope&&!continuingPurchase?{previous_query:state.queryScope}:{})});
-    response=await completeCoachAnswer(response,context);
+    }:(continuingPurchase||state.queryScope)?await request(context,'post','/api/coach',{message:requestMessage,month:context.month,locale:context.locale,...(state.queryScope&&!continuingPurchase?{previous_query:state.queryScope}:{})}):envelope.legacy;
+    if(!response)throw new Error(t('error.generic'));
+    if(response.source!=='agent')response=await completeCoachAnswer(response,context);
+    assertCurrent(context);
     if(context.locale!==i18n.locale||sequence!==coachSequence)return;
     state.queryScope=response.query_scope||null;
-    const paragraphs=coachNarrative(response,{locale:i18n.locale,money,dateLabel,monthLabel,categoryName,flowName,selectedMonth:context.month});
+    const paragraphs=response.source==='agent'?response.answer:coachNarrative(response,{locale:i18n.locale,money,dateLabel,monthLabel,categoryName,flowName,selectedMonth:context.month});
     const content=paragraphs.join(' ');
     state.conversation.push({id:String(sequence),context,requestMessage,wish,declaredPreference,message:wish?copy(`Explore my wish: ${wish.title}`,`Tutkitaan toivettani: ${wish.title}`,`Utforska min önskan: ${wish.title}`):message,response,paragraphs,content});clearCoachEvidence(state.conversation.splice(0,Math.max(0,state.conversation.length-20)));
     const coachingStyle=experience().load().style;
     clearCoachEvidence();
     $('coach-response').innerHTML=state.conversation.map((turn,index)=>{
+      if(turn.response.source==='agent')return agentTurnHTML(turn,{esc,t,charts:{barChart,trendChart,runwayChart},flowName,latest:index===state.conversation.length-1});
       const keysBefore=new Set(evidenceRegistry.keys());
       const result=turn.response.needs_clarification?'':toolResultHTML(turn.response);
       turn.evidenceKeys=[...evidenceRegistry.keys()].filter(key=>!keysBefore.has(key));
@@ -678,14 +731,14 @@ async function askCoach(message,context=captureContext(),wish=null){
     const scope=response.query_scope;
     if(scope)$('coach-response').insertAdjacentHTML('beforeend',`<p class="query-scope-caption">${esc(copy('Using','Käytössä','Använder'))}: ${dateLabel(scope.start)}–${dateLabel(scope.end)} · ${esc(scope.filters?.category?categoryName(scope.filters.category):scope.concept||u('spending.all'))}</p>`);
     const action=document.createElement('button');action.className='text-button';
-    if(configureCoachAction(state.conversation.at(-1),action)){$('coach-response').append(action);}
+    if(response.source!=='agent'&&configureCoachAction(state.conversation.at(-1),action)){$('coach-response').append(action);}
     const proposal=declaredPreference;
     if(proposal){memoryProposal={...proposal,customerId:context.customerId,generation:context.generation};$('coach-response').insertAdjacentHTML('beforeend',`<section class="memory-proposal"><h3>${esc(u('notebook.remember'))}</h3><p>${esc(proposal.text)}</p>${!experience().load().consent?`<label class="check-row"><input id="remember-consent" type="checkbox">${esc(u('personal.consent'))}</label><p class="small-text">${esc(u('personal.session'))}</p>`:''}<button type="button" class="secondary-button" data-confirm-memory>${esc(u('notebook.confirm'))}</button><button type="button" class="text-button" data-dismiss-memory>${esc(u('notebook.dismiss'))}</button></section>`);}
-    $('coach-response').insertAdjacentHTML('beforeend',`<div class="response-feedback"><span>${esc(copy('Did this help?','Oliko tästä apua?','Var detta till hjälp?'))}</span><button type="button" class="text-button" data-response-feedback="yes">${esc(copy('Yes','Kyllä','Ja'))}</button><button type="button" class="text-button" data-response-feedback="no">${esc(copy('Help me refine it','Tarkenna kysymystä','Hjälp mig precisera'))}</button><span id="response-feedback-message" role="status"></span></div>`);
-    text('coach-live-status','');$('coach-response').setAttribute('aria-busy','false');renderCoachContext();
-    text('coach-mode',t(response.source==='gemini'?'coach.aiMode':'coach.offlineMode'));
+    if(response.source!=='agent')$('coach-response').insertAdjacentHTML('beforeend',`<div class="response-feedback"><span>${esc(copy('Did this help?','Oliko tästä apua?','Var detta till hjälp?'))}</span><button type="button" class="text-button" data-response-feedback="yes">${esc(copy('Yes','Kyllä','Ja'))}</button><button type="button" class="text-button" data-response-feedback="no">${esc(copy('Help me refine it','Tarkenna kysymystä','Hjälp mig precisera'))}</button><span id="response-feedback-message" role="status"></span></div>`);
+    clearCoachPending();renderCoachContext();scrollCoach();
+    text('coach-mode',t(response.source==='agent'?'agent.mode':response.source==='gemini'?'coach.aiMode':'coach.offlineMode'));
     $('coach-debug').hidden=!new URLSearchParams(globalThis.location?.search||'').has('debug');text('coach-debug-content',`${t('coach.debug.source')}: ${response.source||'—'} · ${t('coach.debug.fallback')}: ${response.fallback_reason||t('coach.debug.none')} · ${t('coach.debug.tool')}: ${response.tool_source||response.tool_kind||'—'}`);
-  }catch(error){if(isCurrent(context)&&context.locale===i18n.locale&&sequence===coachSequence&&!(error instanceof StaleResponse)){text('coach-live-status',errorText(error)+' '+t('coach.fallback'));$('coach-response').setAttribute('aria-busy','false');const retry=document.createElement('button');retry.className='text-button';retry.textContent=t('action.retry');retry.onclick=()=>perform(retry,next=>askCoach(message,next,wish));$('coach-live-status').append(retry);}}
+  }catch(error){if(isCurrent(context)&&context.locale===i18n.locale&&sequence===coachSequence&&!(error instanceof StaleResponse)){clearCoachPending();renderCoachContext();text('coach-live-status',errorText(error)+' '+t('coach.fallback'));const retry=document.createElement('button');retry.className='text-button';retry.textContent=t('action.retry');retry.onclick=()=>perform(retry,next=>askCoach(message,next,wish));$('coach-live-status').append(retry);scrollCoach();}}
 }
 function unavailableAccount(error){explainError(error);text('current-balance','—');text('account-caption',t('error.account'));$('current-balance').classList.remove('skeleton');$('money-flow').innerHTML=`<p class="empty-state">${esc(t('error.database'))}</p>`;text('insight-headline',t('error.account'));if(!state.overview){$('home-baskets-content').innerHTML=`<p class="empty-state">${esc(t('support.unavailable'))}</p>`;$('spending-donut').innerHTML=`<p class="empty-state">${esc(t('support.unavailable'))}</p>`;$('spending-donut').setAttribute('aria-busy','false');}}
 async function load(context=captureContext()){
@@ -769,7 +822,24 @@ $('demo-button').addEventListener('click',()=>openDialog('demo-dialog'));
 for(const link of document.querySelectorAll('a.wordmark'))link.addEventListener('click',event=>{event.preventDefault();navigate('home');});
 $('goal-template').addEventListener('change',()=>{$('goal-name').value=$('goal-template').value==='custom'?'':t('goal.template.'+$('goal-template').value);});
 $('ask-coach').addEventListener('click',()=>openDialog('coach-dialog'));
-$('coach-form').addEventListener('submit',event=>{event.preventDefault();const message=$('coach-input').value.trim();if(message){perform(event.submitter,context=>{$('coach-input').value='';return askCoach(message,context);});}});
+$('coach-form').addEventListener('submit',event=>{event.preventDefault();const message=$('coach-input').value.trim();if(message&&!coachPending){return perform(event.submitter,context=>{$('coach-input').value='';resizeCoachInput();return askCoach(message,context);});}});
+$('coach-input').addEventListener('input',resizeCoachInput);
+$('coach-input').addEventListener('keydown',event=>{
+  if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing){event.preventDefault();if(!$('coach-send').disabled&&$('coach-input').value.trim())$('coach-form').requestSubmit($('coach-send'));}
+});
+$('coach-scope-button').addEventListener('click',()=>{renderCoachContext();openDialog('coach-context-dialog');});
+$('coach-month').addEventListener('change',()=>changePeriod($('coach-month').value));
+$('agent-action-form').addEventListener('submit',event=>{
+  event.preventDefault();const proposal=agentProposal;
+  if(!proposal||!agentTurn(proposal.turn.id))return;
+  return perform(event.submitter,async context=>{
+    const saved=await request(context,'post','/api/scenarios',{...proposal.params,confirmed:true});
+    const scenario=saved.scenario||saved;
+    proposal.turn.savedActions={...proposal.turn.savedActions,[proposal.index]:scenario};
+    if(agentProposal!==proposal)return;
+    agentProposal=null;closeDialogs();beginGoalHandoff(scenario);
+  });
+});
 $('tax-plan-form').addEventListener('submit',event=>{event.preventDefault();perform(event.submitter,submitTaxPlan);});
 $('undo-action').addEventListener('click',event=>perform(event.currentTarget,async context=>{await request(context,'post','/api/undo',{confirmed:true});state.scenario=null;state.exclusion=null;clearHandoff();await load(context);assertCurrent(context);if(!state.scenario)await ensureScenario(context);assertCurrent(context);renderScenario();notify(t('feedback.undo'));}));
 $('reset-demo').addEventListener('click',event=>perform(event.currentTarget,async context=>{
@@ -807,6 +877,9 @@ document.addEventListener('click',event=>{
     $('goal-planner').open=true;$('goal-name').value=wish.title;$('goal-template').value=wish.template;$('goal-target').focus();return;
   }
   if(button.hasAttribute('data-open-coach')){closeDialogs();openDialog('coach-dialog');$('coach-input').focus();return;}
+  if(button.dataset.agentEvidence){const turn=agentTurn(button.dataset.agentEvidence),item=turn?.response.evidence?.[Number(button.dataset.index)];if(item?.query)return perform(button,context=>showTransactions(item.query,context));return;}
+  if(button.dataset.agentAction){const turn=agentTurn(button.dataset.agentAction);if(turn)reviewAgentAction(turn,Number(button.dataset.index));return;}
+  if(button.dataset.agentSuggestion){const turn=agentTurn(button.dataset.agentSuggestion),message=turn?.response.suggestions?.[Number(button.dataset.index)];if(turn===state.conversation.at(-1)&&typeof message==='string')return perform(button,context=>askCoach(message,context));return;}
   if(button.dataset.directQuestion)return perform(button,context=>{openDialog('coach-dialog');return askCoach(button.dataset.directQuestion,context);});
   if(button.dataset.personalPlan)return perform(button,context=>{openDialog('coach-dialog');const category=categoryName(button.dataset.personalPlan);return askCoach(copy(`How much could I save if I reduced ${category} spending by 20%?`,`Kuinka paljon voisin säästää, jos vähennän ${category} 20 %?`,`Hur mycket kan jag spara om jag minskar ${category} med 20 %?`),context);});
   if(button.hasAttribute('data-open-notebook')){noteEditing=null;openNotebook();return;}
@@ -835,7 +908,7 @@ document.addEventListener('click',event=>{
   }
   if(button.hasAttribute('data-dismiss-memory')){memoryProposal=null;button.closest('.memory-proposal')?.remove();return;}
   if(button.dataset.responseFeedback){text('response-feedback-message',button.dataset.responseFeedback==='yes'?copy('Good. You choose the next step.','Hyvä. Sinä päätät seuraavan askeleen.','Bra. Du väljer nästa steg.'):copy('Tell me the category, dates, or meaning you want to change.','Kerro, mitä luokkaa, päivämääriä tai määritelmää haluat muuttaa.','Berätta vilken kategori, vilka datum eller vilken definition du vill ändra.'));if(button.dataset.responseFeedback==='no')$('coach-input').focus();return;}
-  if(button.hasAttribute('data-new-conversation')){clearCoachEvidence();state.queryScope=null;state.conversation=[];memoryProposal=null;coachSequence++;text('coach-response','');text('coach-live-status','');$('coach-response').setAttribute('aria-busy','false');$('coach-input').value='';renderCoachContext();$('coach-input').focus();return;}
+  if(button.hasAttribute('data-new-conversation')){clearCoachPending(true);agentProposal=null;clearCoachEvidence();state.queryScope=null;state.conversation=[];memoryProposal=null;coachSequence++;text('coach-response','');$('coach-input').value='';resizeCoachInput();text('coach-mode',t('coach.verified'));renderCoachContext();$('coach-input').focus();return;}
   if(button.dataset.view)navigate(button.dataset.view);
   if(button.dataset.coachQuestion)return perform(button,context=>askCoach(t(button.dataset.coachQuestion),context));
   if(button.dataset.coachGoalTemplate!==undefined){const target=button.dataset.coachGoalTemplate,concept={buffer:'an emergency buffer',home:'a home',vehicle:'a car',purchase:'a large purchase',custom:''}[target]||'';return perform(button,context=>askCoach(concept?copy(`I want to save for ${concept}.`,`Haluan säästää ${target==='buffer'?'hätävaraan':target==='home'?'kotiin':target==='vehicle'?'autoon':'hankintaan'}.`,`Jag vill spara till ${target==='buffer'?'en buffert':target==='home'?'ett hem':target==='vehicle'?'en bil':'ett stort köp'}.`):copy('I want to save but I do not know how much','Haluan säästää, mutta en tiedä kuinka paljon','Jag vill spara men vet inte hur mycket'),context));}
@@ -856,7 +929,7 @@ document.addEventListener('click',event=>{
 document.addEventListener('keydown',event=>{const segment=event.target.closest?.('[data-spending-category]');if(segment?.dataset?.spendingCategory&&segment.tagName?.toLowerCase()!=='button'&&['Enter',' '].includes(event.key)){event.preventDefault();selectSpending(segment.dataset.spendingCategory,segment);}});
 // Native dialogs provide Escape, focus trapping and restoration to the opener.
 for(const dialog of document.querySelectorAll('dialog')) dialog.addEventListener('click',event=>{if(event.target===dialog){const box=dialog.getBoundingClientRect();if(event.clientY<box.top||event.clientY>box.bottom||event.clientX<box.left||event.clientX>box.right)dialog.close();}});
-$('language').addEventListener('change',()=>{const retry=Boolean($('status-message').querySelector('button'));i18n.setLocale($('language').value);clearCoachEvidence();state.queryScope=null;state.conversation=[];memoryProposal=null;coachSequence++;text('coach-response','');text('coach-live-status','');$('coach-response').setAttribute('aria-busy','false');$('coach-input').value='';text('coach-debug-content','');$('coach-debug').hidden=true;$('tax-plan-result').replaceChildren();notify(retry?t('error.generic'):'',retry);applyLanguage();});
+$('language').addEventListener('change',()=>{clearCoachPending(true);agentProposal=null;const retry=Boolean($('status-message').querySelector('button'));i18n.setLocale($('language').value);clearCoachEvidence();state.queryScope=null;state.conversation=[];memoryProposal=null;coachSequence++;text('coach-response','');text('coach-live-status','');$('coach-response').setAttribute('aria-busy','false');$('coach-input').value='';resizeCoachInput();text('coach-debug-content','');$('coach-debug').hidden=true;$('tax-plan-result').replaceChildren();notify(retry?t('error.generic'):'',retry);applyLanguage();});
 $('selected-month').addEventListener('change',()=>changePeriod($('selected-month').value));
 $('trend-range').addEventListener('change',()=>changePeriod(state.selectedMonth,Number($('trend-range').value)));
 document.addEventListener('invalid',event=>event.target.setCustomValidity?.(t('error.validation')),true);

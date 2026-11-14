@@ -44,7 +44,7 @@ Exact statistics filters are combined with AND. MCC values must be four-digit st
 
 ## Coach
 
-### Tool-calling agent and text history (WP1–WP2)
+### Tool-calling agent, text history and chat client (WP1, WP2, WP6)
 
 `POST /api/agent` is a read-only route and does not require `confirmed`. It accepts the same common customer/account/month fields as `/api/coach`, plus:
 
@@ -64,7 +64,9 @@ The agent converts historical `user` / `coach` roles into provider `user` / `mod
 
 The frontend exposes `createAPI(customerId).agent(message, {month, locale, conversation})`. It derives the history from existing conversation records, filters customer/month/language mismatches, sends the last eight visible user/coach messages and clips each to 600 Unicode code points. It never serializes transaction references, charts, structured responses or internal state. The currently displayed transcript is left intact. Existing new-question, persona/month and language resets clear the source history; the helper stores no additional copy.
 
-Agent requests have a 40-second client timeout to accommodate the 25-second server budget. Other requests retain their 10-second default; `get` and `post` accept an optional `{timeout}` override. WP6 will connect this helper to `askCoach` together with the agent response renderer and existing stale-response guards. Until then, the visible page continues using `/api/coach`, whose request contract is unchanged.
+Agent requests have a 40-second client timeout to accommodate the 25-second server budget. Other requests retain their 10-second default; `get` and `post` accept an optional `{timeout}` override. The page's `askCoach` uses this helper, retains twenty exchanges and checks customer/generation/language/sequence before rendering. Explicit preference declarations remain local. A deterministic envelope uses `legacy` through the existing renderer; offline follow-ups that need `previous_query` or a planned-purchase continuation use the unchanged `/api/coach` request contract after fallback.
+
+The client escapes all agent text, permits bold within plain paragraphs and derives charts only from the returned `chart.series`. Evidence buttons reopen the exact server query in the existing transaction view. `create_goal` fills the editable goal form without a POST; `save_scenario` opens a separate review dialog and sends the exact proposed category, percent and month only after confirmation. `open_view` is limited to the four primary views. Actions and suggestions are bound to their retained conversation turn and become inert after a scope reset.
 
 The response `data` contains:
 

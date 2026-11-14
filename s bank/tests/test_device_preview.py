@@ -24,6 +24,7 @@ class DevicePreviewTests(unittest.TestCase):
         expected = {
             "small-phone": (320, 568),
             "compact-phone": (375, 667),
+            "chat-phone": (375, 812),
             "current-phone": (390, 844),
             "large-phone": (412, 915),
             "tablet": (768, 1024),
@@ -77,9 +78,10 @@ class DevicePreviewTests(unittest.TestCase):
         assert.deepEqual(preview.dimensionsFor('current-phone', false), {{width:390,height:844}});
         assert.deepEqual(preview.dimensionsFor('current-phone', true), {{width:844,height:390}});
         assert.deepEqual(preview.dimensionsFor('tablet', false), {{width:768,height:1024}});
+        assert.deepEqual(preview.dimensionsFor('chat-phone', false), {{width:375,height:812}});
         assert.equal(preview.fitScale(390, 844, 390, 844, false), 1);
         assert.equal(preview.fitScale(390, 844, 195, 422, true), 0.5);
-        assert.equal(Object.keys(preview.PRESETS).length, 6);
+        assert.equal(Object.keys(preview.PRESETS).length, 7);
         """
         executed = subprocess.run(
             ["node", "--input-type=module", "--eval", harness],
