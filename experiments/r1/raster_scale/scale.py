@@ -184,7 +184,7 @@ def estimate_area(path: str, target: str = "apartment") -> dict | None:
     }
 
 
-def printed_areas(path: str, backend: str = "local") -> list[dict]:
+def printed_areas(path: str, backend: str = "local", rotate: bool = True) -> list[dict]:
     """Areas printed on the plan ('12,5 m²', '3h+k+s 85 m2') with image-px boxes: ONE local VLM call (cached).
 
     When the plan prints the asked area, that number is the answer (exact) and its box is the evidence; the door
@@ -205,6 +205,34 @@ def printed_areas(path: str, backend: str = "local") -> list[dict]:
     r = llm.chat(PROMPT, images=[upscale(img)], backend=backend, max_tokens=600, max_pixels=6_000_000, cache=True,
                  extra_body={"repetition_penalty": 1.05})
     items = parse(r.text, *img.size)
+    if not items and rotate:
+        # No area with a unit. Finnish plans often print bare numbers ('MH 11.7'), and sideways plans print rotated
+        # text the reader misses (R1 8i, plan -1191). Candidates: the same reply read unit-less, and the image turned
+        # 90 deg each way (2 more cached calls); keep the orientation that yields the most areas. A tie goes to the
+        # turned image: on an upright plan the sideways view reads fewer numbers, so a tie means rotated text (-1191:
+        # upright 6 items with misreads 6.1/22.5, turned 6 items 8.1/22.8 as printed).
+        # Items get unitless=True so callers can lower confidence.
+        W, H = img.size
+        upright = parse(r.text, W, H, unitless=True)
+        for it in upright:
+            it["rotated"] = 0
+        best = []
+        for tr in (Image.ROTATE_270, Image.ROTATE_90):
+            r2 = llm.chat(PROMPT, images=[upscale(img.transpose(tr))], backend=backend, max_tokens=600,
+                          max_pixels=6_000_000, cache=True, extra_body={"repetition_penalty": 1.05})
+            its = parse(r2.text, H, W, unitless=True)
+            for it in its:
+                u0, v0, u1, v1 = it["box"]
+                it["box"] = ([v0, H - 1 - u1, v1, H - 1 - u0] if tr == Image.ROTATE_270
+                             else [W - 1 - v1, u0, W - 1 - v0, u1])
+                it["rotated"] = 270 if tr == Image.ROTATE_270 else 90
+            if len(its) > len(best):
+                best = its
+        if len(upright) > len(best):
+            best = upright
+        for it in best:
+            it["unitless"] = True
+        items = best
     npz = ART / "cc5k_seg" / f"{Path(path).stem}.npz"
     if npz.exists():
         import numpy as np
