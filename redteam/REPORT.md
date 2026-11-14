@@ -502,6 +502,13 @@ Ad hoc on night 753eccb: "How many kitchens are on this floor?" → 10 ('kitchen
 floor?" → the whole storey 870 m² at 0.30 (PESUKODA = laundry not mapped). W1's cross-language label mapping holds and
 says which labels it used — good material for the demo.
 
+## v13 (05:17): the Swiss demo plan handed over alone (no DXF), as PDF or PNG — 8 Qs (ad hoc on night 753eccb)
+- **PDF alone: 4/4** via `pdf_vector` (doors 36 at 0.99 "identified by path shape/style", apartments 4, apartment B
+  80.83 at 0.80, bathtubs 4) — the vector path does not need the DXF. (Its apartment note still says "on DXF layer
+  ROOM_TEXT", which is not what happened for a PDF-only file — cosmetic, W2.)
+- **PNG alone: 1/4**, mostly honest: doors 14 and bathtubs 2 at 0.12, apartments 4 at 0.75 ✓, but **apartment B →
+  16.78 m² at 0.75 with no assumption** — the area of one room (2.10 'Zimmer'), not the apartment (W3, raster).
+
 ## Pre-merge check (05:07): night 753eccb + W1 1c43c57 + W2 2254acb + W4 f889ace (scratch snapshot)
 All 440 rows, run `20261114-050528-pipeline-questions-98f0` vs night's `93c5`: **0 answers lost**; core 283 rows 96.5 %
 (=), 189/189 right at ≥ 0.8, 0/24 false premises; all 440: 91.7 % scored, 237/247 right at ≥ 0.8, $0.073 per 1,000.
@@ -518,8 +525,8 @@ Italian ×3, floors = 7, 7th floor ×2; W2: one-floor "whole building" ×3).
 - Rotated, grayscale, heavily compressed and half-resolution copies of a plan: 30/30 right, at the same confidence.
 
 ## Re-run
-`questions.jsonl` now has 455 rows: v1 (174) + v2 (31) + v3 Swiss compositions (42) + v4 CubiCasa compositions (36) +
-v5 natural references (70) + v6 judge questions on the demo drawings (21) + v7 scope words in 9 languages (36) + v8 scope premises (8) + v9 Finnish judge (14) + v10 scan follow-ups (8) + v11 number formats (10) + v12 Estonian labels (5) = 455; earlier rows are byte-identical across builds (checked with cmp), so runs on the first 205 /
+`questions.jsonl` now has 463 rows: v1 (174) + v2 (31) + v3 Swiss compositions (42) + v4 CubiCasa compositions (36) +
+v5 natural references (70) + v6 judge questions on the demo drawings (21) + v7 scope words in 9 languages (36) + v8 scope premises (8) + v9 Finnish judge (14) + v10 scan follow-ups (8) + v11 number formats (10) + v12 Estonian labels (5) + v13 lone PDF/PNG (8) = 463; earlier rows are byte-identical across builds (checked with cmp), so runs on the first 205 /
 283 rows compare directly (`python3 $JUNCTION_SHARED/artifacts/Q/subset_stats.py <run> 283`). Build with
 `PYTHONHASHSEED=0 PYTHONPATH=.`; v5 calls the ifc solver for its gold (deterministic, < 1 s per row).
 ```
