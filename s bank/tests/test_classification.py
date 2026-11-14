@@ -6,10 +6,28 @@ class ClassificationTests(unittest.TestCase):
         for kind in ('investment_deposit','investment_withdrawal','salary_sweep'):
             self.assertEqual(classify({'transaction_type':kind,'category':'Other'})['role'],'saving_or_transfer')
         self.assertEqual(classify({'transaction_type':'salary','category':'Salary'})['role'],'income')
-        self.assertEqual(classify({'transaction_type':'purchase','category':'Groceries'})['literacy_label'],'irregular essentials')
         self.assertEqual(classify({'transaction_type':'mystery','category':'Unknown'})['role'],'needs_review')
         c=classify({'transaction_type':'purchase','category':'Restaurants'}, {'role':'fixed_obligation','label':'Tax','provenance':'user'})
         self.assertEqual(c['literacy_label'],'regular essentials'); self.assertEqual(c['source'],'user')
+
+    def test_source_categories_follow_the_partner_three_basket_definition(self):
+        for category in ('Groceries', 'Transportation'):
+            with self.subTest(category=category):
+                result = classify({'transaction_type': 'purchase', 'category': category})
+                self.assertEqual(result['role'], 'fixed_obligation')
+                self.assertEqual(result['literacy_label'], 'regular essentials')
+
+        for category in ('Health', 'Home & Tech'):
+            with self.subTest(category=category):
+                result = classify({'transaction_type': 'purchase', 'category': category})
+                self.assertEqual(result['role'], 'flexible_essential')
+                self.assertEqual(result['literacy_label'], 'irregular essentials')
+
+        for category in ('Restaurants', 'Entertainment', 'Lifestyle', 'Travel'):
+            with self.subTest(category=category):
+                result = classify({'transaction_type': 'purchase', 'category': category})
+                self.assertEqual(result['role'], 'discretionary')
+                self.assertEqual(result['literacy_label'], 'everyday discretionary')
 
     def test_transfer_cannot_be_misrepresented_as_consumption_by_role_override(self):
         result=classify({'transaction_type':'investment_deposit','category':'Invest Deposit'}, {'role':'discretionary','provenance':'user'})

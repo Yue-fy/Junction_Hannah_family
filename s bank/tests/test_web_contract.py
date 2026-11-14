@@ -48,6 +48,38 @@ class WebContractTests(unittest.TestCase):
                 self.assertTrue(attrs.get('id') in labels or attrs.get('aria-label'), attrs)
         self.assertNotIn('@import', self.read('styles.css'))
 
+    def test_adaptive_controls_and_supporting_cards_are_semantic(self):
+        doc = Document(self.read('index.html'))
+        ids = {attrs.get('id'): (tag, attrs) for tag, attrs in doc.elements}
+        for identifier in ('language', 'selected-month', 'trend-range', 'safe-card', 'investment-card', 'vat-card', 'vat-content'):
+            self.assertIn(identifier, ids)
+        self.assertTrue(ids['selected-month'][0] == 'select' or ids['selected-month'][1].get('type') == 'month')
+        self.assertTrue(any(tag == 'svg' and attrs.get('data-brand') == 'coach-step' for tag, attrs in doc.elements), 'Use an original coach mark')
+
+    def test_coach_directory_tax_planner_and_free_text_are_semantic(self):
+        doc = Document(self.read('index.html'))
+        ids = {attrs.get('id'): (tag, attrs) for tag, attrs in doc.elements}
+        for identifier in (
+            'coach-topics', 'coach-spending', 'coach-cashflow', 'coach-investing',
+            'coach-goals', 'coach-home-vehicle', 'coach-tax', 'tax-plan-form',
+            'tax-plan-amount', 'tax-plan-saved', 'tax-plan-date',
+            'tax-plan-location', 'tax-plan-result', 'coach-form', 'coach-input',
+        ):
+            self.assertIn(identifier, ids)
+        labels = {attrs.get('for') for tag, attrs in doc.elements if tag == 'label'}
+        for identifier in ('tax-plan-amount', 'tax-plan-saved', 'tax-plan-date', 'tax-plan-location', 'coach-input'):
+            self.assertIn(identifier, labels)
+        self.assertEqual(ids['tax-plan-form'][0], 'form')
+        self.assertEqual(ids['coach-form'][0], 'form')
+        self.assertIn('hidden', ids['coach-home-history'][1], 'Mortgage history must stay hidden until availability is verified')
+        self.assertTrue(any(tag == 'option' and attrs.get('value') == 'CUST01331' for tag, attrs in doc.elements))
+
+    def test_vat_lens_is_data_backed_and_transaction_level(self):
+        source = self.read('app.js')
+        for token in ('/api/vat', 'estimated_vat_cents', 'rate_basis_points', 'rate_source', 'mapping_quality', 'mapping_note', 'limitations', 'comparison_transaction_refs'):
+            self.assertIn(token, source)
+        self.assertIn('vat', self.read('state.js'))
+
     def node_module(self, name, body):
         if not shutil.which('node'):
             self.skipTest('Node is not installed')
@@ -58,43 +90,47 @@ class WebContractTests(unittest.TestCase):
 
     def node_app(self, body):
         """Execute the real app with a small DOM boundary and scoped API fixtures."""
-        sources = {name: self.read(name) for name in ('app.js', 'api.js', 'state.js', 'charts.js')}
+        sources = {name: self.read(name) for name in ('app.js', 'api.js', 'state.js', 'charts.js', 'i18n.js')}
         harness = r'''
 import assert from 'node:assert/strict';
 const elements = new Map(), documentListeners = {}, calls=[];
 class Element {
- constructor(id=''){this.id=id;this.textContent='';this.innerHTML='';this.value='';this.hidden=false;this.disabled=false;this.open=false;this.dataset={};this.listeners={};this.attributes={};this.classList={remove(){}};}
+ constructor(id=''){this.id=id;this.textContent='';this.innerHTML='';this.value='';this.hidden=false;this.disabled=false;this.open=false;this.dataset={};this.listeners={};this.attributes={};this.children=[];this.classList={remove(){}};}
  addEventListener(name,callback){this.listeners[name]=callback;}
  setAttribute(name,value){this.attributes[name]=value;}
  removeAttribute(name){delete this.attributes[name];}
  hasAttribute(name){return name in this.attributes;}
- replaceChildren(...children){this.textContent=children.map(x=>typeof x==='string'?x:x.textContent||'').join('');}
- append(child){this.textContent+=typeof child==='string'?child:child.textContent||'';}
- prepend(){} focus(){} scrollIntoView(){} insertAdjacentHTML(){} remove(){}
+ replaceChildren(...children){this.children=[...children];this.textContent=children.map(x=>typeof x==='string'?x:x.textContent||'').join('');this.innerHTML='';}
+ append(child){this.children.push(child);this.textContent+=typeof child==='string'?child:child.textContent||'';}
+ prepend(){} focus(){this.focused=true;} scrollIntoView(){this.scrolled=true;} insertAdjacentHTML(_position,html){this.innerHTML+=html;} remove(){}
  querySelector(selector){if(selector==='.dialog-notice')return null;return this;}
  showModal(){this.open=true;} close(){this.open=false;}
  closest(){return this;}
 }
 const get=id=>{if(!elements.has(id))elements.set(id,new Element(id));return elements.get(id);};
-globalThis.document={getElementById:get,createElement:()=>new Element(),createTextNode:value=>({textContent:value}),addEventListener:(name,cb)=>documentListeners[name]=cb,querySelectorAll:selector=>selector==='dialog[open]'?[...elements.values()].filter(x=>x.open):[]};
+globalThis.document={documentElement:new Element('html'),getElementById:get,createElement:()=>new Element(),createTextNode:value=>({textContent:value}),addEventListener:(name,cb)=>documentListeners[name]=cb,querySelectorAll:selector=>selector==='dialog[open]'?[...elements.values()].filter(x=>x.open):[]};
 globalThis.window={scrollTo(){}};
 const comparison={customer_id:'CUST00001',account_id:'ACC000001',current:{start:'2026-09-01',end:'2026-09-30',total_cents:22570,count:10,average_cents:2257,transaction_refs:['restaurant-current']},previous:{start:'2026-08-01',end:'2026-08-31',total_cents:11543,count:10,average_cents:1154,transaction_refs:['restaurant-previous']},delta_cents:11027,count_delta:0,fact_id:'restaurant-fact'};
 const scenario={id:'scenario-a',customer_id:'CUST00001',category:'Restaurants',adjustable_base_cents:18923,monthly_contribution_cents:3785,excluded_transaction_refs:['restaurant-one-off']};
 let pending=null;
 function fixture(path,customer){
- if(path==='/api/overview')return {customer_id:customer,account_id:customer==='CUST00001'?'ACC000001':'ACC000676',latest_balance_cents:10000,latest_balance_date:'2026-09-30',flows:[],scenarios:[]};
+ if(path==='/api/overview')return {customer_id:customer,account_id:customer==='CUST00001'?'ACC000001':'ACC000676',month:'2026-09',observed_start:'2024-10-03',observed_end:'2026-09-30',latest_balance_cents:10000,latest_balance_date:'2026-09-30',flows:[],scenarios:[]};
  if(path==='/api/comparison')return {...comparison,customer_id:customer};
  if(path==='/api/transactions')return {transactions:[{transaction_ref:'restaurant-one-off',category:'Restaurants',date:'2026-09-10',amount_cents:-3647}]};
  if(path==='/api/scenarios'||path==='/api/scenarios/exclude')return {scenario};
  if(path==='/api/goals/link')return {goal:{id:'goal-a'},host_action:{goal_ref:'goal-a',scenario_ref:'scenario-a',cents:3785}};
  if(path==='/api/goals')return {goals:[]};
- if(path==='/api/coach')return {intent:'explain_change',explanation_blocks:[{text:'OLD CUSTOMER RESPONSE',fact_ids:['restaurant-fact']}],source:'deterministic'};
+ if(path==='/api/coach')return {intent:'explain_change',selected_candidate_id:'restaurant_change',explanation_blocks:[{text:'OLD CUSTOMER RESPONSE',fact_ids:['restaurant-fact']}],source:'deterministic'};
  if(path==='/api/forecast')return {customer_id:customer,observed:[],projected:[],recurring_items:[],assumptions:[]};
+ if(path==='/api/safe-to-spend')return {customer_id:customer,available:true,horizon_days:7,horizon_end:'2026-10-07',safe_to_spend_cents:12345,reserve_floor_cents:50000,scheduled_outflows_cents:12000,historical_flexible_buffer_cents:3456,transaction_refs:[],fact_id:'safe-fact'};
+ if(path==='/api/investments')return {customer_id:customer,total_contributions_cents:20000,withdrawals_cents:5000,contribution_months:4,period_months:12,months:[],transaction_refs:[],fact_id:'investment-fact'};
+ if(path==='/api/vat')return {customer_id:customer,start:'2026-09-01',end:'2026-09-30',gross_spending_cents:187866,estimated_vat_cents:21238,coverage_basis_points:10000,transactions:[],by_rate:[],transaction_refs:[],fact_id:'vat-fact',limitations:['server limitation evidence']};
+ if(path==='/api/tax-plan')return {amount_cents:90000,already_set_aside_cents:10000,remaining_cents:80000,due_date:'2027-03-31',reference_date:'2026-09-30',remaining_monthly_periods:6,required_monthly_set_aside_cents:13334,current_balance_cents:10000,reserve_floor_cents:50000,available_after_full_set_aside_cents:0,upfront_funding_gap_cents:90000,source:'user_declared',scenario:true,observed:false,not_tax_advice:true,persistence:'not_saved',scenario_id:'tax-plan'};
  return {};
 }
 globalThis.fetch=async(url,options)=>{
  const parsed=new URL(url,'http://local'), body=options.body?JSON.parse(options.body):{};
- const customer=body.customer_id||parsed.searchParams.get('customer_id');calls.push({path:parsed.pathname,customer,body});
+ const customer=body.customer_id||parsed.searchParams.get('customer_id');calls.push({path:parsed.pathname,customer,body,query:Object.fromEntries(parsed.searchParams)});
  let data=fixture(parsed.pathname,customer);
  if(parsed.pathname==='/api/goals'&&options.method==='POST')data={goal:{id:'goal-a',name:body.name}};
  if(pending&&pending.path===parsed.pathname&&!pending.used){const held=pending;held.used=true;held.startedResolve();await held.gate;}
@@ -102,7 +138,7 @@ globalThis.fetch=async(url,options)=>{
 };
 const dataURL=source=>'data:text/javascript;base64,'+Buffer.from(source).toString('base64');
 let source=sources['app.js'].replace(/from ['"]\.\/([^'"]+)['"]/g,(_,file)=>'from "'+dataURL(sources[file])+'"');
-source=source.slice(0,source.lastIndexOf('\nload();'))+'\nexport {state,ensureScenario,showStory,showTransactions,markOneOff,createGoal,loadGoals,askCoach,calculationHTML,load};';
+source=source.slice(0,source.lastIndexOf('\nload();'))+'\nexport {state,ensureScenario,showStory,showTransactions,markOneOff,createGoal,loadGoals,askCoach,calculationHTML,load,toolResultHTML,submitTaxPlan};';
 const app=await import(dataURL(source));
 const settle=async()=>{for(let i=0;i<8;i++)await new Promise(resolve=>setImmediate(resolve));};
 async function select(customer){get('persona').value=customer;get('persona').listeners.change();await settle();}
@@ -192,6 +228,120 @@ assert.deepEqual(app.state.goals,[],'A pre-reset load restored removed goals');a
 assert.ok(sequenceDuringRefresh>oldSequence,'Reset must preserve monotonic request sequencing');assert.equal(busyDuringRefresh,true,'Reset must remain busy through its refresh');assert.equal(app.state.busy,false);
 ''')
 
+    def test_period_controls_scope_all_requests_and_discard_old_range_results(self):
+        self.node_app(r'''
+assert.equal(app.state.selectedMonth,'2026-09');assert.equal(get('selected-month').min,'2024-10');assert.equal(get('selected-month').max,'2026-09');
+const held=hold('/api/trends');const old=app.load();await held.started;
+get('selected-month').value='2026-08';get('selected-month').listeners.change();await settle();
+get('trend-range').value='6';get('trend-range').listeners.change();await settle();
+const currentTrend=app.state.trends;held.release();await old;await settle();
+assert.equal(app.state.selectedMonth,'2026-08');assert.equal(app.state.trendMonths,6);assert.equal(app.state.trends,currentTrend,'Old range response replaced the selected period');
+await app.showTransactions();await app.ensureScenario();await app.askCoach('Explain the change');
+assert.equal(calls.filter(c=>c.path==='/api/comparison').at(-1).query.comparison_month,'2026-07');
+for(const path of ['/api/overview','/api/comparison','/api/transactions','/api/trends','/api/investments'])assert.equal(calls.filter(c=>c.path===path).at(-1).query.month,'2026-08',path);
+assert.equal(calls.filter(c=>c.path==='/api/trends').at(-1).query.months,'6');
+assert.equal(calls.filter(c=>c.path==='/api/scenarios').at(-1).body.month,'2026-08');
+assert.equal(calls.filter(c=>c.path==='/api/coach').at(-1).body.month,'2026-08');
+const safe=calls.filter(c=>c.path==='/api/safe-to-spend').at(-1);assert.equal(safe.query.as_of,'2026-08-31');assert.equal(safe.query.reserve_floor_cents,'50000');
+assert.ok(!get('story-description').textContent.includes('September'));
+''')
+
+    def test_language_controls_format_dynamic_ui_and_scope_offline_coach_locale(self):
+        self.node_app(r'''
+get('language').value='fi';get('language').listeners.change();await settle();
+assert.equal(document.documentElement.lang,'fi');assert.ok(get('scenario-amount').innerHTML.includes('€')||!app.state.scenario);
+assert.ok(get('selected-month').innerHTML.includes('syyskuu 2026'),'Month choices must follow product locale, independent of the OS');
+await app.ensureScenario();assert.ok(get('scenario-amount').innerHTML.includes('37,85'));assert.ok(get('scenario-detail').textContent.includes('20'));
+await app.askCoach('Mikä muuttui?');assert.equal(calls.filter(c=>c.path==='/api/coach').at(-1).body.locale,'fi');
+assert.ok(get('coach-response').textContent.includes('RESPONSE\n'),'Coach explanation and action need a text boundary');
+get('language').value='sv';get('language').listeners.change();await settle();assert.equal(document.documentElement.lang,'sv');
+assert.ok(get('goal-submit').textContent.includes('Skapa'));
+''')
+
+    def test_supporting_cards_use_server_values_and_have_unavailable_states(self):
+        self.node_app(r'''
+assert.ok(get('safe-content').innerHTML.includes('€123.45'));assert.ok(get('safe-content').innerHTML.includes('€500.00'));
+assert.ok(get('investment-content').innerHTML.includes('€200.00'));assert.ok(get('investment-content').innerHTML.includes('€50.00'));
+assert.ok(get('vat-content').innerHTML.includes('mapping coverage'));assert.ok(get('vat-content').innerHTML.includes('Excise'));
+const originalFetch=globalThis.fetch;globalThis.fetch=async(url,options)=>{const path=new URL(url,'http://local').pathname;if(path==='/api/safe-to-spend')return {ok:true,json:async()=>({ok:true,data:{available:false,needs_history:true}})};if(path==='/api/investments')return {ok:false,status:503,json:async()=>({ok:false,error:{message:'Unavailable'}})};return originalFetch(url,options);};
+await app.load();assert.ok(get('safe-content').innerHTML.includes('history'));assert.ok(get('investment-content').innerHTML.includes('unavailable'));
+''')
+
+    def test_coach_tool_results_render_exact_server_values_without_generic_action(self):
+        self.node_app(r'''
+const stats=app.toolResultHTML({tool_kind:'transaction_statistics',tool_fact_id:'taxi-fact',parameters:{period:'2026-09',category:'Transportation'},tool_result:{start:'2026-09-01',end:'2026-09-30',filters:{category:'Transportation'},outflow_total_cents:26680,transaction_count:6,average_outflow_cents:4447,largest_outflow:{amount_cents:6216,date:'2026-09-20'},transaction_refs:['a','b']}});
+assert.ok(stats.includes('€266.80'));assert.ok(stats.includes('6'));assert.ok(stats.includes('€44.47'));assert.ok(stats.includes('taxi-fact'));
+const adjustment=app.toolResultHTML({tool_kind:'spending_adjustment_preview',tool_fact_id:'scenario-fact',tool_result:{category:'Restaurants',percent:'20',actual_total_cents:22570,adjustable_base_cents:22570,modeled_monthly_contribution_cents:4514,persistence:'not_saved',transaction_refs:['r1']}});
+assert.ok(adjustment.includes('€45.14'));assert.ok(adjustment.includes('€225.70'));assert.ok(adjustment.includes('20'));
+const profile=app.toolResultHTML({tool_kind:'three_basket_profile',tool_fact_id:'profile-fact',tool_result:{period:'2026-09',total_consumption_cents:187866,baskets:[{role:'fixed_obligation',amount_cents:126690},{role:'flexible_essential',amount_cents:0},{role:'discretionary',amount_cents:61176}],transaction_refs:['p1']}});
+assert.ok(profile.includes('€1,266.90'));assert.ok(profile.includes('€0.00'));assert.ok(profile.includes('€611.76'));assert.ok(profile.includes('profile-fact'));
+const safe=app.toolResultHTML({tool_kind:'safe_to_spend',tool_fact_id:'safe-fact',tool_result:{available:true,horizon_days:7,horizon_end:'2026-10-07',safe_to_spend_cents:328831,reserve_floor_cents:50000,scheduled_outflows_cents:52838,historical_flexible_buffer_cents:40689,assumptions:['server assumptions remain auditable'],transaction_refs:['s1'],comparison_transaction_refs:['h1']}});
+assert.ok(safe.includes('€3,288.31'));assert.ok(safe.includes('€500.00'));assert.ok(safe.includes('€528.38'));assert.ok(safe.includes('€406.89'));assert.ok(safe.includes('safe-fact'));
+const noTax=app.toolResultHTML({tool_kind:'observed_tax_evidence',tool_fact_id:'tax-fact',tool_result:{available:false,observed_tax_paid_cents:null,records:[],transaction_refs:[],limitations:[]}});
+assert.ok(noTax.toLowerCase().includes('no explicit tax'));
+assert.equal(app.toolResultHTML({intent:'explain_change'}),'');
+''')
+
+    def test_vat_transaction_evidence_explains_broad_mapping(self):
+        self.node_app(r'''
+app.state.vat={transactions:[{transaction_ref:'vat-row',estimated_vat_cents:2550,rate_basis_points:2550,rate_source:{kind:'mcc',value:'7999'},mapping_quality:'broad_mcc_estimate',mapping_note:'Ambiguous recreation MCC 7999 uses the documented broad estimate'}]};
+const html=app.calculationHTML({kind:'transaction',customerId:'CUST00001',accountId:'ACC000001',row:{transaction_ref:'vat-row',date:'2026-09-01',amount_cents:-12550,category:'Entertainment',mcc_code:'7999'}});
+assert.ok(html.includes('Broad MCC estimate'));assert.ok(html.includes('MCC 7999'));assert.ok(html.includes('Ambiguous recreation MCC 7999'));
+''')
+
+    def test_tax_plan_posts_user_inputs_as_unsaved_scenario(self):
+        self.node_app(r'''
+get('tax-plan-amount').value='900';get('tax-plan-saved').value='100';get('tax-plan-date').value='2027-03-31';get('tax-plan-location').value='inside_current_balance';calls.length=0;
+app.state.overview.latest_balance_date='2026-08-31';
+await app.submitTaxPlan();
+const call=calls.find(item=>item.path==='/api/tax-plan');assert.ok(call);assert.equal(call.body.amount_cents,90000);assert.equal(call.body.already_set_aside_cents,10000);assert.equal(call.body.reference_date,'2026-08-31');assert.equal(call.body.current_balance_cents,10000);assert.equal(call.body.reserve_floor_cents,50000);assert.equal(call.body.set_aside_location,'inside_current_balance');assert.equal(call.body.confirmed,true);
+assert.ok(get('tax-plan-result').innerHTML.includes('€133.34'));assert.ok(get('tax-plan-result').innerHTML.includes('Reference date'));assert.ok(get('tax-plan-result').innerHTML.includes('Observed balance'));assert.ok(get('tax-plan-result').innerHTML.includes('€100.00'));assert.ok(get('tax-plan-result').innerHTML.includes('Reserve'));assert.ok(get('tax-plan-result').innerHTML.includes('€500.00'));assert.ok(get('tax-plan-result').innerHTML.toLowerCase().includes('not tax advice'));
+''')
+
+    def test_coach_directory_routes_questions_goals_and_vat(self):
+        self.node_app(r'''
+calls.length=0;
+const taxi=get('directory-taxi');taxi.dataset.coachQuestion='coach.question.taxi';
+await documentListeners.click({target:taxi});await settle();
+const coachCall=calls.filter(item=>item.path==='/api/coach').at(-1);assert.ok(coachCall);assert.equal(coachCall.body.message,'How much did I spend on taxis last month?');
+get('language').value='sv';get('language').listeners.change();await settle();
+const tax=get('directory-tax');tax.dataset.coachQuestion='coach.question.taxRecords';await documentListeners.click({target:tax});await settle();
+assert.equal(calls.filter(item=>item.path==='/api/coach').at(-1).body.message,'Kontrollera uttryckliga skatteuppgifter den här månaden');
+const vehicle=get('directory-vehicle');vehicle.dataset.goalTemplate='vehicle';documentListeners.click({target:vehicle});
+assert.equal(app.state.view,'goals');assert.equal(get('goal-template').value,'vehicle');assert.ok(get('goal-name').value);assert.equal(get('goal-name').focused,true);
+const vat=get('directory-vat');vat.setAttribute('data-open-vat','');documentListeners.click({target:vat});
+assert.equal(app.state.view,'trends');assert.equal(get('vat-card').scrolled,true);
+''')
+
+    def test_persona_and_language_changes_clear_scoped_coach_evidence(self):
+        self.node_app(r'''
+get('coach-home-history').hidden=false;get('persona').value='CUST00676';get('persona').listeners.change();
+assert.equal(get('coach-home-history').hidden,true,'A previously available mortgage-history action leaked into the next persona');
+get('coach-debug').hidden=false;get('coach-debug-content').textContent='old diagnostics';get('tax-plan-result').innerHTML='<p>old tax scenario</p>';
+get('language').value='fi';get('language').listeners.change();
+assert.equal(get('coach-debug').hidden,true);assert.equal(get('coach-debug-content').textContent,'');assert.equal(get('tax-plan-result').innerHTML,'');
+''')
+
+    def test_ask_coach_mounts_exact_tool_result_and_collapsed_diagnostics(self):
+        self.node_app(r'''
+const originalFetch=globalThis.fetch;
+globalThis.fetch=async(url,options)=>{
+ const path=new URL(url,'http://local').pathname;
+ if(path==='/api/coach'){
+  const body=JSON.parse(options.body);
+  if(body.message==='transport')return {ok:true,json:async()=>({ok:true,data:{intent:'spending_adjustment',source:'deterministic',tool_kind:'spending_adjustment_preview',explanation_blocks:[{text:'Transport preview.'}],tool_result:{category:'Transportation',percent:'20',actual_total_cents:20000,adjustable_base_cents:15000,modeled_monthly_contribution_cents:3000,transaction_refs:['transport-row']}}})};
+  if(body.message==='tax')return {ok:true,json:async()=>({ok:true,data:{intent:'observed_tax_evidence',source:'deterministic',tool_kind:'observed_tax_evidence',explanation_blocks:[{text:'No explicit tax rows.'}],tool_result:{available:false,transaction_refs:[]}}})};
+  return {ok:true,json:async()=>({ok:true,data:{intent:'transaction_statistics',source:'deterministic',fallback_reason:'gemini_unavailable',tool_source:'local_statistics',tool_kind:'transaction_statistics',tool_fact_id:'taxi-fact',parameters:{period:'2026-09'},explanation_blocks:[{text:'Verified taxi activity.'}],tool_result:{start:'2026-09-01',end:'2026-09-30',filters:{category:'Transportation'},outflow_total_cents:26680,transaction_count:6,average_outflow_cents:4447,largest_outflow:{amount_cents:6216,date:'2026-09-20'},transaction_refs:['taxi-row']}}})};
+ }
+ return originalFetch(url,options);
+};
+await app.askCoach('How much did I spend on taxis last month?');
+assert.ok(get('coach-response').innerHTML.includes('€266.80'));assert.ok(get('coach-response').innerHTML.includes('€44.47'));assert.ok(get('coach-response').innerHTML.includes('taxi-fact'));
+assert.equal(get('coach-debug').hidden,false);assert.ok(get('coach-debug-content').textContent.includes('gemini_unavailable'));assert.ok(get('coach-debug-content').textContent.includes('local_statistics'));
+await app.askCoach('transport');let action=get('coach-response').children.filter(child=>child?.onclick).at(-1);assert.ok(action.textContent.includes('Create a goal'));action.onclick();assert.equal(app.state.view,'goals');assert.equal(get('story-dialog').open,false);
+await app.askCoach('tax');action=get('coach-response').children.filter(child=>child?.onclick).at(-1);assert.ok(action.textContent.includes('Plan a user-declared tax amount'));action.onclick();assert.equal(get('coach-tax').open,true);assert.equal(get('tax-plan-amount').focused,true);
+''')
+
     def test_handoff_retries_link_failure_without_creating_a_second_goal(self):
         self.node_app(r'''
 app.state.scenario={...scenario};goalInputs();get('link-goal').listeners.click();calls.length=0;
@@ -267,6 +417,11 @@ assert.equal(module.eurosToCents('37.85'),3785);
 assert.throws(()=>module.eurosToCents('2.005'));
 """)
 
+    def test_forecast_copy_describes_pattern_evidence_without_claiming_confirmation(self):
+        source = self.read('i18n.js')
+        self.assertNotIn('confirmed recurring items', source.lower())
+        self.assertIn('qualified recurring patterns', source.lower())
+
     def test_story_has_bound_controls_and_local_module_imports(self):
         source = self.read('app.js')
         import re
@@ -308,6 +463,13 @@ assert.match(chart,/Income: €100.00/);assert.match(chart,/Outflows: €70.00/)
 import assert from 'node:assert/strict';
 const chart=module.comparisonChart({before:{total_cents:100,count:3},after:{total_cents:100,count:3}});
 assert.ok(!chart.includes('€0.33 average'),'Missing verified average must not be calculated in the client');
+''')
+
+    def test_twenty_four_month_trend_keeps_labels_readable_and_all_values_accessible(self):
+        self.node_module('charts.js', '''
+import assert from 'node:assert/strict';
+const rows=Array.from({length:24},(_,index)=>({month:'period-'+index,total_cents:10000+index}));
+const chart=module.trendChart(rows);assert.ok((chart.match(/class="chart-note"/g)||[]).length<=8,'Twenty-four labels overlap on a phone');assert.ok(chart.includes('period-23'));assert.ok(chart.includes('€100.23'),'Accessible description must retain each value');
 ''')
 
 @unittest.skipUnless(os.environ.get('SCOACH_PLAYWRIGHT_PATH'), 'Set SCOACH_PLAYWRIGHT_PATH for optional browser integration')
@@ -354,13 +516,26 @@ const {chromium} = require(process.env.SCOACH_PLAYWRIGHT_PATH);
  await page.getByRole('button',{name:'Trends',exact:true}).click();assert.ok(await page.getByRole('heading',{name:'Same month, last year'}).isVisible());
  assert.ok(await page.getByRole('heading',{name:'Salary, on its own'}).isVisible());
  await page.getByRole('button',{name:'Home',exact:true}).click();
- await page.locator('#ask-coach').click();await page.getByRole('button',{name:'What changed in restaurants?'}).click();
+ await page.locator('#ask-coach').click();await page.locator('#coach-spending>summary').click();await page.getByRole('button',{name:'What changed in restaurants?'}).click();
  await page.waitForFunction(()=>document.querySelector('#coach-response').textContent.includes('average'));await page.keyboard.press('Escape');
  await page.locator('#forecast-details').click();assert.ok(await page.locator('[data-assumption]').count()>0);
  await page.locator('#apply-preview').click();await page.waitForFunction(()=>document.querySelector('#status-message').textContent.includes('recalculated'));
  const dayField=page.locator('[data-field=day]').first();await dayField.fill('17');await page.locator('#apply-preview').click();await page.waitForFunction(()=>!document.querySelector('#apply-preview').disabled);
  assert.equal(await dayField.inputValue(),'17','Edited preview assumptions remain visible');
- for(const width of [320,390,1440]){await page.setViewportSize({width,height:900});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'No horizontal overflow at '+width);}
+ for(const width of [320,390,768,1280,1440]){
+  await page.setViewportSize({width,height:900});await page.reload();await page.waitForFunction(()=>!document.querySelector('#open-story').disabled);await page.getByRole('button',{name:'Home',exact:true}).click();assert.equal(await page.locator('#status-message').innerText(),'','A fresh load must not announce an edit');assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'No horizontal overflow at '+width);
+  const workspace=await page.locator('.phone-shell').boundingBox();if(width===768)assert.ok(workspace.width>=650,'Tablet must use the available width');
+  if(width>=920){assert.ok(workspace.width>=1000,'Desktop must be a real workspace');const money=await page.locator('.money-card').boundingBox(),priority=await page.locator('.priority-section').boundingBox();assert.notEqual(Math.round(money.x),Math.round(priority.x),'Desktop Home must use two columns');assert.ok((await page.locator('nav').boundingBox()).y<160,'Desktop navigation must be visible near the top');assert.equal(await page.locator('.desktop-intro').count(),0);}
+  if(process.env.SCOACH_SCREENSHOT_DIR)await page.screenshot({path:process.env.SCOACH_SCREENSHOT_DIR+'/scoach-7a-en-'+width+'.png'});
+  if(width>=920){await page.locator('.skip-link').focus();await page.keyboard.press('Enter');const nav=await page.locator('nav').boundingBox(),main=await page.locator('#main-content').boundingBox();assert.ok(main.y>=nav.y+nav.height-1,'Sticky navigation must not cover the focused main target');}
+  if(width===1280){
+   await page.getByRole('button',{name:'Trends',exact:true}).click();const cards=page.locator('#trends-view>.white-card');assert.notEqual((await cards.nth(0).boundingBox()).x,(await cards.nth(1).boundingBox()).x);
+   if(process.env.SCOACH_SCREENSHOT_DIR)await page.screenshot({path:process.env.SCOACH_SCREENSHOT_DIR+'/scoach-7a-trends-desktop.png'});
+   await page.getByRole('button',{name:'Goals',exact:true}).click();assert.notEqual((await page.locator('#goals-list').boundingBox()).x,(await page.locator('#goal-form').boundingBox()).x);
+   if(process.env.SCOACH_SCREENSHOT_DIR)await page.screenshot({path:process.env.SCOACH_SCREENSHOT_DIR+'/scoach-7a-goals-desktop.png'});
+  }
+  if(width===320){await page.getByRole('button',{name:'Goals',exact:true}).click();assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Goal form overflow on a small phone');await page.getByRole('button',{name:'Home',exact:true}).click();}
+ }
  await page.locator('#persona-button').click();await page.locator('#persona').selectOption('CUST00676');await page.waitForFunction(()=>document.querySelector('#account-caption').textContent.includes('ACC000676'));
  assert.ok(!(await page.locator('#insight-headline').innerText()).includes('€110.27'));
  await page.locator('#persona').selectOption('CUST00001');await page.waitForFunction(()=>document.querySelector('#account-caption').textContent.includes('ACC000001'));
@@ -373,6 +548,27 @@ const {chromium} = require(process.env.SCOACH_PLAYWRIGHT_PATH);
  await page.reload();await page.getByText('Database unavailable for test',{exact:false}).waitFor();assert.equal(await page.locator('#current-balance').innerText(),'—');
  await page.unroute('**/api/overview?**');await page.getByRole('button',{name:'Try again',exact:true}).click();await page.waitForFunction(()=>document.querySelector('#current-balance').textContent.includes('4,723.58'));
  if(process.env.SCOACH_SCREENSHOT_DIR)await page.screenshot({path:process.env.SCOACH_SCREENSHOT_DIR+'/scoach-desktop.png',fullPage:true});
+ const localized=await browser.newPage({locale:'fi-FI',viewport:{width:390,height:844}});localized.on('pageerror',error=>errors.push(error.message));
+ const coachLocales=[];localized.on('request',request=>{if(request.url().endsWith('/api/coach'))coachLocales.push(request.postDataJSON().locale);});
+ await localized.goto(base);await localized.waitForFunction(()=>!document.querySelector('#open-story').disabled);assert.equal(await localized.locator('html').getAttribute('lang'),'fi','Browser language should be the initial choice');
+ for(const locale of ['fi','sv']){
+  if(locale==='sv'){await localized.locator('#language').selectOption('sv');await localized.reload();await localized.waitForFunction(()=>!document.querySelector('#open-story').disabled);}
+  assert.equal(await localized.locator('html').getAttribute('lang'),locale);assert.ok((await localized.locator('#current-balance').innerText()).includes(',58'));
+  assert.ok((await localized.locator('#selected-month option:checked').innerText()).includes(locale==='fi'?'syyskuu':'september'));
+  assert.equal(await localized.locator('#home-title').innerText(),locale==='fi'?'Tuore näkymä raha-asioihisi':'En ny bild av din ekonomi');
+  assert.ok(!(await localized.locator('#flow-legend').innerText()).includes('Regular essentials'));assert.ok(!(await localized.locator('body').innerText()).match(/\{[a-z]+\}/));
+  if(process.env.SCOACH_SCREENSHOT_DIR)await localized.screenshot({path:process.env.SCOACH_SCREENSHOT_DIR+'/scoach-7a-'+locale+'-home.png'});
+  for(const width of [320,768,1280]){await localized.setViewportSize({width,height:900});assert.ok(await localized.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),locale+' overflow at '+width);if(process.env.SCOACH_SCREENSHOT_DIR)await localized.screenshot({path:process.env.SCOACH_SCREENSHOT_DIR+'/scoach-7a-'+locale+'-'+width+'.png'});}
+  await localized.setViewportSize({width:390,height:844});
+  await localized.locator('#ask-coach').click();await localized.locator('#coach-spending>summary').click();await localized.locator('[data-coach-question="coach.promptRestaurants"]').click();await localized.waitForFunction(()=>document.querySelector('#coach-mode').textContent.includes('·'));
+  await localized.waitForFunction(()=>!document.querySelector('#coach-response').textContent.includes('…'));
+  assert.ok((await localized.locator('#coach-response').innerText()).includes(locale==='fi'?'havaittuihin':'observerade'));assert.equal(coachLocales.at(-1),locale);
+  if(process.env.SCOACH_SCREENSHOT_DIR)await localized.screenshot({path:process.env.SCOACH_SCREENSHOT_DIR+'/scoach-7a-'+locale+'-coach.png'});
+  await localized.keyboard.press('Escape');await localized.locator('#open-story').click();await localized.waitForFunction(()=>document.querySelector('#scenario-amount').textContent.includes(','));
+  assert.ok((await localized.locator('#show-transactions').innerText()).includes('10'));assert.ok(!(await localized.locator('#story-dialog').innerText()).includes('Actual spending'));
+  await localized.keyboard.press('Escape');
+ }
+ await localized.close();
  assert.deepEqual(errors,[]);
  console.log('PASS phone story, exact values, 10 rows, calculation, refresh, goal handoff, offline coach, forecast controls, three widths, persona isolation, reset, Escape');
  }finally{await browser.close();}

@@ -1,5 +1,8 @@
 const esc = value => String(value ?? '').replace(/[&<>"']/g, x => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[x]));
-const euro = value => new Intl.NumberFormat('en-IE',{style:'currency',currency:'EUR'}).format(Number(value)/100);
+let chartLocale='en-IE', chartTranslate=null;
+export function configureCharts({locale,translate}){chartLocale=locale;chartTranslate=translate;}
+const ct=(key,values,fallback)=>chartTranslate?chartTranslate(key,values):String(fallback).replace(/\{(\w+)\}/g,(_,key)=>values?.[key]??'{'+key+'}');
+const euro = value => new Intl.NumberFormat(chartLocale,{style:'currency',currency:'EUR'}).format(Number(value)/100);
 let sequence = 0;
 const svg = (title, description, body, height) => {
   const id = 'chart-' + (++sequence);
@@ -23,25 +26,25 @@ export function flowChart(flows) {
 }
 export function comparisonChart(data) {
   const before=data.before, after=data.after;
-  if (!before || !after) return empty('No complete comparison periods available.');
+  if (!before || !after) return empty(ct('chart.noComparison',{},'No complete comparison periods available.'));
   const max=Math.max(before.total_cents,after.total_cents,1);
   const rows=[before,after];
-  const labels=[before.label || 'August',after.label || 'September'];
+  const labels=[before.label || 'Previous period',after.label || 'Current period'];
   const bars=rows.map((row,i)=>{
     const y=i*70;
-    return `<text x="0" y="${y+12}" class="chart-label">${esc(labels[i])}</text><text x="330" y="${y+12}" text-anchor="end" class="chart-value">${euro(row.total_cents)}</text><rect x="0" y="${y+25}" width="330" height="23" rx="5" fill="#e8ecdf"/><rect x="0" y="${y+25}" width="${Math.max(0,row.total_cents/max*330)}" height="23" rx="5" fill="${i?'#466d48':'#b8cd98'}"/><text x="0" y="${y+62}" class="chart-note">${row.count} purchases · ${row.average_cents===null||row.average_cents===undefined?'Average unavailable':euro(row.average_cents)+' average'}</text>`;
+    return `<text x="0" y="${y+12}" class="chart-label">${esc(labels[i])}</text><text x="330" y="${y+12}" text-anchor="end" class="chart-value">${euro(row.total_cents)}</text><rect x="0" y="${y+25}" width="330" height="23" rx="5" fill="#e8ecdf"/><rect x="0" y="${y+25}" width="${Math.max(0,row.total_cents/max*330)}" height="23" rx="5" fill="${i?'#466d48':'#b8cd98'}"/><text x="0" y="${y+62}" class="chart-note">${esc(ct('chart.purchases',{count:row.count},'{count} purchases'))} · ${esc(row.average_cents===null||row.average_cents===undefined?ct('chart.noAverage',{},'Average unavailable'):ct('chart.average',{amount:euro(row.average_cents)},'{amount} average'))}</text>`;
   }).join('');
-  return svg('Restaurant spending comparison', rows.map((row,i)=>`${labels[i]}: ${euro(row.total_cents)}, ${row.count} purchases`).join('. '), bars, 135);
+  return svg(ct('chart.comparison',{},'Restaurant spending comparison'), rows.map((row,i)=>`${labels[i]}: ${euro(row.total_cents)}, ${ct('chart.purchases',{count:row.count},'{count} purchases')}`).join('. '), bars, 135);
 }
 export function trendChart(rows) {
-  if (!rows?.length) return empty('No complete periods available for this trend.');
+  if (!rows?.length) return empty(ct('chart.noTrend',{},'No complete periods available for this trend.'));
   const values=rows.map(row=>Number(row.total_cents ?? row.consumption_cents ?? row.value_cents ?? 0));
   const max=Math.max(...values,1); const step=330/rows.length;
-  const bars=rows.map((row,i)=>{const height=Math.max(1,values[i]/max*100);return `<rect x="${i*step+3}" y="${110-height}" width="${Math.max(2,step-6)}" height="${height}" rx="3" fill="${i===rows.length-1?'#466d48':'#b9cba3'}"/><text transform="translate(${i*step+step/2},127) rotate(-35)" text-anchor="end" class="chart-note">${esc((row.period || row.month || row.label || '').slice(-5))}</text>`;}).join('');
-  return svg('Complete-month spending trend', rows.map((row,i)=>`${row.period||row.month||row.label}: ${euro(values[i])}`).join('. '),bars,151);
+  const bars=rows.map((row,i)=>{const height=Math.max(1,values[i]/max*100),show=i===rows.length-1||i%Math.ceil(rows.length/6)===0;return `<rect x="${i*step+3}" y="${110-height}" width="${Math.max(2,step-6)}" height="${height}" rx="3" fill="${i===rows.length-1?'#466d48':'#b9cba3'}"/>${show?`<text transform="translate(${i*step+step/2},127) rotate(-35)" text-anchor="end" class="chart-note">${esc((row.period || row.month || row.label || '').slice(-5))}</text>`:''}`;}).join('');
+  return svg(ct('chart.trend',{},'Complete-month spending trend'), rows.map((row,i)=>`${row.period||row.month||row.label}: ${euro(values[i])}`).join('. '),bars,151);
 }
 export function runwayChart(rows) {
-  if (!rows?.length) return empty('A confirmed cash-flow preview is not available for this account yet.');
+  if (!rows?.length) return empty(ct('chart.noRunway',{},'A cash-flow estimate is not available for this account yet.'));
   const values=rows.map(row=>Number(row.balance_cents));
   const bounds=rows.flatMap(row=>row.historical_flexible_scenarios?Object.values(row.historical_flexible_scenarios):[row.balance_cents]);
   const min=Math.min(...values,...bounds), max=Math.max(...values,...bounds), span=Math.max(max-min,1);
@@ -54,10 +57,10 @@ export function runwayChart(rows) {
   const scenarioRows=rows.map((row,index)=>({row,index})).filter(({row})=>row.historical_flexible_scenarios);
   const bandPoints=key=>scenarioRows.map(({row,index})=>xy({balance_cents:row.historical_flexible_scenarios[key]},index).join(','));
   const band=scenarioRows.length?`<polygon points="${[...bandPoints('p25'),...bandPoints('p75').reverse()].join(' ')}" fill="#d5e2bd" opacity="0.7"/>`:'';
-  return svg('Confirmed cash-flow preview', `Observed starting balance ${euro(values[0])}. Scenario ending balance ${euro(values.at(-1))}. Historical variation, not a probability interval. A planning scenario, not a prediction.`, `<line x1="0" y1="103" x2="330" y2="103" stroke="#e2e6d9"/>${band}<polyline points="${solid}" fill="none" stroke="#466d48" stroke-width="2.5"/><polyline points="${dashed}" fill="none" stroke="#466d48" stroke-width="2.5" stroke-dasharray="5 5"/><circle cx="${start[0]}" cy="${start[1]}" r="4" fill="#466d48"/><text x="0" y="121" class="chart-note">Recent observed activity</text><text x="330" y="121" text-anchor="end" class="chart-note">30-day scenario</text><text x="0" y="10" class="chart-note">${euro(max)}</text>`,130);
+  return svg(ct('chart.runway',{},'Pattern-based cash-flow preview'), ct('chart.runwayDescription',{start:euro(values[0]),end:euro(values.at(-1))},'Observed starting balance {start}. Scenario ending balance {end}. Historical variation, not a probability interval.'), `<line x1="0" y1="103" x2="330" y2="103" stroke="#e2e6d9"/>${band}<polyline points="${solid}" fill="none" stroke="#466d48" stroke-width="2.5"/><polyline points="${dashed}" fill="none" stroke="#466d48" stroke-width="2.5" stroke-dasharray="5 5"/><circle cx="${start[0]}" cy="${start[1]}" r="4" fill="#466d48"/><text x="0" y="121" class="chart-note">${esc(ct('chart.recent',{},'Recent observed activity'))}</text><text x="330" y="121" text-anchor="end" class="chart-note">${esc(ct('chart.next30',{},'30-day estimate'))}</text><text x="0" y="10" class="chart-note">${euro(max)}</text>`,130);
 }
 export function goalChart(current,target) {
-  if (!Number.isFinite(target) || target<=0) return empty('Choose a target to see your goal progress.');
+  if (!Number.isFinite(target) || target<=0) return empty(ct('chart.noGoal',{},'Choose a target to see your progress.'));
   const ratio=Math.min(1,Math.max(0,current/target));
-  return svg('Goal progress',`${euro(current)} saved toward ${euro(target)}. ${Math.round(ratio*100)} percent complete.`,`<rect width="330" height="10" rx="5" fill="#d5dfc5"/><rect width="${ratio*330}" height="10" rx="5" fill="#466d48"/><text x="0" y="29" class="chart-note">${Math.round(ratio*100)}% saved</text><text x="330" y="29" text-anchor="end" class="chart-note">${euro(target)} target</text>`,34);
+  return svg(ct('chart.goal',{},'Goal progress'),ct('chart.goalDescription',{current:euro(current),target:euro(target),percent:Math.round(ratio*100)},'{current} saved toward {target}. {percent}% complete.'),`<rect width="330" height="10" rx="5" fill="#d5dfc5"/><rect width="${ratio*330}" height="10" rx="5" fill="#466d48"/><text x="0" y="29" class="chart-note">${esc(ct('chart.saved',{percent:Math.round(ratio*100)},'{percent}% saved'))}</text><text x="330" y="29" text-anchor="end" class="chart-note">${esc(ct('chart.target',{amount:euro(target)},'{amount} target'))}</text>`,34);
 }

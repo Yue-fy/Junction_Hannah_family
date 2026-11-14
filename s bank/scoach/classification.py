@@ -10,8 +10,9 @@ def classify(row, override=None):
     if kind in TRANSFER_TYPES: role='saving_or_transfer'
     elif kind in ('salary','other_income'): role='income'
     elif kind in ('housing_payment','utilities_payment'): role='fixed_obligation'
-    elif category in ('Groceries','Transportation','Health'): role='flexible_essential'
-    elif category in ('Restaurants','Entertainment','Lifestyle','Travel','Home & Tech'): role='discretionary'
+    elif category in ('Housing','Utilities','Groceries','Transportation'): role='fixed_obligation'
+    elif category in ('Health','Home & Tech'): role='flexible_essential'
+    elif category in ('Restaurants','Entertainment','Lifestyle','Travel'): role='discretionary'
     else: role='needs_review'
     source='dataset'
     if override and kind not in TRANSFER_TYPES:

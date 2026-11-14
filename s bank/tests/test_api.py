@@ -33,6 +33,10 @@ class APITests(unittest.TestCase):
     def test_health_personas_and_missing_database_are_explicit(self):
         status, result = self.request('GET', '/api/health')
         self.assertEqual((status, result['ok']), (200, True))
+        self.assertFalse(result['data']['gemini_configured'])
+        with patch.dict('os.environ', {'GEMINI_API_KEY': 'configured-for-test'}):
+            configured = self.request('GET', '/api/health')[1]['data']
+        self.assertTrue(configured['gemini_configured'])
         self.assertEqual(self.request('GET', '/api/personas')[1]['data']['personas'][0]['customer_id'], 'CUST00001')
         missing = Application(Path(self.temp.name)/'missing.db', self.web)
         status, result = missing.handle('GET', '/api/overview')
@@ -201,6 +205,17 @@ class APITests(unittest.TestCase):
         self.assertEqual(selected['data']['reserve_floor_source'], 'demo_default')
         self.assertFalse(selected['data']['available'])
 
+    def test_financing_route_is_read_only_goal_typed_and_explicit_when_unavailable(self):
+        status, result = self.request('GET', '/api/financing?goal_type=home')
+        self.assertEqual(status, 200)
+        self.assertFalse(result['data']['available'])
+        self.assertEqual(result['data']['reason'], 'no_linked_mortgage_history')
+        status, result = self.request('GET', '/api/financing?goal_type=vehicle')
+        self.assertEqual(status, 200)
+        self.assertFalse(result['data']['available'])
+        self.assertEqual(result['data']['reason'], 'no_financing_history_for_goal_type')
+        self.assertEqual(self.request('GET', '/api/financing?goal_type=boat')[0], 400)
+
     def test_coach_recognizes_safe_to_spend_and_investment_cashflows(self):
         safe = self.request('POST', '/api/coach', {'message': 'What is safe to spend this week?'})[1]['data']
         self.assertEqual(safe['intent'], 'safe_to_spend')
@@ -237,6 +252,124 @@ class APITests(unittest.TestCase):
         safe_fact = next(fact for fact in data['facts'] if fact['label'].startswith('Estimated safe-to-spend'))
         self.assertEqual(safe_fact['reserve_floor_cents'], 50000)
         self.assertEqual(safe_fact['reserve_floor_source'], 'demo_default')
+
+    def test_coach_reports_safe_to_spend_unavailable_for_short_history(self):
+        short_db = Path(self.temp.name) / 'short.sqlite3'
+        conn = connect(short_db); initialize_schema(conn)
+        conn.execute("INSERT INTO customers VALUES ('CUST00001', '00100', 30, '{}')")
+        conn.execute('INSERT INTO transactions VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)', ('only', 'CUST00001', 'A1', '2026-09-30', '2026-09-30T12:00:00', 'Salary', 100000, 100000, 'salary', None, None, 1, 'only', '{}'))
+        conn.commit(); conn.close()
+        app = Application(short_db, self.web)
+        status, response = app.handle('POST', '/api/coach', {'message': 'What is safe to spend this week?'})
+        self.assertEqual(status, 200)
+        block = response['data']['explanation_blocks'][0]['text'].lower()
+        self.assertIn('not enough observed history', block)
+        self.assertNotIn('protects', block)
+
+    def test_statistics_compare_and_tax_routes_validate_scope_and_methods(self):
+        status, result = self.request('GET', '/api/statistics?month=2026-09&category=Restaurants')
+        self.assertEqual(status, 200)
+        self.assertEqual(result['data']['transaction_count'], 2)
+        self.assertEqual(result['data']['outflow_total_cents'], 22570)
+        status, result = self.request('GET', '/api/statistics?start=2026-08-01&end=2026-08-31&category=Restaurants')
+        self.assertEqual(status, 200); self.assertEqual(result['data']['transaction_count'], 1)
+        status, result = self.request('GET', '/api/statistics/compare?month=2026-09&comparison_month=2026-08&category=Restaurants')
+        self.assertEqual(status, 200)
+        self.assertEqual(result['data']['outflow_delta_cents'], 11027)
+        for target in [
+            '/api/statistics?month=2026-09&category=Unknown',
+            '/api/statistics?month=2026-09&category=',
+            '/api/statistics?month=2026-09&role=invented',
+            '/api/statistics?month=2026-09&transaction_type=wire',
+            '/api/statistics?month=2026-09&merchant_id=unknown',
+            '/api/statistics?start=bad&end=2026-09-30&category=Restaurants',
+            '/api/statistics?start=2026-09-01&category=Restaurants',
+            '/api/statistics?month=2026-09&bogus=x',
+            '/api/statistics/compare?month=2026-09&category=Restaurants',
+        ]:
+            self.assertEqual(self.request('GET', target)[0], 400, target)
+        status, result = self.request('GET', '/api/statistics/compare?start=2026-09-01&end=2026-09-30&comparison_start=2026-08-01&comparison_end=2026-08-31&category=Restaurants')
+        self.assertEqual(status, 200); self.assertEqual(result['data']['outflow_delta_cents'], 11027)
+        status, result = self.request('GET', '/api/taxes?month=2026-09')
+        self.assertEqual(status, 200)
+        self.assertFalse(result['data']['available'])
+        self.assertIsNone(result['data']['observed_tax_paid_cents'])
+        self.assertIsNone(result['data']['observed_net_tax_cents'])
+        self.assertEqual(self.request('POST', '/api/statistics', {})[0], 405)
+        self.assertEqual(self.request('POST', '/api/taxes', {})[0], 405)
+        self.assertEqual(self.request('GET', '/api/tax-plan')[0], 405)
+
+    def test_tax_plan_is_confirmed_pure_unsaved_and_handles_inside_outside_balance(self):
+        conn=connect(self.db)
+        before={table:conn.execute(f'SELECT count(*) FROM {table}').fetchone()[0] for table in ('transactions','audit_events','goals','scenarios')}
+        conn.close()
+        base={'amount_cents':100000,'due_date':'2027-03-31','reference_date':'2026-09-30','already_set_aside_cents':90000,'current_balance_cents':150000,'reserve_floor_cents':20000,'label':'User tax target'}
+        self.assertEqual(self.request('POST','/api/tax-plan',base)[0],400)
+        status,result=self.request('POST','/api/tax-plan',{**base,'confirmed':True,'set_aside_location':'inside_current_balance'})
+        self.assertEqual(status,200); inside=result['data']
+        self.assertEqual(inside['protected_from_current_balance_cents'],100000)
+        self.assertEqual(inside['available_after_full_set_aside_cents'],30000)
+        self.assertEqual(inside['persistence'],'not_saved'); self.assertTrue(inside['not_tax_advice'])
+        status,result=self.request('POST','/api/tax-plan',{**base,'confirmed':True,'set_aside_location':'outside_current_balance'})
+        self.assertEqual(status,200); outside=result['data']
+        self.assertEqual(outside['protected_from_current_balance_cents'],10000)
+        self.assertEqual(outside['available_after_full_set_aside_cents'],120000)
+        for values in [
+            {**base,'amount_cents':0}, {**base,'due_date':'2026-09-30'},
+            {**base,'set_aside_location':'somewhere'}, {**base,'current_balance_cents':'150000'},
+            {**base,'unknown':'x'},
+        ]:
+            self.assertEqual(self.request('POST','/api/tax-plan',{**values,'confirmed':True})[0],400)
+        conn=connect(self.db)
+        after={table:conn.execute(f'SELECT count(*) FROM {table}').fetchone()[0] for table in before}
+        conn.close(); self.assertEqual(after,before)
+
+    def test_coach_executes_statistics_and_tax_tools_after_validated_interpretation(self):
+        status,result=self.request('POST','/api/coach',{'message':'How much did I spend on restaurants?'})
+        self.assertEqual(status,200); data=result['data']
+        self.assertEqual(data['intent'],'transaction_statistics')
+        self.assertEqual(data['tool_result']['transaction_count'],2)
+        self.assertEqual(data['tool_result']['outflow_total_cents'],22570)
+        self.assertEqual(data['tool_fact_id'],data['tool_result']['fact_id'])
+        self.assertEqual(data['tool_kind'],'transaction_statistics')
+        self.assertEqual(data['tool_fact_ids'],[data['tool_result']['fact_id']])
+        status,result=self.request('POST','/api/coach',{'message':'Did I pay taxes this month?'})
+        self.assertEqual(status,200); tax=result['data']
+        self.assertEqual(tax['intent'],'observed_tax_evidence')
+        self.assertFalse(tax['tool_result']['available'])
+        self.assertIsNone(tax['tool_result']['observed_tax_paid_cents'])
+        self.assertEqual(tax['tool_kind'],'observed_tax_evidence')
+
+    def test_fake_gemini_statistics_filter_is_allowlisted_before_tool_execution(self):
+        captured=[]
+        valid={'intent':'transaction_statistics','parameters':{'period':'2026-09','category':'Restaurants'},'needs_clarification':False,'explanation_blocks':[]}
+        self.app.coach_transport=lambda payload,timeout: captured.append(payload) or valid
+        status,result=self.request('POST','/api/coach',{'message':'How much did I spend on restaurants?'})
+        self.assertEqual(status,200); self.assertEqual(result['data']['source'],'gemini')
+        self.assertEqual(result['data']['tool_result']['outflow_total_cents'],22570)
+        encoded=json.dumps(captured[0]); self.assertNotIn('CUST00001',encoded); self.assertNotIn('r0',encoded)
+        self.assertIn('Restaurants',captured[0]['context']['filter_catalog']['categories'])
+        invalid={**valid,'parameters':{'period':'2026-09','category':'Invented'}}
+        self.app.coach_transport=lambda payload,timeout: invalid
+        status,result=self.request('POST','/api/coach',{'message':'How much did I spend on restaurants?'})
+        self.assertEqual(status,200); self.assertEqual(result['data']['source'],'deterministic')
+        self.assertEqual(result['data']['fallback_reason'],'invalid_response')
+        self.assertEqual(result['data']['tool_result']['filters'],{'category':'Restaurants'})
+
+    def test_german_gemini_copy_survives_deterministic_statistics_execution(self):
+        response={'intent':'transaction_statistics','parameters':{'period':'2026-09','category':'Restaurants'},'needs_clarification':False,'explanation_blocks':[{'text':'Hier sind die beobachteten Ergebnisse.','fact_ids':['comparison:placeholder']}]}
+        # Use the actual scoped fact ID supplied to Gemini, without exposing rows.
+        def transport(payload,timeout):
+            response['explanation_blocks'][0]['fact_ids']=[payload['context']['facts'][0]['id']]
+            return response
+        self.app.coach_transport=transport
+        status,result=self.request('POST','/api/coach',{'locale':'en','message':'Wie viel habe ich in Restaurants ausgegeben?'})
+        self.assertEqual(status,200); data=result['data']
+        self.assertEqual(data['source'],'gemini'); self.assertEqual(data['response_language_source'],'query_language_gemini')
+        self.assertEqual(data['explanation_blocks'][0]['text'],'Hier sind die beobachteten Ergebnisse.')
+        self.assertEqual(data['explanation_blocks'][0]['fact_ids'],[data['tool_fact_id']])
+        self.assertEqual(data['tool_result']['outflow_total_cents'],22570)
+        self.assertEqual(data['tool_kind'],'transaction_statistics')
     def test_http_static_and_encoded_path_traversal(self):
         server = create_server(self.app, host='127.0.0.1', port=0)
         worker = threading.Thread(target=server.serve_forever, daemon=True); worker.start()
@@ -268,4 +401,86 @@ class RealDemoPriorityTests(unittest.TestCase):
             self.assertNotIn(priority['kind'], {'safe_to_spend', 'investment_cashflow'})
             priorities[customer_id] = priority['id']
         self.assertEqual(priorities['CUST00001'], 'restaurant_change')
-        self.assertGreaterEqual(len(set(priorities.values())), 2)
+        self.assertEqual(priorities['CUST00676'], 'payday_timing')
+        self.assertEqual(priorities['CUST00756'], 'salary_change')
+        self.assertTrue(priorities['CUST05097'].startswith('unusual:'))
+        self.assertEqual(priorities['CUST00296'], 'home_financing_history')
+        self.assertEqual(len(set(priorities.values())), 5)
+
+    def test_priority_facts_have_bounded_dimensions_and_evidence(self):
+        database = Path(__file__).resolve().parents[1] / 'var' / 'scoach.sqlite3'
+        app = Application(database)
+        for customer_id, expected_kind in [('CUST00676', 'payday_timing'), ('CUST00756', 'salary_change')]:
+            status, response = app.handle('GET', f'/api/overview?customer_id={customer_id}&month=2026-09')
+            self.assertEqual(status, 200)
+            data=response['data']; priority=data['priority']
+            self.assertEqual(priority['kind'],expected_kind)
+            for field in ('materiality','urgency','explainability','addressability'):
+                self.assertGreaterEqual(priority[field],0); self.assertLessEqual(priority[field],1)
+            self.assertTrue(priority['fact_ids']); self.assertTrue(priority['transaction_refs'])
+            facts={fact['id']:fact for fact in data['facts']}
+            fact=facts[priority['fact_ids'][0]]
+            self.assertTrue(fact['transaction_refs']); self.assertEqual(fact['status'],'observed')
+
+    def test_linked_home_history_is_neutral_evidence_and_excludes_raw_notes_from_coach_context(self):
+        database = Path(__file__).resolve().parents[1] / 'var' / 'scoach.sqlite3'
+        app = Application(database)
+        status, response = app.handle('GET', '/api/financing?customer_id=CUST00296&goal_type=home')
+        self.assertEqual(status, 200)
+        financing=response['data']; self.assertTrue(financing['available'])
+        self.assertTrue(financing['historical_context_only']); self.assertTrue(financing['event_refs'])
+        status, response = app.handle('GET', '/api/overview?customer_id=CUST00296&month=2026-09')
+        self.assertEqual(status, 200)
+        data=response['data']; priority=data['priority']
+        self.assertEqual(priority['kind'],'home_financing_history')
+        self.assertIn('not a current approval or affordability assessment',priority['text'])
+        self.assertEqual(priority['transaction_refs'],[]); self.assertTrue(priority['event_refs'])
+        fact=next(fact for fact in data['facts'] if fact['id'] in priority['fact_ids'])
+        self.assertTrue(fact['historical_context_only']); self.assertNotIn('description',fact)
+        self.assertNotIn('note',json.dumps(fact).lower())
+
+        with patch.dict('os.environ', {'GEMINI_API_KEY': ''}):
+            for locale, message, phrase in [
+                ('fi', 'Mitä asuntolainahistoriani kertoo?', 'historiallista taustatietoa'),
+                ('sv', 'Vad visar min bolånehistorik?', 'historisk bakgrund'),
+            ]:
+                status, coached = app.handle('POST', '/api/coach', {'customer_id': 'CUST00296', 'locale': locale, 'message': message})
+                self.assertEqual(status, 200)
+                self.assertEqual(coached['data']['intent'], 'home_financing_history')
+                self.assertIn(phrase, coached['data']['explanation_blocks'][0]['text'].lower())
+
+    def test_real_financing_numbers_are_excluded_from_minimized_gemini_context(self):
+        from scoach.gemini import minimized_context
+        database=Path(__file__).resolve().parents[1]/'var'/'scoach.sqlite3'
+        app=Application(database); conn=connect(database)
+        try:
+            context=app._coach_context(conn,'CUST00296','2026-09','en')
+        finally:
+            conn.close()
+        minimized=minimized_context(context); encoded=json.dumps(minimized)
+        financing_fact=next(fact for fact in minimized['facts'] if fact.get('historical_context_only'))
+        self.assertTrue(financing_fact['historical_context_only'])
+        for forbidden_key in ('value','value_cents','recorded_fees_total_cents','event_refs'):
+            self.assertNotIn(forbidden_key,financing_fact)
+        financing_candidate=next(item for item in minimized['candidates'] if item.get('historical_context_only'))
+        self.assertTrue(financing_candidate['historical_context_only'])
+        self.assertEqual(financing_candidate['copy_key'],'home_financing_history')
+        self.assertNotIn('text',financing_candidate)
+        for exact_amount in ('26600000','29000000','2400000','19200000','63000'):
+            self.assertNotIn(exact_amount,encoded)
+
+
+class RealDemoToolTests(unittest.TestCase):
+    def test_cust00001_september_transportation_and_empty_comparison_are_exact(self):
+        app=Application(Path(__file__).resolve().parents[1]/'var'/'scoach.sqlite3')
+        status,response=app.handle('GET','/api/statistics?customer_id=CUST00001&month=2026-09&category=Transportation')
+        self.assertEqual(status,200); data=response['data']
+        self.assertEqual(data['transaction_count'],6)
+        self.assertEqual(data['outflow_total_cents'],26680)
+        self.assertEqual(data['consumption_cents'],26680)
+        self.assertEqual(len(data['transaction_refs']),6)
+        status,response=app.handle('GET','/api/statistics/compare?customer_id=CUST00001&month=2026-09&comparison_month=2026-08&category=Transportation')
+        self.assertEqual(status,200); comparison=response['data']
+        self.assertEqual(comparison['current']['transaction_count'],6)
+        self.assertEqual(comparison['comparison']['transaction_count'],0)
+        self.assertFalse(comparison['comparison']['has_transactions'])

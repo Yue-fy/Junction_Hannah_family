@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>S-Coach · Device preview</title>
+  <style>
+    :root{color-scheme:dark;font-family:Arial,Helvetica,sans-serif;background:#0e271d;color:#f5fff9;--accent:#31d879;--panel:#17382a;--line:#315746}
+    *{box-sizing:border-box}body{margin:0;min-height:100vh;background:linear-gradient(145deg,#0b2118,#153729)}button{font:inherit;color:inherit}button:focus-visible{outline:3px solid #9dffc1;outline-offset:3px}
+    header{padding:22px 26px;border-bottom:1px solid var(--line);background:#0e271df2}header h1{font-size:22px;margin:0 0 7px}header p{margin:0;color:#bcd1c5;line-height:1.5;font-size:13px}
+    .layout{display:grid;grid-template-columns:280px minmax(0,1fr);min-height:calc(100vh - 97px)}.controls{padding:22px;border-right:1px solid var(--line);background:#112d22}.controls fieldset{border:0;padding:0;margin:0}.controls legend{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#bcd1c5;margin-bottom:12px}
+    .preset-list{display:grid;gap:8px}.preset{display:grid;grid-template-columns:1fr auto;gap:12px;text-align:left;border:1px solid var(--line);border-radius:11px;background:#17382a;padding:11px 12px;min-height:46px;cursor:pointer}.preset span:last-child{color:#a9c7b7;font-variant-numeric:tabular-nums}.preset[aria-pressed=true]{border-color:var(--accent);background:#1d4935;box-shadow:inset 3px 0 var(--accent)}
+    .toggle-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:18px}.toggle{border:1px solid var(--line);border-radius:11px;background:#17382a;padding:10px;min-height:48px;cursor:pointer}.toggle[aria-pressed=true]{border-color:var(--accent);color:#bfffd6}.dev-note{font-size:12px;line-height:1.6;color:#bcd1c5;margin:22px 0 0;padding-top:18px;border-top:1px solid var(--line)}
+    .workspace{min-width:0;display:grid;grid-template-rows:auto minmax(0,1fr)}.readout{display:flex;justify-content:space-between;gap:20px;align-items:center;padding:13px 22px;background:#102d21;border-bottom:1px solid var(--line);font-size:13px}.readout strong{font-variant-numeric:tabular-nums}.readout span{color:#bcd1c5}
+    .stage{position:relative;min-height:0;overflow:auto;padding:28px;display:flex;justify-content:center;align-items:flex-start;background-image:linear-gradient(#ffffff08 1px,transparent 1px),linear-gradient(90deg,#ffffff08 1px,transparent 1px);background-size:24px 24px}.frame-space{position:relative;flex:0 0 auto}.frame{position:absolute;top:0;left:50%;transform-origin:top center;background:#fff;border:1px solid #6d8b7b;border-radius:24px;overflow:hidden;box-shadow:0 22px 80px #0008}.frame[data-preset=desktop]{border-radius:12px}.frame iframe{display:block;width:100%;height:100%;border:0;background:#fff}
+    @media(max-width:760px){.layout{grid-template-columns:1fr}.controls{border-right:0;border-bottom:1px solid var(--line)}.preset-list{grid-template-columns:1fr 1fr}.stage{min-height:70vh}.readout{position:sticky;top:0;z-index:2}.dev-note{margin-top:16px}}
+    @media(max-width:430px){.preset-list{grid-template-columns:1fr}.toggle-grid{grid-template-columns:1fr}.readout{align-items:flex-start;flex-direction:column;gap:3px}.stage{padding:18px}}
+    @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important}}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Development preview — not part of the customer experience</h1>
+    <p>Compare the real responsive S-Coach page at representative viewport sizes. This page does not spoof a device, browser, operating system, or feature set.</p>
+  </header>
+  <div class="layout">
+    <aside class="controls" aria-label="Preview controls">
+      <fieldset>
+        <legend>Viewport preset</legend>
+        <div class="preset-list">
+          <button class="preset" type="button" data-preset="small-phone" aria-pressed="false"><span>Small phone</span><span>320 × 568</span></button>
+          <button class="preset" type="button" data-preset="compact-phone" aria-pressed="false"><span>Compact phone</span><span>375 × 667</span></button>
+          <button class="preset" type="button" data-preset="current-phone" aria-pressed="true"><span>Current compact</span><span>390 × 844</span></button>
+          <button class="preset" type="button" data-preset="large-phone" aria-pressed="false"><span>Large phone</span><span>412 × 915</span></button>
+          <button class="preset" type="button" data-preset="tablet" aria-pressed="false"><span>Tablet</span><span>768 × 1024</span></button>
+          <button class="preset" type="button" data-preset="desktop" aria-pressed="false"><span>Responsive desktop</span><span>1280 × 800</span></button>
+        </div>
+      </fieldset>
+      <div class="toggle-grid" role="group" aria-label="Frame options">
+        <button class="toggle" id="orientation" type="button" aria-pressed="false">Orientation<br><span id="orientation-label">Portrait</span></button>
+        <button class="toggle" id="fit-window" type="button" aria-pressed="true">Fit to window<br><span id="fit-label">On</span></button>
+      </div>
+      <p class="dev-note">Browser DevTools and automated viewport tests remain authoritative. Check real touch targets, safe areas, font rendering and assistive technology on actual devices before production.</p>
+    </aside>
+    <main class="workspace">
+      <div class="readout" aria-live="polite"><strong id="viewport-readout">390 × 844 · 100%</strong><span id="preset-readout">Current compact · portrait · fit on</span></div>
+      <div class="stage" id="stage">
+        <div class="frame-space" id="frame-space">
+          <div class="frame" id="frame" data-preset="current-phone">
+            <iframe id="app-preview" src="/" title="S-Coach application preview"></iframe>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+  <script>
+    const PRESETS = Object.freeze({
+      'small-phone': Object.freeze({label:'Small phone',width:320,height:568}),
+      'compact-phone': Object.freeze({label:'Compact phone',width:375,height:667}),
+      'current-phone': Object.freeze({label:'Current compact',width:390,height:844}),
+      'large-phone': Object.freeze({label:'Large phone',width:412,height:915}),
+      'tablet': Object.freeze({label:'Tablet',width:768,height:1024}),
+      'desktop': Object.freeze({label:'Responsive desktop',width:1280,height:800})
+    });
+
+    function dimensionsFor(name, landscape=false) {
+      const preset = PRESETS[name];
+      if (!preset) throw new Error('Unknown viewport preset');
+      return landscape ? {width:preset.height,height:preset.width} : {width:preset.width,height:preset.height};
+    }
+
+    function fitScale(width, height, availableWidth, availableHeight, fit=true) {
+      if (!fit) return 1;
+      if (![width,height,availableWidth,availableHeight].every(value=>Number.isFinite(value)&&value>0)) return 1;
+      return Math.min(1, availableWidth/width, availableHeight/height);
+    }
+
+    function boot() {
+      const stage=document.getElementById('stage');
+      const frame=document.getElementById('frame');
+      const frameSpace=document.getElementById('frame-space');
+      const viewportReadout=document.getElementById('viewport-readout');
+      const presetReadout=document.getElementById('preset-readout');
+      const orientationButton=document.getElementById('orientation');
+      const orientationLabel=document.getElementById('orientation-label');
+      const fitButton=document.getElementById('fit-window');
+      const fitLabel=document.getElementById('fit-label');
+      let selected='current-phone';
+      let landscape=false;
+      let fit=true;
+
+      function render() {
+        const dimensions=dimensionsFor(selected,landscape);
+        const availableWidth=Math.max(1,stage.clientWidth-56);
+        const availableHeight=Math.max(1,window.innerHeight-180);
+        const scale=fitScale(dimensions.width,dimensions.height,availableWidth,availableHeight,fit);
+        frame.style.width=dimensions.width+'px';
+        frame.style.height=dimensions.height+'px';
+        frame.style.transform=`translateX(-50%) scale(${scale})`;
+        frame.dataset.preset=selected;
+        frameSpace.style.width=Math.ceil(dimensions.width*scale)+'px';
+        frameSpace.style.height=Math.ceil(dimensions.height*scale)+'px';
+        viewportReadout.textContent=`${dimensions.width} × ${dimensions.height} · ${Math.round(scale*100)}%`;
+        presetReadout.textContent=`${PRESETS[selected].label} · ${landscape?'landscape':'portrait'} · fit ${fit?'on':'off'}`;
+        orientationButton.setAttribute('aria-pressed',String(landscape));
+        orientationLabel.textContent=landscape?'Landscape':'Portrait';
+        fitButton.setAttribute('aria-pressed',String(fit));
+        fitLabel.textContent=fit?'On':'Off';
+        document.querySelectorAll('.preset[data-preset]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.preset===selected)));
+      }
+
+      document.querySelectorAll('.preset[data-preset]').forEach(button=>button.addEventListener('click',()=>{selected=button.dataset.preset;landscape=false;render();}));
+      orientationButton.addEventListener('click',()=>{landscape=!landscape;render();});
+      fitButton.addEventListener('click',()=>{fit=!fit;render();});
+      window.addEventListener('resize',render,{passive:true});
+      render();
+    }
+
+    if (typeof window !== 'undefined') window.DevicePreview=Object.freeze({PRESETS,dimensionsFor,fitScale});
+    if (typeof document !== 'undefined') {
+      if (document.readyState==='loading') document.addEventListener('DOMContentLoaded',boot,{once:true});
+      else boot();
+    }
+  </script>
+</body>
+</html>

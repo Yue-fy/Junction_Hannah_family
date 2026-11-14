@@ -69,3 +69,106 @@ class CoachTests(unittest.TestCase):
         self.assertEqual(result['intent'], 'safe_to_spend')
         self.assertIn('tilihistoriaa', result['explanation_blocks'][0]['text'])
         self.assertNotRegex(result['explanation_blocks'][0]['text'], r'\d|[€%]')
+
+    def test_financing_history_has_explicit_en_fi_sv_historical_boundaries(self):
+        base = {
+            **CONTEXT,
+            'facts': [{'id': 'home-history', 'value_cents': 26600000, 'historical_context_only': True}],
+            'candidates': [{
+                'id': 'home_financing_history', 'kind': 'home_financing_history',
+                'copy_key': 'home_financing_history',
+                'text': 'Linked past mortgage data is historical context only. It is not a current affordability or approval assessment.',
+                'fact_ids': ['home-history'], 'materiality': 1,
+                'historical_context_only': True,
+            }],
+        }
+        cases = [
+            ('en', 'What does my mortgage history show?', ['historical context only', 'not a current', 'approval', 'affordability assessment'], ['account transaction']),
+            ('fi', 'Mitä asuntolainahistoriani kertoo?', ['historiallista taustatietoa', 'eivät ole nykyinen', 'maksukyky', 'hyväksyntä'], ['tilitapahtuma']),
+            ('sv', 'Vad visar min bolånehistorik?', ['historisk bakgrund', 'inte en aktuell', 'betalningsförmåga', 'godkännande'], ['kontohändelse']),
+        ]
+        for locale, message, expected, forbidden in cases:
+            with self.subTest(locale=locale):
+                result = interpret(message, {**base, 'interface_locale': locale}, api_key='')
+                self.assertEqual(result['intent'], 'home_financing_history')
+                text = result['explanation_blocks'][0]['text'].lower()
+                for phrase in expected:
+                    self.assertIn(phrase, text)
+                for phrase in forbidden:
+                    self.assertNotIn(phrase, text)
+
+    def test_statistics_tax_and_tax_plan_canned_intents_are_localized_and_precise(self):
+        catalog = {
+            'categories': ['Groceries', 'Restaurants', 'Transportation'],
+            'roles': ['discretionary', 'flexible_essential'],
+            'transaction_types': ['purchase'],
+            'merchant_ids': [],
+        }
+        cases = [
+            ('en', 'How much did I spend on taxis?', 'Transportation'),
+            ('fi', 'Paljonko käytin ravintoloihin?', 'Restaurants'),
+            ('sv', 'Hur mycket spenderade jag på matvaror?', 'Groceries'),
+        ]
+        for locale, message, category in cases:
+            with self.subTest(locale=locale):
+                result = interpret(message, {**CONTEXT, 'interface_locale': locale, 'filter_catalog': catalog}, api_key='')
+                self.assertEqual(result['intent'], 'transaction_statistics')
+                self.assertFalse(result['needs_clarification'])
+                self.assertEqual(result['parameters'], {'period': '2026-09', 'category': category})
+
+        for locale, question_fragment in [('en', 'category'), ('fi', 'luok'), ('sv', 'kategori')]:
+            with self.subTest(missing_locale=locale):
+                result = interpret('How much did I spend?', {**CONTEXT, 'interface_locale': locale, 'filter_catalog': catalog}, api_key='')
+                self.assertTrue(result['needs_clarification'])
+                self.assertIn(question_fragment, result['clarification_question'].lower())
+
+        taxes = interpret('Did I pay taxes this month?', {**CONTEXT, 'filter_catalog': catalog}, api_key='')
+        self.assertEqual(taxes['intent'], 'observed_tax_evidence')
+        self.assertEqual(taxes['parameters'], {'period': '2026-09'})
+        planning = interpret('Help me plan for a tax payment', {**CONTEXT, 'interface_locale': 'fi', 'filter_catalog': catalog}, api_key='')
+        self.assertEqual(planning['intent'], 'plan_tax')
+        self.assertTrue(planning['needs_clarification'])
+        self.assertIn('summa', planning['clarification_question'].lower())
+
+    def test_free_exploration_recognizes_all_everyday_categories_offline(self):
+        categories = [
+            'Entertainment', 'Groceries', 'Health', 'Home & Tech', 'Housing',
+            'Lifestyle', 'Restaurants', 'Transportation', 'Travel', 'Utilities',
+        ]
+        context = {
+            **CONTEXT,
+            'filter_catalog': {
+                'categories': categories,
+                'roles': [],
+                'transaction_types': ['purchase'],
+                'merchant_ids': [],
+            },
+        }
+        cases = [
+            ('en', 'How much did I spend on entertainment?', 'Entertainment'),
+            ('en', 'How much did I spend on health?', 'Health'),
+            ('en', 'How much did I spend on home appliances?', 'Home & Tech'),
+            ('en', 'How much did I spend on rent?', 'Housing'),
+            ('en', 'How much did I spend on clothes?', 'Lifestyle'),
+            ('en', 'How much did I spend on travel?', 'Travel'),
+            ('en', 'How much did I spend on utilities?', 'Utilities'),
+            ('fi', 'Paljonko käytin viihteeseen?', 'Entertainment'),
+            ('fi', 'Paljonko käytin matkailuun?', 'Travel'),
+            ('sv', 'Hur mycket spenderade jag på hälsa?', 'Health'),
+            ('sv', 'Hur mycket spenderade jag på boende?', 'Housing'),
+        ]
+        for locale, message, category in cases:
+            with self.subTest(locale=locale, category=category):
+                result = interpret(message, {**context, 'interface_locale': locale}, api_key='')
+                self.assertEqual(result['intent'], 'transaction_statistics')
+                self.assertFalse(result['needs_clarification'])
+                self.assertEqual(result['parameters']['category'], category)
+
+        current = interpret(
+            'How much did I spend in the current month?',
+            {**context, 'interface_locale': 'en'},
+            api_key='',
+        )
+        self.assertEqual(current['intent'], 'transaction_statistics')
+        self.assertTrue(current['needs_clarification'])
+        self.assertNotIn('category', current['parameters'])

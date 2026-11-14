@@ -1,4 +1,5 @@
 """Deterministic comparisons, literacy flows and robust review candidates."""
+from datetime import date, timedelta
 from decimal import Decimal
 from .money import rounded, median_cents, percentile_cents
 from .ledger import transactions, account_scope, month_bounds, shift_month, fact_id
@@ -53,6 +54,20 @@ def money_map(conn, customer_id, month=None):
     return result
 
 
+def three_basket_profile(conn, customer_id, month=None):
+    """Return a neutral, evidence-bearing breakdown rather than a spender score."""
+    overview=money_map(conn,customer_id,month)
+    roles=('fixed_obligation','flexible_essential','discretionary')
+    selected=[]
+    for role in roles:
+        flow=next(row for row in overview['flows'] if row['role']==role)
+        selected.append({'role':role,'amount_cents':-min(flow['amount_cents'],0),'fact_id':flow['fact_id'],'transaction_refs':flow['transaction_refs'],'observed':True})
+    refs=[ref for row in selected for ref in row['transaction_refs']]
+    result={**account_scope(conn,customer_id),'period':overview['month'],'start':overview['start'],'end':overview['end'],'baskets':selected,'total_consumption_cents':sum(row['amount_cents'] for row in selected),'transaction_refs':refs,'observed':True,'profile_kind':'three_basket_breakdown','limitations':['This is a descriptive breakdown of observed spending, not a score, diagnosis, or judgment']}
+    result['fact_id']=fact_id('three-basket-profile',overview['fact_id'],[row['fact_id'] for row in selected])
+    return result
+
+
 def _complete(conn,customer_id,start,end):
     if (start,end)!=month_bounds(start[:7]): raise ValueError('Comparison requires complete calendar months')
     coverage=conn.execute('SELECT min(date),max(date) FROM transactions').fetchone()
@@ -96,6 +111,136 @@ def trend_series(conn, customer_id, end_month=None, months=12, filters=None):
     return {**account_scope(conn,customer_id),'months':series,'same_month_previous_year':previous,'year_over_year_delta_cents':current['total_cents']-previous['total_cents'] if previous['available'] else None,'annual_comparison':annual,'trailing_six_median_cents':median_cents([m['total_cents'] for m in baseline]) if all(m['available'] for m in baseline) else None,'recent_three_salary_median_cents':median_cents([m['salary_cents'] for m in salary_maps[-3:]]) if len(salary_maps)>=3 else None,'prior_six_salary_median_cents':median_cents([m['salary_cents'] for m in salary_maps[:6]]) if len(salary_maps)==9 else None,'salary_transaction_refs':[ref for m in salary_maps for ref in m['transaction_refs']],'other_income_separate':True,'transaction_refs':refs,'fact_id':fact_id('trend',customer_id,end_month,filters,refs),'observed':True}
 
 
+def salary_change_signal(conn, customer_id, end_month=None):
+    """Compare a robust recent salary-only level with the preceding baseline."""
+    end_month = end_month or latest_complete_month(conn, customer_id)
+    month_bounds(end_month)
+    scope = account_scope(conn, customer_id)
+    if not scope['observed_start'][:7] <= end_month <= scope['observed_end'][:7]:
+        raise ValueError('Month outside observed dataset coverage')
+    start_month = shift_month(end_month, -8)
+    months = [shift_month(start_month, offset) for offset in range(9)]
+    start, end = month_bounds(start_month)[0], month_bounds(end_month)[1]
+    rows = transactions(conn, customer_id, start, end)
+    salary_rows = [row for row in rows if row['transaction_type'] == 'salary']
+    other_income_refs = [row['transaction_ref'] for row in rows if row['transaction_type'] == 'other_income']
+    monthly = []
+    for month in months:
+        selected = [row for row in salary_rows if row['date'].startswith(month)]
+        monthly.append({
+            'month': month,
+            'salary_cents': sum(row['amount_cents'] for row in selected),
+            'transaction_refs': [row['transaction_ref'] for row in selected],
+            'has_salary': bool(selected),
+        })
+    refs = [row['transaction_ref'] for row in salary_rows]
+    available = start_month >= scope['observed_start'][:7] and all(row['has_salary'] and row['salary_cents'] > 0 for row in monthly)
+    recent = baseline = delta = change_bps = None
+    if available:
+        baseline = median_cents([row['salary_cents'] for row in monthly[:6]])
+        recent = median_cents([row['salary_cents'] for row in monthly[6:]])
+        if baseline <= 0:
+            available = False
+        else:
+            delta = recent - baseline
+            change_bps = rounded(Decimal(delta) * 10_000 / baseline)
+    threshold_bps = 1_500
+    absolute_threshold = 10_000
+    qualified = bool(available and abs(change_bps) >= threshold_bps and abs(delta) >= absolute_threshold)
+    result = {
+        **scope,
+        'available': available,
+        'qualified': qualified,
+        'end_month': end_month,
+        'recent_period': {'start': month_bounds(months[6])[0], 'end': month_bounds(months[8])[1], 'months': 3},
+        'baseline_period': {'start': month_bounds(months[0])[0], 'end': month_bounds(months[5])[1], 'months': 6},
+        'recent_salary_median_cents': recent,
+        'baseline_salary_median_cents': baseline,
+        'delta_cents': delta,
+        'change_basis_points': change_bps,
+        'direction': 'increase' if qualified and delta > 0 else ('decrease' if qualified else None),
+        'threshold_basis_points': threshold_bps,
+        'absolute_threshold_cents': absolute_threshold,
+        'threshold_rule': 'absolute change of at least EUR 100 and relative change of at least 15%',
+        'monthly_salary': monthly,
+        'other_income_excluded': True,
+        'other_income_transaction_refs': other_income_refs,
+        'transaction_refs': refs,
+        'unavailable_reason': None if available else 'Nine complete months with observed salary are required',
+        'label': 'Observed salary-level change' if qualified else 'No meaningful salary-level change detected',
+        'observed': True,
+    }
+    result['fact_id'] = fact_id('salary-change', customer_id, end_month, refs, other_income_refs)
+    return result
+
+
+def payday_timing_signal(conn, customer_id, end_month=None):
+    """Find repeated observed balance troughs in the week before salary payments."""
+    end_month = end_month or latest_complete_month(conn, customer_id)
+    month_bounds(end_month)
+    scope = account_scope(conn, customer_id)
+    if not scope['observed_start'][:7] <= end_month <= scope['observed_end'][:7]:
+        raise ValueError('Month outside observed dataset coverage')
+    start_month = shift_month(end_month, -5)
+    period_start, period_end = month_bounds(start_month)[0], month_bounds(end_month)[1]
+    lookback_days = 7
+    history_start = (date.fromisoformat(period_start) - timedelta(days=lookback_days)).isoformat()
+    rows = transactions(conn, customer_id, history_start, period_end)
+    salary_entries = [(index, row) for index, row in enumerate(rows) if period_start <= row['date'] <= period_end and row['transaction_type'] == 'salary' and row['amount_cents'] > 0]
+    salary_amounts = [row['amount_cents'] for _, row in salary_entries]
+    salary_median = median_cents(salary_amounts) if salary_amounts else None
+    threshold = min(50_000, rounded(Decimal(salary_median) * Decimal('.25'))) if salary_median else None
+    events = []
+    for index, salary in salary_entries:
+        salary_date = date.fromisoformat(salary['date'])
+        window_start = (salary_date - timedelta(days=lookback_days)).isoformat()
+        prior = [row for row in rows[:index] if window_start <= row['date'] <= salary['date']]
+        if not prior:
+            continue
+        trough = min(prior, key=lambda row: (row['balance_after_cents'], row['date'], row['transaction_ref']))
+        events.append({
+            'salary_date': salary['date'],
+            'salary_transaction_ref': salary['transaction_ref'],
+            'salary_cents': salary['amount_cents'],
+            'window_start': window_start,
+            'trough_date': trough['date'],
+            'trough_transaction_ref': trough['transaction_ref'],
+            'trough_balance_cents': trough['balance_after_cents'],
+            'below_threshold': trough['balance_after_cents'] < threshold,
+        })
+    salary_months = {row['date'][:7] for _, row in salary_entries}
+    low_events = [event for event in events if event['below_threshold']]
+    available = start_month >= scope['observed_start'][:7] and len(salary_months) >= 4 and len(events) >= 3
+    qualified = bool(available and len(low_events) >= 3 and len(low_events) * 2 >= len(events))
+    refs = []
+    for event in events:
+        refs.extend([event['salary_transaction_ref'], event['trough_transaction_ref']])
+    refs = list(dict.fromkeys(refs))
+    result = {
+        **scope,
+        'available': available,
+        'qualified': qualified,
+        'end_month': end_month,
+        'period': {'start': period_start, 'end': period_end, 'months': 6},
+        'lookback_days': lookback_days,
+        'salary_median_cents': salary_median,
+        'low_balance_threshold_cents': threshold,
+        'threshold_rule': 'lower of EUR 500 or 25% of the observed median salary',
+        'minimum_evidence_rule': 'at least four salary months, three observed pre-salary windows, and three low events in at least half of observed windows',
+        'salary_month_count': len(salary_months),
+        'observed_window_count': len(events),
+        'low_balance_event_count': len(low_events),
+        'lowest_pre_salary_balance_cents': min((event['trough_balance_cents'] for event in events), default=None),
+        'events': events,
+        'transaction_refs': refs,
+        'unavailable_reason': None if available else 'At least four salary months and three observed pre-salary windows are required',
+        'label': 'Observed pre-payday balance timing pattern' if qualified else 'No repeated pre-payday balance timing pattern detected',
+        'observed': True,
+    }
+    result['fact_id'] = fact_id('payday-timing', customer_id, end_month, refs)
+    return result
+
+
 def investment_cashflows(conn, customer_id, end_month=None, months=12):
     """Summarize observed investment-related bank transfers, never portfolio value."""
     if type(months) is not int or not 1 <= months <= 24:
@@ -105,7 +250,11 @@ def investment_cashflows(conn, customer_id, end_month=None, months=12):
     scope = account_scope(conn, customer_id)
     if not scope['observed_start'][:7] <= end_month <= scope['observed_end'][:7]:
         raise ValueError('Month outside observed dataset coverage')
-    start_month = shift_month(end_month, -months + 1)
+    requested_start_month = shift_month(end_month, -months + 1)
+    start_month = max(requested_start_month, scope['observed_start'][:7])
+    start_year, start_number = map(int, start_month.split('-'))
+    end_year, end_number = map(int, end_month.split('-'))
+    observed_months = (end_year - start_year) * 12 + end_number - start_number + 1
     start, end = month_bounds(start_month)[0], month_bounds(end_month)[1]
     rows = transactions(conn, customer_id, start, end)
     relevant = [row for row in rows if row['transaction_type'] in TRANSFER_TYPES]
@@ -129,7 +278,7 @@ def investment_cashflows(conn, customer_id, end_month=None, months=12):
             'observed': True,
         }
 
-    series = [monthly(shift_month(start_month, offset)) for offset in range(months)]
+    series = [monthly(shift_month(start_month, offset)) for offset in range(observed_months)]
     deposits = sum(row['investment_deposits_cents'] for row in series)
     sweeps = sum(row['salary_sweeps_cents'] for row in series)
     contributions = deposits + sweeps
@@ -140,7 +289,11 @@ def investment_cashflows(conn, customer_id, end_month=None, months=12):
         **scope,
         'start_month': start_month,
         'end_month': end_month,
-        'period_months': months,
+        'requested_period_months': months,
+        'period_months': observed_months,
+        'coverage_limited': start_month != requested_start_month,
+        'observation_start_date': scope['observed_start'],
+        'observation_end_date': scope['observed_end'],
         'investment_deposits_cents': deposits,
         'salary_sweeps_cents': sweeps,
         'total_contributions_cents': contributions,

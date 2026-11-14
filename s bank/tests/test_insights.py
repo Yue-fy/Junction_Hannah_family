@@ -125,6 +125,22 @@ class InsightTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             investment_cashflows(self.conn, 'C', '2026-09', months=25)
 
+    def test_investment_range_is_clamped_to_observed_account_months(self):
+        add_row(self.conn, 'opening', '2026-07-20', 'Salary', 100_000, 100_000, 'salary')
+        add_row(self.conn, 'deposit', '2026-09-05', 'Invest Deposit', -20_000, 80_000, 'investment_deposit')
+        self.conn.commit()
+
+        result = investment_cashflows(self.conn, 'C', '2026-09', months=24)
+
+        self.assertEqual(result['requested_period_months'], 24)
+        self.assertEqual(result['start_month'], '2026-07')
+        self.assertEqual(result['end_month'], '2026-09')
+        self.assertEqual(result['period_months'], 3)
+        self.assertTrue(result['coverage_limited'])
+        self.assertEqual(result['observation_start_date'], '2026-07-20')
+        self.assertEqual([row['month'] for row in result['months']], ['2026-07', '2026-08', '2026-09'])
+        self.assertTrue(all(row['observed'] for row in result['months']))
+
 
 if __name__ == '__main__':
     unittest.main()

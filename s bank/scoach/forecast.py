@@ -55,11 +55,15 @@ def _flexible_windows(rows,reference,recurring_refs):
     earliest=date.fromisoformat(rows[0]['date']); latest_start=reference-timedelta(days=30)
     first_start=max(earliest,reference-timedelta(days=180))
     totals=[]; comparison_refs=set()
-    flexible=[r for r in rows if r['role'] in ('flexible_essential','discretionary','needs_review') and r['amount_cents']<0 and r['transaction_type'] not in TRANSFER_TYPES and r['transaction_ref'] not in recurring_refs]
+    # The literacy basket and cash-flow behavior answer different questions.
+    # Groceries and transport are regular essentials, but they are not safe to
+    # ignore when they do not qualify as a scheduled recurring item. Protect
+    # every unscheduled consumption outflow in the historical buffer.
+    unscheduled=[r for r in rows if r['amount_cents']<0 and r['transaction_type'] in ('purchase','utilities_payment','housing_payment') and r['transaction_type'] not in TRANSFER_TYPES and r['transaction_ref'] not in recurring_refs]
     cursor=first_start
     while cursor<=latest_start:
         end=cursor+timedelta(days=29)
-        selected=[r for r in flexible if cursor.isoformat()<=r['date']<=end.isoformat()]
+        selected=[r for r in unscheduled if cursor.isoformat()<=r['date']<=end.isoformat()]
         totals.append(-sum(r['amount_cents'] for r in selected)); comparison_refs.update(r['transaction_ref'] for r in selected)
         cursor+=timedelta(days=1)
     return totals or [0],sorted(comparison_refs),len(totals)
@@ -94,7 +98,7 @@ def preview_30_days(conn,customer_id,as_of=None,assumptions=None):
         projected.append({'date':day,'confirmed_balance_cents':current,'balance_cents':bands['p50'],'historical_flexible_scenarios':bands,'scheduled_item_ids':[e['id'] for e in todays],'observed':False})
     observed=[{'date':r['date'],'balance_cents':r['balance_after_cents'],'transaction_ref':r['transaction_ref'],'observed':True} for r in rows if r['date']>=(reference-timedelta(days=30)).isoformat()]
     observed_span_days=(reference-date.fromisoformat(rows[0]['date'])).days
-    return {**account_scope(conn,customer_id),'as_of':reference.isoformat(),'latest_observed_date':last['date'],'starting_balance_cents':balance,'starting_transaction_ref':last['transaction_ref'],'observed':observed,'projected':projected,'scheduled_items':events,'recurring_items':recurring,'scenario_band':{'label':'Historical variation — not a probability interval','spending_cents':spend,'rolling_window_days':30,'window_count':complete_window_count,'complete_window_count':complete_window_count,'observed_span_days':observed_span_days,'comparison_transaction_refs':comparison_refs},'label':'Confirmed cash-flow preview','assumptions':['Known recurring items use robust median dates and amounts','Flexible spending is historical 30-day variation; no probability claimed','No unconfirmed income or tax inference','Transfers affect balance and remain separate from consumption'],'fact_id':fact_id('preview',customer_id,reference.isoformat(),assumptions,last['transaction_ref']),'transaction_refs':[last['transaction_ref']]+[ref for r in recurring for ref in r['transaction_refs']]}
+    return {**account_scope(conn,customer_id),'as_of':reference.isoformat(),'latest_observed_date':last['date'],'starting_balance_cents':balance,'starting_transaction_ref':last['transaction_ref'],'observed':observed,'projected':projected,'scheduled_items':events,'recurring_items':recurring,'scenario_band':{'label':'Historical variation — not a probability interval','spending_cents':spend,'spending_scope':'all unscheduled consumption, including regular essentials','rolling_window_days':30,'window_count':complete_window_count,'complete_window_count':complete_window_count,'observed_span_days':observed_span_days,'comparison_transaction_refs':comparison_refs},'label':'Pattern-based cash-flow preview','assumptions':['Qualified recurring patterns use robust median dates and amounts','Unscheduled consumption uses historical 30-day variation; no probability claimed','No unconfirmed income or tax inference','Transfers affect balance and remain separate from consumption'],'fact_id':fact_id('preview',customer_id,reference.isoformat(),assumptions,last['transaction_ref']),'transaction_refs':[last['transaction_ref']]+[ref for r in recurring for ref in r['transaction_refs']]}
 
 
 def safe_to_spend(conn, customer_id, as_of=None, days=7, reserve_floor_cents=None):
@@ -142,6 +146,7 @@ def safe_to_spend(conn, customer_id, as_of=None, days=7, reserve_floor_cents=Non
         'scheduled_income_excluded_cents': excluded_income,
         'historical_flexible_buffer_cents': flexible_buffer,
         'historical_flexible_p75_30_day_cents': p75_30_days,
+        'historical_buffer_scope': preview['scenario_band']['spending_scope'],
         'safe_to_spend_cents': estimate,
         'available': available,
         'needs_history': not available,
@@ -155,7 +160,7 @@ def safe_to_spend(conn, customer_id, as_of=None, days=7, reserve_floor_cents=Non
         'assumptions': [
             'Expected income is excluded until it arrives',
             'Scheduled outflows use qualified recurring patterns, including committed transfers',
-            'The flexible-spending buffer scales the historical thirty-day upper-quartile scenario',
+            'The unscheduled-consumption buffer scales the historical thirty-day upper-quartile scenario and includes regular essentials that are not scheduled separately',
             'Taxes or obligations not present in the transaction history are not inferred',
         ],
         'scenario': True,

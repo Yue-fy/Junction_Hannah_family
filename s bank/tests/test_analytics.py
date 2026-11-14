@@ -1,7 +1,7 @@
 import pathlib, unittest
 from scoach.db import connect, initialize_schema
 from scoach.ledger import transactions, account_scope
-from scoach.analytics import month_summary, money_map, compare_periods, trend_series, unusual_candidates
+from scoach.analytics import month_summary, money_map, compare_periods, trend_series, unusual_candidates, salary_change_signal, payday_timing_signal
 
 class AnalyticsTests(unittest.TestCase):
     def setUp(self): self.conn=connect(pathlib.Path(__file__).resolve().parents[1]/'var/scoach.sqlite3')
@@ -54,3 +54,71 @@ class AnalyticsTests(unittest.TestCase):
 
     def test_money_map_rejects_unobserved_period(self):
         with self.assertRaises(ValueError): money_map(self.conn,'CUST00001','2027-01')
+
+    def test_salary_change_uses_recent_three_complete_months_and_excludes_other_income(self):
+        c=connect(':memory:'); initialize_schema(c); c.execute("INSERT INTO customers VALUES('C','00100',30,'{}')")
+        line=0
+        for month in range(1,10):
+            salary=100000 if month<=6 else 130000
+            line+=1; c.execute('INSERT INTO transactions VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)',(f's{month}','C','A',f'2026-{month:02d}-15','15X26:12:00:00','Salary',salary,200000,'salary',None,None,line,f's{month}','{}'))
+            if month>=7:
+                line+=1; c.execute('INSERT INTO transactions VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)',(f'o{month}','C','A',f'2026-{month:02d}-20','20X26:12:00:00','Other Income',900000,1100000,'other_income',None,None,line,f'o{month}','{}'))
+        c.commit()
+
+        signal=salary_change_signal(c,'C','2026-09')
+
+        self.assertTrue(signal['available']); self.assertTrue(signal['qualified'])
+        self.assertEqual(signal['direction'],'increase')
+        self.assertEqual(signal['recent_period'],{'start':'2026-07-01','end':'2026-09-30','months':3})
+        self.assertEqual(signal['baseline_period'],{'start':'2026-01-01','end':'2026-06-30','months':6})
+        self.assertEqual(signal['recent_salary_median_cents'],130000)
+        self.assertEqual(signal['baseline_salary_median_cents'],100000)
+        self.assertEqual(signal['delta_cents'],30000)
+        self.assertEqual(signal['change_basis_points'],3000)
+        self.assertEqual(signal['threshold_basis_points'],1500)
+        self.assertEqual(signal['absolute_threshold_cents'],10000)
+        self.assertTrue(signal['other_income_excluded'])
+        self.assertEqual(set(signal['transaction_refs']),{f's{i}' for i in range(1,10)})
+        self.assertTrue(signal['fact_id'])
+
+        selected=salary_change_signal(c,'C','2026-08')
+        self.assertEqual(selected['recent_period']['end'],'2026-08-31')
+        c.execute("INSERT INTO customers VALUES('D','00100',30,'{}')")
+        for month in range(2,10):
+            c.execute('INSERT INTO transactions VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)',(f'ds{month}','D','D1',f'2026-{month:02d}-15','15X26:12:00:00','Salary',100000,200000,'salary',None,None,100+month,f'ds{month}','{}'))
+        c.commit()
+        insufficient=salary_change_signal(c,'D','2026-09')
+        self.assertFalse(insufficient['available']); self.assertFalse(insufficient['qualified'])
+        c.close()
+
+    def test_payday_timing_uses_observed_pre_salary_troughs_and_minimum_evidence(self):
+        c=connect(':memory:'); initialize_schema(c); c.execute("INSERT INTO customers VALUES('C','00100',30,'{}')")
+        line=0
+        for month in range(4,10):
+            line+=1; c.execute('INSERT INTO transactions VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)',(f'low{month}','C','A',f'2026-{month:02d}-14','14X26:12:00:00','Groceries',-1000,10000,'purchase',None,None,line,f'low{month}','{}'))
+            line+=1; c.execute('INSERT INTO transactions VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)',(f'salary{month}','C','A',f'2026-{month:02d}-15','15X26:12:00:00','Salary',100000,110000,'salary',None,None,line,f'salary{month}','{}'))
+        c.commit()
+
+        signal=payday_timing_signal(c,'C','2026-09')
+
+        self.assertTrue(signal['available']); self.assertTrue(signal['qualified'])
+        self.assertEqual(signal['period'],{'start':'2026-04-01','end':'2026-09-30','months':6})
+        self.assertEqual(signal['lookback_days'],7)
+        self.assertEqual(signal['salary_median_cents'],100000)
+        self.assertEqual(signal['low_balance_threshold_cents'],25000)
+        self.assertEqual(signal['threshold_rule'],'lower of EUR 500 or 25% of the observed median salary')
+        self.assertEqual(signal['observed_window_count'],6)
+        self.assertEqual(signal['low_balance_event_count'],6)
+        self.assertEqual(signal['lowest_pre_salary_balance_cents'],10000)
+        self.assertEqual(len(signal['events']),6)
+        self.assertEqual(len(signal['transaction_refs']),12)
+        self.assertTrue(signal['fact_id'])
+
+        c.execute("INSERT INTO customers VALUES('D','00100',30,'{}')")
+        for month in (8,9):
+            c.execute('INSERT INTO transactions VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)',(f'dlow{month}','D','D1',f'2026-{month:02d}-14','14X26:12:00:00','Groceries',-1000,10000,'purchase',None,None,100+month,f'dlow{month}','{}'))
+            c.execute('INSERT INTO transactions VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)',(f'dsalary{month}','D','D1',f'2026-{month:02d}-15','15X26:12:00:00','Salary',100000,110000,'salary',None,None,200+month,f'dsalary{month}','{}'))
+        c.commit()
+        insufficient=payday_timing_signal(c,'D','2026-09')
+        self.assertFalse(insufficient['available']); self.assertFalse(insufficient['qualified'])
+        c.close()

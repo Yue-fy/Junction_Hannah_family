@@ -15,7 +15,7 @@ class ForecastTests(unittest.TestCase):
         self.assertEqual(utility['recurrence_kind'],'monthly envelope')
         self.assertTrue(utility['transaction_refs'])
         preview=preview_30_days(self.c,'CUST00676')
-        self.assertEqual(preview['label'],'Confirmed cash-flow preview')
+        self.assertEqual(preview['label'],'Pattern-based cash-flow preview')
         self.assertTrue(all(p['observed'] for p in preview['observed']))
         self.assertTrue(all(not p['observed'] for p in preview['projected']))
         self.assertEqual(len(preview['projected']),30)

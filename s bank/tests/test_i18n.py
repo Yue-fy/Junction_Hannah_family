@@ -1,4 +1,5 @@
 import json
+import re
 import shutil
 import subprocess
 import textwrap
@@ -122,6 +123,25 @@ class I18nModuleTests(unittest.TestCase):
             assert.equal(fallback.locale, 'fi');
             """
         )
+
+    def test_dynamic_story_evidence_and_recovery_have_translated_catalogs(self):
+        self.run_module("""
+        const keys=['story.change','story.sameCount','story.transactions','scenario.base','evidence.scope','evidence.refs','handoff.finishLink','feedback.reset','forecast.include','support.unavailable','basket.review.help','coach.offlineMode'];
+        for(const key of keys){
+          for(const locale of i18n.SUPPORTED_LOCALES)assert.ok(i18n.MESSAGES[locale][key],`${locale}.${key} is missing`);
+          assert.notEqual(i18n.MESSAGES.fi[key],i18n.MESSAGES.en[key],key+' is not Finnish');
+          assert.notEqual(i18n.MESSAGES.sv[key],i18n.MESSAGES.en[key],key+' is not Swedish');
+        }
+        """)
+
+    def test_every_literal_ui_translation_reference_exists_in_all_locales(self):
+        source = (ROOT / 'web/app.js').read_text()
+        html = (ROOT / 'web/index.html').read_text()
+        keys = sorted(key for key in set(re.findall(r"\bt\(['\"]([\w.]+)['\"]", source)) | set(re.findall(r'data-i18n(?:-aria|-placeholder)?="([\w.]+)"', html)) if not key.endswith('.'))
+        self.run_module(f"""
+        const keys={json.dumps(keys)};
+        for(const locale of i18n.SUPPORTED_LOCALES)for(const key of keys)assert.ok(i18n.MESSAGES[locale][key],`${{locale}}.${{key}} is missing`);
+        """)
 
 
 if __name__ == "__main__":

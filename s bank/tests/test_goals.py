@@ -8,6 +8,7 @@ class GoalTests(unittest.TestCase):
     def setUp(self): self.c=demo_connection()
     def tearDown(self): self.c.close()
     def test_upward_contribution_reserve_capacity_and_link_are_planning_only(self):
+        transaction_count=self.c.execute('select count(*) from transactions').fetchone()[0]
         g=create_goal(self.c,'CUST00001','My trip',10000,'2027-01-30',current_saved_cents=1,reserve_floor_cents=99999999,as_of='2026-09-30')
         self.assertEqual(g['required_monthly_cents'],2500); self.assertEqual(g['remaining_cents'],9999)
         self.assertEqual(g['upfront_available_cents'],0); self.assertEqual(len(g['cashflow_months']),6)
@@ -15,7 +16,7 @@ class GoalTests(unittest.TestCase):
         s=create_scenario(self.c,'CUST00001','2026-09-01','2026-09-30')
         linked=link_scenario_to_goal(self.c,'CUST00001',g['id'],s['id'],as_of='2026-09-30')
         self.assertEqual(linked['modeled_scenario_contribution_cents'],4514); self.assertFalse(linked['observed'])
-        self.assertIn('audit_event',linked); self.assertEqual(self.c.execute('select count(*) from transactions').fetchone()[0],3068)
+        self.assertIn('audit_event',linked); self.assertEqual(self.c.execute('select count(*) from transactions').fetchone()[0],transaction_count)
     def test_invalid_inputs_rejected(self):
         for kw in ({'target_cents':0},{'target_date':'2026-01-01'},{'current_saved_cents':-1},{'reserve_floor_cents':-1},{'name':''}):
             args=dict(name='Goal',target_cents=10000,target_date='2027-01-30',as_of='2026-09-30'); args.update(kw)

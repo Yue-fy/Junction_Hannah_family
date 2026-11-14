@@ -12,7 +12,8 @@ def _scenario(conn,customer_id,scenario_id):
     return dict(row)
 
 
-def create_scenario(conn,customer_id,start,end,category='Restaurants',percent=20,name='Spending adjustment',provenance='user'):
+def preview_spending_adjustment(conn,customer_id,start,end,category='Restaurants',percent=20):
+    """Calculate an unsaved category adjustment from observed rows."""
     if (start,end)!=month_bounds(start[:7]): raise ValueError('Monthly scenario requires one complete calendar month')
     try:
         percentage=Decimal(str(percent))
@@ -22,7 +23,15 @@ def create_scenario(conn,customer_id,start,end,category='Restaurants',percent=20
     rows=transactions(conn,customer_id,start,end,{'category':category})
     if any(r['role']!='discretionary' or r['transaction_type'] in TRANSFER_TYPES for r in rows): raise ValueError('Default adjustment requires eligible discretionary spending')
     if not rows: raise ValueError('No eligible rows')
-    row={'id':new_id('scenario'),'customer_id':customer_id,'name':name,'start':start,'end':end,'category':category,'percent':str(percentage),'goal_id':None,'created_at':now()}
+    selected=[r for r in rows if r['amount_cents']<0 and r['transaction_type'] not in TRANSFER_TYPES]
+    base=-sum(r['amount_cents'] for r in selected)
+    refs=[r['transaction_ref'] for r in selected]
+    return {**account_scope(conn,customer_id),'start':start,'end':end,'category':category,'percent':str(percentage),'actual_total_cents':base,'adjustable_base_cents':base,'modeled_monthly_contribution_cents':rounded(Decimal(base)*percentage/100),'transaction_refs':refs,'formula':'adjustable_base × percent / 100, round half up','label':'Planning preview — modeled monthly contribution','scenario':True,'observed':False,'persistence':'not_saved','fact_id':fact_id('scenario-preview',customer_id,start,end,category,str(percentage),refs)}
+
+
+def create_scenario(conn,customer_id,start,end,category='Restaurants',percent=20,name='Spending adjustment',provenance='user'):
+    preview=preview_spending_adjustment(conn,customer_id,start,end,category,percent)
+    row={'id':new_id('scenario'),'customer_id':customer_id,'name':name,'start':start,'end':end,'category':category,'percent':preview['percent'],'goal_id':None,'created_at':now()}
     def apply(): conn.execute('INSERT INTO scenarios VALUES(?,?,?,?,?,?,?,?,?)',tuple(row.values()))
     _,audit=mutate(conn,customer_id,'create_scenario',row['id'],apply,provenance)
     return {**scenario_result(conn,customer_id,row['id']),'audit_event':audit}

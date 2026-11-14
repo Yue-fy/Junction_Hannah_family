@@ -2,6 +2,7 @@
 import calendar
 import json
 import mimetypes
+import os
 import sqlite3
 from datetime import date
 from decimal import Decimal, InvalidOperation
@@ -79,19 +80,25 @@ class Application:
         if any(len(values) != 1 for values in query.values()):
             raise ValueError('Repeated query parameters are not supported')
         query = {key: values[0] for key, values in query.items()}
-        get_routes = {'/api/health', '/api/personas', '/api/overview', '/api/comparison', '/api/transactions', '/api/trends', '/api/forecast', '/api/safe-to-spend', '/api/investments', '/api/goals'}
-        post_routes = {'/api/scenarios', '/api/scenarios/exclude', '/api/rules', '/api/goals', '/api/goals/link', '/api/coach', '/api/undo', '/api/reset'}
+        get_routes = {'/api/health', '/api/personas', '/api/overview', '/api/comparison', '/api/transactions', '/api/trends', '/api/forecast', '/api/safe-to-spend', '/api/investments', '/api/financing', '/api/statistics', '/api/statistics/compare', '/api/taxes', '/api/vat', '/api/goals'}
+        post_routes = {'/api/scenarios', '/api/scenarios/exclude', '/api/rules', '/api/goals', '/api/goals/link', '/api/coach', '/api/tax-plan', '/api/undo', '/api/reset'}
         if path not in get_routes | post_routes:
             raise APIError(404, 'not_found', 'Unknown API endpoint')
         if (method == 'GET' and path not in get_routes) or (method == 'POST' and path not in post_routes) or method not in {'GET', 'POST'}:
             raise APIError(405, 'method_not_allowed', 'Method not allowed')
+        self._validate_tool_query(path, query)
         if method == 'POST' and not isinstance(payload, dict):
             raise ValueError('JSON body must be an object')
         body = payload or {}
         if method == 'POST':
             self._validate_body(path, body)
         if path == '/api/health':
-            return {'status': 'ok', 'database_ready': self.database.is_file(), 'gemini_optional': True}
+            return {
+                'status': 'ok',
+                'database_ready': self.database.is_file(),
+                'gemini_optional': True,
+                'gemini_configured': bool(os.environ.get('GEMINI_API_KEY') or self.coach_transport),
+            }
         if not self.database.is_file():
             raise APIError(503, 'database_unavailable', 'Demo database missing. Run scripts/build_demo_db.py first.')
         if method == 'POST' and path != '/api/coach' and body.get('confirmed') is not True:
@@ -103,7 +110,7 @@ class Application:
             from .ledger import account_scope, transactions
             from .analytics import latest_complete_month, money_map, compare_periods, trend_series
             if path == '/api/personas':
-                aliases = {'CUST00001': ('Alex', 'Everyday spending'), 'CUST00676': ('Robin', 'Payday timing'), 'CUST05097': ('Sam', 'Unusual travel purchase'), 'CUST00756': ('Jules', 'Income growth'), 'CUST00296': ('Taylor', 'Optional home goal')}
+                aliases = {'CUST00001': ('Alex', 'Everyday spending'), 'CUST00676': ('Robin', 'Payday timing'), 'CUST05097': ('Sam', 'Unusual travel purchase'), 'CUST00756': ('Jules', 'Income growth'), 'CUST00296': ('Taylor', 'Optional home goal'), 'CUST01331': ('Kai', 'Young-adult payday timing')}
                 return {'personas': [{'customer_id': row[0], 'name': aliases.get(row[0], ('Demo customer', 'Personal money coach'))[0], 'story': aliases.get(row[0], ('Demo customer', 'Personal money coach'))[1]} for row in conn.execute('SELECT customer_id FROM customers ORDER BY customer_id')]}
             customer_id = body.get('customer_id', query.get('customer_id', 'CUST00001'))
             if not isinstance(customer_id, str) or not conn.execute('SELECT 1 FROM customers WHERE customer_id=?', (customer_id,)).fetchone():
@@ -160,6 +167,43 @@ class Application:
                 if path == '/api/investments':
                     from .analytics import investment_cashflows
                     return investment_cashflows(conn, customer_id, month, int(query.get('months', 12)))
+                if path == '/api/financing':
+                    from .financing import financing_context
+                    return financing_context(conn, customer_id, query.get('goal_type', 'home'))
+                if path == '/api/statistics':
+                    from .statistics import transaction_statistics
+                    statistic_filters = self._validated_statistics_filters(conn, customer_id, filters)
+                    if 'start' in query:
+                        statistic_start, statistic_end = query['start'], query['end']
+                    else:
+                        statistic_start, statistic_end = start, end
+                    return transaction_statistics(conn, customer_id, statistic_start, statistic_end, statistic_filters)
+                if path == '/api/statistics/compare':
+                    from .statistics import compare_transaction_statistics
+                    statistic_filters = self._validated_statistics_filters(conn, customer_id, filters)
+                    if 'start' in query:
+                        current_start, current_end = query['start'], query['end']
+                        comparison_start, comparison_end = query['comparison_start'], query['comparison_end']
+                    else:
+                        current_start, current_end = start, end
+                        comparison_start, comparison_end = _month_bounds(query['comparison_month'])
+                    return compare_transaction_statistics(conn, customer_id, current_start, current_end, comparison_start, comparison_end, statistic_filters)
+                if path == '/api/taxes':
+                    from .tax import observed_tax_evidence
+                    if 'start' in query:
+                        tax_start, tax_end = query['start'], query['end']
+                    elif 'month' in query:
+                        tax_start, tax_end = start, end
+                    else:
+                        tax_start = tax_end = None
+                    return observed_tax_evidence(conn, customer_id, tax_start, tax_end)
+                if path == '/api/vat':
+                    from .vat import vat_lens
+                    if 'start' in query:
+                        vat_start, vat_end = query['start'], query['end']
+                    else:
+                        vat_start, vat_end = start, end
+                    return vat_lens(conn, customer_id, vat_start, vat_end)
                 if path == '/api/goals':
                     from .goals import goal_plan
                     return {**scope, 'goals': [goal_plan(conn, customer_id, row[0]) for row in conn.execute('SELECT id FROM goals WHERE customer_id=? ORDER BY created_at,id', (customer_id,))]}
@@ -167,7 +211,22 @@ class Application:
                 locale = body.get('locale', 'en')
                 if locale not in {'en', 'fi', 'sv'}:
                     raise ValueError('locale must be en, fi, or sv')
-                return interpret(body.get('message'), self._coach_context(conn, customer_id, month, locale), transport=self.coach_transport)
+                context = self._coach_context(conn, customer_id, month, locale)
+                response = interpret(body.get('message'), context, transport=self.coach_transport)
+                return self._execute_coach_tool(conn, customer_id, response, context)
+            if path == '/api/tax-plan':
+                from .tax import tax_planning_scenario
+                for required in ('amount_cents', 'due_date', 'reference_date'):
+                    if required not in body:
+                        raise ValueError('Missing ' + required)
+                return tax_planning_scenario(
+                    body['amount_cents'], body['due_date'], body['reference_date'],
+                    already_set_aside_cents=body.get('already_set_aside_cents', 0),
+                    current_balance_cents=body.get('current_balance_cents'),
+                    reserve_floor_cents=body.get('reserve_floor_cents', 0),
+                    set_aside_location=body.get('set_aside_location', 'inside_current_balance'),
+                    label=body.get('label', 'Tax planning amount'),
+                )
             return self._mutate(conn, path, customer_id, month, body)
         finally:
             conn.close()
@@ -181,6 +240,7 @@ class Application:
             '/api/rules': {'type', 'transaction_ref', 'role', 'category', 'merchant_id', 'label'},
             '/api/goals': {'name', 'target_cents', 'target_date', 'current_saved_cents', 'reserve_floor_cents', 'template'},
             '/api/goals/link': {'goal_id', 'scenario_id'},
+            '/api/tax-plan': {'amount_cents', 'due_date', 'reference_date', 'already_set_aside_cents', 'current_balance_cents', 'reserve_floor_cents', 'set_aside_location', 'label'},
             '/api/coach': {'message', 'locale'}, '/api/undo': set(), '/api/reset': set(),
         }
         if set(body) - common - fields.get(path, set()):
@@ -189,6 +249,12 @@ class Application:
             if name == 'confirmed':
                 if type(value) is not bool:
                     raise ValueError('confirmed must be a boolean')
+            elif name == 'current_balance_cents':
+                if type(value) is not int:
+                    raise ValueError('current_balance_cents must be signed integer cents')
+            elif name == 'amount_cents':
+                if type(value) is not int or value <= 0:
+                    raise ValueError('amount_cents must be positive integer cents')
             elif name.endswith('_cents'):
                 if type(value) is not int or value < 0:
                     raise ValueError(name + ' must be nonnegative integer cents')
@@ -205,6 +271,70 @@ class Application:
                 pass
             elif not isinstance(value, str):
                 raise ValueError(name + ' must be a string')
+
+    @staticmethod
+    def _validate_tool_query(path, query):
+        common = {'customer_id', 'account_id'}
+        allowed = {
+            '/api/statistics': common | {'month', 'start', 'end', 'category', 'role', 'transaction_type', 'merchant_id'},
+            '/api/statistics/compare': common | {'month', 'comparison_month', 'start', 'end', 'comparison_start', 'comparison_end', 'category', 'role', 'transaction_type', 'merchant_id'},
+            '/api/taxes': common | {'month', 'start', 'end'},
+            '/api/vat': common | {'month', 'start', 'end'},
+        }
+        if path not in allowed:
+            return
+        if set(query) - allowed[path]:
+            raise ValueError('Unknown query parameter')
+        for field in ('category', 'role', 'transaction_type', 'merchant_id'):
+            if field in query and not query[field].strip():
+                raise ValueError('Statistics filters must be nonempty')
+        has_dates = any(key in query for key in ('start', 'end'))
+        if path == '/api/statistics':
+            if has_dates and not all(key in query for key in ('start', 'end')):
+                raise ValueError('start and end must be provided together')
+            if not has_dates and 'month' not in query:
+                raise ValueError('month or explicit start and end are required')
+            if has_dates and 'month' in query:
+                raise ValueError('Use month or explicit dates, not both')
+        elif path == '/api/statistics/compare':
+            date_fields = ('start', 'end', 'comparison_start', 'comparison_end')
+            if any(key in query for key in date_fields):
+                if not all(key in query for key in date_fields) or 'month' in query or 'comparison_month' in query:
+                    raise ValueError('Provide all four comparison dates or two months')
+            elif not all(key in query for key in ('month', 'comparison_month')):
+                raise ValueError('month and comparison_month are required')
+        elif path in {'/api/taxes', '/api/vat'}:
+            if has_dates and not all(key in query for key in ('start', 'end')):
+                raise ValueError('start and end must be provided together')
+            if has_dates and 'month' in query:
+                raise ValueError('Use month or explicit dates, not both')
+            if not has_dates and 'month' not in query:
+                raise ValueError('month or explicit start and end are required')
+
+    @staticmethod
+    def _filter_catalog(conn, customer_id, *, bounded=False):
+        from .ledger import transactions
+        rows = transactions(conn, customer_id)
+        values = {
+            'categories': sorted({row['category'] for row in rows if row['category']}),
+            'roles': sorted({row['role'] for row in rows if row['role']}),
+            'transaction_types': sorted({row['transaction_type'] for row in rows if row['transaction_type']}),
+            'merchant_ids': sorted({row['merchant_id'] for row in rows if row['merchant_id']}),
+        }
+        if bounded:
+            limits = {'categories': 64, 'roles': 8, 'transaction_types': 32, 'merchant_ids': 100}
+            values = {key: items[:limits[key]] for key, items in values.items()}
+        return values
+
+    @classmethod
+    def _validated_statistics_filters(cls, conn, customer_id, filters):
+        filters = filters or {}
+        catalog = cls._filter_catalog(conn, customer_id)
+        mapping = {'category': 'categories', 'role': 'roles', 'transaction_type': 'transaction_types', 'merchant_id': 'merchant_ids'}
+        for key, value in filters.items():
+            if value not in catalog[mapping[key]]:
+                raise ValueError('Unknown statistics ' + key)
+        return filters
 
     def _forecast(self, conn, customer_id, query=None):
         from .forecast import preview_30_days
@@ -225,8 +355,9 @@ class Application:
 
     def _coach_context(self, conn, customer_id, month, locale='en'):
         from .ledger import month_bounds, account_scope
-        from .analytics import compare_periods, unusual_candidates, investment_cashflows
+        from .analytics import compare_periods, unusual_candidates, investment_cashflows, salary_change_signal, payday_timing_signal
         from .forecast import safe_to_spend
+        from .financing import financing_context
         start, end = month_bounds(month)
         comparison_month = _previous_month(month)
         pstart, pend = month_bounds(comparison_month)
@@ -242,6 +373,17 @@ class Application:
         for item in unusual_candidates(conn, customer_id, month):
             facts.append({'id': item['fact_id'], 'value_cents': item['amount_cents'], 'unit': 'cents', 'label': item['label'], 'status': 'observed', 'transaction_refs': item['transaction_refs']})
             candidates.append({'id': item['candidate_id'], 'kind': 'explain_change', 'text': 'A purchase is unusual for your earlier pattern. Would you like to review it?', 'fact_ids': [item['fact_id']], 'materiality': _bounded_materiality(item['amount_cents']), 'urgency': 1, 'explainability': 1, 'addressability': 1, 'transaction_refs': item['transaction_refs'], 'status': 'observed'})
+        salary_change = salary_change_signal(conn, customer_id, month)
+        if salary_change['qualified']:
+            direction = salary_change['direction']
+            facts.append({'id': salary_change['fact_id'], 'value_cents': salary_change['delta_cents'], 'unit': 'cents', 'label': salary_change['label'], 'status': 'observed', 'direction': direction, 'change_basis_points': salary_change['change_basis_points'], 'threshold_basis_points': salary_change['threshold_basis_points'], 'recent_period': salary_change['recent_period'], 'baseline_period': salary_change['baseline_period'], 'transaction_refs': salary_change['transaction_refs'], 'other_income_excluded': True})
+            candidates.append({'id': 'salary_change', 'kind': 'salary_change', 'text': f"Your recent salary-only level {direction}d compared with the earlier baseline. Other income is kept separate.", 'fact_ids': [salary_change['fact_id']], 'materiality': min(1.0, abs(salary_change['change_basis_points']) / salary_change['threshold_basis_points']), 'urgency': .25, 'explainability': 1, 'addressability': 1, 'transaction_refs': salary_change['transaction_refs'], 'status': 'observed'})
+        payday = payday_timing_signal(conn, customer_id, month)
+        if payday['qualified']:
+            threshold = max(payday['low_balance_threshold_cents'], 1)
+            gap = max(0, threshold - payday['lowest_pre_salary_balance_cents'])
+            facts.append({'id': payday['fact_id'], 'value_cents': payday['lowest_pre_salary_balance_cents'], 'unit': 'cents', 'label': payday['label'], 'status': 'observed', 'period': payday['period'], 'lookback_days': payday['lookback_days'], 'low_balance_threshold_cents': payday['low_balance_threshold_cents'], 'observed_window_count': payday['observed_window_count'], 'low_balance_event_count': payday['low_balance_event_count'], 'transaction_refs': payday['transaction_refs']})
+            candidates.append({'id': 'payday_timing', 'kind': 'payday_timing', 'text': 'Across several observed pay cycles, your balance reached a low point before salary arrived. This is a timing pattern, not a prediction.', 'fact_ids': [payday['fact_id']], 'materiality': min(1.0, gap / threshold), 'urgency': .5, 'explainability': 1, 'addressability': 1, 'transaction_refs': payday['transaction_refs'], 'status': 'observed'})
         scope = account_scope(conn, customer_id)
         reference_date = min(end, scope['observed_end'])
         safe = safe_to_spend(conn, customer_id, reference_date, days=7)
@@ -251,7 +393,127 @@ class Application:
         investing = investment_cashflows(conn, customer_id, month, 12)
         facts.append({'id': investing['fact_id'], 'value_cents': investing['net_contributions_cents'], 'unit': 'cents', 'label': investing['label'], 'status': 'observed'})
         candidates.append({'id': 'investment_cashflow', 'kind': 'investment_cashflow', 'text': 'These are observed contributions and withdrawals, not portfolio value or performance.', 'fact_ids': [investing['fact_id']], 'materiality': _bounded_materiality(investing['total_contributions_cents']), 'urgency': 0, 'explainability': 1, 'addressability': 1, 'transaction_refs': investing['transaction_refs'], 'status': 'observed', 'utility': True})
-        return {**scope, 'period': month, 'comparison_period': comparison_month, 'reference_date': reference_date, 'days': 7, 'months': 12, 'interface_locale': locale, 'facts': facts, 'candidates': candidates, 'transaction_refs': sorted({ref for item in candidates for ref in item.get('transaction_refs', [])}), 'scenario_ids': [row[0] for row in conn.execute('SELECT id FROM scenarios WHERE customer_id=?', (customer_id,))], 'goal_ids': [row[0] for row in conn.execute('SELECT id FROM goals WHERE customer_id=?', (customer_id,))]}
+        financing = financing_context(conn, customer_id, 'home')
+        if financing['available']:
+            facts.append({'id': financing['fact_id'], 'value_cents': financing['requested_loan_cents'], 'unit': 'cents', 'label': 'Linked historical home-financing context', 'status': 'observed', 'historical_context_only': True, 'event_refs': financing['event_refs'], 'recorded_fees_total_cents': financing['recorded_fees_total_cents']})
+            candidates.append({'id': 'home_financing_history', 'kind': 'home_financing_history', 'copy_key': 'home_financing_history', 'text': 'Linked past mortgage data is historical context only. It is not a current approval or affordability assessment.', 'fact_ids': [financing['fact_id']], 'materiality': 1, 'urgency': 0, 'explainability': 1, 'addressability': 1, 'transaction_refs': [], 'event_refs': financing['event_refs'], 'status': 'observed', 'historical_context_only': True})
+        return {**scope, 'period': month, 'comparison_period': comparison_month, 'reference_date': reference_date, 'days': 7, 'months': 12, 'interface_locale': locale, 'filter_catalog': self._filter_catalog(conn, customer_id, bounded=True), 'facts': facts, 'candidates': candidates, 'transaction_refs': sorted({ref for item in candidates for ref in item.get('transaction_refs', [])}), 'scenario_ids': [row[0] for row in conn.execute('SELECT id FROM scenarios WHERE customer_id=?', (customer_id,))], 'goal_ids': [row[0] for row in conn.execute('SELECT id FROM goals WHERE customer_id=?', (customer_id,))]}
+
+    def _execute_coach_tool(self, conn, customer_id, response, context):
+        if response.get('needs_clarification'):
+            return response
+        intent = response.get('intent')
+        params = response.get('parameters', {})
+        locale = context['interface_locale']
+        copy = {
+            'en': {
+                'statistics': 'Here are the exact observed results for the selected category and period.',
+                'statistics_empty': 'I found no matching transactions for that exact category and period.',
+                'adjustment': 'This is an unsaved planning preview based on observed spending in the selected category.',
+                'profile': 'This is a neutral breakdown of observed spending across the learning baskets, not a score or judgment.',
+                'safe': 'This estimate protects the reserve, qualified recurring outflows, and a buffer based on earlier unscheduled spending.',
+                'safe_unavailable': 'There is not enough observed history yet to calculate a safe-to-spend estimate.',
+                'tax': 'I found explicit observed tax records for the selected period.',
+                'tax_empty': 'I found no explicit tax records for this period. Missing records do not mean no tax was paid.',
+            },
+            'fi': {
+                'statistics': 'Tässä ovat valitun luokan ja ajanjakson tarkat havaitut tulokset.',
+                'statistics_empty': 'En löytänyt tälle tarkalle luokalle ja ajanjaksolle vastaavia tapahtumia.',
+                'adjustment': 'Tämä on tallentamaton suunnitteluarvio, joka perustuu valitun luokan havaittuihin menoihin.',
+                'profile': 'Tämä on neutraali erittely havaituista menoista oppimiskoreittain, ei pisteytys tai arvio sinusta.',
+                'safe': 'Arvio suojaa vararahasi, tunnistetut toistuvat menot ja aiempaan aikatauluttamattomaan kulutukseen perustuvan varan.',
+                'safe_unavailable': 'Tilihistoriaa ei ole vielä riittävästi turvallisen käyttövaran arvioimiseen.',
+                'tax': 'Löysin valitulta ajanjaksolta nimenomaisia havaittuja verotietoja.',
+                'tax_empty': 'En löytänyt tältä ajanjaksolta nimenomaisia verotietoja. Puuttuvat tiedot eivät tarkoita, ettei veroa olisi maksettu.',
+            },
+            'sv': {
+                'statistics': 'Här är de exakta observerade resultaten för den valda kategorin och perioden.',
+                'statistics_empty': 'Jag hittade inga matchande transaktioner för den exakta kategorin och perioden.',
+                'adjustment': 'Det här är en osparad planeringsöversikt som bygger på observerade utgifter i den valda kategorin.',
+                'profile': 'Det här är en neutral uppdelning av observerade utgifter i lärandekorgarna, inte ett betyg eller omdöme.',
+                'safe': 'Uppskattningen skyddar bufferten, kvalificerade återkommande utflöden och ett utrymme baserat på tidigare ej schemalagda utgifter.',
+                'safe_unavailable': 'Det finns ännu inte tillräcklig kontohistorik för en uppskattning av tryggt att spendera.',
+                'tax': 'Jag hittade uttryckliga observerade skatteuppgifter för den valda perioden.',
+                'tax_empty': 'Jag hittade inga uttryckliga skatteuppgifter för perioden. Saknade uppgifter betyder inte att ingen skatt betalades.',
+            },
+        }
+        def explanation(default_text, fact_id):
+            if response.get('source') == 'gemini' and response.get('explanation_blocks'):
+                return [{'text': block['text'], 'fact_ids': [fact_id]} for block in response['explanation_blocks']]
+            return [{'text': default_text, 'fact_ids': [fact_id]}]
+        if intent == 'transaction_statistics':
+            from .statistics import transaction_statistics, compare_transaction_statistics
+            period = params['period']
+            start, end = _month_bounds(period)
+            filters = {key: params[key] for key in ('category', 'role', 'transaction_type', 'merchant_id') if key in params}
+            filters = self._validated_statistics_filters(conn, customer_id, filters)
+            if 'comparison_period' in params:
+                comparison_start, comparison_end = _month_bounds(params['comparison_period'])
+                result = compare_transaction_statistics(conn, customer_id, start, end, comparison_start, comparison_end, filters)
+                has_transactions = result['current']['has_transactions'] or result['comparison']['has_transactions']
+            else:
+                result = transaction_statistics(conn, customer_id, start, end, filters)
+                has_transactions = result['has_transactions']
+            response['tool_result'] = result
+            response['tool_fact_id'] = result['fact_id']
+            response['tool_fact_ids'] = [result['fact_id']]
+            response['tool_kind'] = 'transaction_statistics_comparison' if 'comparison_period' in params else 'transaction_statistics'
+            response['tool_source'] = 'deterministic_account_statistics'
+            response['source_refs'] = {'transaction_refs': result['transaction_refs']}
+            response['explanation_blocks'] = explanation(copy[locale]['statistics' if has_transactions else 'statistics_empty'], result['fact_id'])
+        elif intent == 'spending_adjustment':
+            from .scenarios import preview_spending_adjustment
+            start, end = _month_bounds(params['period'])
+            result = preview_spending_adjustment(conn, customer_id, start, end, params['category'], params['percent'])
+            response['tool_result'] = result
+            response['tool_fact_id'] = result['fact_id']
+            response['tool_fact_ids'] = [result['fact_id']]
+            response['tool_kind'] = 'spending_adjustment_preview'
+            response['tool_source'] = 'deterministic_unsaved_scenario'
+            response['source_refs'] = {'transaction_refs': result['transaction_refs']}
+            response['explanation_blocks'] = explanation(copy[locale]['adjustment'], result['fact_id'])
+        elif intent == 'spending_profile':
+            from .analytics import three_basket_profile
+            result = three_basket_profile(conn, customer_id, params['period'])
+            basket_fact_ids = [row['fact_id'] for row in result['baskets']]
+            response['tool_result'] = result
+            response['tool_fact_id'] = result['fact_id']
+            response['tool_fact_ids'] = [result['fact_id'], *basket_fact_ids]
+            response['tool_kind'] = 'three_basket_profile'
+            response['tool_source'] = 'deterministic_money_map'
+            response['source_refs'] = {'transaction_refs': result['transaction_refs']}
+            response['explanation_blocks'] = explanation(copy[locale]['profile'], result['fact_id'])
+        elif intent == 'safe_to_spend':
+            from .forecast import safe_to_spend
+            result = safe_to_spend(
+                conn,
+                customer_id,
+                context['reference_date'],
+                days=context.get('days', 7),
+            )
+            refs = sorted(set(result['transaction_refs'] + result['comparison_transaction_refs']))
+            response['tool_result'] = result
+            response['tool_fact_id'] = result['fact_id']
+            response['tool_fact_ids'] = [result['fact_id']]
+            response['tool_kind'] = 'safe_to_spend'
+            response['tool_source'] = 'deterministic_safe_to_spend'
+            response['source_refs'] = {'transaction_refs': refs}
+            response['explanation_blocks'] = explanation(
+                copy[locale]['safe' if result['available'] else 'safe_unavailable'],
+                result['fact_id'],
+            )
+        elif intent == 'observed_tax_evidence':
+            from .tax import observed_tax_evidence
+            start, end = _month_bounds(params['period'])
+            result = observed_tax_evidence(conn, customer_id, start, end)
+            response['tool_result'] = result
+            response['tool_fact_id'] = result['fact_id']
+            response['tool_fact_ids'] = [result['fact_id']]
+            response['tool_kind'] = 'observed_tax_evidence'
+            response['tool_source'] = 'deterministic_observed_tax_evidence'
+            response['source_refs'] = {'transaction_refs': result['transaction_refs'], 'mortgage_event_refs': result['mortgage_event_refs']}
+            response['explanation_blocks'] = explanation(copy[locale]['tax' if result['available'] else 'tax_empty'], result['fact_id'])
+        return response
 
     @staticmethod
     def _mutation_result(kind, result):

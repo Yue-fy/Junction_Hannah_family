@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from .money import euros_to_cents
 
-DEFAULT_CUSTOMERS = ('CUST00001','CUST00676','CUST05097','CUST00756','CUST00296')
+DEFAULT_CUSTOMERS = ('CUST00001','CUST00676','CUST05097','CUST00756','CUST00296','CUST01331')
 SCHEMA_VERSION = 1
 
 
