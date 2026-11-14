@@ -517,6 +517,8 @@ def test_room_net_prefers_printed_area_when_polygon_disagrees():
     assert r.net == 35.38
     r.printed_area = None
     assert r.net == 35.38
+    r.area, r.printed_area = 6.06, 86.23  # another label's number (F 10:53): the polygon stays
+    assert r.net == 6.06
 
 
 def test_dxf_plan_vs_dxf_question_words():
