@@ -253,3 +253,12 @@ def test_extra_structure():
     assert extra_structure("Hur många fler sovrum än badrum finns det?")
     assert extra_structure("How many more bedrooms than bathrooms are there?")
     assert extra_structure("How many rooms are larger than 10 m²?")
+
+
+def test_compose_yesno_comparison():
+    from stoa.router.compose import combine, decompose
+
+    p = decompose("cubicasa5k", "Does this apartment have more bedrooms (MH) than bathrooms or washrooms? Answer yes or no.")
+    assert p is not None and p.op == "gt" and p.labels == ["bedroom", "bathroom"]
+    assert combine(p, [2, 2])[0] == "no" and combine(p, [3, 1])[0] == "yes"
+    assert decompose("cubicasa5k", "Does this apartment have a sauna?").op == "exists"

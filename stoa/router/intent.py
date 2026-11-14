@@ -50,7 +50,7 @@ _T = [
     ("apartment", r"apartments?|residential units?|wohnungen|appartements?|logements?|appartament[io]|unit[àa] abitativ|"
                   r"asuntoj|asunto"),
     ("window", r"windows?|ikkun|fenster|fen[eê]tres?|finestr[ae]|ramen\b|vinduer|f[öo]nster|aken|akn|ventanas?|ferestre|okien|okna"),
-    ("door", r"doors?|doorways?|\bov(?:i|ea|et)\b|ovi|\bt[üu]r(?:en)?\b|portes?\b|port[ae]\b|deuren|d[øo]re|d[öo]rr|uks|ust\b|puertas?"),
+    ("door", r"doors?|doorways?|\bov(?:i|ea|et)\b|\bovi\w*|\bt[üu]r(?:en)?\b|portes?\b|port[ae]\b|deuren|d[øo]re|d[öo]rr|\buks\b|\bukse\w*|\bust\b|puertas?"),
     ("stair", r"stairs?|staircases?|treppen?|escaliers?|scale\b|escaleras?|trappen?|trapper|portaat|trepp|sc[ăa]ri\b|schod"),
     ("column", r"columns?|st[üu]tzen|s[øo]jler|colonnes?|pilares?|pilastri|kolommen|pylv|\bposti|\bpost\b|st[âa]lpi|słup"),
     ("beam", r"beams?|tr[äa]ger|bjælker|poutres?|vigas?|travi\b|balken|palk|\btala|grinzi|belk"),
@@ -175,7 +175,10 @@ def extra_structure(question: str) -> bool:
     """Does an unseen wording carry more than one plain concept? (F 03:23: on held-out, confident answers to such
     questions read as one atomic count were right 33% of the time; plain paraphrases in `hard` 79%.)"""
     t = re.sub(r"\([^)]*\)", " ", _QUOTED.sub(" ", _fold(question)))
-    return bool(_STRUCT.search(t))
+    if _STRUCT.search(t):
+        return True
+    # two object classes outside definitions = a compound read as one (F 04:05)
+    return len({x for x in targets_mentioned(t) if x not in _GENERIC}) >= 2
 
 
 def modifiers(question: str) -> list[str]:

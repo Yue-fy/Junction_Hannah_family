@@ -43,6 +43,10 @@ Served on :8001 as model `cc-v2` from 01:40 (base unchanged as `default`); solve
 | train_gate cubicasa (480, unseen by LoRA) | **76.7** | | | 51.9 | 45.6 | (memorised) |
 | hard cubicasa translations / paraphrases / compositions | **75 / 66** / 9.6 | 67 / 62 / 26.5 | 67 / 60 / 19.3 | | | |
 | leak-free for both (200, `cc5k_heldout_notLoRA`) | **79.0** | | | 54.0 | 51.5 | 60.5 |
+**Sealed test 1 (S0, frozen 95f2277, 03:21–03:55; aggregates only):** pipeline with the LoRA vs `lora=0`:
+cubicasa 61.6 → 70.5, **+8.8 [+6.0, +11.9]** (111 wins / 40 losses), micro 83.9 → 87.4, **weighted 73.8 → 79.8**,
+cost $0.19 → $0.28 per 1k, ECE 0.016 → 0.017. About 3/4 of the dev gain (+11.9): symbol concepts transfer, room-label
+concepts drop (saunas 93 → 80, bedrooms 90 → 82, separate WC rooms 100 → 90; F). The team's largest gain on sealed data.
 Paired: vs raster +11.4 [+8.2, +14.4]; vs CC5K net +18.5 [+11.5, +25.5] (`experiments/r2/paired.py`). Only per-concept loss
 vs raster: EN showers+bathtubs 73 vs 84. Compositions must go through the pipeline's compose step (atomic questions).
 Cost $0.035/1k (780 tok in, 2 out). Confidence: own map (CONF_MAPS["cc-v2"], fit on train_gate), AUROC 0.885–0.928.
@@ -82,6 +86,21 @@ at saturation), not HTTP wall time (which includes queueing behind other agents)
 Gemma loses on Finnish room-label reading (kitchens 35 vs 85, saunas 15 vs 50, WC seats 5–15 vs 45–65) and ties on
 swiss plans. Not a replacement base. A Gemma counting LoRA (`experiments/r2/lora/gemma_lora.sh`, `train_lora.py
 --arch gemma4`, same TRAIN mix as cc-v3) tests whether fine-tuning closes the gap (Gemma prize, small fine-tuned model).
+
+## Language front end: `stoa.llm.to_english` (04:15)
+Sealed hard2r showed the pipeline collapsing on languages nobody wrote rules for (F: Polish cubicasa 21%, Estonian ifc
+20%). `lang_guess(q)` (stopwords + diacritics over 20 languages, quoted names ignored; 0 model calls) decides; for a
+language outside en/fi/de/fr/it (or `force=True`) ONE local 8B call translates the question to English with quoted
+names, numbers/IDs and unit letters masked as `[[n]]` and restored byte-identical (quote marks always restored; a
+lost placeholder returns the original with `ok=False`). ~250 tokens in / 40 out, ~0.4 s, cost recorded.
+| probe | pipeline as is | translated first | notes |
+|---|---|---|---|
+| lang4: 12 dev Qs × CS/HU/TR/RO, hand-written (48) | 38/48 (79.2%) | **48/48** | EN originals 12/12; 10 wins / 0 losses; 1 translation rejected (placeholder lost) → original kept |
+| hard's 175 non-English Qs (fi/de/fr/it templates; new sv/nl/pl/de wordings) | 152/175 | 146/175 (always) / **152/175** (`should_translate` trigger: fires on 0) | translating what the rules already read loses 7, wins 1 |
+Trigger (`should_translate(q, intent)`): non-English AND the intent parser failed (lang '?', no target, or task text).
+lang4 with the trigger: 48/48 (fires on 46). So: translate on parse failure only, never by language list.
+Known slips of the 8B translator: Czech "záchodové mísy" → "toilet rooms" (once), Swedish "bastur" (saunas) → "bathrooms".
+Wiring belongs in the pipeline front (W4). Honest number: sealed hard2r at test 2.
 
 ## Candidates surveyed (23:35–23:50, HF hub listing; vLLM 0.31 registry checked)
 | model | size | vLLM | why interesting | verdict |

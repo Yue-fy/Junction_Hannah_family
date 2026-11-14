@@ -78,6 +78,14 @@ TIMES_W = (r"how\s+many\s+times|times\s+(?:larger|bigger|greater|as\s+(?:large|b
            r"hur\s+m[åa]nga\s+g[åa]nger|g[åa]nger\s+(?:st[öo]rre|s[åa]\s+stor)|f[öo]rh[åa]llande|\bkvot\b|"
            r"cu[áa]ntas\s+veces|veces\s+(?:m[áa]s\s+grande|mayor)|\braz[óo]n\b|kuinka\s+monta\s+kertaa|kertaa\s+suurempi|"
            r"\bsuhde\b|ile\s+razy|razy\s+wi[ęe]ksz\w*|\bstosunek\b|\bmultiple\s+of\b|relative\s+to")
+# "by what percentage is B larger than A" = relative difference 100·(B−A)/A, not B's share (W4 04:04)
+PCTDIFF_W = (r"(?:what|how\s+(?:many|much))\s+(?:percent(?:age)?|%)(?:\s+points?)?\b.{0,60}?\b(?:larger|bigger|greater|more|"
+             r"smaller|less|lower|higher)\b|\b(?:percent(?:age)?|%)\s+(?:larger|bigger|greater|more|smaller|less)\s+than\b|"
+             r"um\s+wie\s*viel(?:e)?\s+prozent.{0,60}?(?:gr[öo]ss|gr[öo]ß|klein|mehr|weniger)|"
+             r"prozent\s+(?:gr[öo]sser|größer|kleiner|mehr|weniger)\s+als|"
+             r"de\s+combien\s+de\s+pour\s*-?\s*cent.{0,60}?\b(?:plus|moins)\b|pour\s*-?\s*cent\s+(?:plus|moins)\s+(?:grand|petit)|"
+             r"di\s+(?:quanto|che)\s+percent\w*.{0,60}?\b(?:più|meno)\b|per\s*cento\s+(?:più|meno)\s+(?:grande|piccol)")
+PCTLESS_W = r"\b(?:smaller|less|lower|kleiner|weniger|moins|plus\s+petit|meno|più\s+piccol)"
 SHARE_W = (r"\bshare\b|\bpercent(?:age)?\b|in\s+%|\bproportion\b|\banteil\b|prozent|pourcentage|\bpart\s+de\b|"
            r"percentuale|\bquota\b|\btake\s+up\b|\bnimmt\b.*\bein\b|\boccupe\b|\boccupa\b|\baandeel\b|\bprocent\w*|"
            r"\bandel(?:en)?\b|\bporcentaje\b|\bproporci[óo]n\b|\bosuus\b|prosent\w*|\budzia[łl]\b|\btakes\s+up\b|"
@@ -361,6 +369,9 @@ def parse(question: str, vocab: list[str] | None = None, room_numbers: set[str] 
             terms = [Term("area_total", None, -1)] + [Term("area_apartment", a, p) for a, p in apts]
             op, rev = "diff", False
             consumed.append(NEG_APT_W)
+        elif len(terms) == 2 and re.search(PCTDIFF_W, ql):
+            op = "pctdiff_less" if re.search(PCTLESS_W, ql) else "pctdiff"
+            consumed += [PCTDIFF_W, SHARE_W]
         elif apts and re.search(SHARE_W, ql):
             terms = [Term("area_apartment", a, p) for a, p in apts[:1]] + [Term("area_total", None, 10**6)]
             op = "pct"
@@ -390,10 +401,10 @@ def parse(question: str, vocab: list[str] | None = None, room_numbers: set[str] 
         unit_out = unit if qtype != "text" else None
         if op == "ratio":
             unit_out = None
-        elif op == "pct":
+        elif op in ("pct", "pctdiff", "pctdiff_less"):
             unit_out = "%"
         qr = Query(qtype, op, terms, unit_out, notes, include_outdoor=inc, gross=gross, consumed=consumed)
-        if op in ("pct",) or (op == "diff" and consumed):
+        if op in ("pct", "pctdiff", "pctdiff_less") or (op == "diff" and consumed):
             qr.terms.sort(key=lambda t: t.pos)
             return qr
         return _finish(qr, rev)
@@ -466,6 +477,39 @@ UNCOVERED = re.compile(
     r"ha(?:ve|s)\s+(?:a|an|no|any|more|at\s+least|\d+)\b|contain\w*|adjacent|next\s+to|neighbo\w+|between|at\s+least|at\s+most|is\s+there|are\s+there\s+any|do\s+any|"
     r"mit\s+(?:einem|einer|mehr)|ohne\s+(?:fenster|t[üu]r)|avec\s+(?:un|une|plus)|sans\s+(?:fen|porte)|senza)\b|%|(?:more|less|larger|smaller)\s+than\s+\d",
     re.I)
+
+
+NUM_TOKEN = re.compile(r"(?<![\w.])\d+(?:[.,]\d+)*(?![\w])")
+
+
+def unused_numbers(question: str, qr: "Query") -> list[str]:
+    """Numbers stated in the question that the parse did not use: a price, rate, constant or percentage ("450 euros
+    per door", "add 15 %"). A rule answer then answers the base quantity without the arithmetic (F, hard3: 30% of
+    derived-quantity questions). Room numbers, apartment ids, thresholds, quoted labels, unit exponents, ordinals and
+    "N decimal places" are not counted."""
+    q = re.sub(r"[%s][^%s]{0,60}[%s]" % (QUOTES, QUOTES, QUOTES), " ", question)  # quoted labels
+    q = re.sub(r"\b(?:m|ft|sq\.?\s*ft|qm|mq)\s*[2²³3]\b", " ", q, flags=re.I)  # m2, ft2
+    q = re.sub(r"\b\d+\s*(?:st|nd|rd|th|er|e|ème|eme|te|ten|ter|°|º|ª|o|a)\b", " ", q, flags=re.I)  # ordinals
+    q = re.sub(r"\b\d+\s+(?:decimal|decimals|dezimal\w*|décimal\w*|decimal\w*|nachkomma\w*|significant)\b", " ", q,
+               flags=re.I)
+    used = set()
+    for t in qr.terms:
+        for a in ([t.arg] if isinstance(t.arg, str) else list(t.arg or [])):
+            used.add(str(a).strip().lower())
+    if qr.threshold is not None:
+        th = qr.threshold
+        used |= {f"{th:g}", f"{th:g}".replace(".", ","), f"{th:.1f}", f"{th:.2f}", f"{th:.1f}".replace(".", ","),
+                 f"{th:.2f}".replace(".", ",")}
+    out = []
+    for m in NUM_TOKEN.finditer(q):
+        n = m.group(0)
+        if n.lower() in used or n.rstrip(".,") in used:
+            continue
+        # a room number like 2.05 written with a label (room 2.05) that the parse resolved under another spelling
+        if any(u.endswith(n) or n.endswith(u) for u in used if u and u[0].isdigit() and len(u) >= 3):
+            continue
+        out.append(n)
+    return out
 
 
 def covered(question: str, qr: Query) -> bool:
