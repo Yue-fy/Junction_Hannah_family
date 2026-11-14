@@ -595,6 +595,15 @@ def _plan_vs_model(path: str, question: str) -> Answer | None:
     return a if a.value is not None else None
 
 
+# R1 10:47: on a drawing with no project graph the link route answers only questions whose SUBJECT is a file ('Is there
+# an IFC model for this floor plan?', 'Gibt es ein IFC-Modell zu diesem Grundriss?', 'Finns det en IFC-modell …?'), which
+# R1's trigger files under 'plan and model named' once a plan noun is in it; at most one word (an article) between the
+# existence phrase and the format word, so 'Are there doors in the IFC model?' (its contents) stays out
+_FILE_SUBJECT = re.compile(
+    r"^\s*(is there|are there|gibt es|existiert|onko|löytyykö|y a-t-il|existe-t-il|finns det|c'è|esiste|is er|"
+    r"bestaat er|hay|existe|kas on)\s+(\S+\s+)?(3d[- ]?model\w*|3-d model|ifc|bim\b|dxf|dwg|cad\b|building model)", re.I)
+
+
 def _link_shape(v) -> tuple[str, object] | None:
     """('num', x) | ('yn', 'yes'|'no') | None: the comparable core of a link answer ("no: model 55, plan draws 52"
     -> ('yn', 'no'); 3 -> ('num', 3.0)); anything else (names, lists) is not compared."""
@@ -1174,7 +1183,7 @@ class Pipeline(BaseSolver):
             hit = is_link_question(question)
         except Exception:  # noqa: BLE001  (R1's module missing: no link route)
             return None
-        if not hit.get("fire") or not (ifc_src or hit.get("why") == "model exists"):
+        if not hit.get("fire") or not (ifc_src or hit.get("why") == "model exists" or re.search(_FILE_SUBJECT, question)):
             return None
         trace = [f"route: link question ({hit.get('why')}) -> project knowledge graph (R1 kg_qa over stoa.kg); "
                  + ("ifc as asked checks it" if ifc_src else "the files linked to this drawing")]
