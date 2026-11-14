@@ -141,6 +141,11 @@ def answer(path: str, question: str, image_path: str | None = None, backend: str
     # cited lines 54/72 right (75%; HABS alone 90%), image-only 1/2 -> cited 0.75, image-only 0.3
     conf = 0.75 if cited else 0.3
     missing = [] if cited else ["the answer is not printed as text: an image-only reading"]
+    if isinstance(value, (int, float)) and any(abs(float(n) - value) < 1e-9 for n in
+                                               re.findall(r"\d+(?:\.\d+)?", question)) and _SIZE.search(question):
+        # the 'size' is a number the question itself names (room 0.20 -> '0.20 m²'): an echo, not a reading
+        conf = 0.05
+        missing = [*missing, "the answer repeats a number from the question (likely the room's number, not its size)"]
     assumptions = [a for a in [str(d.get("assumptions", "")).strip()] if a and a.lower() not in ("none", "n/a")]
     trace.append(f"answer '{val}' from text lines {[k for k in d.get('lines', [])][:8]}"
                  + (" (literal match)" if in_cited else ""))
@@ -165,12 +170,18 @@ def _room_area_answer(img_path: str, question: str, tl: T.TextLayer, bars: list,
     if lab is None or bar is None:
         return None
     h = lab.box[3] - lab.box[1]
-    near = [a for a in T.areas(tl) if abs((a["box"][1] + a["box"][3]) / 2 - lab.cy) < 4 * h
-            and abs((a["box"][0] + a["box"][2]) / 2 - lab.cx) < 6 * h]
+
+    def d2(a, it):
+        return ((a["box"][0] + a["box"][2]) / 2 - it.cx) ** 2 + ((a["box"][1] + a["box"][3]) / 2 - it.cy) ** 2
+
+    # a printed area belongs to the room whose number label is NEAREST to it (Swiss renders print 'NN.NN m²' under
+    # the number; a neighbour's area can be as close vertically)
+    ids = [i for i in tl.items if M._ROOM_ID.fullmatch(i.text.strip())] or [lab]
+    near = [a for a in T.areas(tl) if d2(a, lab) < (6 * h) ** 2 and min(ids, key=lambda i: d2(a, i)) is lab]
     lab_ev = Evidence(file=img_path, page=0, bbox=[round(x, 1) for x in lab.box], bbox_space="image_px",
                       note=f"room label '{lab.text}'")
     if near:
-        a = min(near, key=lambda a: abs((a["box"][1] + a["box"][3]) / 2 - lab.cy))
+        a = min(near, key=lambda a: d2(a, lab))
         return Answer(value=a["value"], unit=a["unit"], confidence=0.75, solver=solver,
                       evidence=[lab_ev, Evidence(file=img_path, page=0, bbox=[round(x, 1) for x in a["box"]],
                                                  bbox_space="image_px", note=f"printed area '{a['line'][:40]}'")],

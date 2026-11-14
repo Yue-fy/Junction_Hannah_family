@@ -236,3 +236,15 @@ def test_room_area_flood_fill_keeps_corner_fixtures_and_finds_the_label(tmp_path
     assert M.find_label(tl, "What is the net floor area of room 1.01 ('Bad') in m²?").text == "1.01"
     assert M.find_label(tl, "Wie gross ist der Raum «Bad»?").text == "Bad"
     assert M.find_label(tl, "What is the area of room 2.02?") is None
+
+
+def test_swiss_png_without_twin_goes_to_text_mode(monkeypatch):
+    import stoa.solvers.raster as R
+
+    q = "What is the net floor area of room 1.19 ('Corridoio') in m²?"
+    monkeypatch.setattr(R, "_siblings", lambda p: {".png": p, ".pdf": p[:-4] + ".pdf", ".dxf": p[:-4] + ".dxf"})
+    assert not R.RasterSolver()._text_mode("data/swiss_dwellings/x.png", q)  # dxf answers it
+    assert R.RasterSolver(twins=0)._text_mode("data/swiss_dwellings/x.png", q)
+    monkeypatch.setattr(R, "_siblings", lambda p: {".png": p})
+    assert R.RasterSolver()._text_mode("data/swiss_dwellings/x.png", q)
+    assert not R.RasterSolver()._text_mode("data/cubicasa5k/x.png", q)
