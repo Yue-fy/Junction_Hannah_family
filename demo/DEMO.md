@@ -3,8 +3,8 @@
 Written by agent Q, 14 Nov 04:10; updated 05:00 to follow W5's demo tour (`web/fixtures/tour.json`, 13 steps — the
 "step N" references below are its numbering); updated 08:20 for **the test-2 build, night bb94fe4** (S0 started
 sealed test 2 on it at 08:12). Slide 3 has the test-2 aggregates (S0, 08:26). **Every live question below and every tour question was run through
-the pipeline on bb94fe4 at 08:16 (`demo/live_questions.jsonl` → `demo/LIVE-CHECK.md`, 19/21 as expected, the same
-21 answers as on dde6347 and 753eccb), so the answers are known in advance; the "typed live" variants check that a
+the pipeline on bb94fe4 at 08:16 and again on night c1d6149 at 08:40 (`demo/live_questions.jsonl` →
+`demo/LIVE-CHECK.md`, 19/21 as expected, the same 21 answers on both and as on dde6347 and 753eccb), so the answers are known in advance; the "typed live" variants check that a
 slightly different wording still works.**
 
 Setup (5 minutes before): API from the `night` worktree root

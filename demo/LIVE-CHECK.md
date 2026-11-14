@@ -1,15 +1,19 @@
 # Demo pre-flight check
 
-Run `20261114-081638-pipeline-live_questions-ea8f` on **night bb94fe4 = the test-2 build** (S0's sealed test 2,
-run b391, 08:12 14 Nov), via night-Q e3aa94c (same stoa/ and web/ as bb94fe4), 08:16 14 Nov.
-Previous: d116 on 753eccb (05:01) and 2979 on dde6347 (04:51): **same 21 answers**; the only change is that the
-fine-tuned model's bedroom and sauna answers now carry boxes (3 'MH' labels, 1 sauna label: W4 f889ace room-label
-regions, $0, no confidence change).
+**Latest: run `20261114-083951-pipeline-live_questions-c243` on night c1d6149** (S0 cycle 37 = the pre-merge-#5 heads:
+W1 64d1367, W3 2e81496, W4 0319d93, F, R1, R2, W5 b43bdac), via night-Q b1a848c, 08:40 14 Nov: **the same 21 answers,
+confidences and box counts as on the test-2 build bb94fe4** (run `…-081638-…-ea8f`, 08:16) and as on 753eccb / dde6347.
+Latencies in this run are inflated (2–14 s) because three other evals shared the GPU server; on an idle server they
+are the 0.1–5 s of the bb94fe4 run below. Run `web/demo.sh` before going on stage so every tour answer is warm.
+New since 753eccb: the fine-tuned model's bedroom and sauna answers carry boxes (3 'MH' labels, 1 sauna label: W4
+f889ace room-label regions, $0, no confidence change).
 21 rows = the 3-minute script's questions, their "typed live" variants, and every question of W5's 13-step tour
 (`web/fixtures/tour.json`; step 13 is the bench, no question).
 Re-run before the pitch (from the frozen worktree's root; ~1 min once the scans' text layers are cached):
 `$JUNCTION_VENV/bin/python -m stoa.eval --solver pipeline --split demo/live_questions.jsonl --no-leaderboard --workers 4`,
 then `python3 $JUNCTION_SHARED/artifacts/Q/live_table.py <run>` renders this table (rows come out in worker order).
+
+Table: bb94fe4 (test-2 build, idle server). c1d6149 gives the same answer / ok / conf / solver / boxes on every row.
 
 | tour step | kind | question | answer | gold | ok | conf | solver | boxes | latency |
 |---|---|---|---|---|---|---:|---|---:|---:|
