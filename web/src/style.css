@@ -616,3 +616,6 @@ body[data-view="customer"].answered .ask-more { display: inline-flex; }
 body[data-view="expert"] .ask-more { display: none !important; }
 .hero-intro { font-size: 15px; line-height: 1.5; color: #3d4a5c; }
 .hero-intro .tip { display: block; margin-top: 8px; color: var(--navy); }
+.v3d-labels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.v3d-num { position: absolute; left: 0; top: 0; font-size: 24px; font-weight: 800; color: var(--accent); text-shadow: 0 0 3px #fff, 0 0 3px #fff, 0 0 6px #fff; line-height: 1; }
+body[data-view="expert"] .v3d-num { display: none; }

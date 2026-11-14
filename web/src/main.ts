@@ -892,6 +892,8 @@ function applyEvidence3D(a: Answer) {
   }
   const pane = $("pane3d");
   pane.dataset.found = String(n);
+  // the same circled numbers as the answer's short list (customer view; CSS hides them in the expert view)
+  v.setNumbers(numbered(a.evidence).map((i) => a.evidence[i].ifc_guid).filter((g): g is string => !!g));
 }
 
 function focusEvidence(i: number) {
