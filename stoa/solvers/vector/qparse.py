@@ -702,7 +702,11 @@ ATTR_W = re.compile(r"\bfire\b|feuer|\bincendi|\bbrand(?:schutz|widerstand)|u-?v
                     r"rev[êe]tement|rivestimento", re.I)
 
 
-_CONJ = re.compile(r"\b(?:and|und|et|e|ed|y|i|och|og|en|a|ja|és|ve|și|plus|as\s+well\s+as|together\s+with|sowie|ainsi\s+que)\b|&|\+", re.I)
+# no one-letter 'a'/'i'/'y' (Czech/Polish/Spanish 'and' = English article/pronoun: "a quick count for a quantity
+# takeoff" split there); those languages are translated to English before parsing anyway
+_CONJ = re.compile(r"\b(?:and|und|et|e|ed|och|og|en|ja|és|ve|și|plus|as\s+well\s+as|together\s+with|sowie|ainsi\s+que)\b|&|\+", re.I)
+_STOP = (r"(?:the|all|of|total|in\s+total|together|for|a|an|quick|me|us|please|on|in|at|to|this|that|sheet|plan|floor|"
+         r"drawing|there|are|is|how|many|number|count|quantity|takeoff|i|need|\W)*")
 
 
 def unparsed_conjunct(question: str, qr: "Query") -> str | None:
@@ -732,7 +736,7 @@ def unparsed_conjunct(question: str, qr: "Query") -> str | None:
             continue
         if isinstance(t.arg, str) and t.arg.lower() in p:
             continue
-        if re.fullmatch(r"(?:the|all|of|total|in\s+total|together|\W)*", p):
+        if re.fullmatch(_STOP, p) or re.fullmatch(r"(?:" + _STOP + r"\s*)+", p):
             continue
         return p
     return None
