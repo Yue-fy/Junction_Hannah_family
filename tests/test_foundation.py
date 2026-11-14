@@ -181,3 +181,32 @@ def test_dataset_rel_foreign_file_in_dataset_layout(tmp_path):
     (ifc_dir / "house_plan-01-EG.pdf").write_bytes(b"%PDF")
     assert ifc_model_for(str(ifc_dir / "house_plan-01-EG.pdf")) == str(ifc_dir / "house.ifc")
     assert ifc_model_for(str(ifc_dir / "other_plan-01.pdf")) is None
+
+
+def test_outside_sheet_next_to_its_model(tmp_path):
+    """F c226 neutral-path probe: an IFC plan sheet outside the dataset (no data/ifc_models/ folder) next to its
+    model was source 'unknown' -> no model sibling, no `ifc` route (ifc_models dev 100% -> 0-21%)."""
+    from stoa.data import ifc_model_for, siblings, source_of
+    pkg = tmp_path / "upload1"
+    pkg.mkdir()
+    (pkg / "house.ifc").write_text("ISO-10303-21;")
+    sheet = pkg / "house_plan-01-EG.pdf"
+    sheet.write_bytes(b"%PDF")
+    assert source_of(str(sheet)) == "ifc_models"
+    assert siblings(str(sheet))[".ifc"] == str(pkg / "house.ifc")
+    # one model in a project folder: sheets under any name belong to it
+    other = pkg / "A101 Ground floor.pdf"
+    other.write_bytes(b"%PDF")
+    assert ifc_model_for(str(other)) == str(pkg / "house.ifc") and source_of(str(other)) == "ifc_models"
+    # two models and no name match: no guess
+    (pkg / "garage.ifc").write_text("ISO-10303-21;")
+    other2 = pkg / "A102 First floor.pdf"
+    other2.write_bytes(b"%PDF")
+    assert ifc_model_for(str(other2)) is None and source_of(str(other2)) == "unknown"
+    assert source_of(str(pkg / "house_plan-01-EG.pdf")) == "ifc_models"
+    # a lone drawing, a model file itself, a CubiCasa-like PNG: unchanged
+    lone = tmp_path / "lone" / "plan.png"
+    lone.parent.mkdir()
+    lone.write_bytes(b"x")
+    assert source_of(str(lone)) == "unknown"
+    assert source_of(str(pkg / "house.ifc")) == "unknown"

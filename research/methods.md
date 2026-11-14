@@ -738,3 +738,15 @@ per-room area forms, AREA_Q in 8 languages — tuned on half A (by original ques
 behind the raster + cubicasa gate). End to end on 40 routed non-English half-B paraphrases: room_graph 33/40 vs 36/40
 for the same questions in English (4 lost / 1 won: balcony/terrace access, the known relation failure); conf ≥ 0.7 on
 30 (25 right). Since W4's pipeline imports `experiments.r1.room_graph.route.per_room`, this lands with the merge.
+**8k addendum: before/after on current night (31397eb + R1, W1's in-ifc link answers included) and Q's v20.**
+| probe | night pipeline | pipeline_kg | conf ≥ 0.8 (night → kg) |
+|---|---|---|---|
+| fresh probe_kg (21) | 9/21 | **21/21** (12 won / 0 lost, p = 0.0005) | 7 @ 3 right → 20 @ 20 right |
+| Q v17 (9) | 7/9 | 9/9 | 5 @ 5 → 9 @ 9 |
+| Q v20 (19, Q's own new wordings/models) | 6/19 | **19/19** (13 won / 0 lost) | 6 @ 4 → 18 @ 18 |
+Runs 20261114-092552-pipeline-{probe_kg-4e8a,v17-2f04,v20-c62a} vs -092552-pipeline_kg-{probe_kg-0902,v17-6ebe,v20-5fb5}.
+v20 caveat: its first run on b44392a was 12/19; the trigger broadening was done before I saw v20, but the sheet
+formatter fix (3 confident misses where the text said 'no plan sheet' while the evidence was the sheet) came from
+it. Night's 4 confident-wrong answers on probe_kg all come from ifc as asked (sheets in total → 4 @ 0.85; FR 'même
+nombre de portes' → 18 @ 0.97; 'more windows on DG1 than the plan shows' → 'no (36 = 36)' @ 0.89; 'storeys with no
+rooms' → a room name @ 0.90), so kg_qa must run BEFORE ifc on a link question, not as a fallback after it.

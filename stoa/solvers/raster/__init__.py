@@ -265,7 +265,11 @@ class RasterSolver(BaseSolver):
         lab = labelled_query(question or "")
         if lab or cls in ROOM_CLASSES:
             return self._sheet_veto(path, question or "", self._text_count(path, cls, lab, trace, question))
-        twinless = not self.twins or not ({".pdf", ".dxf", ".ifc"} & set(_siblings(path)))
+        # a twin only helps where a vector solver reads it for this image: dxf takes a PNG path on swiss_dwellings
+        # only, pdf_vector .pdf paths only. A PNG+PDF pair outside the dataset (Q's lone16 folder) went to vlm_direct
+        # (0/8) while raster abstained "because dxf/pdf_vector count it"
+        twinless = not self.twins or not ({".pdf", ".dxf", ".ifc"} & set(_siblings(path))) or \
+            source_of(path) not in TEXT_OFF
         if cls == "door" and self.doors and twinless:  # with a twin, dxf/pdf_vector count exactly: no text layer here
             ans = self._door_arcs(path, trace)
             if ans is not None:
@@ -278,7 +282,7 @@ class RasterSolver(BaseSolver):
         """Doors on a plan without a vector twin: every drawn swing arc (doorarcs.py; radius 0.55-1.35 m from the
         scale bar), plus one for each door on the red apartment boundary (the dataset counts such a door once per
         side). TRAIN Swiss floors, 60 (experiments/w3/doorwin): visible arcs found 0.9 recall / 0.95+ precision,
-        counts exact on few floors (the DXF also counts doors no drawing shows), median error -1. An estimate whose
+        counts exact on 7/60 floors (the DXF also counts doors no drawing shows), median error -2. An estimate whose
         every door a reader can check, not an exact count. None without a metric scale bar."""
         from stoa.solvers.raster import doorarcs as DA
         from stoa.solvers.raster import scalebar as SB
@@ -318,7 +322,7 @@ class RasterSolver(BaseSolver):
                                    f"{len(dup)} doors on the red apartment boundary counted once per side, as the "
                                    f"source data does"],
                       missing=["a vector twin (DXF/PDF) of this plan for an exact count: the image alone matched the "
-                               "exact count on few TRAIN floors (median error -1 door)"])
+                               "exact count on 7 of 60 TRAIN floors (median error -2 doors)"])
 
     def _text_count(self, path: str, cls: str | None, label: str | None, trace: list[str],
                     question: str | None = None) -> Answer:

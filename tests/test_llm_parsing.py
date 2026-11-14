@@ -239,3 +239,76 @@ def test_text_backend_is_opt_in_and_falls_back(monkeypatch):
     L._TB_SEEN.clear()
     monkeypatch.setenv("STOA_TEXT_BACKEND", "no-such-backend")
     assert L.text_backend() == "local"
+
+
+def test_lang_guess_terse_wordings_and_shared_words():
+    from stoa.llm import _LANG_DF, _LANG_WORDS2, lang_guess
+    from stoa.llm import _lang_score as score
+
+    def v2(q):
+        return score(q, _LANG_WORDS2, _LANG_DF)
+
+    # R2 09:40: terse wordings without a question word were read as English on a tie ('in' vs 'und'); a word several
+    # languages share now counts 1/(number of languages listing it) in the v2 scorer
+    assert v2("Nettofläche Whg. B in m², ohne Balkon und Loggia?") == "de"
+    assert v2("Quante porte ci sono in tutto l'edificio?") == "it"
+    assert v2("Laske ikkunat.") == "fi"
+    assert v2("Hvor mange rum er vist på plantegningen for 'Grundplan'?") == "da"
+    # ... but lang_guess takes v2 only when it moves a question to an UNCOVERED language (the pipeline skips
+    # translation for covered ones: terse Finnish lost its translation fallback when it became 'fi')
+    assert lang_guess("Laske ikkunat.") == "?"
+    assert lang_guess("Tel de ramen op deze plattegrond.") == "nl"          # was 'fr' -> never translated
+    assert lang_guess("Aantal deuren op deze plattegrond?") == "nl"
+    assert lang_guess("Número de puertas en la planta baja?") == "es"       # was 'fr'
+    assert lang_guess("Mekkora a 3.09-es szoba ('Küche') nettó alapterülete m²-ban?") == "hu"  # was 'de'
+    # English stays English, also with an unquoted Dutch storey name and short keyword questions
+    for q in ("Room 'kleedkamer (12)' (00 Begane grond): area in square metres?", "Net area apartment C in m²?",
+              "Total wall length on 2.OG?", "Number of doors on this plan?"):
+        assert lang_guess(q) == "en" and v2(q) == "en", q
+    # a non-Latin script is never a rule language (Greek 'netto' must not make it Italian)
+    assert v2("Πόσες φορές είναι μεγαλύτερο το διαμέρισμα Α από το Β κατά netto επιφάνεια;") == "?"
+
+
+def test_local2_down_falls_back_to_local_at_once(monkeypatch):
+    import time as _t
+
+    from openai import APIConnectionError
+
+    import stoa.llm as L
+
+    calls = []
+
+    class Comp:
+        def __init__(self, name):
+            self.name = name
+
+        def create(self, **kw):
+            calls.append((self.name, kw.get("model")))
+            if self.name == "local2":
+                raise APIConnectionError(request=None)
+
+            class U:
+                prompt_tokens, completion_tokens = 10, 2
+
+            class M:
+                content, reasoning_content = "ok", None
+
+            class C:
+                message, finish_reason, logprobs = M(), "stop", None
+
+            class R:
+                choices, usage, model = [C()], U(), "qwen3-vl-8b"
+
+            return R()
+
+    class Client:
+        def __init__(self, name):
+            self.chat = type("X", (), {"completions": Comp(name)})()
+
+    monkeypatch.setattr(L, "_client", lambda b: Client(b))
+    L._TB_SEEN.pop("local2", None)
+    t0 = _t.time()
+    r = L.chat("hi", backend="local2", model="qwen3.6-35b-a3b", cache=False)
+    assert r.text == "ok" and r.backend == "local" and _t.time() - t0 < 1.0
+    assert calls == [("local2", "qwen3.6-35b-a3b"), ("local", "default")]
+    assert L._TB_SEEN["local2"][0] is False  # text_backend() answers 'local' for the next 60 s

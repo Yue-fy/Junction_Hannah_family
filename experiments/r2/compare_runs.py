@@ -33,6 +33,8 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("runs", nargs="+")
     ap.add_argument("--source", default=None)
+    ap.add_argument("--by", default="concept", choices=["concept", "kind", "type", "source"],
+                    help="group rows by dataset concept (default), meta.kind (probe/Stoa example kinds), type or source")
     a = ap.parse_args()
     runs = []
     for r in a.runs:
@@ -46,17 +48,21 @@ def main() -> None:
         rows = {x["qid"]: x for x in load(str(p)) if not a.source or x["source"] == a.source}
         runs.append((Path(p).stem[-40:], rows))
     common = set.intersection(*(set(r) for _, r in runs))
-    print(f"{len(common)} shared questions")
+    print(f"{len(common)} shared questions (score = exact/2% when gold is a number, else the LLM judge's verdict)")
     by = collections.defaultdict(list)
     for q in common:
-        by[concept_of(runs[0][1][q]["template"])].append(q)
+        r0 = runs[0][1][q]
+        key = {"concept": lambda: concept_of(r0.get("template") or ""), "kind": lambda: str((r0.get("meta") or {}).get(
+            "kind") or r0.get("type")), "type": lambda: str(r0.get("type")), "source": lambda: str(r0.get("source"))}[a.by]()
+        by[key].append(q)
     hdr = "  ".join(f"{name[-22:]:>22}" for name, _ in runs)
-    print(f"{'n':>4}  {hdr}  concept")
+    print(f"{'n':>4}  {hdr}  {a.by}")
     tot = [0] * len(runs)
     for c, qs in sorted(by.items(), key=lambda kv: -len(kv[1])):
         accs = []
         for i, (_, rows) in enumerate(runs):
-            k = sum(bool(rows[q]["correct"]) for q in qs)
+            k = sum(bool(rows[q]["correct"] if rows[q].get("correct") is not None else rows[q].get("text_judge"))
+                    for q in qs)
             tot[i] += k
             accs.append(f"{100 * k / len(qs):22.1f}")
         print(f"{len(qs):4d}  {'  '.join(accs)}  {c[:70]}")

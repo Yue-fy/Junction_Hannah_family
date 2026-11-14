@@ -37,6 +37,10 @@ MAX_STEPS = 7
 # architect?" 13 LLM calls / 76.7k tokens -> 0.20). Once this much is spent with no reading above BUDGET_CONF, the next
 # step is the last one (a grounded chain - ask, calc, answer - has a sure reading long before)
 BUDGET_CALLS, BUDGET_TOKENS, BUDGET_CONF = 6, 30000, 0.5
+# the answer step's own reasoning says the value is assumed, not read (Q 09:12; 3 of 14 right on tonight's runs)
+_ASSUMED = re.compile(r"\b(assum\w*|no (?:definitive|direct|clear) (?:evidence|data|information)|typical(?:ly)?|"
+                      r"standard (?:practice|set|size)|guess\w*|probabl\w*|likely)\b", re.I)
+ASSUMED_CAP = 0.3
 SCOPE_PENALTY = 0.6  # an ask that names none of the question's quoted names (storey, room, label) is about another scope
 SYSTEM = """You answer one question about a construction drawing or building model by calling tools, step by step.
 Tools (one per step):
@@ -339,6 +343,7 @@ class Agent:
         names = {str(_f[k]).strip().lower() for k in ("storey", "model") if _f.get(k)}
         names = {n for n in names if n}  # token match below, so short storey names ('1', '0') are safe
         over = False  # the per-question budget is spent without a sure reading
+        last_thought = ""
         for step in range(self.max_steps):
             force = step == self.max_steps - 1 or over
             if force:
@@ -368,6 +373,7 @@ class Agent:
                 final = inp if tool == "answer" else None
                 unit = (d.get("unit") or "").strip() or None
                 trace.append(f"think: {thought} → answer {inp} {unit or ''}".strip())
+                last_thought = str(d.get("thought", ""))
                 break
             if (tool, inp) in done and tool != "answer":
                 obs = (f"error: you already called {tool}({inp[:60]}) and got: {done[(tool, inp)][:300]}. "
@@ -407,6 +413,15 @@ class Agent:
                 missing.append(f"stopped after {cost.llm_calls} model calls without a sure reading; the drawing may not "
                                "show this (a label, table or model property stating it would settle it)")
         ans = self._finish(final, unit, results, evidence, trace, assumptions, missing, cost, t0, question)
+        if ans.value is not None and ans.confidence > ASSUMED_CAP and _ASSUMED.search(last_thought):
+            # Q 09:12: "No definitive evidence of sheet count ...; assume standard practice for small sets -> 2" @ 0.49
+            # (its own ask had just said the 2 it saw is not the sheet count). Final steps that ASSUME the value were
+            # right 3 of 14 times on tonight's runs (9 above 0.3) -> capped; an unsure solver reading then wins
+            ans.trace.append(f"the final step assumes the value (\"{last_thought[:80]}\"): confidence capped at "
+                             f"{ASSUMED_CAP}")
+            ans.confidence = ASSUMED_CAP
+            ans.missing = [*ans.missing, "the agent's last step assumed the value instead of reading it: "
+                                         + last_thought[:120]]
         if src == "swiss_dwellings" and self.ask_fn is not None and ans.value is not None and ans.confidence > 0.25:
             try:
                 self._table_evidence(path, results, ans)
