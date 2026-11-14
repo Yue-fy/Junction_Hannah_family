@@ -38,7 +38,7 @@ export function costTier(c: Cost): "deterministic" | "local" | "api" {
 
 const UNIT_LABEL: Record<string, string> = { m2: "m²", m3: "m³", ft2: "ft²", count: "", m: "m", EUR: "€", eur: "€", USD: "$", usd: "$" };
 /** Unit for display: known units from the table, free-text ones (W4: "m2/door", "CHF", "h") with m2/m3/ft2 prettified. */
-const unitLabel = (u: string | null | undefined) => !u ? "" : UNIT_LABEL[u] ?? u.replace(/\b(m|ft|cm|mm)([23])\b/g, (_, b, e) => b + (e === "2" ? "²" : "³")).replace(/\bEUR\b/g, "€");
+export const unitLabel = (u: string | null | undefined) => !u ? "" : UNIT_LABEL[u] ?? u.replace(/\b(m|ft|cm|mm)([23])\b/g, (_, b, e) => b + (e === "2" ? "²" : "³")).replace(/\bEUR\b/g, "€");
 
 const esc = (s: unknown) => String(s ?? "").replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
@@ -50,7 +50,7 @@ function fmtEur(usd: number) {
   return `€${per1k < 10 ? per1k.toFixed(2) : per1k.toFixed(0)} / 1k Qs`;
 }
 
-function fmtValue(a: Answer) {
+export function fmtValue(a: Answer) {
   if (a.value === null || a.value === undefined) return "—";
   if (typeof a.value === "boolean") return a.value ? "yes" : "no"; // Python bool (int subclass) arrives as true/false
   if (typeof a.value === "number") {
