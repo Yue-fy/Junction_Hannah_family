@@ -534,6 +534,21 @@ def main():
     for lang, q in this_floor.items():
         out.append(row(E, q, 46, "count", "count", f"scope-floor:{lang}", "same", note="1.korrus (the sheet) 46"))
 
+    # ===== v8 (05:05): scope false premises — a place the drawing does not show ===================================
+    # "the whole building" on a one-floor plan (the dataset holds 1 floor of bldg2082), a second floor on a one-floor
+    # apartment, a 7th floor in a 5-storey model, unquoted (quoted '7.korrus' is flagged at 0.29 since W1's guard).
+    for path, q, typ, note in [
+        (SW, "How many doors are there in the whole building?", "count", "only this floor of building 2082 is drawn"),
+        (SW, "Wie viele Türen gibt es im ganzen Gebäude?", "count", "only this floor of building 2082 is drawn"),
+        (SW, "How many apartments does the building have in total?", "count", "only this floor is drawn"),
+        (CC, "How many bedrooms are on the second floor?", "count", "the plan shows one floor"),
+        (E, "How many doors are there on the 7th floor?", "count", "the model has 1.-5.korrus"),
+        (E, "How many doors are on the eighth floor?", "count", "the model has 1.-5.korrus"),
+    ]:
+        out.append(row(path, q, None, None, typ, "scope-premise", "flag", note=note))
+    for q, g in [("How many doors are on the 3rd floor?", 42), ("How many doors are on floor 5?", 39)]:
+        out.append(row(E, q, g, "count", "count", "scope-ordinal", "same", note="Estonian 3./5.korrus"))
+
     with open(OUT, "w", encoding="utf-8") as f:
         for r in out:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
