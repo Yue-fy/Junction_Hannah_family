@@ -496,11 +496,11 @@ async function showAnswer(a: Answer, roundTripMs: number) {
     await ensure3D();
     const v = v3d;
     if (state.answer !== a || !v || v.file !== askedPath) return;
-    const named = v.findNamed(String(a.value));
+    const named = v.findNamed(String(a.value), askedQ);
     if (!named.length) return;
     const said = named.filter((n) => !n.missed);
     const missed = named.filter((n) => n.missed);
-    if (!said.length) return;
+    if (!said.length && !missed.length) return;
     const checks = said.filter((n) => n.said !== null).map((n) => `${n.name} ${n.guids.length}${n.said === n.guids.length ? " ✓" : ` ✗ (answer says ${n.said})`}`);
     const ev = said.flatMap((n) => n.guids.map((g, i) => ({
       file: askedPath, ifc_guid: g,
@@ -511,13 +511,14 @@ async function showAnswer(a: Answer, roundTripMs: number) {
     const miss = missed.map((n) => `${n.name} ×${n.guids.length}`).join(", ");
     ev.push(...missed.flatMap((n) => n.guids.map((g, i) => ({
       file: askedPath, ifc_guid: g,
-      note: `NOT in the answer: ${n.name} (${i + 1} of ${n.guids.length})${i === 0 && n === missed[0] ? `; cross-check: the model also has ${miss} of the same kind (purple in 3D), which the answer does not mention ✗` : ""}`,
+      note: `NOT in the answer: ${n.name} (${i + 1} of ${n.guids.length})${i === 0 && n === missed[0] ? `; cross-check: the model ${said.length ? "also " : ""}has ${miss} of ${said.length ? "the same kind" : "the kind the question asks about"} (purple in 3D), which the answer does not mention ✗` : ""}`,
     }) as Answer["evidence"][number])));
     await showAnswer({
       ...a, evidence: [...ev, ...a.evidence],
-      trace: [...(a.trace ?? []), `named in the answer → found in the model by element name (in the browser, no model call): ${said.map((n) => `${n.name} ×${n.guids.length}`).join(", ")}${checks.length ? `; counts: ${checks.join(", ")}` : ""}${miss ? `; same kind, not named: ${miss}` : ""}`],
+      trace: [...(a.trace ?? []), `checked against the model by element name (in the browser, no model call): ${said.length ? `named in the answer ${said.map((n) => `${n.name} ×${n.guids.length}`).join(", ")}` : "the answer names no element type of the model"}${checks.length ? `; counts: ${checks.join(", ")}` : ""}${miss ? `; same kind, not named: ${miss}` : ""}`],
       missing: [...(a.missing ?? []), ...(miss ? [`the answer does not mention ${miss} (same kind of fixture in the model)`] : [])],
-      assumptions: [...(a.assumptions ?? []), "highlighted elements are matched by the family/type names the answer uses; the solver did not cite them"],
+      assumptions: [...(a.assumptions ?? []), said.length ? "highlighted elements are matched by the family/type names the answer uses; the solver did not cite them"
+        : "purple elements are the model's families of the kind the question asks about (matched by element name), not cited by the solver"],
     }, roundTripMs);
   }
 }
@@ -580,7 +581,7 @@ const TOUR: { file: string; q: string; note: string; bench?: boolean; second?: b
     note: "A question no template covers, with a number in it: the IFC solver reads the price from the question, counts the 46 doors in the model and multiplies in code (46 × 450 € = 20,700 €). No model call; every counted door is evidence." },
   { file: "data/ifc_bench/4351_arc.ifc",
     q: "What plumbing fixtures are in this building and their respective counts?",
-    note: "A free-text answer about a model: the browser finds the fixture types it names in the IFC model, highlights them, checks its counts (9 ✓, 4 ✓) and flags what it left out: 8 sinks of the same kind. No model call for the check." },
+    note: "A free-text answer about a model is checked against the IFC model in the browser, no model call: fixture types it names are highlighted (orange) with their counts checked; plumbing fixtures it leaves out are flagged and shown in purple." },
   { file: "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
     q: "How many doors (interior doors and entrance doors together) are drawn on this floor plan?",
     note: "Vector drawing: doors counted on the CAD layer and mapped back onto the PDF." },

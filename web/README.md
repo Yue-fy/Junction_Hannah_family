@@ -49,10 +49,12 @@ and shows a one-line note:
    room area on '1.korrus' does 'KORIDOR (119)' take?" → 7.34 %. Questions no solver can read go to W4's planning
    agent (ask → ask → calc → answer; sub-questions clickable, evidence rows labelled by step).
 6. A free-text question about a model (4351_arc.ifc, "what plumbing fixtures are in this building and their counts?"):
-   the solver's answer names Toilet-Domestic-3D ×9 and Urinal-Wall-3D ×4 but cites no elements. The browser finds the
-   named types in the loaded IFC model by element name (`findNamed` in `src/viewer3d.ts`, no model call), highlights
-   the 13 fixtures in 3D, checks both counts ✓, and flags "the model also has Sink Vanity-Round ×6, Sink
-   Kitchen-Double ×2 of the same kind, which the answer does not mention ✗" (exactly what the gold answer adds).
+   the solver's text cites no elements, so the browser checks it against the loaded IFC model by element name
+   (`findNamed` in `src/viewer3d.ts`, no model call). With the 03:29 answer ("Toilet-Domestic-3D: 9, Urinal-Wall-3D: 4")
+   the named fixtures turn orange, both counts ✓, and "the model also has Sink Vanity-Round ×6, Sink Kitchen-Double ×2
+   … not mentioned ✗" (purple) — exactly what the gold adds. With night 8f02b13's answer ("no plumbing fixtures are
+   listed", a fact-card regression, told W1) the card shows "✗ the model has Urinal-Wall-3D ×4, Toilet-Domestic-3D ×9,
+   Sink Vanity-Round ×6, Sink Kitchen-Double ×2 of the kind the question asks about" and all 21 in purple.
 7. Swiss floor plan: doors counted on the DXF layer, boxed on the PDF (36).
 8. Same floor, asked in German, doors and windows together → 64. The card shows "Understood as: count · door +
    window · German" and the plan (sum of 2 sub-questions, each clickable); both parts are cross-checked.
@@ -88,8 +90,10 @@ per candidate and an "argmax/argmin over …" line, the card shows a bar per can
 
 **Named elements** (free-text answers on an .ifc with no element evidence): element types the text names are
 matched in the model by family/type name, highlighted, and their counts checked against the numbers the text gives;
-for fixture kinds (sanitary, furniture, lighting) other families of the same kind that the text leaves out are listed
-as a ✗ check and under "What would make it certain". An assumption line says the solver did not cite them.
+for fixture kinds (sanitary, furniture, lighting), families of that kind that the text leaves out are listed as a ✗
+check and under "What would make it certain" (purple in 3D). A kind is checked when the answer names one of its
+families or the question asks about it ("plumbing fixtures"; not for questions about rooms/spaces). An assumption
+line says the solver did not cite them.
 
 **Second opinion** (any answer from a model tier, or below 80 % confidence, on an image or PDF): one click
 asks hosted NVIDIA Nemotron the same question (`POST /ask {solver: "vlm_direct", solver_args: {backend:

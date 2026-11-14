@@ -537,7 +537,7 @@ export class Viewer3D {
   /** Element types a free-text answer names ("Toilet-Domestic-3D: 9 units"), found in the loaded model by name: Revit
    * "Family:Type:Type:id" names give the family and "Family:Type"; ObjectType too. Per named type: its elements and the
    * number the text puts right after the name (null when it gives none). Generic class words alone never match. */
-  findNamed(text: string): { name: string; guids: string[]; said: number | null; missed?: boolean }[] {
+  findNamed(text: string, question = ""): { name: string; guids: string[]; said: number | null; missed?: boolean }[] {
     this.ensureGuidIndex();
     const api = this.api;
     if (!api || !text) return [];
@@ -578,10 +578,16 @@ export class Viewer3D {
     }
     // Omissions: when the named types are fixtures of one kind (sanitary, furniture, lighting), other families of that
     // kind in the model that the answer does not name ("Sink Vanity-Round ×6" next to toilets and urinals).
-    const KINDS = [/toilet|\bwc\b|urinal|sink|basin|lavatory|shower|bath|tub\b|bidet|faucet|\btap\b|water closet/i,
-      /chair|table|desk|\bbed\b|sofa|couch|cabinet|shelf|shelving|wardrobe|bench/i, /light|lamp|luminaire/i];
-    for (const k of KINDS) {
-      if (!out.some((o) => k.test(o.name))) continue;
+    // A kind is checked when the answer names one of its families or the QUESTION asks about it ("plumbing fixtures"),
+    // so an answer that names none ("no plumbing fixtures are listed") is still checked against the model.
+    const KINDS: [RegExp, RegExp][] = [
+      [/toilet|\bwc\b|urinal|sink|basin|lavatory|shower|bath|tub\b|bidet|faucet|\btap\b|water closet/i,
+        /plumbing|sanitary|toilets?\b|urinals?|sinks?\b|wash ?basins?|lavator/i],
+      [/chair|table|desk|\bbed\b|sofa|couch|cabinet|shelf|shelving|wardrobe|bench|cubicle|work ?station/i, /furniture|furnishing/i],
+      [/light|lamp|luminaire/i, /light(ing)? fixtures?|lamps?\b|luminaires?|lighting/i]];
+    for (const [k, q] of KINDS) {
+      // a question about rooms/spaces ("which rooms have a toilet?") is not a question about the fixtures themselves
+      if (!out.some((o) => k.test(o.name)) && (!q.test(question) || /\b(rooms?|spaces?|zones?)\b/i.test(question))) continue;
       for (const [fam, gs] of families) {
         if (!k.test(fam) || out.some((o) => o.name.startsWith(fam) || fam.startsWith(o.name))) continue;
         const guids = [...gs].filter((g) => !taken.has(g));
