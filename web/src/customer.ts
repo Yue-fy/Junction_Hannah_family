@@ -226,7 +226,7 @@ export function heroHtml(a: Answer, ctx: HeroCtx): string {
       <span>about <b>${mt.minutes} min</b> by hand <small>(estimate)</small></span>
     </div>
     ${shown.length ? `<div class="hero-where"><div class="hw-title">Where it comes from</div>
-      ${shown.map((i, k) => `<button type="button" class="hw-item" data-ev="${i}"><span class="num">${circled(k)}</span><span class="lbl">${esc(place(i))} · ${esc(evidenceLabel(ev[i].note ?? ""))}</span></button>`).join("")}
+      ${shown.map((i, k) => `<button type="button" class="hw-item" data-ev="${i}"><span class="num pin-badge">${k + 1}</span><span class="lbl">${esc(place(i))} · ${esc(evidenceLabel(ev[i].note ?? ""))}</span></button>`).join("")}
       ${more > 0 ? `<div class="hw-more">+ ${more} more, all marked ${/\.ifc$/i.test(ctx.file) || !ev.some((e) => e.bbox) ? "in the 3D model" : "on the drawing"}</div>` : ""}</div>` : ""}`;
 }
 

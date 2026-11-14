@@ -892,8 +892,8 @@ function applyEvidence3D(a: Answer) {
   }
   const pane = $("pane3d");
   pane.dataset.found = String(n);
-  // the same circled numbers as the answer's short list (customer view; CSS hides them in the expert view)
-  v.setNumbers(numbered(a.evidence).map((i) => a.evidence[i].ifc_guid).filter((g): g is string => !!g));
+  // the same numbers as the answer's short list (customer view; CSS hides them in the expert view)
+  v.setNumbers(numbered(a.evidence).map((i) => a.evidence[i].ifc_guid ?? ""));
 }
 
 function focusEvidence(i: number) {
@@ -1083,7 +1083,11 @@ function renderHero(a: Answer, roundTripMs: number) {
     question: $<HTMLTextAreaElement>("question").value.trim(), file: state.file?.path ?? "", roundTripMs,
     sheetLabel: (path) => p?.sheets.find((s) => s.path === path)?.label ?? "",
   });
-  el.querySelectorAll<HTMLButtonElement>("[data-ev]").forEach((b) => b.addEventListener("click", () => focusEvidence(Number(b.dataset.ev))));
+  el.querySelectorAll<HTMLButtonElement>("[data-ev]").forEach((b) => {
+    b.addEventListener("click", () => focusEvidence(Number(b.dataset.ev)));
+    b.addEventListener("mouseenter", () => v2d.hoverEvidence(Number(b.dataset.ev)));
+    b.addEventListener("mouseleave", () => v2d.hoverEvidence(null));
+  });
 }
 
 // --- boot ---------------------------------------------------------------------------------------------------

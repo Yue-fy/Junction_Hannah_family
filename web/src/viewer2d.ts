@@ -266,27 +266,43 @@ export class Viewer2D {
   }
 
   /** Draw evidence that lives on this file (bbox), plus GUID highlights for ifc_guid evidence. */
-  /** Customer view: circled numbers ①…⑤ on the evidence items the answer lists (indexes into the evidence array). */
+  /** Customer view: numbered pins (1…5) on the evidence items the answer lists (indexes into the evidence array).
+   *  A pin keeps the same size on screen at any zoom (CSS scales it by 1/--z); it sits on the centre of a lit model
+   *  element (the room/door itself is highlighted) and on the top-left corner of a plain box (the box's content stays
+   *  readable). */
   setNumbers(idx: number[]) {
-    const CIRC = "①②③④⑤⑥⑦⑧⑨";
+    const pad = Math.max(this.w, this.h) * 0.003;
     this.evLayer.querySelectorAll<SVGGElement>("g.ev").forEach((g) => {
-      g.querySelector("text.circ")?.remove();
-      const k = idx.indexOf(Number(g.dataset.index));
+      g.querySelector("g.pin")?.remove();
+      const i = Number(g.dataset.index);
+      const k = idx.indexOf(i);
       g.classList.toggle("num", k >= 0);
-      if (k < 0) return;
-      const plain = g.querySelector("text");
-      const shape = g.querySelector("rect, circle");
-      if (!plain || !shape) return;
+      const item = this.evidence.find((e) => e.i === i);
+      if (k < 0 || !item) return;
+      const r = item.rect;
+      const point = r[2] - r[0] < 1 && r[3] - r[1] < 1;
+      const [x, y] = g.classList.contains("on-guid") || point ? [(r[0] + r[2]) / 2, (r[1] + r[3]) / 2] : [r[0] - pad, r[1] - pad];
+      const pin = document.createElementNS(SVGNS, "g");
+      pin.classList.add("pin");
+      pin.setAttribute("transform", `translate(${x} ${y})`);
+      const s = document.createElementNS(SVGNS, "g");
+      s.classList.add("pin-s");
+      const c = document.createElementNS(SVGNS, "circle");
+      c.setAttribute("r", "14");
       const t = document.createElementNS(SVGNS, "text");
-      t.classList.add("circ");
-      const side = Math.max(this.w, this.h);
-      const fs = side * 0.016;
-      t.setAttribute("font-size", String(fs));
-      t.setAttribute("x", plain.getAttribute("x") ?? "0");
-      t.setAttribute("y", String(Number(plain.getAttribute("y") ?? 0) - fs * 0.1));
-      t.textContent = CIRC[k] ?? String(k + 1);
-      g.append(t);
+      t.setAttribute("text-anchor", "middle");
+      t.setAttribute("dy", "0.36em");
+      t.setAttribute("font-size", "16");
+      t.textContent = String(k + 1);
+      s.append(c, t);
+      pin.append(s);
+      g.append(pin);
     });
+  }
+
+  /** Customer view: light up one numbered item (hovering its line in the answer's list). */
+  hoverEvidence(index: number | null) {
+    this.evLayer.querySelectorAll<SVGGElement>("g.ev").forEach((g) => g.classList.toggle("hot", index !== null && g.dataset.index === String(index)));
   }
 
   setEvidence(evidence: Evidence[]) {
@@ -307,6 +323,8 @@ export class Viewer2D {
       // W1: elements the plan cut does not draw (slabs, high beams) are boxed from the model footprint
       if (/projected: not drawn/i.test(ev.note ?? "")) g.classList.add("projected");
       g.dataset.index = String(i);
+      // the element itself is lit on the plan (GUID layer): the box is only its click target in the customer view
+      if (ev.ifc_guid && this.guidEls.has(ev.ifc_guid)) g.classList.add("on-guid");
       const shape = document.createElementNS(SVGNS, isPoint ? "circle" : "rect");
       if (isPoint) {
         shape.setAttribute("cx", String(r[0]));
