@@ -133,6 +133,10 @@ def is_link_question(question: str) -> dict:
     if re.search(_OTHER_DATASET, q):
         why.append("same building elsewhere")
     if re.search(_ROOM_STOREY, q) and not re.search(r"\b(more|fewer|less|most|least|largest|smallest|highest|lowest|"
+                                                     r"biggest|tiniest|größte\w*|kleinste\w*|suurin\w*|pienin\w*|"
+                                                     r"plus grande?s?|plus petite?s?|största|minsta|più grande|"
+                                                     r"più piccol\w*|grootste|kleinste|más grande|más pequeñ\w*|"
+                                                     r"suurim\w*|väikseim\w*|"
                                                      r"mehr|weniger|meisten|enemmän|vähemmän|eniten|plus de|moins de|"
                                                      r"flest|fler|più|meno|meer|minder|rohkem)\b", q) and (re.search(r"['\"‘’“”]", q) or re.search(
             r"(\broom|raum\b|huone|\bpièce|\bsalle|\blocal|rum(met)?\b|\bstanza|ruimte\b|ruum\b)", q)):
@@ -167,6 +171,43 @@ def facts(path: str) -> tuple[list[dict], dict]:
     if not g:
         return [], {}
     this_plan = path if path.endswith(".pdf") else None
+    this_extra = None
+    if this_plan and g.get("model") and not any(f["path"] == this_plan for f in g.get("files", [])):
+        # an uploaded / renamed sheet ('A101.pdf', hashed copies) next to its model: stoa.kg finds sheets by the
+        # model's name prefix, so it is not a plan node (Q 10:38: kg_qa fired 2/28 on hashed copies). Read its storey
+        # with W1's plan_storey (sheet title, else GlobalId tags) and its cut-plane counts with W1's _cut_compare.
+        try:
+            import copy
+
+            from stoa.kg.graph import _CHECK_KINDS, CUT_HEIGHT, _cut_compare, floor_offset
+            from stoa.solvers.ifc.index import load_index
+            from stoa.solvers.ifc.plan2d import plan_items
+            from stoa.solvers.ifc.solver import plan_storey
+
+            idx = load_index(g["model"])
+            s, _why = plan_storey(this_plan, idx)
+            if s is not None:
+                g = copy.deepcopy(g)
+                items = plan_items(this_plan)
+                cut_z = (s.elevation or 0.0) + floor_offset(idx) + CUT_HEIGHT
+                sname = {x.guid: x.name for x in idx.storeys}
+                g.setdefault("files", []).append({"path": this_plan, "kind": "plan", "storey": s.guid})
+                for st in g.get("storeys", []):
+                    if st["guid"] == s.guid and not st.get("plan"):
+                        st["plan"] = this_plan
+                for r in g.get("rooms", []):
+                    if r.get("storey") == s.guid and not r.get("plan"):
+                        r["plan"] = this_plan
+                        it = items.get(r.get("guid"))
+                        if it is not None:
+                            r["bbox_pt"] = [round(v, 2) for v in it.bbox]
+                for label, classes in _CHECK_KINDS:
+                    c = _cut_compare(idx, s.guid, items, classes, cut_z, sname)
+                    if c["model"] or c["drawn_all"]:
+                        g.setdefault("crosschecks", []).append({"storey": s.name, "what": label, "plan": this_plan, **c})
+                this_extra = {"name": s.name, "guid": s.guid, "plan": this_plan, "why": _why}
+        except Exception:  # noqa: BLE001  (never break the link route on an odd upload)
+            this_extra = None
     rows: list[dict] = []
 
     def add(tag, text, **data):
@@ -208,7 +249,8 @@ def facts(path: str) -> tuple[list[dict], dict]:
         add("R", f"room '{nm}' on storey '{r['storey_name']}', {r.get('area_m2') or 0:g} m², plan sheet "
                  f"{Path(r['plan']).name if r.get('plan') else 'NONE'}", name=nm, storey=r["storey_name"],
             plan=r.get("plan"), bbox=r.get("bbox_pt"), guid=r.get("guid"), model=g.get("model"))
-    return rows, {"model": g.get("model"), "this": links(path).get("storey") if this_plan else None}
+    return rows, {"model": g.get("model"),
+                  "this": this_extra or (links(path).get("storey") if this_plan else None)}
 
 
 def _retrieve(rows: list[dict], question: str, k: int = 12) -> list[dict]:
@@ -544,9 +586,11 @@ def _solve_one(path: str, question: str, backend: str = "local", llm_question: s
 
         asks_sheet = op == "lookup_sheet" or bool(re.search(_WHICH_SHEET, ql) or re.search(_SHEET3, ql))
         st = sorted({r.get("storey") for r in cited if r.get("storey")})
-        sheets = sorted({_short(x) for r in cited if (x := sheet_of(r))})
+        sheets = sorted({(_short(x) if "_plan-" in Path(x).stem or "_section-" in Path(x).stem or "_elevation-" in
+                          Path(x).stem else Path(x).name) for r in cited if (x := sheet_of(r))})
         if asks_sheet and sheets:
-            value = ", ".join(f"plan-{x}" if not x.startswith(("plan", "section", "elevation")) else x for x in sheets)
+            # dataset sheets are '<model>_plan-NN-<storey>'; an upload keeps its own name ('A101', a hash)
+            value = ", ".join(x for x in sheets)
             if st:
                 value += " (storey " + ", ".join(f"'{s}'" for s in st) + ")"
             conf = 0.85 if len(sheets) == 1 else 0.5
@@ -629,6 +673,13 @@ def _solve_one(path: str, question: str, backend: str = "local", llm_question: s
     elif op == "exists":
         value, conf = ("yes" if cited else "no"), 0.7
         ev = [e for r in cited if (e := evid(r, r["text"][:80]))]
+    if value is not None and not yesno and re.match(r"(yes|no)\b", str(value)) and re.match(
+            r"(which|what|where|on which|in which|welche\w*|auf welche\w*|in welche\w*|mikä|missä|mill\w*|quel\w*|"
+            r"sur quel\w*|vilke\w*|på vilke\w*|qual\w*|su qual\w*|welk\w*|op welk\w*|qué|cuál\w*|en qué|mis|"
+            r"millis\w*)\b", ql):
+        # Q 10:40 'Which floor has the biggest room?' -> 'yes (model 55 vs drawn 52)' @0.80: a which-question has no yes
+        trace.append(f"kg_qa: which-question answered '{str(value)[:30]}' (op {op}) -> no answer")
+        value, conf = None, 0.0
     if counting_q and value is not None and op in ("lookup_storey", "lookup_sheet", "list_storeys"):
         # W1 c8 'How many walls are there on the ground floor?' -> 'EG' @0.85 (a storey lookup): a count needs a number
         trace.append(f"kg_qa: count question answered with '{value}' (op {op}) -> no answer")
