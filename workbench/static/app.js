@@ -410,6 +410,7 @@ const asker = {
     $("#q-ask").disabled = true;
     try {
       const r = await api("api/ask", { method: "POST", body: JSON.stringify({ path: this.path, question }) });
+      r.fresh = true;
       this.system = r;
       if (!r.ok) { res.className = "result err"; res.innerHTML = `Our system failed: ${esc(r.error)}`; return; }
       const mine = $("#q-answer").value.trim();
@@ -445,7 +446,9 @@ const asker = {
     const body = {
       path: this.path, page: this.page, question, answer: ans, unit: $("#q-unit").value, type,
       method: $("#q-method").value, sureness: ($("input[name=sure]:checked") || {}).value || "",
-      marks: this.viewer.marks, system: this.system, qid: this.editQid || "",
+      marks: this.viewer.marks, qid: this.editQid || "",
+      // an old answer of ours only stays attached if the question text is unchanged (or she asked again)
+      system: this.system && (this.system.fresh || !this.editQid || question === this.editOrigQ) ? this.system : null,
     };
     try {
       const r = await api("api/questions", { method: "POST", body: JSON.stringify(body) });
@@ -479,6 +482,7 @@ const asker = {
       this.viewer.marks = (q.marks || []).slice(); this.viewer.drawMarks();
       this.edit(q);
       this.system = q.system ? { ok: true, ...q.system } : null;  // keep our earlier answer unless she asks again
+      this.editOrigQ = q.question;
       $("#q-text").focus();
     }));
     $$("#q-list [data-del]").forEach((b) => b.addEventListener("click", async () => {
