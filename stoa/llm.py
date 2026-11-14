@@ -853,10 +853,60 @@ _LANG_WORDS: dict[str, set[str]] = {
     "lv": set("cik kāda ir un uz stāvā telpu platība".split()),
     "lt": set("kiek koks yra ir ant aukšte patalpų plotas".split()),
 }
+# R2 09:40 (experiments/r2/probes/lang_id.py): terse wordings without a question word were read as English on a tie
+# ("Nettofläche Whg. B in m², ohne Balkon und Loggia?" en 'in' 1 vs de 'und' 1; "Quante porte ci sono in tutto
+# l'edificio?"), so they never reached the translator; Dutch "Tel de ramen op deze plattegrond." was French. More
+# general function/domain words per language, and every word now scores 1 / (number of languages that list it), so a
+# shared word ('in', 'de', 'plan', 'area') can no longer outvote a word only one language uses. No vocabulary added
+# for hr / nb / el / lt (F's held-out hardL languages). Not added: storey names that appear UNQUOTED in English
+# questions ('00 Begane grond'), and 'all' (tied an English injection tail with the Finnish question before it).
+_LANG_MORE: dict[str, str] = {
+    "en": "count number net door doors window windows wall walls kitchen living bedroom bathroom apartment ground "
+          "storey level vs per between from",
+    "fi": "laske laskekaa kpl määrä lukumäärä ovien ikkunoiden ikkunat ikkunaa ovet ovea asunto asunnon asunnossa "
+          "huoneisto huoneiston neliöinä neliömetriä pohjakuva pohjakuvassa pohjapiirros piirustus piirustuksessa "
+          "makuuhuonetta makuuhuoneita keittiö olohuone kylpyhuone kerros kerroksen ilman tai mitä missä paljon",
+    "de": "in mit ohne für von zu ein eine einer eines einem alle aller gesamt gesamte gesamten insgesamt zusammen "
+          "hat haben nicht oder anzahl zahl zählen zähle wieviel wieviele wo was wohnfläche nettowohnfläche "
+          "nettofläche flächen zimmer räume raum türen tür fenster wände wand erdgeschoss obergeschoss "
+          "untergeschoss dachgeschoss stockwerk küche wohnzimmer schlafzimmer badezimmer diesem dieser diesen "
+          "dieses plan",
+    "fr": "en au aux avec sans pour par nombre compte compter surface nette logement porte portes fenêtre fenêtres "
+          "mur murs pièce rez chaussée cuisine salon chambre chambres salle bain bâtiment totale plus moins que plan",
+    "it": "in con senza per che ci sono tutto tutti tutte numero conta contare quanto quanta area netta netto lorda "
+          "alloggio porte porta finestre finestra muri muro pareti edificio stanza locale locali cucina soggiorno "
+          "camera camere bagno bagni dell nella nelle negli sulla al ai alla più meno terra",
+    "es": "con sin para por de la número cuenta contar puertas puerta ventanas ventana paredes muros neta neto "
+          "apartamento vivienda baja plano cocina salón dormitorio baño total",
+    "pt": "no na nos nas com sem para por número conte contar portas porta janelas janela paredes apartamento desta "
+          "deste cozinha sala quarto banho total rés chão",
+    "nl": "de een in met zonder voor aantal tel telt tellen deze dit die er staan ramen raam deuren deur muren kamer "
+          "keuken woonkamer slaapkamer badkamer plattegrond totaal netto appartement woning hoe groot",
+    "sv": "i av med utan för antal räkna lägenhet lägenheten lägenheter dörrar dörr fönster fönstren väggar sovrum "
+          "badrum kök vardagsrum bottenvåningen våningen ritningen planritningen totalt sammanlagt tillsammans "
+          "nettoarea yta area",
+    "da": "antal døre vinduer vægge stueetagen lejlighed køkken badeværelse soveværelse alt med uden i",
+    "pl": "w z bez dla do od liczba policz drzwi okna okien ścian ściany mieszkania mieszkanie parterze rzucie rzut "
+          "kuchnia łazienka sypialnia netto wszystkich razem łącznie",
+    "cs": "v z bez pro do od spočítej spočítejte okna bytu byt přízemí výkresu půdorysu kuchyně koupelna ložnice",
+    "ro": "la de cu fără pentru numărul număr numără uși ușă ferestre fereastră ferestrele pereți apartamentul "
+          "parter plan bucătărie dormitor baie total",
+    "hu": "meg számold száma darab ajtók ajtó ablak ablakok ablakokat falak földszint földszinten rajzon lakás "
+          "konyha fürdőszoba hálószoba összesen nettó",
+    "tr": "sayısı say sayın kapı kapılar pencere pencereleri pencereler duvar zemin kat plandaki daire mutfak banyo "
+          "yatak net metrekare",
+    "et": "arv loe loenda uksed akende seinte esimesel teisel korter korteri köök vannituba magamistuba netopind",
+}
+_LANG_WORDS2: dict[str, set[str]] = {c: v | set(_LANG_MORE.get(c, "").split()) for c, v in _LANG_WORDS.items()}
+_LANG_DF: dict[str, int] = {}
+for _vocab in _LANG_WORDS2.values():
+    for _w in _vocab:
+        _LANG_DF[_w] = _LANG_DF.get(_w, 0) + 1
 _LANG_CHARS: dict[str, str] = {  # letters that (almost) only one language family uses
     "pl": "ąęłńśźż", "cs": "ěřůť", "sk": "ľĺŕô", "hu": "őű", "tr": "ğşı", "ro": "ășțâî", "et": "õ",
     "es": "ñ¿¡", "pt": "ãõ", "fi": "", "lv": "āēīķļņģ", "lt": "ėįų", "da": "æø", "no": "æø", "sv": "å",
 }
+_LANG_CHARS2 = {**_LANG_CHARS, "da": "æøå", "no": "æøå"}  # v2: å is Danish/Norwegian too (Danish read as Swedish)
 COVERED_LANGS = ("en", "fi", "de", "fr", "it")  # languages the dataset (and therefore our rules) use
 _QUOTED = re.compile(r"(?<![^\W\d_])'[^']{1,80}'(?![^\W\d_])|\"[^\"]{1,80}\"|‘[^’]{1,80}’|“[^”]{1,80}”|„[^“”]{1,80}[“”]|«[^»]{1,80}»")
 # IDs and numbers: anything with a digit (1.korrus, A-101, 2,40, 1 200, 25 CHF stays: only the number part)
@@ -867,23 +917,42 @@ def _strip_quoted(q: str) -> str:
     return _QUOTED.sub(" ", q)
 
 
-def lang_guess(question: str) -> str:
-    """Best-guess ISO 639-1 code of a question (no model call; quoted names ignored). '?' when nothing matches.
-    Meant for routing ("is this a language our rules cover?"), not for linguistics: close pairs (da/no, cs/sk)
-    can be confused, which does not matter because both get translated."""
+def _lang_score(question: str, vocab_by_lang: dict[str, set[str]], df: dict[str, int] | None) -> str:
     t = _strip_quoted(question).lower()
     words = re.findall(r"[^\W\d_]+(?:-[^\W\d_]+)?", t)
     if not words:
         return "?"
+    if df is not None:
+        letters = [ch for w in words for ch in w]
+        if sum(1 for ch in letters if ch > "\u024f") * 2 > len(letters):
+            return "?"  # mostly non-Latin script (Greek, Cyrillic, ...): no vocabulary here, never a rule language
     best, best_s = "?", 0.0
-    for code, vocab in _LANG_WORDS.items():
-        s = sum(1.0 for w in words if w in vocab)
-        chars = _LANG_CHARS.get(code, "")
+    for code, vocab in vocab_by_lang.items():
+        s = sum((1.0 / df[w] if df else 1.0) for w in words if w in vocab)
+        chars = (_LANG_CHARS2 if df else _LANG_CHARS).get(code, "")
         if chars:
             s += 1.5 * sum(1 for ch in t if ch in chars)
         if s > best_s:
             best, best_s = code, s
-    return best if best_s >= 1.0 else "?"
+    return best if best_s >= (1e-9 if df else 1.0) else "?"
+
+
+def lang_guess(question: str) -> str:
+    """Best-guess ISO 639-1 code of a question (no model call; quoted names ignored). '?' when nothing matches.
+    Meant for routing ("is this a language our rules cover?"), not for linguistics: close pairs (da/no, cs/sk)
+    can be confused, which does not matter because both get translated.
+
+    Two scorers: v1 (original vocabulary, 1 point per word) and v2 (_LANG_MORE + 1/df weights + non-Latin -> '?').
+    v2 is right more often (open labelled probes 892 -> 928/946; 0 changes on the 6,671 open dataset questions), but
+    the pipeline reads a COVERED language (en/fi/de/fr/it) as "the rules read it" and then skips translation, so
+    v2's corrections TOWARD covered languages measured 0 wins / 1 loss (terse Finnish 'Laske ikkunat.' lost its
+    translation fallback) and +46% LLM calls on the 63 affected open-probe rows (R2 09:30, artifacts/R2/
+    lang_changed.jsonl). So v2 is used only when it moves a question to an UNCOVERED language (Dutch read as
+    French, terse Dutch/Swedish/Spanish read as English): those are exactly the questions the front end should
+    translate (held-out hardL: +30 points from translating uncovered languages)."""
+    v1 = _lang_score(question, _LANG_WORDS, None)
+    v2 = _lang_score(question, _LANG_WORDS2, _LANG_DF)
+    return v2 if v2 != v1 and v2 not in COVERED_LANGS and v2 != "?" else v1
 
 
 @dataclass

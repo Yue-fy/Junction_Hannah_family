@@ -239,3 +239,32 @@ def test_text_backend_is_opt_in_and_falls_back(monkeypatch):
     L._TB_SEEN.clear()
     monkeypatch.setenv("STOA_TEXT_BACKEND", "no-such-backend")
     assert L.text_backend() == "local"
+
+
+def test_lang_guess_terse_wordings_and_shared_words():
+    from stoa.llm import _LANG_DF, _LANG_WORDS2, lang_guess
+    from stoa.llm import _lang_score as score
+
+    def v2(q):
+        return score(q, _LANG_WORDS2, _LANG_DF)
+
+    # R2 09:40: terse wordings without a question word were read as English on a tie ('in' vs 'und'); a word several
+    # languages share now counts 1/(number of languages listing it) in the v2 scorer
+    assert v2("Nettofläche Whg. B in m², ohne Balkon und Loggia?") == "de"
+    assert v2("Quante porte ci sono in tutto l'edificio?") == "it"
+    assert v2("Laske ikkunat.") == "fi"
+    assert v2("Hvor mange rum er vist på plantegningen for 'Grundplan'?") == "da"
+    # ... but lang_guess takes v2 only when it moves a question to an UNCOVERED language (the pipeline skips
+    # translation for covered ones: terse Finnish lost its translation fallback when it became 'fi')
+    assert lang_guess("Laske ikkunat.") == "?"
+    assert lang_guess("Tel de ramen op deze plattegrond.") == "nl"          # was 'fr' -> never translated
+    assert lang_guess("Aantal deuren op deze plattegrond?") == "nl"
+    assert lang_guess("Número de puertas en la planta baja?") == "es"       # was 'fr'
+    assert lang_guess("Har lägenheten en bastu?") == "sv"                   # was 'es'
+    assert lang_guess("Mekkora a 3.09-es szoba ('Küche') nettó alapterülete m²-ban?") == "hu"  # was 'de'
+    # English stays English, also with an unquoted Dutch storey name and short keyword questions
+    for q in ("Room 'kleedkamer (12)' (00 Begane grond): area in square metres?", "Net area apartment C in m²?",
+              "Total wall length on 2.OG?", "Number of doors on this plan?"):
+        assert lang_guess(q) == "en" and v2(q) == "en", q
+    # a non-Latin script is never a rule language (Greek 'netto' must not make it Italian)
+    assert v2("Πόσες φορές είναι μεγαλύτερο το διαμέρισμα Α από το Β κατά netto επιφάνεια;") == "?"
