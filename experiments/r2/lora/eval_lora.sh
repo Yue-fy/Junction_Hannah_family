@@ -24,7 +24,7 @@ PORT=8002 GPU_UTIL=${GPU_UTIL:-0.30} SERVED_NAME=$PRESET-lora-test LORA="$NAME=$
 
 run() {
   echo "[$(date +%H:%M)] eval: $*"
-  LLM_BASE_URL=http://127.0.0.1:8002/v1 "$J" -m stoa.eval --solver vlm_direct --workers 24 \
+  LLM_BASE_URL=http://127.0.0.1:8002/v1 "$J" -m stoa.eval --solver vlm_direct --workers ${WORKERS:-4} \
     --solver-arg model="$NAME" --note "R2 LoRA $NAME ($DIR) on private :8002" "$@" 2>&1 | grep -v "it/s" || true
 }
 ARGS=()
