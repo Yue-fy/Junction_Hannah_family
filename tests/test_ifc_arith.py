@@ -1,0 +1,91 @@
+"""Outer arithmetic around IFC quantities (stoa.solvers.ifc.arith + IfcSolver._outer): self-written wordings,
+not from any split. Values are checked against the solver's own atomic answers, so the test checks the
+arithmetic and the routing, not the dataset."""
+
+from __future__ import annotations
+
+import pytest
+
+from stoa.data import abspath
+from stoa.solvers.ifc.arith import detect, leftover_numbers
+
+ESPL = "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf"
+
+
+@pytest.mark.parametrize("q,op,n,unit,basis,kind", [
+    ("If each door costs 450 euros, how much do the doors on 'X' cost in total?", "mul", 450, "EUR", "count", "door"),
+    ("At 35 EUR per square metre, what would it cost to clean all rooms on 'X'?", "mul", 35, "EUR", "area", None),
+    ("If every window needs 2 curtains, how many curtains are needed on 'X'?", "mul", 2, "count", "count", "window"),
+    ("Doors cost €320 each. What is the total cost of the doors on 'X'?", "mul", 320, "EUR", "count", None),
+    ("How many doors would remain on 'X' if 5 were removed?", "sub", 5, None, None, None),
+    ("How many doors are on 'X' if we add 3 more?", "add", 3, None, None, None),
+    ("Are there more than 40 doors on 'X'?", "cmp", 40, None, None, None),
+    ("Is the total room area on 'X' larger than 800 m²?", "cmp", 800, None, None, None),
+])
+def test_detect(q, op, n, unit, basis, kind):
+    o = detect(q)
+    assert o is not None and o.op == op and o.n == n
+    assert o.unit == unit and o.basis == basis and o.basis_kind == kind
+
+
+@pytest.mark.parametrize("q", [
+    "How many doors are shown on the floor plan of '1.korrus'?",
+    "What is the average net floor area per room (space) on 'Attic', in m²?",
+    "How many of the rooms 'A (1.5)' and 'B (1.4)' on '1' have a net floor area of more than 13 m²?",
+    "Which storey has more doors, '1.korrus' or '2.korrus'?",
+    "How many doors per storey are there?",
+])
+def test_detect_leaves_templates_alone(q):
+    o = detect(q)
+    assert o is None or o.op != "mul"
+    assert detect("What is the total net floor area of all spaces on '1.korrus', in m²?") is None
+
+
+def test_leftover_numbers():
+    assert leftover_numbers("How many walls are there on '1.korrus', minus 10?", []) == ["10"]
+    assert leftover_numbers("What is the net floor area of the room 'Room (1.4)' on '1', in m²?", []) == []
+    assert leftover_numbers("How many doors are on level 4 and on the 2nd floor?", []) == []
+    assert leftover_numbers("What furniture is in room 112?", []) == []
+    assert leftover_numbers("List the 5 largest rooms on '1.korrus'.", []) == []
+
+
+@pytest.fixture(scope="module")
+def solver():
+    from stoa.solvers import get_solver
+
+    return get_solver("ifc")
+
+
+@pytest.mark.skipif(not abspath(ESPL).exists(), reason="dataset not available")
+def test_outer_arithmetic_on_a_model(solver):
+    doors = solver.solve(ESPL, "How many doors are there on '1.korrus'?").value
+    windows = solver.solve(ESPL, "How many windows are there on '1.korrus'?").value
+    rooms = solver.solve(ESPL, "How many rooms are there on '1.korrus'?").value
+    area = solver.solve(ESPL, "What is the total net floor area of all spaces on '1.korrus'?").value
+    a = solver.solve(ESPL, "If each door costs 450 euros, how much do the doors on '1.korrus' cost in total, in euros?")
+    assert a.value == pytest.approx(doors * 450) and a.unit == "EUR" and a.confidence > 0.8 and a.evidence
+    a = solver.solve(ESPL, "How many square metres of floor per door are there on '1.korrus'?")
+    assert a.value == pytest.approx(area / doors, rel=1e-3)
+    a = solver.solve(ESPL, "How many windows per room are there on '1.korrus' on average?")
+    assert a.value == pytest.approx(windows / rooms, rel=1e-3)
+    a = solver.solve(ESPL, "What is the ratio of doors to windows on '1.korrus'?")
+    assert a.value == pytest.approx(doors / windows, rel=1e-3)
+    assert solver.solve(ESPL, "How many doors would remain on '1.korrus' if 5 were removed?").value == doors - 5
+    assert solver.solve(ESPL, f"Are there more than {doors - 1} doors on '1.korrus'?").value == "yes"
+    assert solver.solve(ESPL, f"Are there more than {doors} doors on '1.korrus'?").value == "no"
+    a = solver.solve(ESPL, "How many walls are there on '1.korrus', minus 10?")  # not modelled -> guard
+    assert a.confidence <= 0.3 and any("10" in m for m in a.missing)
+
+
+@pytest.mark.skipif(not abspath(ESPL).exists(), reason="dataset not available")
+def test_scope_and_superlatives(solver):
+    whole = solver.solve(ESPL, "How many doors are there in the whole building?")
+    plan = solver.solve(ESPL, "How many doors are there on '1.korrus'?")
+    assert whole.value > plan.value
+    big = solver.solve(ESPL, "What is the area of the largest room on '1.korrus'?")
+    total = solver.solve(ESPL, "What is the total net floor area of all spaces on '1.korrus'?")
+    assert 0 < big.value < total.value and len({e.ifc_guid for e in big.evidence if e.ifc_guid}) == 1
+    name = solver.solve(ESPL, "What is the name of the largest room on '1.korrus'?")
+    assert isinstance(name.value, str) and f"{big.value:.2f}" in name.value
+    st = solver.solve(ESPL, "Which storey has the most doors?")
+    assert st.value == "1.korrus"
