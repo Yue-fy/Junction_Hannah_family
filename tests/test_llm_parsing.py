@@ -103,3 +103,54 @@ def test_vlm_lora_adapter_per_source(monkeypatch):
     assert s.model_for("data/swiss_dwellings/a.png") == "cc-v3"
     assert VlmLora(model="cc-v2").model_for("data/swiss_dwellings/a.png") == "cc-v2"
     assert "washbasin" in VlmLora.TRAINED_BY_MODEL["cc-v3"] and "washbasin" not in VlmLora.TRAINED
+
+
+# --- question translation front end (stoa.llm.to_english); offline: chat is monkeypatched ---
+
+def test_lang_guess_ignores_quoted_names():
+    from stoa.llm import lang_guess
+
+    assert lang_guess("How many rooms labelled 'Pièce' are there on this floor?") == "en"
+    assert lang_guess("Kuinka monta WC-istuinta pohjapiirustukseen on piirretty?") == "fi"
+    assert lang_guess("Ile pomieszczeń jest na kondygnacji „-1”?") == "pl"
+    assert lang_guess("Hány ajtó látható a(z) 'KG' szint alaprajzán?") == "hu"
+    assert lang_guess("Bu kat planında kaç sauna var?") == "tr"
+
+
+def test_protect_restore_roundtrip_keeps_names_numbers_letters():
+    from stoa.llm import _protect, _restore
+
+    q = "Mekkora az A lakás és az 1.11-es helyiség ('Zimmer') területe a „5.korrus” szinten, 2,40 €?"
+    masked, spans = _protect(q)
+    assert "Zimmer" not in masked and "5.korrus" not in masked and "2,40" not in masked
+    assert "-es" in masked  # the case ending stays outside the placeholder so the model can translate it
+    assert _restore(masked, spans) == (q, True)
+    # the model dropped the quote marks around a name: they come back anyway
+    txt = masked.replace("'[[", "[[").replace("]]'", "]]")
+    assert "('Zimmer')" in _restore(txt, spans)[0]
+
+
+def test_to_english_skips_covered_languages_and_checks_placeholders(monkeypatch):
+    import stoa.llm as L
+
+    calls = []
+
+    class R:
+        def __init__(self, text):
+            self.text = text
+
+    def fake_chat(masked, **kw):
+        calls.append(masked)
+        if "kaç" in masked:  # loses the placeholder -> must fall back to the original
+            return R('{"lang": "tr", "english": "How many rooms are there?"}')
+        return R('{"lang": "cs", "english": "How many doors are on floor \'[[1]]\'?"}')
+
+    monkeypatch.setattr(L, "chat", fake_chat)
+    L._tr_memo.clear()
+    de = L.to_english("Wie viele Türen gibt es im Geschoss 'EG'?")
+    assert not de.translated and de.text.startswith("Wie viele") and calls == []
+    cs = L.to_english("Kolik dveří je na podlaží 'KG'?")
+    assert cs.translated and cs.ok and cs.text == "How many doors are on floor 'KG'?" and cs.lang == "cs"
+    tr = L.to_english("Bu katta 'Bad' etiketli kaç oda var?")
+    assert not tr.translated and not tr.ok and tr.text == "Bu katta 'Bad' etiketli kaç oda var?"
+    L._tr_memo.clear()

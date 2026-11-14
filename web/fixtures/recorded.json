@@ -54,7 +54,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 1.359
+    "wall_seconds": 1.1399
    },
    "intent": {
     "task": "area",
@@ -69,7 +69,7 @@
     "key": "area:room:room"
    }
   },
-  "recorded_at": "2026-11-14 03:44",
+  "recorded_at": "2026-11-14 04:09",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -1073,7 +1073,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 0.0958
+    "wall_seconds": 0.0832
    },
    "intent": {
     "task": "count",
@@ -1087,7 +1087,7 @@
     "key": "count:door:storey"
    }
   },
-  "recorded_at": "2026-11-14 03:44",
+  "recorded_at": "2026-11-14 04:09",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -2281,7 +2281,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 0.0195
+    "wall_seconds": 0.0193
    },
    "intent": {
     "task": "count",
@@ -2295,7 +2295,7 @@
     "key": "count:window:storey"
    }
   },
-  "recorded_at": "2026-11-14 03:44",
+  "recorded_at": "2026-11-14 04:09",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -6761,7 +6761,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 0.0176
+    "wall_seconds": 0.0207
    },
    "intent": {
     "task": "count",
@@ -6775,7 +6775,2687 @@
     "key": "count:door:model"
    }
   },
-  "recorded_at": "2026-11-14 03:44",
+  "recorded_at": "2026-11-14 04:09",
+  "api": "http://127.0.0.1:8102"
+ },
+ {
+  "path": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+  "question": "If each door costs 450 euros, what do all the doors on '1.korrus' cost in total?",
+  "answer": {
+   "value": 20700.0,
+   "unit": "EUR",
+   "confidence": 0.9215,
+   "evidence": [
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      974.97,
+      506.21,
+      996.0,
+      542.65
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "3Z0LniWg2KrPAx$bJQIbx5",
+     "note": "IfcDoor ARUKS - 012"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      539.97,
+      275.24,
+      566.03,
+      313.89
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "1HfzM2TPPQajbINaHMIdrb",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      517.12,
+      316.7,
+      560.18,
+      346.22
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "1UobiwPyx$YwsduZKXbAna",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      840.86,
+      497.41,
+      883.92,
+      526.93
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "2WXJ26xsfFGaO1yi1nLt1B",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      328.49,
+      211.4,
+      371.55,
+      240.93
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "2fMlzbCqxHKUCKoBWlddYd",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      585.92,
+      355.1,
+      628.98,
+      384.63
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "1x7Sic5Nh2IT78CYC3Vi8W",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      774.53,
+      460.38,
+      817.6,
+      489.91
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "1_tpU8prPjGgB0lUIsykwO",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      488.86,
+      367.31,
+      518.73,
+      411.68
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "0egLHXa__bOCbI0xhrpZGj",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      228.46,
+      221.96,
+      258.33,
+      266.32
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "3H3ZS8zC_qgdRfJQRNyfaP",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      300.23,
+      262.02,
+      330.1,
+      306.39
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "2iwe4T4N7O1Blpw5E57z_x",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      557.66,
+      405.72,
+      587.53,
+      450.08
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "2PcxFY6dsh0i4g2neEY1Ol",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      746.28,
+      511.0,
+      776.15,
+      555.37
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "2yv34AexuSNI7MBHIevU4k",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      812.6,
+      548.02,
+      842.47,
+      592.39
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "2UsMzcvdMJpMCi1uniOqFD",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      928.96,
+      570.99,
+      965.58,
+      629.33
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "3FxEsmg7kYi8lwtrBtGaep",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      864.37,
+      715.17,
+      908.74,
+      745.04
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "3sy9qKBZRJdJh4SMTZ4rND",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      901.67,
+      648.34,
+      946.04,
+      678.21
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "22tGbVqqBSKqlC3sOBWiy$",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      979.26,
+      787.02,
+      1013.81,
+      841.64
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "12s74hya9irS457S7GpdhY",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      1057.67,
+      642.84,
+      1094.29,
+      701.17
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "2TjD19x0Tc6zqJOOaD2cU6",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      302.71,
+      310.59,
+      331.25,
+      353.1
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "1tWOvenmxcjmerlqi0_Tu9",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      716.44,
+      549.81,
+      759.82,
+      578.58
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "2JwK9k_bVb1HCkeTFs_ulq",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      361.37,
+      187.91,
+      400.89,
+      214.2
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "1PbIWDZLO6hL5GR$UwH4V3",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      861.21,
+      846.39,
+      911.27,
+      875.02
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "0UFl9l1USZWtSg0b36q4d7",
+     "note": "IfcDoor ARVU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      1332.37,
+      885.34,
+      1360.91,
+      927.85
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "36MjCAKbtIkccudGHdSrOI",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      1488.69,
+      980.88,
+      1532.06,
+      1009.64
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "3Fq$ZLJn_K34Vpk9vdQ6bj",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      201.61,
+      262.44,
+      244.99,
+      291.2
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "2_5Oovi2yFYGhQs$YNO3eA",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      627.49,
+      322.94,
+      663.15,
+      346.76
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "3KXBSstlehA_owbjkD3RJL",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      1231.27,
+      837.19,
+      1274.65,
+      865.96
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "3g13QxGnl6fgpzfpiyIzcU",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      1103.81,
+      577.49,
+      1130.76,
+      618.5
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "3RjKE18SPB1R7L_ae362yh",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      729.35,
+      309.86,
+      773.72,
+      339.73
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "3$ePWtxSJNTMzLx0ZD2_8z",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      1010.01,
+      374.42,
+      1051.2,
+      399.37
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "2I5IuUT6CGJgARshpW5Byy",
+     "note": "IfcDoor ARVU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      958.03,
+      345.41,
+      999.22,
+      370.36
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "0651gemSsFD$J1nTzBg7gK",
+     "note": "IfcDoor ARVU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      1336.84,
+      855.49,
+      1379.91,
+      885.02
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "1SKU8wqJ8Abdh$JEi4NS1O",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      1523.47,
+      959.66,
+      1566.53,
+      989.19
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "3ek36IDfW$QNFsDooZ1XL_",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      1594.76,
+      999.46,
+      1637.82,
+      1028.98
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "3rrINjQVpuO7IMSNwddKyW",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      1135.12,
+      742.89,
+      1178.18,
+      772.41
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "3x15KKi1YokPuJJ1BKSFVe",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      1266.05,
+      815.97,
+      1309.12,
+      845.5
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "2YTHyxHuENTTjHWpJTwCOO",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      1506.76,
+      861.74,
+      1536.63,
+      906.11
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "3_crOfIzrthCNsE0BeYMvV",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      1378.29,
+      790.03,
+      1408.16,
+      834.4
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "2_LsQ0vPvT7tiRn8CtVNbp",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      1463.93,
+      837.84,
+      1493.8,
+      882.2
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "2OwgnooYHo2R6IQYN2PaSC",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      1165.43,
+      671.21,
+      1206.43,
+      698.16
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "0rdhm0PGmsgOUPcOIsdL6B",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      1421.11,
+      813.93,
+      1450.98,
+      858.3
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "1HuZqwqC1JRo7bO$1hnKPa",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      226.32,
+      186.18,
+      255.0,
+      234.06
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "2auFlRE$FCzNMLlWrw0qRu",
+     "note": "IfcDoor ARVU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      1635.81,
+      972.95,
+      1664.49,
+      1020.83
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "28PCzbmvvl91jBwlolqXI8",
+     "note": "IfcDoor ARVU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      1589.78,
+      1029.03,
+      1618.32,
+      1071.54
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "2jbjr1e0N$T4rP1J_YQ$X4",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      459.03,
+      406.13,
+      502.4,
+      434.89
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "15YzZ2iuR$vktpHCsqJcwV",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      560.12,
+      454.28,
+      588.66,
+      496.79
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "0roVlhvnNz0HMFDYwDtXOP",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "3Z0LniWg2KrPAx$bJQIbx5",
+     "note": "IfcDoor ARUKS - 012"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "1HfzM2TPPQajbINaHMIdrb",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "1UobiwPyx$YwsduZKXbAna",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "2WXJ26xsfFGaO1yi1nLt1B",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "2fMlzbCqxHKUCKoBWlddYd",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "1x7Sic5Nh2IT78CYC3Vi8W",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "1_tpU8prPjGgB0lUIsykwO",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "0egLHXa__bOCbI0xhrpZGj",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "3H3ZS8zC_qgdRfJQRNyfaP",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "2iwe4T4N7O1Blpw5E57z_x",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "2PcxFY6dsh0i4g2neEY1Ol",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "2yv34AexuSNI7MBHIevU4k",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "2UsMzcvdMJpMCi1uniOqFD",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "3FxEsmg7kYi8lwtrBtGaep",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "3sy9qKBZRJdJh4SMTZ4rND",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "22tGbVqqBSKqlC3sOBWiy$",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "12s74hya9irS457S7GpdhY",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "2TjD19x0Tc6zqJOOaD2cU6",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "1tWOvenmxcjmerlqi0_Tu9",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "2JwK9k_bVb1HCkeTFs_ulq",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "1PbIWDZLO6hL5GR$UwH4V3",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "0UFl9l1USZWtSg0b36q4d7",
+     "note": "IfcDoor ARVU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "36MjCAKbtIkccudGHdSrOI",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "3Fq$ZLJn_K34Vpk9vdQ6bj",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "2_5Oovi2yFYGhQs$YNO3eA",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "3KXBSstlehA_owbjkD3RJL",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "3g13QxGnl6fgpzfpiyIzcU",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "3RjKE18SPB1R7L_ae362yh",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "3$ePWtxSJNTMzLx0ZD2_8z",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "2I5IuUT6CGJgARshpW5Byy",
+     "note": "IfcDoor ARVU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "0651gemSsFD$J1nTzBg7gK",
+     "note": "IfcDoor ARVU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "1SKU8wqJ8Abdh$JEi4NS1O",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "3ek36IDfW$QNFsDooZ1XL_",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "3rrINjQVpuO7IMSNwddKyW",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "3x15KKi1YokPuJJ1BKSFVe",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "2YTHyxHuENTTjHWpJTwCOO",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "3_crOfIzrthCNsE0BeYMvV",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "2_LsQ0vPvT7tiRn8CtVNbp",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "2OwgnooYHo2R6IQYN2PaSC",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "0rdhm0PGmsgOUPcOIsdL6B",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "1HuZqwqC1JRo7bO$1hnKPa",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "2auFlRE$FCzNMLlWrw0qRu",
+     "note": "IfcDoor ARVU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "28PCzbmvvl91jBwlolqXI8",
+     "note": "IfcDoor ARVU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "2jbjr1e0N$T4rP1J_YQ$X4",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "15YzZ2iuR$vktpHCsqJcwV",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "0roVlhvnNz0HMFDYwDtXOP",
+     "note": "IfcDoor ARSU"
+    }
+   ],
+   "trace": [
+    "intent: text door [storey] (storey=1.korrus) (lang en)",
+    "ifc (question as asked): 20700.0 EUR (conf 0.92; the solver read the question itself, no LLM needed)",
+    "[ifc] asked on bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf; answering from its source model bsc-esplanades_1807-ep-ar-v18.ifc",
+    "[ifc] model bsc-esplanades_1807-ep-ar-v18.ifc: IFC2X3, 7 storeys, 2249 elements (index 14.7s, cached)",
+    "[ifc] parsed: metric=text kind=door scope=storey names=['1.korrus']",
+    "[ifc] outer operation: factor 450 EUR per door",
+    "[ifc] storey '1.korrus' -> '1.korrus' (exact, 100) guid 1oZ0wPs_PE8ANCPg3bIs4j",
+    "[ifc] 46 elements of IfcDoor in storey '1.korrus'",
+    "[ifc] 46 count x 450 = 20700.00 EUR",
+    "[ifc] 2D link: 46/46 evidence elements drawn on bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf"
+   ],
+   "solver": "pipeline/ifc",
+   "assumptions": [
+    "factor 450 EUR per door: model quantity x the factor given in the question",
+    "elements whose spatial container is storey '1.korrus'"
+   ],
+   "missing": [],
+   "cost": {
+    "llm_tokens_in": 0,
+    "llm_tokens_out": 0,
+    "gpu_seconds": 0.0,
+    "api_calls": 0,
+    "api_tokens_in": 0,
+    "api_tokens_out": 0,
+    "llm_calls": 0,
+    "wall_seconds": 0.0237
+   },
+   "intent": {
+    "task": "text",
+    "target": "door",
+    "scope": "storey",
+    "unit": null,
+    "filters": {
+     "storey": "1.korrus"
+    },
+    "lang": "en",
+    "key": "text:door:storey"
+   }
+  },
+  "recorded_at": "2026-11-14 04:09",
+  "api": "http://127.0.0.1:8102"
+ },
+ {
+  "path": "data/ifc_bench/4351_arc.ifc",
+  "question": "What plumbing fixtures are in this building and their respective counts?",
+  "answer": {
+   "value": "Plumbing fixtures in this building include:\n- Toilet-Domestic-3D: 9 units\n- Urinal-Wall-3D: 4 units\n\nNo other plumbing fixtures are listed in the model facts.",
+   "unit": null,
+   "confidence": 0.3,
+   "evidence": [
+    {
+     "file": "data/ifc_bench/4351_arc.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": null,
+     "note": "IFC model (fact card source)"
+    }
+   ],
+   "trace": [
+    "intent: text unknown [drawing] (lang en)",
+    "ifc (question as asked): Plumbing fixtures in this building include:\n- Toilet-Domestic-3D: 9 units\n- Urinal-Wall-3D: 4 units\n\nNo other plumbing fixtures are listed in the model facts.  at conf 0.30, unsure",
+    "no train gate for this kind of question: general path by file type",
+    "ifc: Plumbing fixtures in this building include:\n- Toilet-Domestic-3D: 9 units\n- Urinal-Wall-3D: 4 units\n\nNo other plumbing fixtures are listed in the model facts.  (conf 0.30)",
+    "[ifc] model 4351_arc.ifc: IFC2X3, 5 storeys, 401 elements (index 1.0s, cached)",
+    "[ifc] parsed: metric=text kind=None scope=auto names=[]",
+    "[ifc] abstain: free-text question: no deterministic rule",
+    "[ifc] rules could not answer; asking the local LLM with a fact card of the model (45 lines, 4546 chars)",
+    "[ifc] fact card (first lines): Model: 4351_arc.ifc | schema IFC2X3 | project 'Project Number' | Authoring application: Autodesk Revit Architecture 2011 2011 (Autodesk Revit Architecture 2011) | Element totals: IfcBuildingElementProxy 122, IfcLightFixture 119, IfcWallStandardCase 41, IfcAirTerminal 36, IfcDoor 17, IfcCovering 14, IfcFurnishingElement 13, IfcRailing 11, IfcSlab 6, IfcSpace 6, IfcMember 4, IfcStair 4, IfcStairFlig"
+   ],
+   "solver": "pipeline/ifc",
+   "assumptions": [
+    "answered by the local LLM from facts extracted from the IFC (counts, types, materials, fire ratings, rooms); not verified by a rule"
+   ],
+   "missing": [
+    "a quantity question (count/area/volume/length)"
+   ],
+   "cost": {
+    "llm_tokens_in": 2041,
+    "llm_tokens_out": 46,
+    "gpu_seconds": 0.1276,
+    "api_calls": 0,
+    "api_tokens_in": 0,
+    "api_tokens_out": 0,
+    "llm_calls": 1,
+    "wall_seconds": 9.9841
+   },
+   "intent": {
+    "task": "text",
+    "target": "unknown",
+    "scope": "drawing",
+    "unit": null,
+    "filters": {},
+    "lang": "en",
+    "key": "text:unknown:drawing"
+   }
+  },
+  "recorded_at": "2026-11-14 03:29",
+  "api": "http://127.0.0.1:8102",
+  "note": "pinned 04:05: the 03:29 answer (night 609e41c code) named the fixture types; since night-W1 e78a093 the IFC fact card prints bare type names and the live answer is 'No plumbing fixtures are listed' (conf 0.3), which the card flags ✗ against the model (told W1). Unpin when W1's fix is on night.",
+  "pinned": true
+ },
+ {
+  "path": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+  "question": "How many doors (interior doors and entrance doors together) are drawn on this floor plan?",
+  "answer": {
+   "value": 36,
+   "unit": "count",
+   "confidence": 0.988,
+   "evidence": [
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      553.8,
+      109.5,
+      569.3,
+      126.5
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door 1; cross-check: answer 36 vs DXF layer count 36 ✓"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      569.5,
+      110.2,
+      584.2,
+      126.5
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door 2"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      534.0,
+      127.0,
+      551.7,
+      143.0
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door 3"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      582.5,
+      132.7,
+      596.3,
+      145.0
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door 4"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      564.8,
+      143.2,
+      580.0,
+      161.2
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door 5"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      585.5,
+      162.5,
+      604.0,
+      179.3
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door 6"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      585.5,
+      162.5,
+      604.0,
+      179.3
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door 7"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      572.0,
+      166.1,
+      586.0,
+      183.2
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door 8"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      572.0,
+      166.1,
+      586.0,
+      183.2
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door 9"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      556.7,
+      178.1,
+      571.2,
+      195.8
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door 10"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      556.7,
+      178.1,
+      571.2,
+      195.8
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door 11"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      586.4,
+      183.2,
+      600.0,
+      195.0
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door 12"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      572.7,
+      208.9,
+      586.3,
+      224.3
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door 13"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      572.7,
+      208.9,
+      586.3,
+      224.3
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door 14"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      639.5,
+      312.2,
+      654.5,
+      330.4
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door 15"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      655.4,
+      328.8,
+      671.0,
+      342.6
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door 16"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      623.6,
+      328.9,
+      641.4,
+      343.9
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door 17"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      655.4,
+      344.6,
+      672.1,
+      359.6
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door 18"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      655.5,
+      399.7,
+      672.8,
+      415.2
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door 19"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      621.5,
+      409.9,
+      636.5,
+      426.7
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door 20"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      601.2,
+      425.8,
+      615.7,
+      438.4
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door 21"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      643.9,
+      431.1,
+      660.5,
+      450.9
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door 22"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      643.9,
+      431.1,
+      660.5,
+      450.9
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door 23"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      665.7,
+      433.6,
+      681.0,
+      447.4
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door 24"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      604.4,
+      456.1,
+      623.0,
+      472.9
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door 25"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      621.7,
+      462.8,
+      641.8,
+      480.2
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door 26"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      621.7,
+      462.8,
+      641.8,
+      480.2
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door 27"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      622.0,
+      479.7,
+      637.4,
+      496.7
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door 28"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      644.2,
+      483.1,
+      660.3,
+      502.2
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door 29"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      644.2,
+      483.1,
+      660.3,
+      502.2
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door 30"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      665.9,
+      486.5,
+      680.5,
+      499.6
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door 31"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      656.2,
+      518.8,
+      673.2,
+      534.0
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door 32"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      616.2,
+      536.5,
+      631.4,
+      553.7
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door 33"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      656.8,
+      567.4,
+      674.6,
+      583.2
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door 34"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      625.3,
+      577.0,
+      643.1,
+      591.9
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door 35"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      641.6,
+      591.4,
+      657.4,
+      609.0
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door 36"
+    }
+   ],
+   "trace": [
+    "intent: count door [drawing] (lang en)",
+    "gate (train n=40): prior 5%, dxf 100%, raster 0%, vlm_direct 5%; skip raster, vlm_direct",
+    "dxf: 36 count (conf 0.98, train hit rate)",
+    "cross-check: answer 36 vs DXF layer count 36 ✓",
+    "[dxf] parsed: count/sum: count(door) [count]",
+    "[dxf] doors = 36 (door leaves (5-vertex polylines) on DXF layer DOOR)",
+    "[dxf] DXF->PDF fit on 33 text anchors, rms 0.05 pt, scale 1:200"
+   ],
+   "solver": "pipeline/dxf",
+   "assumptions": [
+    "counted door leaves (5-vertex polylines) on DXF layer DOOR"
+   ],
+   "missing": [],
+   "cost": {
+    "llm_tokens_in": 0,
+    "llm_tokens_out": 0,
+    "gpu_seconds": 0.0,
+    "api_calls": 0,
+    "api_tokens_in": 0,
+    "api_tokens_out": 0,
+    "llm_calls": 0,
+    "wall_seconds": 0.179
+   },
+   "intent": {
+    "task": "count",
+    "target": "door",
+    "scope": "drawing",
+    "unit": "count",
+    "filters": {},
+    "lang": "en",
+    "key": "count:door:drawing"
+   }
+  },
+  "recorded_at": "2026-11-14 04:09",
+  "api": "http://127.0.0.1:8102"
+ },
+ {
+  "path": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+  "question": "Wie viele Türen und Fenster sind insgesamt auf diesem Grundriss eingezeichnet?",
+  "answer": {
+   "value": 64,
+   "unit": "count",
+   "confidence": 0.976,
+   "evidence": [
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      553.8,
+      109.5,
+      569.3,
+      126.5
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door: door 1; cross-check: answer 36 vs DXF layer count 36 ✓"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      569.5,
+      110.2,
+      584.2,
+      126.5
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door: door 2"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      534.0,
+      127.0,
+      551.7,
+      143.0
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door: door 3"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      582.5,
+      132.7,
+      596.3,
+      145.0
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door: door 4"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      564.8,
+      143.2,
+      580.0,
+      161.2
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door: door 5"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      585.5,
+      162.5,
+      604.0,
+      179.3
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door: door 6"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      585.5,
+      162.5,
+      604.0,
+      179.3
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door: door 7"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      572.0,
+      166.1,
+      586.0,
+      183.2
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door: door 8"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      572.0,
+      166.1,
+      586.0,
+      183.2
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door: door 9"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      556.7,
+      178.1,
+      571.2,
+      195.8
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door: door 10"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      556.7,
+      178.1,
+      571.2,
+      195.8
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door: door 11"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      586.4,
+      183.2,
+      600.0,
+      195.0
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door: door 12"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      572.7,
+      208.9,
+      586.3,
+      224.3
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door: door 13"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      572.7,
+      208.9,
+      586.3,
+      224.3
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door: door 14"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      639.5,
+      312.2,
+      654.5,
+      330.4
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door: door 15"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      655.4,
+      328.8,
+      671.0,
+      342.6
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door: door 16"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      623.6,
+      328.9,
+      641.4,
+      343.9
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door: door 17"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      655.4,
+      344.6,
+      672.1,
+      359.6
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door: door 18"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      655.5,
+      399.7,
+      672.8,
+      415.2
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door: door 19"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      621.5,
+      409.9,
+      636.5,
+      426.7
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door: door 20"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      601.2,
+      425.8,
+      615.7,
+      438.4
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door: door 21"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      643.9,
+      431.1,
+      660.5,
+      450.9
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door: door 22"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      643.9,
+      431.1,
+      660.5,
+      450.9
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door: door 23"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      665.7,
+      433.6,
+      681.0,
+      447.4
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door: door 24"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      604.4,
+      456.1,
+      623.0,
+      472.9
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door: door 25"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      621.7,
+      462.8,
+      641.8,
+      480.2
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door: door 26"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      621.7,
+      462.8,
+      641.8,
+      480.2
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door: door 27"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      622.0,
+      479.7,
+      637.4,
+      496.7
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door: door 28"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      644.2,
+      483.1,
+      660.3,
+      502.2
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door: door 29"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      644.2,
+      483.1,
+      660.3,
+      502.2
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door: door 30"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      665.9,
+      486.5,
+      680.5,
+      499.6
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door: door 31"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      656.2,
+      518.8,
+      673.2,
+      534.0
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door: door 32"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      616.2,
+      536.5,
+      631.4,
+      553.7
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door: door 33"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      656.8,
+      567.4,
+      674.6,
+      583.2
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door: door 34"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      625.3,
+      577.0,
+      643.1,
+      591.9
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door: door 35"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      641.6,
+      591.4,
+      657.4,
+      609.0
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "door: door 36"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      653.2,
+      643.3,
+      677.9,
+      650.4
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "window: window 1 (3 lines); cross-check: answer 28 vs DXF layer count 28 ✓"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      603.4,
+      643.2,
+      627.2,
+      650.4
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "window: window 2 (3 lines)"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      566.7,
+      598.5,
+      573.8,
+      633.0
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "window: window 3 (3 lines)"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      566.4,
+      550.8,
+      573.5,
+      574.3
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "window: window 4 (3 lines)"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      706.7,
+      545.0,
+      714.3,
+      568.6
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "window: window 5 (3 lines)"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      706.6,
+      518.0,
+      714.2,
+      542.2
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "window: window 6 (3 lines)"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      566.2,
+      503.7,
+      573.3,
+      527.6
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "window: window 7 (3 lines)"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      706.4,
+      487.1,
+      713.9,
+      501.8
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "window: window 8 (3 lines)"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      706.4,
+      487.1,
+      713.9,
+      501.8
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "window: window 9 (3 lines)"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      566.0,
+      458.2,
+      573.1,
+      481.2
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "window: window 10 (3 lines)"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      706.2,
+      457.1,
+      713.8,
+      477.7
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "window: window 11 (3 lines)"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      565.9,
+      426.0,
+      572.9,
+      440.6
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "window: window 12 (3 lines)"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      705.8,
+      391.2,
+      713.4,
+      415.2
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "window: window 13 (3 lines)"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      565.7,
+      384.9,
+      572.7,
+      408.1
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "window: window 14 (3 lines)"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      705.5,
+      343.9,
+      713.1,
+      367.5
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "window: window 15 (3 lines)"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      565.5,
+      339.2,
+      572.5,
+      361.9
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "window: window 16 (3 lines)"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      705.2,
+      289.0,
+      712.8,
+      319.2
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "window: window 17 (3 lines)"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      574.5,
+      288.9,
+      581.8,
+      311.9
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "window: window 18 (3 lines)"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      640.6,
+      272.7,
+      655.3,
+      279.3
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "window: window 19 (3 lines)"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      623.8,
+      239.6,
+      631.3,
+      263.5
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "window: window 20 (3 lines)"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      623.7,
+      212.5,
+      631.3,
+      236.7
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "window: window 21 (3 lines)"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      623.6,
+      182.1,
+      631.1,
+      196.8
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "window: window 22 (3 lines)"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      623.6,
+      182.1,
+      631.1,
+      196.8
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "window: window 23 (3 lines)"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      623.6,
+      150.8,
+      631.1,
+      172.8
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "window: window 24 (3 lines)"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      475.9,
+      137.1,
+      483.0,
+      167.6
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "window: window 25 (3 lines)"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      623.5,
+      126.6,
+      631.0,
+      142.0
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "window: window 26 (3 lines)"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      546.2,
+      71.6,
+      569.7,
+      78.8
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "window: window 27 (3 lines)"
+    },
+    {
+     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+     "page": 0,
+     "bbox": [
+      589.7,
+      71.5,
+      613.9,
+      78.6
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": null,
+     "note": "window: window 28 (3 lines)"
+    }
+   ],
+   "trace": [
+    "compound question → sum over 2 parts: door, window",
+    "part 'door': \"How many doors (interior doors and entrance doors together) are drawn on this floor plan?\" → 36 count (conf 0.99, pipeline/dxf)",
+    "part 'window': \"How many windows are drawn on this floor plan?\" → 28 count (conf 0.99, pipeline/dxf)",
+    "combine: door 36 + window 28 = 64"
+   ],
+   "solver": "pipeline/compose",
+   "assumptions": [
+    "door: counted door leaves (5-vertex polylines) on DXF layer DOOR",
+    "window: counted windows on DXF layer WINDOW (3 polylines per window)"
+   ],
+   "missing": [],
+   "cost": {
+    "llm_tokens_in": 0,
+    "llm_tokens_out": 0,
+    "gpu_seconds": 0.0,
+    "api_calls": 0,
+    "api_tokens_in": 0,
+    "api_tokens_out": 0,
+    "llm_calls": 0,
+    "wall_seconds": 0.8757
+   },
+   "intent": {
+    "task": "count",
+    "target": "window",
+    "scope": "drawing",
+    "unit": "count",
+    "filters": {},
+    "lang": "de",
+    "key": "count:window:drawing"
+   },
+   "plan": {
+    "op": "sum",
+    "parts": [
+     "door",
+     "window"
+    ],
+    "sub_questions": [
+     "How many doors (interior doors and entrance doors together) are drawn on this floor plan?",
+     "How many windows are drawn on this floor plan?"
+    ]
+   }
+  },
+  "recorded_at": "2026-11-14 04:09",
+  "api": "http://127.0.0.1:8102"
+ },
+ {
+  "path": "data/cubicasa5k/colorful-4539.png",
+  "question": "Kuinka monta makuuhuonetta (MH) pohjapiirustuksessa on?",
+  "answer": {
+   "value": 3,
+   "unit": "count",
+   "confidence": 0.857,
+   "evidence": [
+    {
+     "file": "data/cubicasa5k/colorful-4539.png",
+     "page": null,
+     "bbox": [
+      276.0,
+      322.9,
+      334.5,
+      356.0
+     ],
+     "bbox_space": "image_px",
+     "ifc_guid": null,
+     "note": "label 'MH' = bedroom 1; cross-check: vlm_lora 3 = raster 3 ✓"
+    },
+    {
+     "file": "data/cubicasa5k/colorful-4539.png",
+     "page": null,
+     "bbox": [
+      990.0,
+      322.9,
+      1048.5,
+      356.0
+     ],
+     "bbox_space": "image_px",
+     "ifc_guid": null,
+     "note": "label 'MH' = bedroom 2; cross-check: vlm_lora 3 = raster 3 ✓"
+    },
+    {
+     "file": "data/cubicasa5k/colorful-4539.png",
+     "page": null,
+     "bbox": [
+      580.5,
+      861.1,
+      637.5,
+      894.2
+     ],
+     "bbox_space": "image_px",
+     "ifc_guid": null,
+     "note": "label 'MH' = bedroom 3; cross-check: vlm_lora 3 = raster 3 ✓"
+    }
+   ],
+   "trace": [
+    "intent: count bedroom [drawing] (lang fi)",
+    "gate (train n=40): prior 28%, raster 72%, vlm_lora 85%, vlm_direct 70%",
+    "vlm_lora: 3 count (conf 0.83, train hit rate)",
+    "cross-check: vlm_lora 3 = raster 3 ✓ → conf 0.86 (LoRA right 29/33 on train_gate when raster agreed)",
+    "[vlm_lora] kind=count unit=count",
+    "[vlm_lora] local:cc-v2 0.2s tok 2104->2",
+    "[vlm_lora] raw: 3",
+    "[vlm_lora] p(answer digits) = 0.91673 -> confidence 0.92",
+    "[vlm_lora] cost: calls=1 tok_in=2104 tok_out=2 gpu_s=0.09 api_calls=0"
+   ],
+   "solver": "pipeline/vlm_lora",
+   "assumptions": [],
+   "missing": [],
+   "cost": {
+    "llm_tokens_in": 7364,
+    "llm_tokens_out": 442,
+    "gpu_seconds": 11.012198449325561,
+    "api_calls": 0,
+    "api_tokens_in": 0,
+    "api_tokens_out": 0,
+    "llm_calls": 2,
+    "wall_seconds": 2.0751
+   },
+   "intent": {
+    "task": "count",
+    "target": "bedroom",
+    "scope": "drawing",
+    "unit": "count",
+    "filters": {},
+    "lang": "fi",
+    "key": "count:bedroom:drawing"
+   }
+  },
+  "recorded_at": "2026-11-14 04:09",
+  "api": "http://127.0.0.1:8102"
+ },
+ {
+  "path": "data/cubicasa5k/high_quality_architectural-14797.png",
+  "question": "How many saunas are on this floor plan?",
+  "answer": {
+   "value": 0,
+   "unit": "count",
+   "confidence": 0.778,
+   "evidence": [],
+   "trace": [
+    "intent: count sauna [drawing] (lang en)",
+    "gate (train n=40): prior 42%, raster 85%, vlm_lora 98%, vlm_direct 52%",
+    "vlm_lora: 0 count (conf 0.95, train hit rate)",
+    "cross-check: vlm_lora 0 ≠ raster 1 → conf 0.78 (LoRA right 6/7 on train_gate when raster disagreed)",
+    "[vlm_lora] kind=count unit=count",
+    "[vlm_lora] local:cc-v2 0.3s tok 288->2",
+    "[vlm_lora] raw: 0",
+    "[vlm_lora] p(answer digits) = 0.70452 -> confidence 0.82",
+    "[vlm_lora] cost: calls=1 tok_in=288 tok_out=2 gpu_s=0.01 api_calls=0"
+   ],
+   "solver": "pipeline/vlm_lora",
+   "assumptions": [],
+   "missing": [
+    "raster counted 1, the LoRA 0",
+    "no located evidence from this solver"
+   ],
+   "cost": {
+    "llm_tokens_in": 3039,
+    "llm_tokens_out": 3697,
+    "gpu_seconds": 36.1088154964447,
+    "api_calls": 0,
+    "api_tokens_in": 0,
+    "api_tokens_out": 0,
+    "llm_calls": 7,
+    "wall_seconds": 0.453
+   },
+   "intent": {
+    "task": "count",
+    "target": "sauna",
+    "scope": "drawing",
+    "unit": "count",
+    "filters": {},
+    "lang": "en",
+    "key": "count:sauna:drawing"
+   }
+  },
+  "recorded_at": "2026-11-14 04:09",
+  "api": "http://127.0.0.1:8102"
+ },
+ {
+  "path": "data/habs/vi0026_sheet_00003.jpg",
+  "question": "What kind of drawing is this (floor plan, elevation, section, site plan)?",
+  "answer": {
+   "value": "elevation",
+   "unit": null,
+   "confidence": 0.7,
+   "evidence": [
+    {
+     "file": "data/habs/vi0026_sheet_00003.jpg",
+     "page": 0,
+     "bbox": [
+      1500.0,
+      1720.1,
+      2034.2,
+      1746.9
+     ],
+     "bbox_space": "image_px",
+     "ifc_guid": null,
+     "note": "text 'HEAD HOUSE AND RESIDENCE'"
+    },
+    {
+     "file": "data/habs/vi0026_sheet_00003.jpg",
+     "page": 0,
+     "bbox": [
+      1683.7,
+      1760.3,
+      2029.8,
+      1787.1
+     ],
+     "bbox_space": "image_px",
+     "ifc_guid": null,
+     "note": "text 'NORTH ELEVATION'"
+    }
+   ],
+   "trace": [
+    "intent: text unknown [drawing] (lang en)",
+    "no train gate for this kind of question: general path by file type",
+    "raster: elevation  (conf 0.70)",
+    "[raster] text layer: 59 texts in 6 tile(s); Scale notes found: 'SCALE 1/4\"=1'-0\" (1:48)' = 1:48.",
+    "[raster] answer 'elevation' from text lines [49, 53] (literal match)"
+   ],
+   "solver": "pipeline/raster",
+   "assumptions": [],
+   "missing": [],
+   "cost": {
+    "llm_tokens_in": 28276,
+    "llm_tokens_out": 5539,
+    "gpu_seconds": 6.6702,
+    "api_calls": 0,
+    "api_tokens_in": 0,
+    "api_tokens_out": 0,
+    "llm_calls": 7,
+    "wall_seconds": 212.4672
+   },
+   "intent": {
+    "task": "text",
+    "target": "unknown",
+    "scope": "drawing",
+    "unit": null,
+    "filters": {},
+    "lang": "en",
+    "key": "text:unknown:drawing"
+   }
+  },
+  "recorded_at": "2026-11-14 04:09",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -7872,7 +10552,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 0.0513
+    "wall_seconds": 0.0809
    },
    "intent": {
     "task": "area",
@@ -7887,1598 +10567,7 @@
     "key": "area:room:room"
    }
   },
-  "recorded_at": "2026-11-14 03:44",
-  "api": "http://127.0.0.1:8102"
- },
- {
-  "path": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
-  "question": "If each door costs 450 euros, what do all the doors on '1.korrus' cost in total?",
-  "answer": {
-   "value": 20700.0,
-   "unit": "EUR",
-   "confidence": 0.9215,
-   "evidence": [
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
-     "page": 0,
-     "bbox": [
-      974.97,
-      506.21,
-      996.0,
-      542.65
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": "3Z0LniWg2KrPAx$bJQIbx5",
-     "note": "IfcDoor ARUKS - 012"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
-     "page": 0,
-     "bbox": [
-      539.97,
-      275.24,
-      566.03,
-      313.89
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": "1HfzM2TPPQajbINaHMIdrb",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
-     "page": 0,
-     "bbox": [
-      517.12,
-      316.7,
-      560.18,
-      346.22
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": "1UobiwPyx$YwsduZKXbAna",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
-     "page": 0,
-     "bbox": [
-      840.86,
-      497.41,
-      883.92,
-      526.93
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": "2WXJ26xsfFGaO1yi1nLt1B",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
-     "page": 0,
-     "bbox": [
-      328.49,
-      211.4,
-      371.55,
-      240.93
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": "2fMlzbCqxHKUCKoBWlddYd",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
-     "page": 0,
-     "bbox": [
-      585.92,
-      355.1,
-      628.98,
-      384.63
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": "1x7Sic5Nh2IT78CYC3Vi8W",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
-     "page": 0,
-     "bbox": [
-      774.53,
-      460.38,
-      817.6,
-      489.91
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": "1_tpU8prPjGgB0lUIsykwO",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
-     "page": 0,
-     "bbox": [
-      488.86,
-      367.31,
-      518.73,
-      411.68
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": "0egLHXa__bOCbI0xhrpZGj",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
-     "page": 0,
-     "bbox": [
-      228.46,
-      221.96,
-      258.33,
-      266.32
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": "3H3ZS8zC_qgdRfJQRNyfaP",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
-     "page": 0,
-     "bbox": [
-      300.23,
-      262.02,
-      330.1,
-      306.39
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": "2iwe4T4N7O1Blpw5E57z_x",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
-     "page": 0,
-     "bbox": [
-      557.66,
-      405.72,
-      587.53,
-      450.08
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": "2PcxFY6dsh0i4g2neEY1Ol",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
-     "page": 0,
-     "bbox": [
-      746.28,
-      511.0,
-      776.15,
-      555.37
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": "2yv34AexuSNI7MBHIevU4k",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
-     "page": 0,
-     "bbox": [
-      812.6,
-      548.02,
-      842.47,
-      592.39
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": "2UsMzcvdMJpMCi1uniOqFD",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
-     "page": 0,
-     "bbox": [
-      928.96,
-      570.99,
-      965.58,
-      629.33
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": "3FxEsmg7kYi8lwtrBtGaep",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
-     "page": 0,
-     "bbox": [
-      864.37,
-      715.17,
-      908.74,
-      745.04
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": "3sy9qKBZRJdJh4SMTZ4rND",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
-     "page": 0,
-     "bbox": [
-      901.67,
-      648.34,
-      946.04,
-      678.21
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": "22tGbVqqBSKqlC3sOBWiy$",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
-     "page": 0,
-     "bbox": [
-      979.26,
-      787.02,
-      1013.81,
-      841.64
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": "12s74hya9irS457S7GpdhY",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
-     "page": 0,
-     "bbox": [
-      1057.67,
-      642.84,
-      1094.29,
-      701.17
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": "2TjD19x0Tc6zqJOOaD2cU6",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
-     "page": 0,
-     "bbox": [
-      302.71,
-      310.59,
-      331.25,
-      353.1
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": "1tWOvenmxcjmerlqi0_Tu9",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
-     "page": 0,
-     "bbox": [
-      716.44,
-      549.81,
-      759.82,
-      578.58
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": "2JwK9k_bVb1HCkeTFs_ulq",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
-     "page": 0,
-     "bbox": [
-      361.37,
-      187.91,
-      400.89,
-      214.2
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": "1PbIWDZLO6hL5GR$UwH4V3",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
-     "page": 0,
-     "bbox": [
-      861.21,
-      846.39,
-      911.27,
-      875.02
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": "0UFl9l1USZWtSg0b36q4d7",
-     "note": "IfcDoor ARVU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
-     "page": 0,
-     "bbox": [
-      1332.37,
-      885.34,
-      1360.91,
-      927.85
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": "36MjCAKbtIkccudGHdSrOI",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
-     "page": 0,
-     "bbox": [
-      1488.69,
-      980.88,
-      1532.06,
-      1009.64
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": "3Fq$ZLJn_K34Vpk9vdQ6bj",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
-     "page": 0,
-     "bbox": [
-      201.61,
-      262.44,
-      244.99,
-      291.2
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": "2_5Oovi2yFYGhQs$YNO3eA",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
-     "page": 0,
-     "bbox": [
-      627.49,
-      322.94,
-      663.15,
-      346.76
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": "3KXBSstlehA_owbjkD3RJL",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
-     "page": 0,
-     "bbox": [
-      1231.27,
-      837.19,
-      1274.65,
-      865.96
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": "3g13QxGnl6fgpzfpiyIzcU",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
-     "page": 0,
-     "bbox": [
-      1103.81,
-      577.49,
-      1130.76,
-      618.5
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": "3RjKE18SPB1R7L_ae362yh",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
-     "page": 0,
-     "bbox": [
-      729.35,
-      309.86,
-      773.72,
-      339.73
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": "3$ePWtxSJNTMzLx0ZD2_8z",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
-     "page": 0,
-     "bbox": [
-      1010.01,
-      374.42,
-      1051.2,
-      399.37
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": "2I5IuUT6CGJgARshpW5Byy",
-     "note": "IfcDoor ARVU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
-     "page": 0,
-     "bbox": [
-      958.03,
-      345.41,
-      999.22,
-      370.36
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": "0651gemSsFD$J1nTzBg7gK",
-     "note": "IfcDoor ARVU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
-     "page": 0,
-     "bbox": [
-      1336.84,
-      855.49,
-      1379.91,
-      885.02
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": "1SKU8wqJ8Abdh$JEi4NS1O",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
-     "page": 0,
-     "bbox": [
-      1523.47,
-      959.66,
-      1566.53,
-      989.19
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": "3ek36IDfW$QNFsDooZ1XL_",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
-     "page": 0,
-     "bbox": [
-      1594.76,
-      999.46,
-      1637.82,
-      1028.98
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": "3rrINjQVpuO7IMSNwddKyW",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
-     "page": 0,
-     "bbox": [
-      1135.12,
-      742.89,
-      1178.18,
-      772.41
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": "3x15KKi1YokPuJJ1BKSFVe",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
-     "page": 0,
-     "bbox": [
-      1266.05,
-      815.97,
-      1309.12,
-      845.5
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": "2YTHyxHuENTTjHWpJTwCOO",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
-     "page": 0,
-     "bbox": [
-      1506.76,
-      861.74,
-      1536.63,
-      906.11
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": "3_crOfIzrthCNsE0BeYMvV",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
-     "page": 0,
-     "bbox": [
-      1378.29,
-      790.03,
-      1408.16,
-      834.4
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": "2_LsQ0vPvT7tiRn8CtVNbp",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
-     "page": 0,
-     "bbox": [
-      1463.93,
-      837.84,
-      1493.8,
-      882.2
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": "2OwgnooYHo2R6IQYN2PaSC",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
-     "page": 0,
-     "bbox": [
-      1165.43,
-      671.21,
-      1206.43,
-      698.16
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": "0rdhm0PGmsgOUPcOIsdL6B",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
-     "page": 0,
-     "bbox": [
-      1421.11,
-      813.93,
-      1450.98,
-      858.3
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": "1HuZqwqC1JRo7bO$1hnKPa",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
-     "page": 0,
-     "bbox": [
-      226.32,
-      186.18,
-      255.0,
-      234.06
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": "2auFlRE$FCzNMLlWrw0qRu",
-     "note": "IfcDoor ARVU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
-     "page": 0,
-     "bbox": [
-      1635.81,
-      972.95,
-      1664.49,
-      1020.83
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": "28PCzbmvvl91jBwlolqXI8",
-     "note": "IfcDoor ARVU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
-     "page": 0,
-     "bbox": [
-      1589.78,
-      1029.03,
-      1618.32,
-      1071.54
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": "2jbjr1e0N$T4rP1J_YQ$X4",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
-     "page": 0,
-     "bbox": [
-      459.03,
-      406.13,
-      502.4,
-      434.89
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": "15YzZ2iuR$vktpHCsqJcwV",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
-     "page": 0,
-     "bbox": [
-      560.12,
-      454.28,
-      588.66,
-      496.79
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": "0roVlhvnNz0HMFDYwDtXOP",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
-     "page": null,
-     "bbox": null,
-     "bbox_space": null,
-     "ifc_guid": "3Z0LniWg2KrPAx$bJQIbx5",
-     "note": "IfcDoor ARUKS - 012"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
-     "page": null,
-     "bbox": null,
-     "bbox_space": null,
-     "ifc_guid": "1HfzM2TPPQajbINaHMIdrb",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
-     "page": null,
-     "bbox": null,
-     "bbox_space": null,
-     "ifc_guid": "1UobiwPyx$YwsduZKXbAna",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
-     "page": null,
-     "bbox": null,
-     "bbox_space": null,
-     "ifc_guid": "2WXJ26xsfFGaO1yi1nLt1B",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
-     "page": null,
-     "bbox": null,
-     "bbox_space": null,
-     "ifc_guid": "2fMlzbCqxHKUCKoBWlddYd",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
-     "page": null,
-     "bbox": null,
-     "bbox_space": null,
-     "ifc_guid": "1x7Sic5Nh2IT78CYC3Vi8W",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
-     "page": null,
-     "bbox": null,
-     "bbox_space": null,
-     "ifc_guid": "1_tpU8prPjGgB0lUIsykwO",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
-     "page": null,
-     "bbox": null,
-     "bbox_space": null,
-     "ifc_guid": "0egLHXa__bOCbI0xhrpZGj",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
-     "page": null,
-     "bbox": null,
-     "bbox_space": null,
-     "ifc_guid": "3H3ZS8zC_qgdRfJQRNyfaP",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
-     "page": null,
-     "bbox": null,
-     "bbox_space": null,
-     "ifc_guid": "2iwe4T4N7O1Blpw5E57z_x",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
-     "page": null,
-     "bbox": null,
-     "bbox_space": null,
-     "ifc_guid": "2PcxFY6dsh0i4g2neEY1Ol",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
-     "page": null,
-     "bbox": null,
-     "bbox_space": null,
-     "ifc_guid": "2yv34AexuSNI7MBHIevU4k",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
-     "page": null,
-     "bbox": null,
-     "bbox_space": null,
-     "ifc_guid": "2UsMzcvdMJpMCi1uniOqFD",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
-     "page": null,
-     "bbox": null,
-     "bbox_space": null,
-     "ifc_guid": "3FxEsmg7kYi8lwtrBtGaep",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
-     "page": null,
-     "bbox": null,
-     "bbox_space": null,
-     "ifc_guid": "3sy9qKBZRJdJh4SMTZ4rND",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
-     "page": null,
-     "bbox": null,
-     "bbox_space": null,
-     "ifc_guid": "22tGbVqqBSKqlC3sOBWiy$",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
-     "page": null,
-     "bbox": null,
-     "bbox_space": null,
-     "ifc_guid": "12s74hya9irS457S7GpdhY",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
-     "page": null,
-     "bbox": null,
-     "bbox_space": null,
-     "ifc_guid": "2TjD19x0Tc6zqJOOaD2cU6",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
-     "page": null,
-     "bbox": null,
-     "bbox_space": null,
-     "ifc_guid": "1tWOvenmxcjmerlqi0_Tu9",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
-     "page": null,
-     "bbox": null,
-     "bbox_space": null,
-     "ifc_guid": "2JwK9k_bVb1HCkeTFs_ulq",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
-     "page": null,
-     "bbox": null,
-     "bbox_space": null,
-     "ifc_guid": "1PbIWDZLO6hL5GR$UwH4V3",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
-     "page": null,
-     "bbox": null,
-     "bbox_space": null,
-     "ifc_guid": "0UFl9l1USZWtSg0b36q4d7",
-     "note": "IfcDoor ARVU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
-     "page": null,
-     "bbox": null,
-     "bbox_space": null,
-     "ifc_guid": "36MjCAKbtIkccudGHdSrOI",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
-     "page": null,
-     "bbox": null,
-     "bbox_space": null,
-     "ifc_guid": "3Fq$ZLJn_K34Vpk9vdQ6bj",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
-     "page": null,
-     "bbox": null,
-     "bbox_space": null,
-     "ifc_guid": "2_5Oovi2yFYGhQs$YNO3eA",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
-     "page": null,
-     "bbox": null,
-     "bbox_space": null,
-     "ifc_guid": "3KXBSstlehA_owbjkD3RJL",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
-     "page": null,
-     "bbox": null,
-     "bbox_space": null,
-     "ifc_guid": "3g13QxGnl6fgpzfpiyIzcU",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
-     "page": null,
-     "bbox": null,
-     "bbox_space": null,
-     "ifc_guid": "3RjKE18SPB1R7L_ae362yh",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
-     "page": null,
-     "bbox": null,
-     "bbox_space": null,
-     "ifc_guid": "3$ePWtxSJNTMzLx0ZD2_8z",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
-     "page": null,
-     "bbox": null,
-     "bbox_space": null,
-     "ifc_guid": "2I5IuUT6CGJgARshpW5Byy",
-     "note": "IfcDoor ARVU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
-     "page": null,
-     "bbox": null,
-     "bbox_space": null,
-     "ifc_guid": "0651gemSsFD$J1nTzBg7gK",
-     "note": "IfcDoor ARVU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
-     "page": null,
-     "bbox": null,
-     "bbox_space": null,
-     "ifc_guid": "1SKU8wqJ8Abdh$JEi4NS1O",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
-     "page": null,
-     "bbox": null,
-     "bbox_space": null,
-     "ifc_guid": "3ek36IDfW$QNFsDooZ1XL_",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
-     "page": null,
-     "bbox": null,
-     "bbox_space": null,
-     "ifc_guid": "3rrINjQVpuO7IMSNwddKyW",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
-     "page": null,
-     "bbox": null,
-     "bbox_space": null,
-     "ifc_guid": "3x15KKi1YokPuJJ1BKSFVe",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
-     "page": null,
-     "bbox": null,
-     "bbox_space": null,
-     "ifc_guid": "2YTHyxHuENTTjHWpJTwCOO",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
-     "page": null,
-     "bbox": null,
-     "bbox_space": null,
-     "ifc_guid": "3_crOfIzrthCNsE0BeYMvV",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
-     "page": null,
-     "bbox": null,
-     "bbox_space": null,
-     "ifc_guid": "2_LsQ0vPvT7tiRn8CtVNbp",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
-     "page": null,
-     "bbox": null,
-     "bbox_space": null,
-     "ifc_guid": "2OwgnooYHo2R6IQYN2PaSC",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
-     "page": null,
-     "bbox": null,
-     "bbox_space": null,
-     "ifc_guid": "0rdhm0PGmsgOUPcOIsdL6B",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
-     "page": null,
-     "bbox": null,
-     "bbox_space": null,
-     "ifc_guid": "1HuZqwqC1JRo7bO$1hnKPa",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
-     "page": null,
-     "bbox": null,
-     "bbox_space": null,
-     "ifc_guid": "2auFlRE$FCzNMLlWrw0qRu",
-     "note": "IfcDoor ARVU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
-     "page": null,
-     "bbox": null,
-     "bbox_space": null,
-     "ifc_guid": "28PCzbmvvl91jBwlolqXI8",
-     "note": "IfcDoor ARVU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
-     "page": null,
-     "bbox": null,
-     "bbox_space": null,
-     "ifc_guid": "2jbjr1e0N$T4rP1J_YQ$X4",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
-     "page": null,
-     "bbox": null,
-     "bbox_space": null,
-     "ifc_guid": "15YzZ2iuR$vktpHCsqJcwV",
-     "note": "IfcDoor ARSU"
-    },
-    {
-     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
-     "page": null,
-     "bbox": null,
-     "bbox_space": null,
-     "ifc_guid": "0roVlhvnNz0HMFDYwDtXOP",
-     "note": "IfcDoor ARSU"
-    }
-   ],
-   "trace": [
-    "intent: text door [storey] (storey=1.korrus) (lang en)",
-    "ifc (question as asked): 20700.0 EUR (conf 0.92; the solver read the question itself, no LLM needed)",
-    "[ifc] asked on bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf; answering from its source model bsc-esplanades_1807-ep-ar-v18.ifc",
-    "[ifc] model bsc-esplanades_1807-ep-ar-v18.ifc: IFC2X3, 7 storeys, 2249 elements (index 14.7s, cached)",
-    "[ifc] parsed: metric=text kind=door scope=storey names=['1.korrus']",
-    "[ifc] outer operation: factor 450 EUR per door",
-    "[ifc] storey '1.korrus' -> '1.korrus' (exact, 100) guid 1oZ0wPs_PE8ANCPg3bIs4j",
-    "[ifc] 46 elements of IfcDoor in storey '1.korrus'",
-    "[ifc] 46 count x 450 = 20700.00 EUR",
-    "[ifc] 2D link: 46/46 evidence elements drawn on bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf"
-   ],
-   "solver": "pipeline/ifc",
-   "assumptions": [
-    "factor 450 EUR per door: model quantity x the factor given in the question",
-    "elements whose spatial container is storey '1.korrus'"
-   ],
-   "missing": [],
-   "cost": {
-    "llm_tokens_in": 0,
-    "llm_tokens_out": 0,
-    "gpu_seconds": 0.0,
-    "api_calls": 0,
-    "api_tokens_in": 0,
-    "api_tokens_out": 0,
-    "llm_calls": 0,
-    "wall_seconds": 0.0141
-   },
-   "intent": {
-    "task": "text",
-    "target": "door",
-    "scope": "storey",
-    "unit": null,
-    "filters": {
-     "storey": "1.korrus"
-    },
-    "lang": "en",
-    "key": "text:door:storey"
-   }
-  },
-  "recorded_at": "2026-11-14 03:44",
-  "api": "http://127.0.0.1:8102"
- },
- {
-  "path": "data/ifc_bench/4351_arc.ifc",
-  "question": "What plumbing fixtures are in this building and their respective counts?",
-  "answer": {
-   "value": "Plumbing fixtures in this building include:\n- Toilet-Domestic-3D: 9 units\n- Urinal-Wall-3D: 4 units\n\nNo other plumbing fixtures are listed in the model facts.",
-   "unit": null,
-   "confidence": 0.3,
-   "evidence": [
-    {
-     "file": "data/ifc_bench/4351_arc.ifc",
-     "page": null,
-     "bbox": null,
-     "bbox_space": null,
-     "ifc_guid": null,
-     "note": "IFC model (fact card source)"
-    }
-   ],
-   "trace": [
-    "intent: text unknown [drawing] (lang en)",
-    "ifc (question as asked): Plumbing fixtures in this building include:\n- Toilet-Domestic-3D: 9 units\n- Urinal-Wall-3D: 4 units\n\nNo other plumbing fixtures are listed in the model facts.  at conf 0.30, unsure",
-    "no train gate for this kind of question: general path by file type",
-    "ifc: Plumbing fixtures in this building include:\n- Toilet-Domestic-3D: 9 units\n- Urinal-Wall-3D: 4 units\n\nNo other plumbing fixtures are listed in the model facts.  (conf 0.30)",
-    "[ifc] model 4351_arc.ifc: IFC2X3, 5 storeys, 401 elements (index 1.0s, cached)",
-    "[ifc] parsed: metric=text kind=None scope=auto names=[]",
-    "[ifc] abstain: free-text question: no deterministic rule",
-    "[ifc] rules could not answer; asking the local LLM with a fact card of the model (45 lines, 4546 chars)",
-    "[ifc] fact card (first lines): Model: 4351_arc.ifc | schema IFC2X3 | project 'Project Number' | Authoring application: Autodesk Revit Architecture 2011 2011 (Autodesk Revit Architecture 2011) | Element totals: IfcBuildingElementProxy 122, IfcLightFixture 119, IfcWallStandardCase 41, IfcAirTerminal 36, IfcDoor 17, IfcCovering 14, IfcFurnishingElement 13, IfcRailing 11, IfcSlab 6, IfcSpace 6, IfcMember 4, IfcStair 4, IfcStairFlig"
-   ],
-   "solver": "pipeline/ifc",
-   "assumptions": [
-    "answered by the local LLM from facts extracted from the IFC (counts, types, materials, fire ratings, rooms); not verified by a rule"
-   ],
-   "missing": [
-    "a quantity question (count/area/volume/length)"
-   ],
-   "cost": {
-    "llm_tokens_in": 2041,
-    "llm_tokens_out": 46,
-    "gpu_seconds": 0.1276,
-    "api_calls": 0,
-    "api_tokens_in": 0,
-    "api_tokens_out": 0,
-    "llm_calls": 1,
-    "wall_seconds": 9.9841
-   },
-   "intent": {
-    "task": "text",
-    "target": "unknown",
-    "scope": "drawing",
-    "unit": null,
-    "filters": {},
-    "lang": "en",
-    "key": "text:unknown:drawing"
-   }
-  },
-  "recorded_at": "2026-11-14 03:29",
-  "api": "http://127.0.0.1:8102",
-  "note": "kept from the 03:29 recording (night 609e41c): night 8f02b13 answers 'none listed' (fact-card type names lost the Revit family, told W1)"
- },
- {
-  "path": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-  "question": "How many doors (interior doors and entrance doors together) are drawn on this floor plan?",
-  "answer": {
-   "value": 36,
-   "unit": "count",
-   "confidence": 0.988,
-   "evidence": [
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      553.8,
-      109.5,
-      569.3,
-      126.5
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "door 1; cross-check: answer 36 vs DXF layer count 36 ✓"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      569.5,
-      110.2,
-      584.2,
-      126.5
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "door 2"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      534.0,
-      127.0,
-      551.7,
-      143.0
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "door 3"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      582.5,
-      132.7,
-      596.3,
-      145.0
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "door 4"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      564.8,
-      143.2,
-      580.0,
-      161.2
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "door 5"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      585.5,
-      162.5,
-      604.0,
-      179.3
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "door 6"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      585.5,
-      162.5,
-      604.0,
-      179.3
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "door 7"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      572.0,
-      166.1,
-      586.0,
-      183.2
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "door 8"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      572.0,
-      166.1,
-      586.0,
-      183.2
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "door 9"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      556.7,
-      178.1,
-      571.2,
-      195.8
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "door 10"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      556.7,
-      178.1,
-      571.2,
-      195.8
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "door 11"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      586.4,
-      183.2,
-      600.0,
-      195.0
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "door 12"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      572.7,
-      208.9,
-      586.3,
-      224.3
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "door 13"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      572.7,
-      208.9,
-      586.3,
-      224.3
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "door 14"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      639.5,
-      312.2,
-      654.5,
-      330.4
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "door 15"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      655.4,
-      328.8,
-      671.0,
-      342.6
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "door 16"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      623.6,
-      328.9,
-      641.4,
-      343.9
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "door 17"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      655.4,
-      344.6,
-      672.1,
-      359.6
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "door 18"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      655.5,
-      399.7,
-      672.8,
-      415.2
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "door 19"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      621.5,
-      409.9,
-      636.5,
-      426.7
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "door 20"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      601.2,
-      425.8,
-      615.7,
-      438.4
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "door 21"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      643.9,
-      431.1,
-      660.5,
-      450.9
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "door 22"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      643.9,
-      431.1,
-      660.5,
-      450.9
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "door 23"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      665.7,
-      433.6,
-      681.0,
-      447.4
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "door 24"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      604.4,
-      456.1,
-      623.0,
-      472.9
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "door 25"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      621.7,
-      462.8,
-      641.8,
-      480.2
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "door 26"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      621.7,
-      462.8,
-      641.8,
-      480.2
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "door 27"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      622.0,
-      479.7,
-      637.4,
-      496.7
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "door 28"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      644.2,
-      483.1,
-      660.3,
-      502.2
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "door 29"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      644.2,
-      483.1,
-      660.3,
-      502.2
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "door 30"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      665.9,
-      486.5,
-      680.5,
-      499.6
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "door 31"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      656.2,
-      518.8,
-      673.2,
-      534.0
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "door 32"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      616.2,
-      536.5,
-      631.4,
-      553.7
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "door 33"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      656.8,
-      567.4,
-      674.6,
-      583.2
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "door 34"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      625.3,
-      577.0,
-      643.1,
-      591.9
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "door 35"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      641.6,
-      591.4,
-      657.4,
-      609.0
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "door 36"
-    }
-   ],
-   "trace": [
-    "intent: count door [drawing] (lang en)",
-    "gate (train n=40): prior 5%, dxf 100%, raster 0%, vlm_direct 5%; skip raster, vlm_direct",
-    "dxf: 36 count (conf 0.98, train hit rate)",
-    "cross-check: answer 36 vs DXF layer count 36 ✓",
-    "[dxf] parsed: count/sum: count(door) [count]",
-    "[dxf] doors = 36 (door leaves (5-vertex polylines) on DXF layer DOOR)",
-    "[dxf] DXF->PDF fit on 33 text anchors, rms 0.05 pt, scale 1:200"
-   ],
-   "solver": "pipeline/dxf",
-   "assumptions": [
-    "counted door leaves (5-vertex polylines) on DXF layer DOOR"
-   ],
-   "missing": [],
-   "cost": {
-    "llm_tokens_in": 0,
-    "llm_tokens_out": 0,
-    "gpu_seconds": 0.0,
-    "api_calls": 0,
-    "api_tokens_in": 0,
-    "api_tokens_out": 0,
-    "llm_calls": 0,
-    "wall_seconds": 0.2667
-   },
-   "intent": {
-    "task": "count",
-    "target": "door",
-    "scope": "drawing",
-    "unit": "count",
-    "filters": {},
-    "lang": "en",
-    "key": "count:door:drawing"
-   }
-  },
-  "recorded_at": "2026-11-14 03:44",
+  "recorded_at": "2026-11-14 04:09",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -9666,7 +10755,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 0.0298
+    "wall_seconds": 0.0161
    },
    "intent": {
     "task": "count",
@@ -9680,1060 +10769,63 @@
     "key": "count:room:label"
    }
   },
-  "recorded_at": "2026-11-14 03:44",
-  "api": "http://127.0.0.1:8102"
- },
- {
-  "path": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-  "question": "Wie viele Türen und Fenster sind insgesamt auf diesem Grundriss eingezeichnet?",
-  "answer": {
-   "value": 64,
-   "unit": "count",
-   "confidence": 0.976,
-   "evidence": [
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      553.8,
-      109.5,
-      569.3,
-      126.5
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "door: door 1; cross-check: answer 36 vs DXF layer count 36 ✓"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      569.5,
-      110.2,
-      584.2,
-      126.5
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "door: door 2"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      534.0,
-      127.0,
-      551.7,
-      143.0
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "door: door 3"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      582.5,
-      132.7,
-      596.3,
-      145.0
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "door: door 4"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      564.8,
-      143.2,
-      580.0,
-      161.2
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "door: door 5"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      585.5,
-      162.5,
-      604.0,
-      179.3
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "door: door 6"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      585.5,
-      162.5,
-      604.0,
-      179.3
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "door: door 7"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      572.0,
-      166.1,
-      586.0,
-      183.2
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "door: door 8"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      572.0,
-      166.1,
-      586.0,
-      183.2
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "door: door 9"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      556.7,
-      178.1,
-      571.2,
-      195.8
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "door: door 10"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      556.7,
-      178.1,
-      571.2,
-      195.8
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "door: door 11"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      586.4,
-      183.2,
-      600.0,
-      195.0
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "door: door 12"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      572.7,
-      208.9,
-      586.3,
-      224.3
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "door: door 13"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      572.7,
-      208.9,
-      586.3,
-      224.3
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "door: door 14"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      639.5,
-      312.2,
-      654.5,
-      330.4
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "door: door 15"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      655.4,
-      328.8,
-      671.0,
-      342.6
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "door: door 16"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      623.6,
-      328.9,
-      641.4,
-      343.9
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "door: door 17"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      655.4,
-      344.6,
-      672.1,
-      359.6
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "door: door 18"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      655.5,
-      399.7,
-      672.8,
-      415.2
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "door: door 19"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      621.5,
-      409.9,
-      636.5,
-      426.7
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "door: door 20"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      601.2,
-      425.8,
-      615.7,
-      438.4
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "door: door 21"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      643.9,
-      431.1,
-      660.5,
-      450.9
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "door: door 22"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      643.9,
-      431.1,
-      660.5,
-      450.9
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "door: door 23"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      665.7,
-      433.6,
-      681.0,
-      447.4
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "door: door 24"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      604.4,
-      456.1,
-      623.0,
-      472.9
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "door: door 25"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      621.7,
-      462.8,
-      641.8,
-      480.2
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "door: door 26"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      621.7,
-      462.8,
-      641.8,
-      480.2
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "door: door 27"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      622.0,
-      479.7,
-      637.4,
-      496.7
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "door: door 28"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      644.2,
-      483.1,
-      660.3,
-      502.2
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "door: door 29"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      644.2,
-      483.1,
-      660.3,
-      502.2
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "door: door 30"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      665.9,
-      486.5,
-      680.5,
-      499.6
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "door: door 31"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      656.2,
-      518.8,
-      673.2,
-      534.0
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "door: door 32"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      616.2,
-      536.5,
-      631.4,
-      553.7
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "door: door 33"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      656.8,
-      567.4,
-      674.6,
-      583.2
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "door: door 34"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      625.3,
-      577.0,
-      643.1,
-      591.9
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "door: door 35"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      641.6,
-      591.4,
-      657.4,
-      609.0
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "door: door 36"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      653.2,
-      643.3,
-      677.9,
-      650.4
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "window: window 1 (3 lines); cross-check: answer 28 vs DXF layer count 28 ✓"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      603.4,
-      643.2,
-      627.2,
-      650.4
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "window: window 2 (3 lines)"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      566.7,
-      598.5,
-      573.8,
-      633.0
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "window: window 3 (3 lines)"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      566.4,
-      550.8,
-      573.5,
-      574.3
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "window: window 4 (3 lines)"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      706.7,
-      545.0,
-      714.3,
-      568.6
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "window: window 5 (3 lines)"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      706.6,
-      518.0,
-      714.2,
-      542.2
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "window: window 6 (3 lines)"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      566.2,
-      503.7,
-      573.3,
-      527.6
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "window: window 7 (3 lines)"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      706.4,
-      487.1,
-      713.9,
-      501.8
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "window: window 8 (3 lines)"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      706.4,
-      487.1,
-      713.9,
-      501.8
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "window: window 9 (3 lines)"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      566.0,
-      458.2,
-      573.1,
-      481.2
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "window: window 10 (3 lines)"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      706.2,
-      457.1,
-      713.8,
-      477.7
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "window: window 11 (3 lines)"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      565.9,
-      426.0,
-      572.9,
-      440.6
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "window: window 12 (3 lines)"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      705.8,
-      391.2,
-      713.4,
-      415.2
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "window: window 13 (3 lines)"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      565.7,
-      384.9,
-      572.7,
-      408.1
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "window: window 14 (3 lines)"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      705.5,
-      343.9,
-      713.1,
-      367.5
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "window: window 15 (3 lines)"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      565.5,
-      339.2,
-      572.5,
-      361.9
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "window: window 16 (3 lines)"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      705.2,
-      289.0,
-      712.8,
-      319.2
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "window: window 17 (3 lines)"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      574.5,
-      288.9,
-      581.8,
-      311.9
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "window: window 18 (3 lines)"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      640.6,
-      272.7,
-      655.3,
-      279.3
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "window: window 19 (3 lines)"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      623.8,
-      239.6,
-      631.3,
-      263.5
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "window: window 20 (3 lines)"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      623.7,
-      212.5,
-      631.3,
-      236.7
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "window: window 21 (3 lines)"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      623.6,
-      182.1,
-      631.1,
-      196.8
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "window: window 22 (3 lines)"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      623.6,
-      182.1,
-      631.1,
-      196.8
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "window: window 23 (3 lines)"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      623.6,
-      150.8,
-      631.1,
-      172.8
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "window: window 24 (3 lines)"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      475.9,
-      137.1,
-      483.0,
-      167.6
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "window: window 25 (3 lines)"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      623.5,
-      126.6,
-      631.0,
-      142.0
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "window: window 26 (3 lines)"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      546.2,
-      71.6,
-      569.7,
-      78.8
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "window: window 27 (3 lines)"
-    },
-    {
-     "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-     "page": 0,
-     "bbox": [
-      589.7,
-      71.5,
-      613.9,
-      78.6
-     ],
-     "bbox_space": "pdf_pt",
-     "ifc_guid": null,
-     "note": "window: window 28 (3 lines)"
-    }
-   ],
-   "trace": [
-    "compound question → sum over 2 parts: door, window",
-    "part 'door': \"How many doors (interior doors and entrance doors together) are drawn on this floor plan?\" → 36 count (conf 0.99, pipeline/dxf)",
-    "part 'window': \"How many windows are drawn on this floor plan?\" → 28 count (conf 0.99, pipeline/dxf)",
-    "combine: door 36 + window 28 = 64"
-   ],
-   "solver": "pipeline/compose",
-   "assumptions": [
-    "door: counted door leaves (5-vertex polylines) on DXF layer DOOR",
-    "window: counted windows on DXF layer WINDOW (3 polylines per window)"
-   ],
-   "missing": [],
-   "cost": {
-    "llm_tokens_in": 0,
-    "llm_tokens_out": 0,
-    "gpu_seconds": 0.0,
-    "api_calls": 0,
-    "api_tokens_in": 0,
-    "api_tokens_out": 0,
-    "llm_calls": 0,
-    "wall_seconds": 0.7825
-   },
-   "intent": {
-    "task": "count",
-    "target": "window",
-    "scope": "drawing",
-    "unit": "count",
-    "filters": {},
-    "lang": "de",
-    "key": "count:window:drawing"
-   },
-   "plan": {
-    "op": "sum",
-    "parts": [
-     "door",
-     "window"
-    ],
-    "sub_questions": [
-     "How many doors (interior doors and entrance doors together) are drawn on this floor plan?",
-     "How many windows are drawn on this floor plan?"
-    ]
-   }
-  },
-  "recorded_at": "2026-11-14 03:44",
-  "api": "http://127.0.0.1:8102"
- },
- {
-  "path": "data/cubicasa5k/colorful-4539.png",
-  "question": "Kuinka monta makuuhuonetta (MH) pohjapiirustuksessa on?",
-  "answer": {
-   "value": 3,
-   "unit": "count",
-   "confidence": 0.857,
-   "evidence": [
-    {
-     "file": "data/cubicasa5k/colorful-4539.png",
-     "page": null,
-     "bbox": [
-      276.0,
-      322.9,
-      334.5,
-      356.0
-     ],
-     "bbox_space": "image_px",
-     "ifc_guid": null,
-     "note": "label 'MH' = bedroom 1; cross-check: vlm_lora 3 = raster 3 ✓"
-    },
-    {
-     "file": "data/cubicasa5k/colorful-4539.png",
-     "page": null,
-     "bbox": [
-      990.0,
-      322.9,
-      1048.5,
-      356.0
-     ],
-     "bbox_space": "image_px",
-     "ifc_guid": null,
-     "note": "label 'MH' = bedroom 2; cross-check: vlm_lora 3 = raster 3 ✓"
-    },
-    {
-     "file": "data/cubicasa5k/colorful-4539.png",
-     "page": null,
-     "bbox": [
-      580.5,
-      861.1,
-      637.5,
-      894.2
-     ],
-     "bbox_space": "image_px",
-     "ifc_guid": null,
-     "note": "label 'MH' = bedroom 3; cross-check: vlm_lora 3 = raster 3 ✓"
-    }
-   ],
-   "trace": [
-    "intent: count bedroom [drawing] (lang fi)",
-    "gate (train n=40): prior 28%, raster 72%, vlm_lora 85%, vlm_direct 70%",
-    "vlm_lora: 3 count (conf 0.83, train hit rate)",
-    "cross-check: vlm_lora 3 = raster 3 ✓ → conf 0.86 (LoRA right 29/33 on train_gate when raster agreed)",
-    "[vlm_lora] kind=count unit=count",
-    "[vlm_lora] local:cc-v2 2.2s tok 2104->2",
-    "[vlm_lora] raw: 3",
-    "[vlm_lora] p(answer digits) = 0.91797 -> confidence 0.92",
-    "[vlm_lora] cost: calls=1 tok_in=2104 tok_out=2 gpu_s=0.09 api_calls=0"
-   ],
-   "solver": "pipeline/vlm_lora",
-   "assumptions": [],
-   "missing": [],
-   "cost": {
-    "llm_tokens_in": 7364,
-    "llm_tokens_out": 442,
-    "gpu_seconds": 11.012198449325561,
-    "api_calls": 0,
-    "api_tokens_in": 0,
-    "api_tokens_out": 0,
-    "llm_calls": 2,
-    "wall_seconds": 4.6274
-   },
-   "intent": {
-    "task": "count",
-    "target": "bedroom",
-    "scope": "drawing",
-    "unit": "count",
-    "filters": {},
-    "lang": "fi",
-    "key": "count:bedroom:drawing"
-   }
-  },
-  "recorded_at": "2026-11-14 03:44",
-  "api": "http://127.0.0.1:8102"
- },
- {
-  "path": "data/cubicasa5k/high_quality_architectural-14797.png",
-  "question": "How many saunas are on this floor plan?",
-  "answer": {
-   "value": 0,
-   "unit": "count",
-   "confidence": 0.778,
-   "evidence": [],
-   "trace": [
-    "intent: count sauna [drawing] (lang en)",
-    "gate (train n=40): prior 42%, raster 85%, vlm_lora 98%, vlm_direct 52%",
-    "vlm_lora: 0 count (conf 0.95, train hit rate)",
-    "cross-check: vlm_lora 0 ≠ raster 1 → conf 0.78 (LoRA right 6/7 on train_gate when raster disagreed)",
-    "[vlm_lora] kind=count unit=count",
-    "[vlm_lora] local:cc-v2 0.1s tok 288->2",
-    "[vlm_lora] raw: 0",
-    "[vlm_lora] p(answer digits) = 0.72970 -> confidence 0.82",
-    "[vlm_lora] cost: calls=1 tok_in=288 tok_out=2 gpu_s=0.01 api_calls=0"
-   ],
-   "solver": "pipeline/vlm_lora",
-   "assumptions": [],
-   "missing": [
-    "raster counted 1, the LoRA 0",
-    "no located evidence from this solver"
-   ],
-   "cost": {
-    "llm_tokens_in": 4844,
-    "llm_tokens_out": 5892,
-    "gpu_seconds": 95.43604642677307,
-    "api_calls": 0,
-    "api_tokens_in": 0,
-    "api_tokens_out": 0,
-    "llm_calls": 12,
-    "wall_seconds": 0.2661
-   },
-   "intent": {
-    "task": "count",
-    "target": "sauna",
-    "scope": "drawing",
-    "unit": "count",
-    "filters": {},
-    "lang": "en",
-    "key": "count:sauna:drawing"
-   }
-  },
-  "recorded_at": "2026-11-14 03:44",
+  "recorded_at": "2026-11-14 04:09",
   "api": "http://127.0.0.1:8102"
  },
  {
   "path": "data/habs/vi0026_sheet_00003.jpg",
-  "question": "What kind of drawing is this (floor plan, elevation, section, site plan)?",
+  "question": "What is the title of this sheet?",
   "answer": {
-   "value": "elevation",
+   "value": "HEAD HOUSE AND RESIDENCE NORTH ELEVATION",
    "unit": null,
-   "confidence": 0.2,
-   "evidence": [],
+   "confidence": 0.7,
+   "evidence": [
+    {
+     "file": "data/habs/vi0026_sheet_00003.jpg",
+     "page": 0,
+     "bbox": [
+      1500.0,
+      1720.1,
+      2034.2,
+      1746.9
+     ],
+     "bbox_space": "image_px",
+     "ifc_guid": null,
+     "note": "text 'HEAD HOUSE AND RESIDENCE'"
+    },
+    {
+     "file": "data/habs/vi0026_sheet_00003.jpg",
+     "page": 0,
+     "bbox": [
+      1683.7,
+      1760.3,
+      2029.8,
+      1787.1
+     ],
+     "bbox_space": "image_px",
+     "ifc_guid": null,
+     "note": "text 'NORTH ELEVATION'"
+    }
+   ],
    "trace": [
     "intent: text unknown [drawing] (lang en)",
     "no train gate for this kind of question: general path by file type",
-    "vlm_direct: elevation  (conf 0.20)",
-    "[vlm_direct] kind=text unit=None",
-    "[vlm_direct] local:qwen3-vl-8b 2.3s tok 3246->3",
-    "[vlm_direct] raw: elevation",
-    "[vlm_direct] cost: calls=1 tok_in=3246 tok_out=3 gpu_s=0.13 api_calls=0"
+    "raster: HEAD HOUSE AND RESIDENCE NORTH ELEVATION  (conf 0.70)",
+    "[raster] text layer: 59 texts in 6 tile(s); Scale notes found: 'SCALE 1/4\"=1'-0\" (1:48)' = 1:48.",
+    "[raster] answer 'HEAD HOUSE AND RESIDENCE NORTH ELEVATION' from text lines [49, 53] (literal match)"
    ],
-   "solver": "pipeline/vlm_direct",
+   "solver": "pipeline/raster",
    "assumptions": [],
-   "missing": [
-    "no located evidence from this solver"
-   ],
+   "missing": [],
    "cost": {
-    "llm_tokens_in": 3246,
-    "llm_tokens_out": 3,
-    "gpu_seconds": 0.1328,
+    "llm_tokens_in": 4585,
+    "llm_tokens_out": 43,
+    "gpu_seconds": 0.2264,
     "api_calls": 0,
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 1,
-    "wall_seconds": 2.5549
+    "wall_seconds": 5.7419
    },
    "intent": {
     "task": "text",
@@ -10745,7 +10837,117 @@
     "key": "text:unknown:drawing"
    }
   },
-  "recorded_at": "2026-11-14 03:44",
+  "recorded_at": "2026-11-14 04:09",
+  "api": "http://127.0.0.1:8102"
+ },
+ {
+  "path": "data/habs/vi0026_sheet_00003.jpg",
+  "question": "What is the scale of this drawing?",
+  "answer": {
+   "value": "1:48",
+   "unit": null,
+   "confidence": 0.7,
+   "evidence": [
+    {
+     "file": "data/habs/vi0026_sheet_00003.jpg",
+     "page": 0,
+     "bbox": [
+      2062.6,
+      1735.7,
+      2257.4,
+      1749.1
+     ],
+     "bbox_space": "image_px",
+     "ifc_guid": null,
+     "note": "text 'SCALE 1/4\"=1'-0\" (1:48)'"
+    }
+   ],
+   "trace": [
+    "intent: text stair [drawing] (lang en)",
+    "no train gate for this kind of question: general path by file type",
+    "raster: 1:48  (conf 0.70)",
+    "[raster] text layer: 59 texts in 6 tile(s); Scale notes found: 'SCALE 1/4\"=1'-0\" (1:48)' = 1:48.",
+    "[raster] answer '1:48' from text lines [52] (literal match)"
+   ],
+   "solver": "pipeline/raster",
+   "assumptions": [],
+   "missing": [],
+   "cost": {
+    "llm_tokens_in": 4585,
+    "llm_tokens_out": 28,
+    "gpu_seconds": 0.2114,
+    "api_calls": 0,
+    "api_tokens_in": 0,
+    "api_tokens_out": 0,
+    "llm_calls": 1,
+    "wall_seconds": 5.2896
+   },
+   "intent": {
+    "task": "text",
+    "target": "stair",
+    "scope": "drawing",
+    "unit": null,
+    "filters": {},
+    "lang": "en",
+    "key": "text:stair:drawing"
+   }
+  },
+  "recorded_at": "2026-11-14 04:09",
+  "api": "http://127.0.0.1:8102"
+ },
+ {
+  "path": "data/habs/vi0026_sheet_00003.jpg",
+  "question": "When was this drawing made?",
+  "answer": {
+   "value": 1977,
+   "unit": null,
+   "confidence": 0.7,
+   "evidence": [
+    {
+     "file": "data/habs/vi0026_sheet_00003.jpg",
+     "page": 0,
+     "bbox": [
+      2802.9,
+      1543.6,
+      2818.6,
+      1884.3
+     ],
+     "bbox_space": "image_px",
+     "ifc_guid": null,
+     "note": "text 'Delineated by: CHALMERS G. LONG, JR., 1977'"
+    }
+   ],
+   "trace": [
+    "intent: text unknown [drawing] (lang ?)",
+    "no train gate for this kind of question: general path by file type",
+    "raster: 1977  (conf 0.70)",
+    "[raster] text layer: 59 texts in 6 tile(s); Scale notes found: 'SCALE 1/4\"=1'-0\" (1:48)' = 1:48.",
+    "[raster] answer '1977' from text lines [51] (literal match)"
+   ],
+   "solver": "pipeline/raster",
+   "assumptions": [],
+   "missing": [],
+   "cost": {
+    "llm_tokens_in": 4583,
+    "llm_tokens_out": 33,
+    "gpu_seconds": 0.2163,
+    "api_calls": 0,
+    "api_tokens_in": 0,
+    "api_tokens_out": 0,
+    "llm_calls": 1,
+    "wall_seconds": 4.7504
+   },
+   "intent": {
+    "task": "text",
+    "target": "unknown",
+    "scope": "drawing",
+    "unit": null,
+    "filters": {},
+    "lang": "?",
+    "key": "text:unknown:drawing"
+   }
+  },
+  "recorded_at": "2026-11-14 04:09",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -10758,22 +10960,22 @@
    "evidence": [],
    "trace": [
     "kind=count unit=count",
-    "nvidia:private/nvidia/nemotron-3.5-super-120b-a12b 5.2s tok 2150->170",
-    "raw: room: There is a label \"MH\". |  | 2.  **Verify the count.** |     *   Room 1: Top left corner area. |     *   Room 2: Top right area, next to the bathroom (PH). |     *   Room 3: Bottom middle area, next to the living room (OH) and entrance hall (ET). |  | 3.  **Final Count:** 3. |  | 4.  **Format:** Single integer.3",
-    "cost: calls=1 tok_in=2150 tok_out=170 gpu_s=0.00 api_calls=1"
+    "nvidia:private/nvidia/nemotron-3.5-super-120b-a12b 9.9s tok 2150->168",
+    "raw: le room: There is a label \"MH\". |  | 2.  **Verify the count.** |     *   Room 1: Top left corner area. |     *   Room 2: Top right area, next to the bathroom (PH). |     *   Room 3: Bottom center area, next to the entrance hall (ET) and storage (VAR). |  | 3.  **Final Count:** 3. |  | 4.  **Format:** Single integer.3",
+    "cost: calls=1 tok_in=2150 tok_out=168 gpu_s=0.00 api_calls=1"
    ],
    "solver": "vlm_direct",
    "assumptions": [],
    "missing": [],
    "cost": {
     "llm_tokens_in": 2150,
-    "llm_tokens_out": 170,
+    "llm_tokens_out": 168,
     "gpu_seconds": 0.0,
     "api_calls": 1,
     "api_tokens_in": 2150,
-    "api_tokens_out": 170,
+    "api_tokens_out": 168,
     "llm_calls": 1,
-    "wall_seconds": 5.5749
+    "wall_seconds": 12.3956
    },
    "intent": {
     "task": "count",
@@ -10785,7 +10987,7 @@
     "key": "count:bedroom:drawing"
    }
   },
-  "recorded_at": "2026-11-14 03:44",
+  "recorded_at": "2026-11-14 04:09",
   "api": "http://127.0.0.1:8102",
   "solver": "vlm_direct",
   "solver_args": {
@@ -10802,7 +11004,7 @@
    "evidence": [],
    "trace": [
     "kind=text unit=None",
-    "nvidia:private/nvidia/nemotron-3.5-super-120b-a12b 3.8s tok 3249->3",
+    "nvidia:private/nvidia/nemotron-3.5-super-120b-a12b 7.8s tok 3249->3",
     "raw: Elevation",
     "cost: calls=1 tok_in=3249 tok_out=3 gpu_s=0.00 api_calls=1"
    ],
@@ -10817,7 +11019,7 @@
     "api_tokens_in": 3249,
     "api_tokens_out": 3,
     "llm_calls": 1,
-    "wall_seconds": 4.0793
+    "wall_seconds": 53.4597
    },
    "intent": {
     "task": "text",
@@ -10829,7 +11031,7 @@
     "key": "text:unknown:drawing"
    }
   },
-  "recorded_at": "2026-11-14 03:44",
+  "recorded_at": "2026-11-14 04:09",
   "api": "http://127.0.0.1:8102",
   "solver": "vlm_direct",
   "solver_args": {
@@ -10905,7 +11107,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 0.0292
+    "wall_seconds": 0.0296
    },
    "intent": {
     "task": "count",
@@ -10917,7 +11119,7 @@
     "key": "count:bedroom:drawing"
    }
   },
-  "recorded_at": "2026-11-14 03:44",
+  "recorded_at": "2026-11-14 04:09",
   "api": "http://127.0.0.1:8102",
   "solver": "raster"
  },
@@ -10965,7 +11167,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 0.0033
+    "wall_seconds": 0.0027
    },
    "intent": {
     "task": "count",
@@ -10977,7 +11179,7 @@
     "key": "count:sauna:drawing"
    }
   },
-  "recorded_at": "2026-11-14 03:44",
+  "recorded_at": "2026-11-14 04:09",
   "api": "http://127.0.0.1:8102",
   "solver": "raster"
  },
@@ -11109,14 +11311,17 @@
    ],
    "trace": [
     "raster_cc5k: 9 door components (cached)",
-    "pretrained CubiCasa5K multi-task model (Kalervo et al. 2019), weights CC BY-NC 4.0"
+    "pretrained CubiCasa5K multi-task model (Kalervo et al. 2019), weights CC BY-NC 4.0",
+    "interval90: [6, 14]"
    ],
    "solver": "raster_cc5k",
    "assumptions": [
     "symbols segmented by the pretrained CubiCasa5K model (Kalervo et al. 2019); each box is one counted symbol",
     "this drawing is in the model's original training list (measured: accuracy on such drawings is within a few points of held-out ones)"
    ],
-   "missing": [],
+   "missing": [
+    "exact count not certain: 90% range 6–14 (held the true count ~90% of the time on held-out CubiCasa5K drawings)"
+   ],
    "cost": {
     "llm_tokens_in": 0,
     "llm_tokens_out": 0,
@@ -11125,7 +11330,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 0.0001
+    "wall_seconds": 0.2924
    },
    "intent": {
     "task": "count",
@@ -11137,7 +11342,7 @@
     "key": "count:door:drawing"
    }
   },
-  "recorded_at": "2026-11-14 03:44",
+  "recorded_at": "2026-11-14 04:09",
   "api": "http://127.0.0.1:8102",
   "solver": "raster_cc5k"
  }

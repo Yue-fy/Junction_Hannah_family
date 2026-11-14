@@ -551,6 +551,12 @@ class DxfSolver(BaseSolver):
             missing.append("could not map DXF to the PDF page (no matching text); evidence in DXF metres")
         if fm.warnings:
             trace += [f"warning: {w}" for w in fm.warnings[:3]]
+        extra = qparse.unused_numbers(question, qr)
+        if extra:
+            conf = min(conf, 0.3)  # F/S0: a stated price/rate/constant the rules did not apply -> the agent does it
+            missing.append(f"the question states {', '.join(extra[:3])}, which this rule answer does not use (a price, "
+                           "rate or factor?); the value is the base quantity before that arithmetic")
+            trace.append(f"unused numbers in the question: {extra[:3]} -> confidence capped at 0.3")
         return Answer(value=value, unit=unit, confidence=round(min(max(conf, 0.0), 1.0), 3), evidence=evidence,
                       trace=trace, solver=self.name, assumptions=list(dict.fromkeys(assumptions)), missing=missing)
 

@@ -468,6 +468,39 @@ UNCOVERED = re.compile(
     re.I)
 
 
+NUM_TOKEN = re.compile(r"(?<![\w.])\d+(?:[.,]\d+)*(?![\w])")
+
+
+def unused_numbers(question: str, qr: "Query") -> list[str]:
+    """Numbers stated in the question that the parse did not use: a price, rate, constant or percentage ("450 euros
+    per door", "add 15 %"). A rule answer then answers the base quantity without the arithmetic (F, hard3: 30% of
+    derived-quantity questions). Room numbers, apartment ids, thresholds, quoted labels, unit exponents, ordinals and
+    "N decimal places" are not counted."""
+    q = re.sub(r"[%s][^%s]{0,60}[%s]" % (QUOTES, QUOTES, QUOTES), " ", question)  # quoted labels
+    q = re.sub(r"\b(?:m|ft|sq\.?\s*ft|qm|mq)\s*[2²³3]\b", " ", q, flags=re.I)  # m2, ft2
+    q = re.sub(r"\b\d+\s*(?:st|nd|rd|th|er|e|ème|eme|te|ten|ter|°|º|ª|o|a)\b", " ", q, flags=re.I)  # ordinals
+    q = re.sub(r"\b\d+\s+(?:decimal|decimals|dezimal\w*|décimal\w*|decimal\w*|nachkomma\w*|significant)\b", " ", q,
+               flags=re.I)
+    used = set()
+    for t in qr.terms:
+        for a in ([t.arg] if isinstance(t.arg, str) else list(t.arg or [])):
+            used.add(str(a).strip().lower())
+    if qr.threshold is not None:
+        th = qr.threshold
+        used |= {f"{th:g}", f"{th:g}".replace(".", ","), f"{th:.1f}", f"{th:.2f}", f"{th:.1f}".replace(".", ","),
+                 f"{th:.2f}".replace(".", ",")}
+    out = []
+    for m in NUM_TOKEN.finditer(q):
+        n = m.group(0)
+        if n.lower() in used or n.rstrip(".,") in used:
+            continue
+        # a room number like 2.05 written with a label (room 2.05) that the parse resolved under another spelling
+        if any(u.endswith(n) or n.endswith(u) for u in used if u and u[0].isdigit() and len(u) >= 3):
+            continue
+        out.append(n)
+    return out
+
+
 def covered(question: str, qr: Query) -> bool:
     """False if the question has parts the rule parser ignores (then a table-QA fallback should answer)."""
     if not qr.terms:

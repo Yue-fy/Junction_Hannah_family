@@ -8,7 +8,8 @@
     "noEmit": true,
     "skipLibCheck": true,
     "types": ["node", "vite/client"],
-    "isolatedModules": true
+    "isolatedModules": true,
+    "resolveJsonModule": true
   },
   "include": ["src", "mock", "vite.config.ts"]
 }

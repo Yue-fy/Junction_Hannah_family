@@ -175,7 +175,10 @@ def extra_structure(question: str) -> bool:
     """Does an unseen wording carry more than one plain concept? (F 03:23: on held-out, confident answers to such
     questions read as one atomic count were right 33% of the time; plain paraphrases in `hard` 79%.)"""
     t = re.sub(r"\([^)]*\)", " ", _QUOTED.sub(" ", _fold(question)))
-    return bool(_STRUCT.search(t))
+    if _STRUCT.search(t):
+        return True
+    # two object classes outside definitions = a compound read as one (F 04:05)
+    return len({x for x in targets_mentioned(t) if x not in _GENERIC}) >= 2
 
 
 def modifiers(question: str) -> list[str]:

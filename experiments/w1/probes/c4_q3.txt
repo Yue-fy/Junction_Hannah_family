@@ -1,0 +1,25 @@
+PATH kit-fzk-haus_ac20-fzk-haus_plan-01-erdgeschoss.pdf
+Wenn jede Tür 450 Euro kostet, wie viel kosten alle Türen im Erdgeschoss?
+Hoeveel kost het om alle ramen op 'Erdgeschoss' te vervangen als een raam 800 euro kost?
+How tall is the building?
+What is the height of the building in metres?
+How many storeys are above ground?
+What is the window-to-wall ratio of the building?
+What is the total window area on 'Erdgeschoss'?
+What is the total glazing area of the building?
+How many rooms on 'Erdgeschoss' have no window?
+What is the area of the largest window in the building?
+What is the gross floor area of 'Erdgeschoss'?
+What is the perimeter of the building?
+What is the total length of external walls on 'Erdgeschoss'?
+What is the volume of concrete in the slabs of the building?
+What is the storey height of 'Erdgeschoss'?
+How many rooms are there in the building?
+How many square metres does the average room on 'Erdgeschoss' have?
+What percentage of the floor area on 'Erdgeschoss' is taken by the 'Wohnen' room?
+How many more square metres does 'Erdgeschoss' have than 'Dachgeschoss'?
+Which is bigger, the total room area on 'Erdgeschoss' or on 'Dachgeschoss'?
+If the walls on 'Erdgeschoss' were 10% thicker, what would their volume be?
+What is the average door width on 'Erdgeschoss'?
+How many doors are wider than 1 m in the building?
+What is the total area of all bathrooms in the building?

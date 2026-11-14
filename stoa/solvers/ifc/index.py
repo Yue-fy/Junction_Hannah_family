@@ -141,8 +141,16 @@ def type_key_fn(els: list[Element]):
     type breakdowns: names and types tie on Revit models; where they differ the type object wins 16 of 26 class rows
     (ac20, molio, smiley use types; hitos, sixty5 doors use element names)."""
     def by_type(e: Element) -> str:
-        return strip_id(e.type_name) or strip_id(e.object_type) or strip_id(e.name) or "(untyped)"
-    by_type.how = "the element's IfcTypeObject name (else ObjectType/Name)"
+        t = strip_id(e.type_name) or strip_id(e.object_type) or strip_id(e.name) or "(untyped)"
+        # Revit IFC2X3: the type object holds the TYPE only ('19" x 19"', 'Standard'); the FAMILY is the first part
+        # of the element Name 'Sink Vanity-Round:19" x 19":19" x 19":123' -> 'Sink Vanity-Round:19" x 19"' (W5 03:38)
+        nm = strip_id(e.name) or ""
+        parts = [p.strip() for p in nm.split(":")]
+        fam = parts[0] if len(parts) >= 2 else ""
+        if fam and fam.lower() not in t.lower() and any(p == t.strip() for p in parts[1:]):
+            return f"{fam}:{t}"
+        return t
+    by_type.how = "the element's IfcTypeObject name (else ObjectType/Name), prefixed by the Revit family when the type lacks it"
     return by_type
 
 
@@ -524,3 +532,37 @@ if __name__ == "__main__":  # python -m stoa.solvers.ifc.index data/ifc_models/x
         ix = load_index(a)
         print(a, ix.schema, f"scale={ix.unit_scale}", f"{len(ix.elements)} elements", f"{len(ix.storeys)} storeys",
               f"build={ix.build_seconds:.1f}s total={time.perf_counter() - t:.1f}s")
+
+
+def nested_parts(path: str) -> dict[str, str]:
+    """{child guid: parent class} for building elements that are PARTS of another element (IfcRelAggregates /
+    IfcRelNests), e.g. stair parts exported as IfcStair under a parent IfcStair (S0 D15 mechanism A). Counts skip a
+    part whose parent is of the same kind, so an assembly is counted once. Cached as JSON next to the index."""
+    import json
+
+    p = abspath(path)
+    f = _cache_dir().parent / "ifc_parts" / (_cache_key(p)[:-4] + ".json")
+    if f.exists():
+        try:
+            return json.loads(f.read_text())
+        except Exception:  # noqa: BLE001 - rebuild a broken cache file
+            pass
+    import ifcopenshell
+
+    m = ifcopenshell.open(str(p))
+    out: dict[str, str] = {}
+    for rel_cls in ("IfcRelAggregates", "IfcRelNests"):
+        try:
+            rels = m.by_type(rel_cls)
+        except Exception:  # noqa: BLE001 - IfcRelNests is not in every schema version
+            continue
+        for rel in rels:
+            parent = rel.RelatingObject
+            if parent is None or not parent.is_a("IfcElement"):
+                continue
+            for ch in rel.RelatedObjects or ():
+                if ch.is_a("IfcElement") and getattr(ch, "GlobalId", None):
+                    out[ch.GlobalId] = parent.is_a()
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text(json.dumps(out))
+    return out

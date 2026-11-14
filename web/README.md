@@ -68,8 +68,12 @@ and shows a one-line note:
    no GPU) and the credit line adds its weights' licence (CC BY-NC 4.0); e.g. high_quality_architectural-816 doors:
    answer 7, detector marks 9 (gold 9; that drawing is in CC5K's training list).
 11. HAER historical scan (vi0026 sheet 3, Creque Marine Railway, 1977; no questions in the dataset): "what kind
-   of drawing is this?" → the local VLM says "elevation" at 20 %, and the tour clicks **Second opinion · NVIDIA
-   Nemotron**: the hosted Nemotron 3.5 Super VL agrees (time, tokens and € shown; its reasoning folded). The
+   of drawing is this?" → "elevation" at 70 %, read from the scan's own printed text: W3's text layer
+   (`stoa/solvers/raster/textlayer.py`, the local VLM reading the sheet tile by tile) finds 59 texts and the
+   scale note (1/4" = 1'-0", 1:48), and the answer cites the title lines "HEAD HOUSE AND RESIDENCE" / "NORTH
+   ELEVATION", boxed on the scan (first read ~3 min on a busy GPU, then cached; the card says "first time").
+   The tour then clicks **Second opinion · NVIDIA Nemotron**: the hosted Nemotron 3.5 Super VL agrees (time,
+   tokens and € shown; its reasoning folded). The
    knowledge-graph strip links the other sheets of the same survey, named from the Library of Congress titles
    ("West Elevation", "South Elevation", "Machinery, North Elevation"). Finna scans link the drawings filed
    under the same address ("drawing 2 of 13").
@@ -122,6 +126,18 @@ five match the dataset answers. Regenerate:
 ```bash
 $JUNCTION_VENV/bin/python web/fixtures/make_fixtures.py
 ```
+
+**Tour and recorded answers.** The demo tour's steps are in `fixtures/tour.json` (`{file, q, note, bench?,
+second?, locate?}`; add a step = add an entry, no code change). `fixtures/record.py` asks the running API every
+tour question (plus a few extras, the Nemotron second opinions and the "Show where" readers) and writes
+`fixtures/recorded.json`, which the mock replays when the API is down:
+
+```bash
+$JUNCTION_VENV/bin/python web/fixtures/record.py --api http://127.0.0.1:8100
+```
+
+An entry with `"pinned": true` in `recorded.json` is kept instead of the fresh recording (use it to hold a
+known-good answer while a solver regression is fixed, and say why in a `"note"`).
 
 ## Coordinates (docs/CONTRACT.md)
 
