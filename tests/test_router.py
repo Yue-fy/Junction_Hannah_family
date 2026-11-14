@@ -242,3 +242,14 @@ def test_derived_quantity_modifiers():
     assert d("Quanti locali ci sono per l'appartamento A?") == []
     assert d("How many windows are shown on this floor plan?") == []
     assert d("How many rooms labelled 'Bad' are there on this floor?") == []
+
+
+def test_extra_structure():
+    from stoa.router.intent import extra_structure
+
+    assert not extra_structure("I need a quick count for a quantity takeoff: bedrooms (rooms marked MH) on this sheet?")
+    assert not extra_structure("Wie viele Saunen gibt es auf diesem Grundriss?")
+    assert not extra_structure("How many sinks (kitchen and bathroom combined; a double sink counts as one) are drawn?")
+    assert extra_structure("Hur många fler sovrum än badrum finns det?")
+    assert extra_structure("How many more bedrooms than bathrooms are there?")
+    assert extra_structure("How many rooms are larger than 10 m²?")

@@ -44,11 +44,19 @@ from stoa.data import siblings, source_of
 from stoa.router import gating, prior
 from stoa.router.canonical import canonical
 from stoa.router.compose import combine, decompose
-from stoa.router.intent import DERIVED, Intent, modifiers, parse
+from stoa.router.intent import DERIVED, Intent, extra_structure, modifiers, parse
 from stoa.router.prior import known_template
 
 DERIVED_CAP = 0.4  # max confidence of a rules-only (0 LLM calls) as-asked answer to a derived-quantity question
-UNSEEN_CAP = 0.5  # max confidence of a local-tier / prior answer to a wording that is not a known train template
+UNSEEN_CAP = 0.5  # (until c72) max confidence of a local-tier / prior answer to a wording that is not a train template
+UNSEEN_SCALE = 0.92  # unseen wording, ONE plain concept: hard's cubicasa paraphrases were 79.2% right at mean conf 0.863
+UNSEEN_STRUCT_CAP = 0.35  # unseen wording WITH extra structure (comparison/exclusion words, numbers): F, held-out: 33%
+
+
+def _unseen_conf(conf: float, question: str) -> float:
+    """Confidence of a local-tier / LoRA / prior answer measured on train templates, for a wording that is not one
+    (F 03:23: the flat 0.5 cap made plain paraphrases under-confident and left compounds over-confident)."""
+    return min(conf, UNSEEN_STRUCT_CAP) if extra_structure(question) else conf * UNSEEN_SCALE
 # D8: symbol counts R1's pretrained CubiCasa5K model answers; its gate is measured on cc5k_heldout only
 CC5K_KEYS = {"count:window:drawing", "count:door:drawing", "count:wc:drawing", "count:sink:drawing"}
 GATING_CC5K = next((f for f in (Path(__file__).parent / "router" / "gating_cc5k.json",
@@ -343,7 +351,7 @@ class Pipeline(BaseSolver):
                 if not known_template(question) and TIER.get(name) != "deterministic":
                     # an unseen wording of a known kind: the VLM/LoRA rate was measured on the template wording
                     # (F hard2q: compounds read as one class went to the LoRA at its rate, 8 of 11 wrong)
-                    conf = min(conf, UNSEEN_CAP)
+                    conf = _unseen_conf(conf, question)
                 if ask == question and not known_template(question) and TIER.get(name) == "deterministic":
                     # an unseen wording asked as is: the template's train rate does not vouch for how the solver
                     # read it (F hard2: "how many times larger is B than A" -> apartment count at 0.976)
@@ -355,7 +363,7 @@ class Pipeline(BaseSolver):
             if name == "vlm_lora" and gate and gate.get("lora_vs_raster"):
                 conf, extra = self._lora_vs_raster(path, ask, ans, gate["lora_vs_raster"], trace, conf)
                 if not known_template(question):
-                    conf = min(conf, UNSEEN_CAP)
+                    conf = _unseen_conf(conf, question)
                 total = total.add(extra)
                 answers.append((name, ans, conf))
                 break  # the LoRA's count stands; raster only sets the confidence and lends its boxes
@@ -627,7 +635,7 @@ class Pipeline(BaseSolver):
         if gate:
             missing.append("solvers tried did not beat this prior on training data for this question type")
         trace.append(f"prior[{pa.level}]: {pa.value} {pa.unit or ''} (train hit rate {100 * pa.hit_rate:.0f}%, n={pa.n})")
-        conf = pa.hit_rate if (question is None or known_template(question)) else min(pa.hit_rate, UNSEEN_CAP)
+        conf = pa.hit_rate if (question is None or known_template(question)) else _unseen_conf(pa.hit_rate, question)
         return Answer(value=pa.value, unit=pa.unit, confidence=round(conf, 3), solver="prior",
                       assumptions=assumptions, missing=missing, trace=[])
 

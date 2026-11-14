@@ -155,6 +155,23 @@ def targets_mentioned(question: str) -> list[str]:
     return out
 
 
+# words that add structure beyond one plain concept (comparisons, exclusions, restrictions), in many languages; with a
+# number outside quotes/parentheses. Parenthesised definitions ("(kitchen and bathroom combined)") do not count.
+_STRUCT = re.compile(
+    r"\b(?:more|fewer|less|than|difference|minus|both|either|neither|except|excluding|without|only|each|mehr als|"
+    r"weniger als|ohne|au(?:ß|ss)er|nur|beide|plus de|moins de|plus que|moins que|sans|sauf|seulement|pi[uù] di|"
+    r"meno di|senza|solo|enemm[äa]n|v[äa]hemm[äa]n|ilman|paitsi|vain|fler|f[äa]rre|än|utan|f[öo]rutom|bara|b[åa]da|"
+    r"meer dan|minder dan|zonder|behalve|alleen|flere|f[æa]rre|uden|undtagen|kun|rohkem|v[äa]hem|ilma|ainult|"
+    r"wi[eę]cej|mniej|bez|tylko|m[aá]s que|menos que|excepto)\b|\d", re.I)
+
+
+def extra_structure(question: str) -> bool:
+    """Does an unseen wording carry more than one plain concept? (F 03:23: on held-out, confident answers to such
+    questions read as one atomic count were right 33% of the time; plain paraphrases in `hard` 79%.)"""
+    t = re.sub(r"\([^)]*\)", " ", _QUOTED.sub(" ", _fold(question)))
+    return bool(_STRUCT.search(t))
+
+
 def modifiers(question: str) -> list[str]:
     """Meaning-changing modifiers: avg, share, diff, rest, threshold, multi (several object classes)."""
     q = _QUOTED.sub(" <q> ", _fold(question))
