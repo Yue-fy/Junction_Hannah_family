@@ -253,3 +253,85 @@ def test_swiss_png_without_twin_goes_to_text_mode(monkeypatch):
     monkeypatch.setattr(R, "_siblings", lambda p: {".png": p})
     assert R.RasterSolver()._text_mode("data/swiss_dwellings/x.png", q)
     assert not R.RasterSolver()._text_mode("data/cubicasa5k/x.png", q)
+
+
+def test_sheet_kind_titles_and_room_questions():
+    """sheet.py (Q 05:04): view titles from a text layer; only count/size questions about rooms need a floor plan."""
+    from stoa.solvers.raster import sheet as S
+    from stoa.solvers.raster.textlayer import TextItem, TextLayer
+
+    tl = TextLayer(path="x.jpg", size=(1000, 800), items=[
+        TextItem("NORTH ELEVATION", [100, 700, 300, 730]), TextItem("PLAN OF PINTLE", [500, 100, 600, 110]),
+        TextItem("SEE THE FLOOR PLAN ON SHEET 3 FOR ALL ROOM NAMES AND DOORS", [10, 10, 400, 20])])
+    kinds = [(h["kind"], h["title"]) for h in S.title_kinds(tl)]
+    assert kinds[0] == ("elevation", True)  # biggest short title first
+    assert ("floor_plan", False) in kinds  # the long note is not a title
+    assert all(k != "floor_plan" for k, t in kinds if t)  # 'PLAN OF PINTLE' is a detail view, not a floor plan
+    k = S.sheet_kind("x.jpg", use_vlm=False, layer=tl)
+    assert k["has_plan"] is None  # a 'plan' word is present -> the text rule does not decide
+    tl.items = tl.items[:1]
+    assert S.sheet_kind("x.jpg", use_vlm=False, layer=tl)["has_plan"] is False
+    tl.items.append(TextItem("POHJA 1/100", [100, 100, 200, 120]))
+    assert S.sheet_kind("x.jpg", use_vlm=False, layer=tl)["has_plan"] is True
+    assert S.needs_plan("How many bedrooms are shown on this floor plan?")
+    assert S.needs_plan("Montako makuuhuonetta asunnossa on?") and S.needs_plan("Wie viele Zimmer hat die Wohnung?")
+    assert not S.needs_plan("How many windows are on the north elevation?")
+    assert not S.needs_plan("What is the name of the hall?")
+    assert S.veto("data/cubicasa5k/x.png", "How many bedrooms?") is None  # CubiCasa sheets are plans
+
+
+def test_apartment_net_area_sums_printed_rooms_inside_the_unit_boundary(tmp_path):
+    """apartment.py (Q 05:16): two units split by a red dash-dot boundary; the asked unit's rooms are summed, the
+    other unit's and outdoor rooms are not; an unknown-unit scale bar resolves to metres from '1:200 (A3)'."""
+    import numpy as np
+    from PIL import Image
+
+    from stoa.solvers.raster import apartment as A
+    from stoa.solvers.raster import scalebar as SB
+    from stoa.solvers.raster.textlayer import TextItem, TextLayer
+
+    img = np.full((400, 600, 3), 255, np.uint8)
+    red = (176, 58, 46)
+
+    def dashed(x0, y0, x1, y1):  # dash 10 px, gap 4 px
+        n = max(abs(x1 - x0), abs(y1 - y0))
+        for t in range(n + 1):
+            if t % 14 < 10:
+                x, y = x0 + (x1 - x0) * t // n, y0 + (y1 - y0) * t // n
+                img[y - 1:y + 2, x - 1:x + 2] = red
+    for (a, b) in [((50, 50), (550, 50)), ((550, 50), (550, 350)), ((550, 350), (50, 350)), ((50, 350), (50, 50)),
+                   ((300, 50), (300, 350))]:
+        dashed(*a, *b)
+    p = tmp_path / "plan.png"
+    Image.fromarray(img).save(p)
+    tl = TextLayer(path=str(p), size=(600, 400), items=[
+        TextItem("Whg. A", [100, 70, 150, 85]), TextItem("Whg. B", [350, 70, 400, 85]),
+        TextItem("Zimmer", [100, 120, 150, 132]), TextItem("1.01", [110, 134, 140, 146]),
+        TextItem("15.50 m²", [100, 148, 150, 160]),
+        TextItem("Küche", [100, 220, 150, 232]), TextItem("1.02", [110, 234, 140, 246]),
+        TextItem("8.25 m²", [100, 248, 150, 260]),
+        TextItem("Balkon", [200, 220, 250, 232]), TextItem("1.03", [210, 234, 240, 246]),
+        TextItem("6.00 m²", [200, 248, 250, 260]),
+        TextItem("Zimmer", [400, 120, 450, 132]), TextItem("1.04", [410, 134, 440, 146]),
+        TextItem("20.00 m²", [400, 148, 450, 160])])
+    q = "What is the net floor area of apartment A in m², summing all its rooms except balconies and terraces?"
+    assert A.unit_letter(q) == "A" and A.unit_letter("Wie gross ist die Nettowohnfläche von Wohnung B?") == "B"
+    assert A.unit_letter("Quelle est la surface nette de l'appartement C en m² ?") == "C"
+    assert set(A.unit_labels(tl)) == {"A", "B"}
+    r = A.net_area(str(p), tl, q, px_per_m=30.0)
+    assert r is not None and r["value"] == 23.75 and [d["id"] for d in r["dropped"]] == ["1.03"]
+    assert A.net_area(str(p), tl, q.replace("apartment A", "apartment B"), px_per_m=30.0)["value"] == 20.0
+    assert A.net_area(str(p), tl, q.replace("apartment A", "apartment C"), px_per_m=30.0) is None
+    assert A.unit_letter("Is this apartment a duplex?") is None  # the letter must be a capital
+    lab = A.room_set(str(p), tl, "What is the total net area in m² of all rooms labelled 'Zimmer' on this floor?", 30.0)
+    assert lab["scope"] == "floor" and lab["value"] == 35.5
+    floor = A.room_set(str(p), tl, "What is the total net floor area in m² of all numbered indoor rooms on this floor "
+                                   "(excluding balconies, loggias, terraces and other outdoor spaces, shafts and voids)?",
+                       30.0)
+    assert floor["value"] == 43.75 and [d["id"] for d in floor["dropped"]] == ["1.03"]
+    assert A.room_set(str(p), tl, "What is the area of the kitchen?", 30.0) is None  # not a summed-area question
+    # unknown-unit bar: '1:200 (A3)' on a 2480-px sheet = 29.52 px/m
+    bar = SB.Bar(unit=None, px_per_unit=29.6, labels=[(0, 0, [0, 0, 1, 1]), (10, 296, [0, 0, 1, 1])],
+                 box=[0, 0, 296, 10], residual=1.0, source="layer")
+    SB._resolve_unknown([bar], TextLayer(path="x.png", size=(2480, 1753), items=[TextItem("1:200 (A3)", [0, 0, 9, 9])]))
+    assert bar.unit == "m"

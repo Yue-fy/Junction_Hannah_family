@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 import time
 import urllib.request
 from pathlib import Path
@@ -92,6 +93,29 @@ def main() -> None:
         if r.get("pinned"):
             print(f"kept pinned: {r['path'].split('/')[-1][:40]} {r['question'][:50]} ({r.get('recorded_at')})")
     (HERE / "recorded.json").write_text(json.dumps(out, indent=1, ensure_ascii=False))
+    record_rooms()
+
+
+def record_rooms() -> None:
+    """Room graphs (R1's experiments/r1/room_graph, from the cached CubiCasa5K segmentation) of the tour's "rooms" steps
+    -> fixtures/rooms.json, so the "Rooms & doors" overlay also works where the middleware cannot run Python."""
+    paths = sorted({t["file"] for t in TOUR if t.get("rooms") and t.get("file")})
+    if not paths:
+        return
+    sys.path.insert(0, str(HERE.parents[1]))
+    try:
+        from experiments.r1.room_graph.graph import room_graph
+    except ImportError as e:
+        print(f"room graphs not recorded ({e})")
+        return
+    out = {}
+    for p in paths:
+        g = room_graph(p, live=False)
+        if g:
+            out[p] = g
+            print(f"rooms: {p.split('/')[-1]} {len(g['rooms'])} rooms, {len(g['doors'])} doors")
+    if out:
+        (HERE / "rooms.json").write_text(json.dumps(out, ensure_ascii=False))
 
 
 if __name__ == "__main__":

@@ -87,3 +87,21 @@ Options (`--solver-arg`):
 - `llm=0` turns off the LLM fallback (the solver then refuses free text).
 
 Pitfalls are in KNOWLEDGE.md (W1 entries).
+
+## Languages, unusual models, multi-part questions (cycle 5)
+
+- **Cross-language check** (`IfcSolver._cross_language`): a non-English question whose wording is not a train template
+  is solved twice by the rules (as is, and via `stoa.llm.to_english(force=True)`, one local call). Agree → keep;
+  same element kind but different value → English reading (the raw parse missed an operator/unit word) ≤ 0.75; raw
+  found no element kind → English ≤ 0.75; different element kinds → the parser's own reading for dataset languages
+  (`PARSER_LANGS`) ≤ 0.6–0.75, else English ≤ 0.5. The LLM fallback runs at most once, after the choice
+  (`_llm_stage`). `translate=0` turns it off. Probe: `experiments/w1/probes/c5_ml.py` + `experiments/w1/ml_run.py`.
+- **Several buildings** (`buildings_of`, `main_building`, `own_storeys`): neighbour/context buildings with storeys
+  of the same names (IFC-Bench city_house_munich). A named storey = the main building's level; "the building" =
+  the main building; storey counts / which-storey / top floor range over the main building; conf ≤ 0.75.
+- **Multi-part questions** (`_multi_part`): when the two-questions guard fires, one local-LLM call splits the
+  question into self-contained parts, the rules answer each, the answer is the parts joined as text.
+- Door width/height swapped on some instances of a type → read transposed; "how many different X types" = count;
+  storeys above/below a named storey; basement / underground level by name (else highest storey below 0); datum
+  elevations (no storey at 0) for above/below ground; area-zone spaces left out of "largest room"; vertical
+  distance between two named storeys = elevation difference. Probes: `experiments/w1/probes/c5_q2..q4.txt`.

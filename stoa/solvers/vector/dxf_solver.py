@@ -619,6 +619,15 @@ class DxfSolver(BaseSolver):
             value = round(100.0 * ((a - b) if qr.op == "pctdiff" else (b - a)) / b, 2)
             trace.append(f"relative difference: 100 × ({a:.2f} − {b:.2f}) / {b:.2f} = {value} %" if qr.op == "pctdiff" else
                          f"relative difference: 100 × ({b:.2f} − {a:.2f}) / {b:.2f} = {value} %")
+        elif qr.op in ("yes_gt", "yes_lt"):
+            a = known[0]
+            b = known[1] if len(known) > 1 else qr.threshold
+            if b is None or len(known) < len(qr.terms):
+                return Answer(value=None, unit=None, confidence=0.0, solver=self.name, trace=trace + ["comparison: a side is missing"],
+                              missing=missing or ["one side of the comparison was not found"])
+            yes = a > b if qr.op == "yes_gt" else a < b
+            value, unit = ("yes" if yes else "no"), None
+            trace.append(f"comparison: {a:.2f} {'>' if qr.op == 'yes_gt' else '<'} {b:.2f} -> {value}")
         elif qr.op in ("count_gt", "count_lt", "count_ge"):
             cmp = {"count_gt": lambda v: v > qr.threshold, "count_lt": lambda v: v < qr.threshold,
                    "count_ge": lambda v: v >= qr.threshold}[qr.op]

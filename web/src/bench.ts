@@ -12,6 +12,7 @@ const esc = (s: unknown) => String(s ?? "").replace(/[&<>"']/g, (c) => `&#${c.ch
 type Run = {
   run_id: string; solver: string; split: string; time: string; commit?: string; agent?: string; note?: string; n: number;
   weighted_acc: number | null; accuracy: number | null; usd_per_1k_q: number | null; latency_p50_s: number | null;
+  latency_p95_s?: number | null;
   evidence_rate: number | null;
   by_tier: Record<string, { share: number; n: number; accuracy: number | null }> | null;
   by_kind: Record<string, { n: number; accuracy: number | null }> | null;
@@ -61,7 +62,17 @@ export function renderBench(el: HTMLElement, b: Bench) {
   const h2r = b.runs.hard2r?.pipeline;
   const h2q = h2r ?? b.runs.hard2q?.pipeline;
   const h2qLabel = h2r ? "a fresh draw of these kinds in a new wording, sealed (never seen while building)" : "same kinds reworded, never seen while building";
-  const runs = [t, t0, ...Object.values(dev), ...Object.values(hard), h2, h2q].filter((r): r is Run => !!r);
+  const h3 = b.runs.hard3?.pipeline; // sealed derived quantities (ratios, differences, per-unit values)
+  // overnight progress: the previous sealed test (test 1) vs this one, and the sealed generality splits on both commits
+  const tp = b.runs.test?.previous;
+  const h2rWas = b.runs.hard2r?.previous;
+  const h3Was = b.runs.hard3?.previous;
+  const secs = (x?: number | null) => (x === null || x === undefined ? "–" : x >= 10 ? `${x.toFixed(0)} s` : `${x.toFixed(1)} s`);
+  const arrow = (a?: number | null, z?: number | null) => `${pct(a, 1)} → <b>${pct(z, 1)}</b>`;
+  const progress = t && tp ? `<div class="bn-progress"><b>Overnight, on sealed data</b> (each run once on a frozen commit):
+      test ${esc(tp.commit ?? "")} → ${esc(t.commit ?? "")}: accuracy ${arrow(tp.accuracy, t.accuracy)} at ${eur(tp.usd_per_1k_q)} → <b>${eur(t.usd_per_1k_q)}</b> per 1,000 questions${tp.usd_per_1k_q && t.usd_per_1k_q && tp.usd_per_1k_q / t.usd_per_1k_q >= 3 ? ` (${Math.round(tp.usd_per_1k_q / t.usd_per_1k_q)}× cheaper)` : ""},
+      slowest 5% ${secs(tp.latency_p95_s)} → <b>${secs(t.latency_p95_s)}</b>${h2r && h2rWas ? ` · new question kinds, fresh wording ${arrow(h2rWas.accuracy, h2r.accuracy)}` : ""}${h3 && h3Was ? ` · derived quantities (ratios, differences, per unit) ${arrow(h3Was.accuracy, h3.accuracy)}` : ""}</div>` : "";
+  const runs = [t, t0, tp, ...Object.values(dev), ...Object.values(hard), h2, h2q, h3, h2rWas, h3Was].filter((r): r is Run => !!r);
   // cost, cascade share and calibration: from the sealed test when it is in (unseen drawings, same pipeline), dev otherwise
   const c = t ?? p;
   const cWhere = t ? "sealed test" : "dev";
@@ -80,7 +91,7 @@ export function renderBench(el: HTMLElement, b: Bench) {
         <div class="s">${pct(p.weighted_acc)} weighted by each source's share of the full dataset · VLM alone ${pct(dev.vlm_direct?.accuracy)}, prior ${pct(dev.prior?.accuracy)}</div></div>`}
       <div class="bn-tile"><div class="k">Generality · hard split${hp ? `, ${hp.n} questions` : ""}</div>
         <div class="v">${pct(hp?.accuracy)}</div>
-        <div class="s">${kinds.length ? kinds.map(([k, v]) => `${esc(k)}s ${pct(v.accuracy, 0)}`).join(" · ") : "translations, paraphrases, compositions"}${h2 ? `<br><b>New question kinds</b> (average, share, threshold, which-is-larger…) ${pct(h2.accuracy, 0)}${h2q ? ` · ${h2qLabel}: ${pct(h2q.accuracy, 0)}` : ""}` : ""}</div></div>
+        <div class="s">${kinds.length ? kinds.map(([k, v]) => `${esc(k)}s ${pct(v.accuracy, 0)}`).join(" · ") : "translations, paraphrases, compositions"}${h2 ? `<br><b>New question kinds</b> (average, share, threshold, which-is-larger…) ${pct(h2.accuracy, 0)}${h2q ? ` · ${h2qLabel}: ${pct(h2q.accuracy, 0)}` : ""}` : ""}${h3 ? `<br><b>Derived quantities</b> (ratios, differences, per-unit values; sealed) ${pct(h3.accuracy, 0)}` : ""}</div></div>
       <div class="bn-tile"><div class="k">Cost per 1,000 questions · ${cWhere}</div>
         <div class="v">${eur(c.usd_per_1k_q)}</div>
         <div class="s">median ${c.latency_p50_s !== null ? `${(c.latency_p50_s * 1000).toFixed(0)} ms` : "–"} per question · GPU time + tokens at the eval's rates${t ? ` · dev ${eur(p.usd_per_1k_q)}${t0 ? ` · without the LoRA ${eur(t0.usd_per_1k_q)}` : ""}` : ""}</div></div>
@@ -88,6 +99,7 @@ export function renderBench(el: HTMLElement, b: Bench) {
         <div class="v">${pct(cDet?.share, 0)}</div>
         <div class="s">of questions, ${pct(cDet?.accuracy)} correct, no model call · ${pct(c.evidence_rate, 0)} of answers carry located evidence${t ? ` · dev ${pct(det?.share, 0)}` : ""}</div></div>
     </div>
+    ${progress}
     <div class="bn-chart">
       <div class="bn-chart-head"><h3>Accuracy by source · dev</h3>
         <div class="bn-legend">${SERIES.map((s) => `<span title="${esc(s.hint)}"><i style="background:${s.color}"></i>${esc(s.label)}</span>`).join("")}</div></div>

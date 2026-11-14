@@ -22,7 +22,7 @@
  {
   "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
   "q": "If each door costs 450 euros, what do all the doors on '1.korrus' cost in total?",
-  "note": "A question no template covers, with a number in it. The IFC rules read 'each door costs 450 €' as a factor, count the 46 doors on the storey and multiply in code: 46 × 450 € = 20,700 €, every door boxed, no language model call, 0.2 s. Questions the rules cannot read go to a small local model that plans tool calls; the numbers still come from the tools."
+  "note": "A question no template covers, with a number in it. The IFC rules read 'each door costs 450 €' as a factor, count the 46 doors on the storey and multiply in code: 46 × 450 € = 20,700 €, every door boxed, no language model call, a few milliseconds. Questions the rules cannot read go to a small local model that plans tool calls; the numbers still come from the tools."
  },
  {
   "file": "data/ifc_bench/4351_arc.ifc",
@@ -42,14 +42,19 @@
  {
   "file": "data/cubicasa5k/colorful-4539.png",
   "q": "Kuinka monta makuuhuonetta (MH) pohjapiirustuksessa on?",
-  "note": "A Finnish apartment plan, asked in Finnish: our fine-tuned 8B vision model (LoRA) counts 3 bedrooms. To keep cost low it reads no boxes itself; 'Show where' asks a second reader for the room names, it finds the three 'MH' labels, they agree (✓), and each counted bedroom is marked.",
-  "locate": true
+  "note": "A Finnish apartment plan, asked in Finnish: our fine-tuned 8B vision model (LoRA) counts 3 bedrooms. Independently, the pretrained CubiCasa5K segmentation finds 3 bedroom regions labelled 'MH': they agree (✓) and each counted bedroom is outlined. One local model call, no cloud."
+ },
+ {
+  "file": "data/cubicasa5k/colorful-4539.png",
+  "q": "",
+  "rooms": true,
+  "note": "The same plan as a graph: every room with its kind, printed label and an area estimate, and every door as a link between two rooms. The hall 'ET' leads to 6 rooms and opens onto the kitchen and living room. Read from the pixels by the pretrained CubiCasa5K model plus geometry rules, no language model; with no scale printed, areas come from the measured door widths (80% band on hover). Hover any room to see its links."
  },
  {
   "file": "data/cubicasa5k/high_quality_architectural-14797.png",
   "q": "How many saunas are on this floor plan?",
   "locate": true,
-  "note": "The fine-tuned model says 0 saunas at 82 %, with nothing to point at. 'Show where' asks the label reader, which finds 'LH' (löylyhuone, the sauna room): the card turns the disagreement into a ✗ and marks the label. One glance shows the sauna: this is how a person catches a confident wrong answer in seconds."
+  "note": "The fine-tuned model says 0 saunas at 82 %, with nothing to point at. Two independent readers disagree: the room segmentation finds one sauna region, and 'Show where' asks the label reader, which finds 'LH' (löylyhuone, the sauna room) and marks it. The card shows both ✗: this is how a person catches a confident wrong answer in seconds."
  },
  {
   "file": "data/habs/vi0026_sheet_00003.jpg",
@@ -66,6 +71,6 @@
   "file": "",
   "q": "",
   "bench": true,
-  "note": "Measured on held-out drawings: accuracy per source against two baselines, generality, and cost per 1,000 questions."
+  "note": "Measured on held-out drawings: accuracy per source against two baselines, generality, and cost per 1,000 questions. The blue line is the night's progress on sealed data: the same accuracy at a tenth of the cost, and far better on question kinds no template covers."
  }
 ]
