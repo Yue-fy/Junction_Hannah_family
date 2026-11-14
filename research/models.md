@@ -252,8 +252,8 @@ Problem (KNOWLEDGE 11:10): on the c43 gate, vlm_lora sets assumptions on 0 of 55
 - Checked: no pipeline branch reads these strings to change a value or confidence (_PREMISE / _OP_FLAG / 'not understood' do
   not match them). Side effect: `_absent_fact` and the "not traced to any value" note no longer fire on a low-conf LoRA count
   (they only fire when 'missing' holds process notes alone); the range is the more useful statement there.
-- Not measured live (GPU busy with gate c43c, answer freeze). Day team: apply, run `--solver pipeline --split dev`, compare
-  with run 20261114-105535-pipeline-dev-a86d: values and confidences must be identical; only assumptions/missing change.
+- LIVE check (11:20, gate c43c done, --no-leaderboard, scratch copies of night 637a6df ± patch; 198 dev CubiCasa rows the gate answered with vlm_lora: all 158 below 0.8 + 40 random above): patched vs unpatched in the same minute: values 197/198, conf 194/198 identical (unpatched vs the gate run: 192 / 189 = vLLM batching noise of the same size); right 114 vs 115 (noise); method assumption on 198/198 LoRA answers; conf<0.8 LoRA answers with a range 155/155; rows stating NEITHER 41 → 0; duplicate range lines 0. Runs 20261114-112030-pipeline-lora_check-144b (patched) vs -112109-…-a85b (unpatched), ref -111300-pipeline-dev-cdc1.
+  Day team: apply, pytest, then a full dev run to confirm before committing.
 
 ## Drawing style from image content (09:30–10:25, `stoa/style.py`; training in `experiments/r2/style/`)
 - `guess_style(path)` → (cubicasa5k | swiss_dwellings | ifc_models | scan, p): numpy softmax on ~110 cheap features (grey/sat/hue
