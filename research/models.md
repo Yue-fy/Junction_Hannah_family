@@ -150,6 +150,19 @@ a 4× bigger base VLM on our counting. :8001 stays Qwen3-VL-8B + cc-v2/cc-v3. EX
 - Grouped thousands (2ccace2): Swiss 1'200 / 1 200 masked as one number.
 - NEGATIVE: extra slip hints (room codes = rooms, 'Hány … közül' = how many of, băi/banyo = bathtubs): hardL_open 206 vs 212 (hu 45 vs 54).
 
+## lang_guess for terse wordings (09:15–09:35, `experiments/r2/probes/lang_id.py`)
+- Problem: a question with no question word was decided by a tie on a shared word ('in', 'de'): 'Nettofläche Whg. B in m², ohne
+  Balkon und Loggia?' → en, Spanish 'Número de puertas en este plano?' → fr, Dutch 'Tel de ramen op deze plattegrond.' → fr. Read as
+  English or as a covered language, an uncovered-language question never reaches the translator (pipeline `_front_end`).
+- v2 scorer: more function/domain words per language (none for hr/nb/el/lt = F's held-out languages), each word weighted
+  1/(languages listing it), non-Latin script → '?', å also da/no. Open labelled probes (946 + 46 terse): 892 → 928 right.
+- Full v2 measured WORSE in the pipeline (63 open rows whose class changes): 90.2 → 88.5, 0 wins / 1 loss, LLM calls/Q 1.30 → 1.92.
+  Mechanism: correct 'fi'/'de'/'it' makes `_front_end` trust the rules (covered language + target found → no translation), so terse
+  Finnish ('Laske ikkunat.') lost the translation fallback it got as '?'; de/it now trigger ifc's cross-language LLM check.
+- Shipped (163bf61): v2 only for covered → uncovered corrections. 0 changes on the 6,671 open dataset questions; terse same-gold probe
+  (Swiss dev counts × nl/sv/pl/es/pt/cs/ro/da/en, written by R2) 89 → 90/92, 5 Spanish answers 0.45 → 0.99, $0.067 → $0.038/1k;
+  hardL_open neutral (89.7 vs 89.4, the 3 diffs are rows whose lang_guess did not change = batching noise).
+
 ## Noon playbook (model side)
 1. New question kinds on rasters/scans: first run `vlm_direct` (8B base, conf=logprob) and `vlm_lora` on Stoa's examples; if the LoRA
    answers a kind it was never trained on, its confidence is NOT calibrated (F 01:28) — keep W4's unseen-wording cap.
