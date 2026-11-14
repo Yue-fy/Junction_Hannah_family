@@ -95,6 +95,18 @@ def _unused_classes(question: str, ans: Answer) -> set[str]:
     return named - set(targets_mentioned(text))
 
 
+# a rules solver saying the question's premise is false: the named thing is labelled otherwise / does not exist / the
+# drawing does not record that property (W2 05:02, W1 'could not resolve', Q's false premises)
+_PREMISE = re.compile(r"is labelled '|labelled '[^']*', not|does not record|could not resolve|does not exist|no such "
+                      r"(?:room|storey|space|apartment|model|sheet)|not on this (?:plan|floor|sheet)", re.I)
+
+
+def _premise_flag(unsure) -> str | None:
+    if unsure is None:
+        return None
+    return next((m for m in unsure[1].missing if _PREMISE.search(str(m))), None)
+
+
 def _excluded_apartment(question: str) -> str | None:
     """The ONE apartment a question with an exclusion cue names ("... without apartment B", "leave B out"), else None."""
     if "rest" not in modifiers(question):
@@ -215,11 +227,16 @@ class Pipeline(BaseSolver):
                  max_tries: int | str = 3, vlm_args: str | dict | None = None, use_gate: int | str = 1,
                  compose: int | str = 1, normalise: int | str = 1, crosscheck: int | str = 1, agent: int | str = 1,
                  raw_first: int | str = 1, raw_accept: float | str = 0.45, cc5k: int | str = 1, lora: int | str = 1,
-                 lora_second: int | str = 0, lora_conf: str = "own", translate: int | str = 1, **kwargs):
+                 lora_second: int | str = 0, lora_conf: str = "own", translate: int | str = 1,
+                 translate_cap: float | str = 0.9, **kwargs):
         super().__init__(**kwargs)
         # R2's language front end (stoa.llm.should_translate / to_english): a non-English question the rules can't read
         # is translated to English once (local model, quoted names/numbers verbatim) and answered in English
         self.translate = bool(int(translate))
+        # max confidence of an answer to a machine-translated question without extra structure (with: UNSEEN_MAX).
+        # 0.9 vs 0.75 on lang4b / F's hardL_open / R2's lang4: ECE 0.187/0.140/0.184 vs 0.239/0.176/0.253, the >= 0.8
+        # bin 97.1/99.1/100% right (R2/F 04:57: right translated answers all sat at 0.75)
+        self.translate_cap = float(translate_cap)
         self.accept = float(accept)
         self.agree = {"1": "cheap", "0": "never", "2": "always"}.get(str(agree), str(agree))  # cheap|never|always
         self.api = bool(int(api))
@@ -309,9 +326,10 @@ class Pipeline(BaseSolver):
                 # can slip on a word (R2: "vasche da bagno" -> bathrooms) and still match a template -> no trust bin
                 ans.trace = [f"language front end: {tr_note}"] + ans.trace
                 ans.assumptions = [*ans.assumptions, tr_note]
-                if ans.value is not None and ans.confidence > UNSEEN_MAX:
-                    ans.trace.append(f"translated question: confidence capped at {UNSEEN_MAX}")
-                    ans.confidence = UNSEEN_MAX
+                cap = self.translate_cap if not extra_structure(question) else UNSEEN_MAX
+                if ans.value is not None and ans.confidence > cap:
+                    ans.trace.append(f"translated question: confidence capped at {cap}")
+                    ans.confidence = cap
         elif tr_note:
             ans.trace = [f"language front end: {tr_note}"] + ans.trace
         if ans.value is not None and str(ans.unit or "").lower() == "count" and ans.confidence > 0.3 and \
@@ -331,6 +349,13 @@ class Pipeline(BaseSolver):
                 ans.trace.append(f"a count question answered with a fraction ({ans.value}): confidence capped at 0.3")
                 ans.confidence = 0.3
                 ans.missing = [*ans.missing, "a count should be a whole number; this answer may read the wrong quantity"]
+        if ans.value is not None and ans.confidence < 0.4 and not ans.missing:
+            # Q 05:04: "How many seats does the stadium have?" -> agent 514 @ 0.34 with nothing in missing. A low
+            # confidence must say what is missing (Stoa: best estimate + what would make it sure)
+            grounded = not any("ungrounded" in str(t) for t in ans.trace)
+            ans.missing = [("the number is not traced to any value read from the drawing (an estimate); " if not grounded
+                            else f"no reliable reading ({ans.solver}, confidence {ans.confidence:.2f}); ")
+                           + "a label, table or model property stating it directly would settle it"]
         question = asked
         ans.cost.wall_seconds = round(time.perf_counter() - t0, 4)
         if ans.value is not None and "vlm_" in (ans.solver or "") and _echoes_question(ans.value, question):
@@ -537,7 +562,10 @@ class Pipeline(BaseSolver):
                                              for m in unsure[1].missing)
         if op_flag:
             trace.append(f"{unsure[0]} flagged an operation it did not apply: no canonical rewrite")
-        if self.normalise and not known_template(question) and not modifiers(question) and not op_flag:
+        premise = _premise_flag(unsure)
+        if premise:
+            trace.append(f"{unsure[0]} says the question's premise does not hold ({premise[:90]}): no canonical rewrite")
+        if self.normalise and not known_template(question) and not modifiers(question) and not op_flag and not premise:
             # the canonical template drops operators ("average", "share", "not in apartment A"): never for those
             canon = canonical(src, intent)
         total = Cost()
@@ -636,6 +664,13 @@ class Pipeline(BaseSolver):
             best.solver = n_u
         if best is None:
             best = self._prior_answer(src, intent, trace, gate, question)
+        if premise and best.value is not None and best.confidence > 0.3:
+            # W2 05:02: "What's the area of room 6.09 (Cuisine)?" (6.09 is not the Cuisine) came back at 0.99 because
+            # another path answered the room number alone; the rules' 'labelled X, not Y' must survive
+            trace.append(f"premise check: {premise[:100]} -> confidence capped at 0.3")
+            best.confidence = 0.3
+            if premise not in best.missing:
+                best.missing = [*best.missing, premise]
         if self.cc5k and src == "cubicasa5k" and intent.key in CC5K_KEYS and best.value is not None and \
                 best.solver != "raster_cc5k":
             self._cc5k_evidence(path, canon or question, best, trace, intent.key)
@@ -903,6 +938,11 @@ class Pipeline(BaseSolver):
         """Agent answer vs a deterministic solver's unsure answer to the same question: keep the surer, log both."""
         if unsure is None:
             return ans
+        premise = _premise_flag(unsure)
+        if premise and ans.value is not None and ans.confidence > 0.3:
+            ans.trace.append(f"premise check ({unsure[0]}): {premise[:100]} -> confidence capped at 0.3")
+            ans.confidence = 0.3
+            ans.missing = [*ans.missing, premise]
         n_u, a_u = unsure
         ans.cost = _cost_of(ans).add(_cost_of(a_u))
         if not _fits(intent.task, a_u):
