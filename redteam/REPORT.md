@@ -22,7 +22,7 @@ caused by the perturbation, not by the drawing.
    confident false-premise answers 7/24 → 0/24; "whole building" in SV/FR/ET/FI/PL 0/15 → 15/15 within an hour.
 4. **Still open on 753eccb (20 of 418 answered wrong at ≥ 0.8, all in v5–v8):** "basement" when the model calls it
    'KG' (6 languages → the sheet's storey at 0.88–0.98, W1), Italian "in tutto l'edificio" (3, W1), "How big is the
-   Küche?" with several kitchens → silent sum at 0.98 (5, W2), "how many floors" → 7 incl. foundation and roof (W1),
+   Küche?" with several kitchens → silent sum at 0.98 (5, W2; fixed on night-W2 2254acb: 0.50 + "name the room"), "how many floors" → 7 incl. foundation and roof (W1),
    "whole building" on a one-floor plan and "the 7th floor" of a 5-storey model (5, W1/W2). On scans, unanswerable
    questions still get an invented number (514 seats at 0.34) with no reason given (v10, W4).
 5. **Demo safety.** Judge-style questions on our three demo drawings (v6, v9 in Finnish) and the full tour pre-flight
@@ -458,6 +458,13 @@ Run `20261114-045855-pipeline-questions-93c5`, all 418 rows; subsets by `subset_
 **Left (20 confident-wrong, all in v5–v8):** "basement" on Smiley West (storey 'KG') in all 6 languages → the 1.OG
 sheet's 50 at 0.88–0.98 (ground floor now works); Italian "in tutto l'edificio" ×3; ambiguous room names ×5 (W2); "how
 many floors" → 7; v8 scope premises ×5.
+
+## Pre-merge check (05:07): night 753eccb + W1 1c43c57 + W2 2254acb + W4 f889ace (scratch snapshot)
+All 440 rows, run `20261114-050528-pipeline-questions-98f0` vs night's `93c5`: **0 answers lost**; core 283 rows 96.5 %
+(=), 189/189 right at ≥ 0.8, 0/24 false premises; all 440: 91.7 % scored, 237/247 right at ≥ 0.8, $0.073 per 1,000.
+W2's fix turns the 5 ambiguous room names from a silent sum at 0.98 into 0.50 + "8 rooms match 'Küche' on this floor;
+the value is their total. Name the room number or the apartment." 15 confident-wrong left (W1: basement 'KG' ×6,
+Italian ×3, floors = 7, 7th floor ×2; W2: one-floor "whole building" ×3).
 
 ## What held (worth saying in the pitch)
 - Paraphrase / casing / context / distractor numbers: **0 of 56 answers changed**. Typos and injections changed 7
