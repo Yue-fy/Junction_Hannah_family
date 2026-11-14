@@ -312,3 +312,46 @@ def test_local2_down_falls_back_to_local_at_once(monkeypatch):
     assert r.text == "ok" and r.backend == "local" and _t.time() - t0 < 1.0
     assert calls == [("local2", "qwen3.6-35b-a3b"), ("local", "default")]
     assert L._TB_SEEN["local2"][0] is False  # text_backend() answers 'local' for the next 60 s
+
+
+def test_gemini_boxes_are_y_first():
+    # Gemini box_2d = [ymin, xmin, ymax, xmax] in 0..1000
+    (b,) = parse_boxes('[{"box_2d": [250, 500, 500, 750], "label": "door"}]', ImageInfo(800, 400, 800, 400),
+                       coords="yx1000")
+    assert [round(v) for v in b.as_list()] == [400, 100, 600, 200]
+
+
+def test_gemini_request_shape_cap_and_purpose_log(tmp_path, monkeypatch):
+    """Offline: no vLLM-only fields go to Google, the daily cap stops calls, every request is logged with a purpose."""
+    import json as _json
+    import types
+
+    import stoa.llm as L
+
+    monkeypatch.setattr(L, "GEMINI_LOG", tmp_path / "gemini_calls.jsonl")
+    monkeypatch.setattr(L, "_nvidia_throttle", lambda backend="nvidia": None)
+    monkeypatch.setenv("STOA_AGENT", "test-agent")
+    monkeypatch.setenv("STOA_LLM_CACHE", "0")
+    seen = {}
+
+    class FakeCompletions:
+        def create(self, **kw):
+            seen.update(kw)
+            msg = types.SimpleNamespace(content="7", reasoning_content=None)
+            return types.SimpleNamespace(choices=[types.SimpleNamespace(message=msg, finish_reason="stop", logprobs=None)],
+                                         model=kw["model"], usage=types.SimpleNamespace(prompt_tokens=10, completion_tokens=1))
+
+    fake = types.SimpleNamespace(chat=types.SimpleNamespace(completions=FakeCompletions()))
+    monkeypatch.setattr(L, "_client", lambda backend: fake)
+    r = L.chat("How many doors?", backend="gemini", purpose="unit test", cache=False)
+    assert r.text == "7" and r.backend == "gemini"
+    assert "chat_template_kwargs" not in (seen.get("extra_body") or {}) and seen["reasoning_effort"] == "low"
+    rec = _json.loads((tmp_path / "gemini_calls.jsonl").read_text().splitlines()[-1])
+    assert rec["purpose"] == "unit test" and rec["agent"] == "test-agent" and rec["ok"]
+    assert L.gemini_calls_today("test-agent") == 1
+    monkeypatch.setenv("GEMINI_MAX_CALLS_PER_DAY", "1")
+    try:
+        L.chat("again", backend="gemini", purpose="unit test", cache=False)
+        raise AssertionError("cap not enforced")
+    except RuntimeError as e:
+        assert "cap" in str(e)
