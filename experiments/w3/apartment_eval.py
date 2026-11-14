@@ -60,7 +60,7 @@ for (st, text), q in sorted(qs.items()):
     rec = {"stem": st, "split": sp, "kind": kind, "q": text[:90], "gold": q["answer"], "bar": bool(bar)}
     if r:
         rec.update(pred=r["value"], err=round(r["value"] / float(q["answer"]) - 1, 4), n=len(r["rooms"]),
-                   measured=len(r["measured"]), unmeasured=len(r["unmeasured"]), region_m2=r.get("region_m2"),
+                   measured=len(r["measured"]), unmeasured=len(r["unmeasured"]), gaps=r.get("gaps", []), region_m2=r.get("region_m2"),
                    interior_m2=r.get("interior_m2"))
     rows.append(rec)
 with open(a.out, "w") as f:

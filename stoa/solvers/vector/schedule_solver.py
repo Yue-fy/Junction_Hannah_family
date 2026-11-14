@@ -214,7 +214,7 @@ class ScheduleSolver(BaseSolver):
     def solve(self, path: str, question: str) -> Answer:
         a = self._solve_tables(path, question)
         if not self.use_text or (a.value is not None and a.confidence >= 0.5) or \
-                (a.trace and str(a.trace[0]).startswith("sheet without a schedule")):
+                (a.trace and str(a.trace[0]).startswith("sheet text:")):
             return a
         # a schedule sheet whose tables gave no confident answer: the question may be about the plan / notes / title
         # block printed next to the schedule (held-out A000: drawing index + site plan). One more read, of the text
@@ -453,13 +453,16 @@ class ScheduleSolver(BaseSolver):
             boxes[TEXT_ID + k] = g.box
         rid = 700000
         for t in tabs:
+            named = [c for c in t.df.columns if not re.fullmatch(r"col\d+", str(c)) and re.search(r"[A-Za-z]{2}", str(c))]
+            if not t.title and len(named) < 0.5 * len(t.df.columns):
+                continue  # rows of dimension strings on a plan ("col5: -; col10: 5' - 0\"") only mislead the model
             for (_, r), b in zip(t.df.iterrows(), t.row_boxes):
                 txt = "; ".join(f"{c}: {v}" for c, v in r.items() if str(v).strip())
                 rows.append({"id": rid, "view": t.title or None, "text": f"table row: {txt}"})
                 boxes[rid] = b
                 rid += 1
-        trace = [f"sheet without a schedule table: {len(groups)} text groups (tags, notes, title block) + "
-                 f"{rid - 700000} rows of small tables"]
+        trace = [f"sheet text: {len(groups)} text groups (tags, notes, title block) + {rid - 700000} rows of small "
+                 "named tables"]
         try:
             res = sheettext.ask(question, rows, backend=self.backend)
         except Exception as e:  # noqa: BLE001
@@ -513,3 +516,16 @@ class ScheduleSolver(BaseSolver):
         return Answer(value=res["value"], unit=res["unit"], confidence=conf, evidence=evidence, trace=trace,
                       solver=self.name, assumptions=assumptions, missing=missing)
 
+
+
+@register("pdf_text")
+class PdfTextSolver(ScheduleSolver):
+    """Any vector PDF with a text layer from OUTSIDE the dataset's known sources (a drawing set handed in at the demo,
+    Stoa's hidden/noon examples): the pipeline routes such PDFs to `pdf_vector`, `pdf_text`, `vlm_direct`, and
+    `schedule` (routed only for opening_design) never saw them. Same reader as `schedule`: rebuilt schedule tables, and
+    the sheet's text groups (tags, notes, title block) by row pointing. Not for swiss_dwellings / ifc_models (their DXF /
+    IFC twins answer) nor opening_design / cubicasa5k (routed elsewhere), so the dataset's answers don't change."""
+
+    def can_handle(self, path: str, question: str) -> bool:
+        return Path(path).suffix.lower() == ".pdf" and \
+            source_of(path) not in ("swiss_dwellings", "ifc_models", "opening_design", "cubicasa5k")

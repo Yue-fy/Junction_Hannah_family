@@ -45,6 +45,10 @@ CANONICAL = {  # used when a composition needs a `direct` answer for one part
 }
 IMG_EXT = (".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp")
 # sources whose non-template questions keep going to their own solvers / vlm_direct (no text-grounded raster answer)
+_COUNT_Q = re.compile(r"\b(how many|number of|count|montako|kuinka monta|lukumäärä|wie viele|anzahl|combien|"
+                      r"nombre de|quant[ie]|numero di|hur många|antal|cu[aá]nt[oa]s|ile|kolik|mitu|hány|câte|kaç)\b", re.I)
+
+
 def _siblings(path: str) -> dict:
     try:
         from stoa.data import siblings
@@ -146,6 +150,11 @@ class RasterSolver(BaseSolver):
         src = source_of(path)
         if src not in TEXT_OFF:
             return True
+        if src == "cubicasa5k":
+            # an unseen NON-count question on a CubiCasa plan ('area of the living room': many print 'OH 22.8'):
+            # read it from the text layer. Count questions keep the counting LoRA / vlm_direct (0 dev/hard/hard2 Qs
+            # reach this branch: all their CubiCasa questions are recognised counts)
+            return not _COUNT_Q.search(question)
         # a Swiss-style plan with NO vector twin (an unseen PNG/JPEG floor): dxf can't answer, so raster reads and
         # measures it (scale bar + room fill: Swiss PNG dev rooms median error 5-6.5%, vs VLM guesses ~50%)
         return src == "swiss_dwellings" and (not self.twins or not ({".pdf", ".dxf", ".ifc"} & set(_siblings(path))))
@@ -154,7 +163,7 @@ class RasterSolver(BaseSolver):
     def solve(self, path: str, question: str) -> Answer:
         op, classes = question_op(question)
         if op == "none" and self._label_count_mode(path, question):
-            return self._text_count(path, None, labelled_query(question), [f"op=none, labelled count"])
+            return self._text_count(path, None, labelled_query(question), [f"op=none, labelled count"], question)
         if op == "none" and self._text_mode(path, question):
             from stoa.solvers.raster import textqa
 
@@ -248,14 +257,16 @@ class RasterSolver(BaseSolver):
         trace.append(f"source '{source_of(path)}' is not CubiCasa: raster's gate/priors/rules do not apply")
         lab = labelled_query(question or "")
         if lab or cls in ROOM_CLASSES:
-            return self._sheet_veto(path, question or "", self._text_count(path, cls, lab, trace))
+            return self._sheet_veto(path, question or "", self._text_count(path, cls, lab, trace, question))
         return Answer(value=None, unit="count", solver=self.name, trace=trace + ["abstain (off-domain symbol class)"],
                       missing=[f"a {cls.replace('_', ' ')} detector for this drawing style (raster's are fitted on "
                                f"CubiCasa plans only)"])
 
-    def _text_count(self, path: str, cls: str | None, label: str | None, trace: list[str]) -> Answer:
+    def _text_count(self, path: str, cls: str | None, label: str | None, trace: list[str],
+                    question: str | None = None) -> Answer:
         """Count printed room labels in the drawing's text layer: the exact quoted label when the question gives one,
         else every label of the room class (EN/FI/SV/DE/FR/IT names, classes.label_class)."""
+        from stoa.solvers.raster import apartment as A
         from stoa.solvers.raster import textlayer as T
 
         img_path = self._raster_file(path)
@@ -268,18 +279,33 @@ class RasterSolver(BaseSolver):
         else:
             hits = [i for i in tl.items if label_class(i.text) == cls]
             what = f"{cls.replace('_', ' ')} label"
-        trace.append(f"text layer: {len(tl.items)} texts in {tl.tiles} tile(s); {len(hits)} x {what}: "
+        scope_note, scope_missing, cap = "", [], 1.0
+        letter = A.unit_letter(question) if question else None
+        if letter:  # 'in apartment B': count inside the unit's drawn boundary, never the whole floor silently
+            comp, ulab = A.unit_region(img_path, tl, letter)
+            if comp is not None:
+                hits = [i for i in hits if comp[min(comp.shape[0] - 1, int(i.cy)), min(comp.shape[1] - 1, int(i.cx))]]
+                scope_note = f" inside apartment {letter}'s drawn boundary (around '{ulab.text}')"
+            elif ulab is None and A.unit_labels(tl):  # the plan names its units, and not this one: a false premise
+                cap = 0.1
+                scope_missing = [f"this plan labels units {', '.join(sorted(A.unit_labels(tl)))}; there is no apartment "
+                                 f"{letter} (counted the whole floor)"]
+            else:
+                cap = 0.2
+                scope_missing = [f"could not find apartment {letter}'s drawn boundary"
+                                 + ("" if ulab is not None else " or its label") + ": counted the whole floor"]
+        trace.append(f"text layer: {len(tl.items)} texts in {tl.tiles} tile(s); {len(hits)} x {what}{scope_note}: "
                      + ", ".join(i.text for i in hits)[:300])
         ev = [Evidence(file=img_path, page=0, bbox=[round(v, 1) for v in i.box], bbox_space="image_px",
                        note=f"{what} {k + 1}: '{i.text}'") for k, i in enumerate(hits)]
         # confidence: exact quoted labels 36/39 right on Swiss PNG floors (R2's swiss_png_counts_dev, run a065; method
         # chosen on 7 of those Qs) -> 0.85; class labels unmeasured off CubiCasa (5/7 on the same floors) -> 0.45
-        conf = (0.85 if label else 0.45) if hits else 0.3
+        conf = min(cap, (0.85 if label else 0.45) if hits else 0.3)
         return Answer(value=len(hits), unit="count", confidence=conf, evidence=ev, solver=self.name, trace=trace,
-                      assumptions=[f"counted the printed {what}s read from the drawing (tiled VLM text reading); "
-                                   f"one label = one room"],
-                      missing=[] if hits else [f"no {what} found in the text read from the drawing; an unlabelled "
-                                               f"room would be missed"])
+                      assumptions=[f"counted the printed {what}s read from the drawing{scope_note} (tiled VLM text "
+                                   f"reading); one label = one room"],
+                      missing=scope_missing + ([] if hits else [f"no {what} found in the text read from the drawing; "
+                                                                f"an unlabelled room would be missed"]))
 
     def _sheet_veto(self, path: str, question: str, ans: Answer, cap: float = 0.05) -> Answer:
         """A room question on a sheet that shows no floor plan (an elevation, section, detail or site plan; Q 05:04):

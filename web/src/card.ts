@@ -145,6 +145,13 @@ function rangeHtml(a: Answer) {
  *  value big and the sub-question it answers small, instead of one long sentence. null when the value is not that shape. */
 export function multiPart(a: Answer): { v: string; u: string; q: string }[] | null {
   if (typeof a.value !== "string") return null;
+  // W4 compose 'list' ("How many doors and how many windows …?"): "door: 46; window: 55"
+  const named = a.value.split(/;\s+/).map((x) => x.match(/^\s*([A-Za-z][\w ()'.-]{0,40}?):\s*(-?\d[\d,]*(?:\.\d+)?)\s*([A-Za-z²³%€/]{0,12})\s*$/));
+  if (named.length >= 2 && named.every((m) => m)) {
+    // "door" → "doors" for plain class words (counts other than 1)
+    const pl = (w: string, v: string) => (/^[a-z ]+$/.test(w) && !/s$/.test(w) && Number(v) !== 1 ? `${w}s` : w);
+    return named.map((m) => ({ v: m![2], u: /^count$/i.test(m![3]) ? "" : m![3], q: pl(m![1].replace(/_/g, " "), m![2]) }));
+  }
   const parts = a.value.split(/\);\s+/).map((x, i, all) => (i < all.length - 1 ? `${x})` : x));
   if (parts.length < 2) return null;
   const rows = parts.map((x) => x.match(/^\s*(-?\d[\d,]*(?:\.\d+)?|yes|no)\s*([A-Za-z²³%€/0-9]{0,12})\s*\((.{3,200})\)\s*$/i));
@@ -275,7 +282,7 @@ function checkedHtml(a: Answer, text: string) {
     <div class="rich-body">
       <table class="checked"><tbody>${rows.map((r) => `<tr class="${r.notInAnswer ? "contrast" : ""}"><td>${esc(r.name)}</td><td class="num">${r.model}</td><td>${mark(r)}</td></tr>`).join("")}</tbody>${foot}</table>
       <div class="checked-src">${allOk && counted.length ? `Every count in the answer matches the model.` : allOk ? "" : "The model and the answer differ (✗)."} Counted in your browser from the loaded model: no model call.</div>
-      <details class="llm-words"${allOk ? "" : " open"}><summary>The language model's text answer · ${lines} line${lines === 1 ? "" : "s"}</summary><div class="value text rich">${richText(text)}</div></details>
+      <details class="llm-words"${allOk ? "" : " open"}><summary>${(a.cost?.llm_tokens_in ?? 0) > 0 ? "The language model's" : "The solver's"} text answer · ${lines} line${lines === 1 ? "" : "s"}</summary><div class="value text rich">${richText(text)}</div></details>
     </div>`;
 }
 
@@ -510,9 +517,31 @@ const missingNow = (a: Answer) => (a.missing ?? []).filter((t) => !(/^no located
 export const LOCATED_NOTE = /^(label reader|CubiCasa5K detector): /;
 export interface Locator { solver: string; name: string; button: string; title: string; noun: string }
 const NOUNS: Record<string, string> = { window: "windows", door: "doors", wc: "WC seats", sink: "sinks", wc_room: "WC room labels" };
-export function locatorFor(a: Answer, file: string): Locator | null {
+/** Room words (EN/FI/SV/DE) and the Finnish plan codes printed on CubiCasa plans → R1's room-graph classes. */
+const ROOM_WORDS: [RegExp, string][] = [
+  [/\b(kitchens?|keitti[öo]\w*|kök\w*|küche\w*|kitchenette)\b|\(K\)|'K'/i, "kitchen"],
+  [/\b(bed ?rooms?|makuuhuone\w*|sovrum\w*|schlafzimmer\w*)\b|\((MH|H)\)|'(MH|H)'/i, "bedroom"],
+  [/\b(living ?rooms?|lounge|olohuone\w*|vardagsrum\w*|wohnzimmer\w*)\b|\(OH\)|'OH'/i, "living"],
+  [/\b(bath ?rooms?|wash ?rooms?|toilets?|wcs?|kylpyhuone\w*|pesuhuone\w*|badrum\w*)\b|\((KH|PH|PESUH|WC)\)|'(KH|PH|WC)'/i, "bath"],
+  [/\b(saunas?|löylyhuone\w*|bastu\w*)\b|\((S|LH|SAUNA)\)|'(LH|S)'/i, "sauna"],
+  [/\b(hall(way)?s?|entr(y|ance|ies)|corridors?|lobby|eteinen|etei\w+|tuulikaappi\w*|hall)\b|\((ET|TK)\)|'(ET|TK)'/i, "entry"],
+  [/\b(storage|store ?rooms?|closets?|walk-in|pantry|varasto\w*|vaatehuone\w*|förråd\w*)\b|\((VAR|VH)\)|'(VAR|VH)'/i, "storage"],
+  [/\b(balcon(y|ies)|terraces?|patio|parveke\w*|terassi\w*|balkong\w*)\b|\((PAR|TER)\)/i, "outdoor"],
+  [/\b(garages?|carport|autotalli\w*)\b/i, "garage"],
+];
+/** The room-graph classes a question names (empty: none). */
+export const roomKindsIn = (q: string) => ROOM_WORDS.filter(([re]) => re.test(q)).map(([, k]) => k);
+
+export function locatorFor(a: Answer, file: string, question = ""): Locator | null {
   if (a.value === null || (a.evidence ?? []).length || !/^data\/cubicasa5k\/.*\.(png|jpe?g)$/i.test(file)) return null;
   const t = a.intent?.target ?? (a.trace ?? []).map((l) => l.match(/^intent: count (\w+)/)?.[1]).find((x) => x) ?? "";
+  // "where is the kitchen?", "which room is the sauna entered from?", room areas…: not a count of labels or symbols, but
+  // the question names a room: R1's room graph (cached CubiCasa5K segmentation, no model call) boxes the rooms named
+  const kinds = roomKindsIn(question);
+  if (kinds.length && (a.intent?.task !== "count" || !(ROOM_TARGETS.has(t) || SYMBOL_TARGETS.has(t)))) {
+    return { solver: "rooms", name: "room graph", button: "Show where · room graph", noun: kinds.join(" / "),
+      title: "Mark the rooms this question names, from the room graph of the plan (pretrained CubiCasa5K segmentation + printed labels; cached, no model call)" };
+  }
   const noun = NOUNS[t] ?? (ROOM_TARGETS.has(t) ? `${t} labels` : "symbols");
   // the pipeline already asked the label reader and it found none: nothing to mark
   if (ROOM_TARGETS.has(t) && (a.trace ?? []).some((l) => /cross-check:.*\braster 0\b/.test(l))) return null;
@@ -532,6 +561,8 @@ export interface CardOpts {
   onEvidence: (i: number) => void;
   describeGuid: (g: string) => string;
   currentFile: string;
+  /** the question as asked (locatorFor: which rooms a "where is …" question names) */
+  currentQuestion?: string;
   onOpenSheet: (path: string) => void;
 }
 
@@ -569,7 +600,7 @@ export function renderCard(el: HTMLElement, a: Answer, opts: CardOpts) {
   const ev = a.evidence ?? [];
   const groups = groupEvidence(ev);
   const shown = groups.slice(0, 80);
-  const loc = locatorFor(a, opts.currentFile);
+  const loc = locatorFor(a, opts.currentFile, opts.currentQuestion ?? "");
 
   el.className = `card answer ${a.value === null ? "refused" : ""}`;
   el.innerHTML = `
