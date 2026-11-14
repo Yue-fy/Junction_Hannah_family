@@ -210,3 +210,22 @@ def test_to_english_repairs_single_brackets_and_retries_a_lost_placeholder(monke
     assert L._restore("floor '[1]' and room '[[2]]'", ["'A'", "'B'"]) == ("floor 'A' and room 'B'", True)
     assert L.lang_guess("Milline protsent korruse '3. korrus' netopinnast on ruum 'WC (3.05)'?") == "et"
     L._tr_memo.clear()
+
+
+def test_text_backend_is_opt_in_and_falls_back(monkeypatch):
+    import stoa.llm as L
+
+    monkeypatch.delenv("STOA_TEXT_BACKEND", raising=False)
+    assert L.text_backend() == "local"
+    monkeypatch.setenv("STOA_TEXT_BACKEND", "local2")
+    L._TB_SEEN.clear()
+
+    class Down:
+        def with_options(self, **kw):
+            raise ConnectionError("no server on :8002")
+
+    monkeypatch.setattr(L, "_client", lambda b: Down())
+    assert L.text_backend() == "local"  # second server down -> shared server
+    L._TB_SEEN.clear()
+    monkeypatch.setenv("STOA_TEXT_BACKEND", "no-such-backend")
+    assert L.text_backend() == "local"
