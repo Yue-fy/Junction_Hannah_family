@@ -229,6 +229,8 @@ _THRESH = re.compile(r"\b(more|greater|larger|bigger|less|smaller|fewer|over|und
                      r"moins|piu|meno|yli|alle|wiecej|mniej|powyzej|ponizej|ueber|uber|unter|boven|onder|over)\b"
                      r"(?:\s+(?:than|als|dan|que|de|di|niz|kuin))?\s*(\d+(?:[.,]\d+)?)")
 _EXCL = re.compile(r"\b(excluding|except( for)?|exclude[sd]?|without|not counting|not including|apart from|other than|"
+                   r"leaving out|leave out|left out|besides|aside from|abgesehen von|ausser|auser|uebrigen|ubrigen|"
+                   r"autres que|en dehors de|aparte de|a parte|muut kuin|"
                    r"ohne|ausser|ausgenommen|exkl\w*|abzuglich|sauf|hors|excepto|salvo|sin contar|zonder|behalve|"
                    r"uitgezonderd|exclusief|lukuun ottamatta|ilman|poza|oprocz|bez|bortsett fran|utom|uden|undtagen|"
                    r"valja arvatud|cu exceptia|fara|senza|tranne|escluso|esclusi)\b(.{0,80})")

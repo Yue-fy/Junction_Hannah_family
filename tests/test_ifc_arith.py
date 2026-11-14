@@ -113,8 +113,8 @@ def test_geometry_room_types_and_guards(solver):
     assert 0 < bath.value < rooms.value / 3  # 'Bad' only, not every room
     width = solver.solve(FZK, "What is the average door width on 'Erdgeschoss'?")
     assert width.unit == "m" and 0.7 < width.value < 1.5
-    rel = solver.solve(FZK, "How many rooms on 'Erdgeschoss' have no window?")
-    assert rel.confidence <= 0.3
+    rel = solver.solve(FZK, "How many rooms on 'Erdgeschoss' have a balcony door facing the garden?")
+    assert rel.confidence <= 0.3  # not modelled: guarded
     win = solver.solve(FZK, "What is the total window area on 'Erdgeschoss'?")
     assert win.unit == "m2" and 5 < win.value < 60
     share = solver.solve(FZK, "What percentage of the floor area on 'Erdgeschoss' is taken by the 'Wohnen' room?")
@@ -169,3 +169,54 @@ def test_lists_ranks_heights_and_storeys(solver):
     cmpd = s(ESPL2, "How many doors are there on '2.korrus' compared to '3.korrus'?")
     assert "2.korrus" in cmpd.value and "3.korrus" in cmpd.value
     assert s(ESPL2, "How many doors does the room 'KORIDOR (219)' have?").confidence <= 0.3
+
+
+@pytest.mark.skipif(not abspath(FZK).exists(), reason="dataset not available")
+def test_room_relations_by_geometry(solver):
+    s = solver.solve
+    ifc = "data/ifc_models/kit-fzk-haus_ac20-fzk-haus.ifc"
+    no_win = s(ifc, "How many rooms on 'Erdgeschoss' have no window?")
+    rooms = s(ifc, "How many rooms are there on 'Erdgeschoss'?").value
+    assert no_win.unit == "count" and 0 <= no_win.value < rooms and no_win.confidence <= 0.7
+    assert "Flur" in s(ifc, "Which rooms have more than one door?").value
+    assert 1 <= s(ifc, "How many windows does the room 'Wohnen' have?").value <= 5
+
+
+@pytest.mark.skipif(not abspath(ESPL).exists(), reason="dataset not available")
+def test_rest_exclusion_and_revit_families(solver):
+    s = solver.solve
+    tot = s(ESPL, "What is the total net floor area of all spaces on '1.korrus'?").value
+    k = s(ESPL, "What is the net floor area of the room 'KORIDOR (119)' on '1.korrus'?").value
+    a = s(ESPL, "How much net floor area (m²) do all the other rooms on '1.korrus' have together, leaving out 'KORIDOR (119)'?")
+    assert a.value == pytest.approx(tot - k, abs=0.01) and a.confidence > 0.8
+    n = s(ESPL, "How many rooms are on '1.korrus' besides 'KORIDOR (119)'?").value
+    assert n == s(ESPL, "How many rooms are there on '1.korrus'?").value - 1
+
+
+def test_revit_family_prefix():
+    from stoa.solvers.ifc.index import Element, type_key_fn
+
+    e = Element(guid="g", cls="IfcBuildingElementProxy", name='Sink Vanity-Round:19" x 19":19" x 19":123456',
+                type_name='19" x 19"')
+    assert type_key_fn([e])(e) == 'Sink Vanity-Round:19" x 19"'
+    e2 = Element(guid="h", cls="IfcWall", name="22_Wall_DD-ytong", type_name="22_Wall_DD-ytong")
+    assert type_key_fn([e2])(e2) == "22_Wall_DD-ytong"
+
+
+@pytest.mark.skipif(not abspath(ESPL).exists(), reason="dataset not available")
+def test_fresh_wordings_of_operators(solver):
+    s = solver.solve
+    d1 = s(ESPL, "How many doors are there on '1.korrus'?").value
+    d5 = s(ESPL, "How many doors are there on '5.korrus'?").value
+    allv = s(ESPL, "How many doors are there in the whole building?").value
+    assert s(ESPL, "Does '1.korrus' or '2.korrus' contain more doors?").value == "1.korrus"
+    assert s(ESPL, f"By how many doors does '1.korrus' exceed '5.korrus'?").value == d1 - d5
+    assert s(ESPL, "Out of all doors in the model, what percentage sit on '1.korrus'?").value == \
+        pytest.approx(d1 / allv * 100, abs=0.01)
+    a1 = s(ESPL, "What is the total net floor area of all spaces on '1.korrus'?").value
+    a5 = s(ESPL, "What is the total net floor area of all spaces on '5.korrus'?").value
+    assert s(ESPL, "How many times larger is the room area on '1.korrus' than on '5.korrus'?").value == \
+        pytest.approx(a1 / a5, abs=0.001)
+    n = s(ESPL, "How many rooms are there on '1.korrus'?").value
+    assert s(ESPL, "Divide the total room area of '1.korrus' by its number of rooms. What do you get?").value == \
+        pytest.approx(a1 / n, abs=0.01)

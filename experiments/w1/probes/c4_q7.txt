@@ -1,0 +1,25 @@
+# fresh wordings of the hard2 recipes (W1-written, 04:12; not from hard2/hard2p/hard2q/hard2r)
+PATH bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf
+On '1.korrus', how large is a room on average, in m²?
+Divide the total room area of '1.korrus' by its number of rooms. What do you get?
+Mean net floor area of the spaces on storey '1.korrus'?
+What portion of the building's doors is located on '1.korrus', in percent?
+Out of all doors in the model, what percentage sit on '1.korrus'?
+How much of the total room area of '1.korrus' does 'KORIDOR (119)' account for, as a percentage?
+Of the rooms 'KORIDOR (119)', 'ESIK (6-2)' and 'TUALETTRUUM (108)' on '1.korrus', how many exceed 10 m²?
+Count the rooms among 'KORIDOR (119)', 'ESIK (6-2)', 'TUALETTRUUM (108)' on '1.korrus' whose net area is above 4 m².
+Does '1.korrus' or '2.korrus' contain more doors?
+Between '2.korrus' and '5.korrus', which storey has fewer windows?
+Which of the two storeys '1.korrus' and '2.korrus' has the bigger total room area?
+Add up the net floor areas of all rooms on '1.korrus' and '2.korrus'.
+What is the summed room area of storeys '1.korrus' plus '2.korrus' in m²?
+Give the combined door count of '1.korrus' and '3.korrus'.
+Express the total wall length on '1.korrus' in feet.
+How long are the walls on '1.korrus' altogether, measured in ft?
+What's the length of all walls on '1.korrus' in feet, total?
+Total wall length on '1.korrus' converted to feet?
+How many windows do '1.korrus' and '2.korrus' have between them?
+By how many doors does '1.korrus' exceed '5.korrus'?
+How many doors more does '1.korrus' have than '5.korrus'?
+What is the ratio between the room area of '1.korrus' and that of '2.korrus'?
+How many times larger is the room area on '1.korrus' than on '5.korrus'?
