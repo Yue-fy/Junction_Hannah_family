@@ -119,3 +119,32 @@ def test_geometry_room_types_and_guards(solver):
     assert win.unit == "m2" and 5 < win.value < 60
     share = solver.solve(FZK, "What percentage of the floor area on 'Erdgeschoss' is taken by the 'Wohnen' room?")
     assert 5 < share.value < 60
+
+
+DUPLEX_L1 = "data/ifc_models/bsc-duplex_duplex-a-20110907.ifc"
+
+
+@pytest.mark.skipif(not abspath(DUPLEX_L1).exists(), reason="dataset not available")
+def test_room_type_scope_thresholds_and_ranges(solver):
+    s = solver.solve
+    n_bed = s(DUPLEX_L1, "How many bedrooms are there in the building?").value
+    avg = s(DUPLEX_L1, "What is the average area of the bedrooms?")  # the sheet's storey has none: whole model
+    assert n_bed >= 2 and avg.value > 5
+    assert "Bedroom" in s(DUPLEX_L1, "What is the smallest bedroom?").value
+    big = s(DUPLEX_L1, "What is the area of the largest room on 'Level 1'?").value
+    small = s(DUPLEX_L1, "What is the area of the smallest room on 'Level 1'?").value
+    rng = s(DUPLEX_L1, "How much bigger is the largest room than the smallest room on 'Level 1'?")
+    assert rng.value == pytest.approx(big - small, abs=0.01) and rng.unit == "m2"
+    l1 = s(DUPLEX_L1, "What is the total net floor area of all spaces on 'Level 1'?").value
+    l2 = s(DUPLEX_L1, "What is the total net floor area of all spaces on 'Level 2'?").value
+    assert s(DUPLEX_L1, "What is the total area of 'Level 1' and 'Level 2'?").value == pytest.approx(l1 + l2, abs=0.01)
+    many = s(DUPLEX_L1, "How many rooms are larger than 20 m² in the whole building?")
+    assert many.unit == "count" and 0 < many.value < 20
+    tot = s(DUPLEX_L1, "What is the total floor area of rooms smaller than 10 m² on 'Level 2'?")
+    assert tot.unit == "m2" and 0 < tot.value < l2
+    each = s(DUPLEX_L1, "How many doors are there on each floor?")
+    assert "Level 2" in each.value  # every storey, not only the sheet's
+    assert s(DUPLEX_L1, "How many windows are on the north facade?").confidence <= 0.3
+    assert s(DUPLEX_L1, "Which room has the most doors?").confidence <= 0.3
+    share = s(DUPLEX_L1, "What percentage of the rooms on 'Level 1' are bathrooms?")
+    assert share.unit == "%" and 0 < share.value < 50
