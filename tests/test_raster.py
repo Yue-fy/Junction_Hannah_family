@@ -511,3 +511,29 @@ def test_clean_render_gate(tmp_path):
     s = np.clip(225 + rng.normal(0, 12, (200, 200)), 0, 255).astype(np.uint8)
     Image.fromarray(s).save(tmp_path / "s.png")
     assert not WS.clean_render(str(tmp_path / "s.png"))[0]
+
+
+def test_window_doorscale_fallback(tmp_path, monkeypatch):
+    """No metric bar: abstain by default; with doorscale=1 the door-arc scale is used, at lower confidence, stated."""
+    import numpy as np
+    from PIL import Image
+
+    from stoa.solvers.raster import RasterSolver
+    from stoa.solvers.raster import doorarcs as DA
+    from stoa.solvers.raster import scalebar as SB
+    from stoa.solvers.raster import textlayer as T
+    from stoa.solvers.raster import windows as WS
+
+    p = tmp_path / "plan.png"
+    Image.fromarray(np.full((200, 300), 255, np.uint8)).save(p)
+    monkeypatch.setattr(T, "text_layer", lambda *a, **k: None)
+    monkeypatch.setattr(SB, "bars", lambda *a, **k: [])
+    monkeypatch.setattr(WS, "clean_render", lambda png: (True, 0.9, 0.6))
+    monkeypatch.setattr(WS, "prescan", lambda png: True)
+    monkeypatch.setattr(WS, "detect", lambda png, s: [{"box": [10, 10, 40, 14], "dir": "h"}])
+    monkeypatch.setattr(DA, "scale_from_arcs", lambda png: (59.0, 8))
+    assert RasterSolver()._window_symbols(str(p), []) is None
+    a = RasterSolver(doorscale=1)._window_symbols(str(p), [])
+    assert a.value == 1 and a.confidence == WS.CONF_DOORSCALE
+    assert any("door leaf" in x for x in a.assumptions) and any("scale bar" in m for m in a.missing)
+
