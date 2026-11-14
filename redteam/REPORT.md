@@ -6,17 +6,18 @@ Builds on F's `hard` (translations/paraphrases/compositions/ft²) and `hard2` (n
 don't. The first 205 rows start from dev questions the pipeline had **right at conf ≥ 0.8**, so a failure there is
 caused by the perturbation, not by the drawing.
 
-## Now (10:00) — the short version
-- **Latest night 0ffd81b (S0 cycle 39: every owner head of 09:25): on the 609 questions v1–v18, 364 of 364 answers at
-  confidence ≥ 0.8 are right and 0 false premises get a confident answer — the pre-merge #9 prediction held.** On all
-  704 rows v1–v21: 407 of 409 confident answers right (the 2 misses are W2's known sheet-text rows); v19 lists 19/19,
-  v20 link wordings 19/19 (were 6/19). 21 won / 0 lost vs night 31397eb. $0.18 per 1,000 adversarial questions.
+## Now (10:02) — the short version
+- **Latest night 7a78559 (S0 cycle 39 round 2): on the 609 questions v1–v18, 378 of 378 answers at confidence ≥ 0.8
+  are right and 0 false premises get a confident answer** (0ffd81b: 364/364 — 14 more confident answers, all right).
+  On v1–v20 (647) 413/413; on all 957 rows v1–v24 544 of 560 (the 16 are this morning's new families, below).
+  22 won / 1 lost vs night 31397eb (the loss: an agent flake under the per-question LLM budget). The D20-2 budget
+  trims the tail (worst question 16 → 11 LLM calls) while the mean is flat (calls/Q −2.8 %, tokens/Q −1.6 %).
 - **Three new families this hour (253 questions, written before any run):** v22 *the demo's upload* — a judge's own
   file: an IFC uploaded alone 7/7, the 'Nordic apartment plan' style = the dataset path exactly; a plain PNG upload
   loses the CubiCasa per-concept gate, and at dev size (800 questions) **confident misses double, 24 → 46**, while
   accuracy moves 607 → 594 (bug 26, W4). v23 *links, round 3* — 18/21, but a "fewer than" question gets the "agree?"
-  polarity and "which sheet shows the ground floor?" names the current sheet (bug 25, R1); **"ground floor" /
-  "Erdgeschoss" on a 1.OG sheet → the 1.OG wall count at 0.98** (bug 24, W1). v24 *lists, round 2* (duplex model,
+  polarity and "which sheet shows the ground floor?" names the current sheet (bug 25, R1); "ground floor" /
+  "Erdgeschoss" on a 1.OG sheet → the 1.OG wall count at 0.98 (bug 24, W1 — **fixed in 7a78559**: 81 at 0.53). v24 *lists, round 2* (duplex model,
   ties, "all but") — 9/11, 0 confident misses.
 - **Stoa point 3:** 0 bare refusals in 647 answers; every wrong answer carries an assumption or a "missing" line —
   but 108 of those lines are process notes ("no located evidence from this solver"), not what the documents lack.
@@ -849,6 +850,24 @@ right, 0 false premises at ≥ 0.8** (= pre-merge #9 exactly); 647 rows 397/397 
 (the dxf "1,200 euros" row flakes again, 91,200 at 0.45, gold 43,200; D20 → W2). v19 19/19, v20 19/19, v21 44/57 with
 the same 2 confident misses as #9 (W2's table-QA rows). Demo pre-flight: 23 rows, every answer unchanged
 (`demo/LIVE-CHECK.md`).
+
+## Night 7a78559 (09:50) = 0ffd81b + W4 2dfacb9, W1 1164209, R2 163bf61, W2 09f37a0, W3 2ea2921, R1 7b582fd, W5 7bea9e0
+Run `20261114-094023-pipeline-all-7a78559-2466` (all 957 rows; the v21 front-yard-setback gold corrected to 35' - 0"
+per W2 09:39): **609 rows 378/378 at ≥ 0.8 right, 0 premises; 647 rows 413/413; 957 rows 85.0 % scored, 544/560.**
+vs 31397eb 22 won / 1 lost; vs 0ffd81b 2 won ("1,200 euros" on the Swiss plan 43,200 at 0.89; "What new amenity is
+planned in the seating area?" → GAS FIRE PIT) / 1 lost ("What is the height difference between the 2nd and the 4th
+floor?" 6.7 at 0.85 → a garbled ifc text at 0.30: "general agent gave no answer … LLM budget for this question reached
+(31,669 tokens / 8 calls): ifc skipped"). Bug 24 fixed (W1 1164209): the 3 storey-role rows 70 at 0.98 → 81 at 0.53.
+New families: v22 unchanged (one more LoRA flake at 0.86), v23 links 17/21 (the Swiss "plan vs its DXF agree?" flips
+yes 0.45 → no 0.60: dxf compares two DXF tables, a door between two rooms counted twice; W2), v24 9/11.
+**Cost (D20-2 per-question LLM budget), the same 647 rows 31397eb → 7a78559** (`artifacts/Q/cost_compare.py`): LLM
+calls/Q 1.269 → 1.233, tokens in/Q 2,739 → 2,695, worst question 16 → 11 calls, questions with ≥ 6 calls 34 → 33;
+the costliest question is unchanged (73.6k tokens: a false premise on a schedule sheet — the table-QA retries happen
+inside one solver call, below the budget's reach). $/1k 0.153 → 0.161 and mean wall 0.8 → 1.5 s follow GPU load (the
+run overlapped S0's gates; usd counts GPU seconds), so compare calls and tokens across runs, not dollars.
+**Left at ≥ 0.8 (16):** v21 sheet text 2 (W2); v22 6 upload answers (bug 26), 4 dataset-path answers on one CubiCasa
+plan (high_quality_architectural-7688: 2 bedrooms vs gold 3, LoRA at 0.82, in EN/FI, plain and styled), the
+plan-without-IFC "0 stairs" (W4); v23 3 link answers (bug 25, R1).
 
 ## v22 (09:40): the demo's "＋ Your own drawing" upload — 216 Qs (W5 asked for it)
 The hidden set is "different drawings". W5's upload stores a visitor's file as `<tmp>/stoa-uploads/<sha256[:12]>/<name>`
