@@ -1,53 +1,67 @@
 # Red team report (agent Q) — can we break the pipeline?
 
-**450 adversarial questions** (`redteam/questions.jsonl`, built by `redteam/build.py`, analysed by `redteam/analyze.py`),
-in eleven families written one after another tonight; each new family was aimed at the mechanism the last one exposed.
+**494 adversarial questions** (`redteam/questions.jsonl`, built by `redteam/build.py`, analysed by `redteam/analyze.py`),
+in fourteen families written one after another tonight; each new family was aimed at the mechanism the last one exposed.
 Builds on F's `hard` (translations/paraphrases/compositions/ft²) and `hard2` (new operators) and covers what those
 don't. The first 205 rows start from dev questions the pipeline had **right at conf ≥ 0.8**, so a failure there is
 caused by the perturbation, not by the drawing.
 
-## Verdict (05:05, night 753eccb) — read this first
+## Verdict (08:20, night bb94fe4 = the test-2 build) — read this first
 1. **What holds.** Rewording, casing, extra context, distractor numbers, typos, prompt injection, rotated / gray /
    JPEG-q10 / half-resolution copies, a plan copied outside our folder, objects that don't exist, yes/no without a
-   hint, the same question asked twice: on the 283 original red-team rows the current night is **96.5 % right, every
-   scored answer at conf ≥ 0.8 is right (190/190), and no false-premise question is answered at ≥ 0.8 (0/24)**
-   (was 7/24 at 04:13). A prompt injection that once worked (99 at 0.71) now gets conf 0.10.
+   hint, the same question asked twice, "which apartment has the largest kitchen": on all 494 rows the test-2 build
+   answers **90.3 % of the scored rows right (408/452), and 283 of its 290 scored answers at conf ≥ 0.8 are right**;
+   on the 283 original rows 0 of 24 false premises get an answer at ≥ 0.8 (was 7/24 at 04:13). A prompt injection
+   that once worked (99 at 0.71) now gets conf 0.10.
 2. **One root cause behind every confident miss we found: a check verifies the number that was computed, never that
-   it answers what was asked** — the storey, room, model, scope or kind of quantity. Each family found it on a new
-   surface: a storey/model that doesn't exist (v1, fixed), a room number with the wrong name (v2, fixed), a dropped
-   half of "A and B" (v3/v4, fixed in the pipeline path), **a storey in everyday words** ("the basement",
-   "im Erdgeschoss"; v5, half fixed), **"in the whole building"** outside English/German/Dutch (v7, fixed except
-   Italian), a singular name matching 8 rooms (v5, open), a floor the building doesn't have (v8, open).
+   it answers what was asked** — the storey, room, model, scope, kind of quantity, or *how many answers* were asked
+   for. Each family found it on a new surface: a storey/model that doesn't exist (v1, fixed), a room number with the
+   wrong name (v2, fixed), a dropped half of "A and B" (v3/v4, fixed), a storey in everyday words (v5, fixed but for
+   Finnish "kellarikerros"), "in the whole building" in 9 languages (v7, fixed), a floor the building doesn't have
+   (v8, open), "1,200 euros" (v11, open), and now **two questions in one** (v14, open: "how many doors and how many
+   windows" → one summed number at 0.86–0.98).
 3. **The owners fixed things fast and generally.** Every round was re-measured on the same rows (tables below):
-   confident false-premise answers 7/24 → 0/24; "whole building" in SV/FR/ET/FI/PL 0/15 → 15/15 within an hour.
-4. **Latest (05:13, night 753eccb + the owners' newest commits, pre-merge): 9 of 450 answered wrong at ≥ 0.8; 273 of
-   277 answers at ≥ 0.8 right.** Left: "1,200 euros" read as 1.2 by the IFC rules (bug 17, demo-visible), "the 7th
-   floor" of a 5-storey model, "how many floors" → 7, Finnish "kellarikerros", "whole building" on a one-floor plan.
-   *Before those commits, on 753eccb itself (20 of 418, all in v5–v8):* "basement" when the model calls it
-   'KG' (6 languages → the sheet's storey at 0.88–0.98, W1), Italian "in tutto l'edificio" (3, W1), "How big is the
-   Küche?" with several kitchens → silent sum at 0.98 (5, W2; fixed on night-W2 2254acb: 0.50 + "name the room"), "how many floors" → 7 incl. foundation and roof (W1),
-   "whole building" on a one-floor plan and "the 7th floor" of a 5-storey model (5, W1/W2). On scans, unanswerable
-   questions still get an invented number (514 seats at 0.34) with no reason given (v10, W4). **Prices written
-   "1,200 euros" / "€1,500" are read as 1.2 / 1.5 by the IFC rules → 55.2 / 69.0 at 0.92** (v11, bug 17, W1).
-5. **Demo safety.** Judge-style questions on our three demo drawings (v6, v9 in Finnish) and the full tour pre-flight
-   are in `demo/DEMO.md` ("If a judge types their own question") and `demo/LIVE-CHECK.md`.
+   confident false-premise answers 7/24 → 0/24; "whole building" in SV/FR/ET/FI/PL 0/15 → 15/15 within an hour;
+   unmerged at 08:14 and checked here: W1's storey heights 1/7 → 5/7, W2's yes/no size comparisons 7/8 → 8/8,
+   with 0 answers lost on the other 463 rows (pre-merge check #3).
+4. **12 of 494 answered wrong at conf ≥ 0.8 on the test-2 build** (the same 12 with the unmerged commits):
+   - v14 (new, bugs 18–19): "How many doors and how many windows are on '1.korrus'?" → 101 at 0.86 and the Swiss
+     "… drawn on this floor plan?" → 64 at 0.98 (compose sums; two answers were asked, W4); "How many doors are on
+     the ground floor, and how many on the top floor?" → 211 twice at 0.80 (the multi-part split adds "of the
+     building model", which reads as whole-model scope, W1).
+   - v11 (bug 17): "1,200 euros" / "€1,500" → 55.2 / 69.0 at 0.92 (IFC rules read the separator as a decimal, W1).
+   - v8: "the 7th / eighth floor" of a 5-storey model → the sheet's 46 at 0.98 (W1); "whole building" / "the
+     building in total" on a single-floor Swiss plan → that floor's 36 / 4 at 0.99 (W2).
+   - v6: "How many floors does this building have?" → 7 at 0.85 (foundation and roof counted, W1); v5: Finnish
+     "kellarikerroksessa" → 50 at 0.88 (W1).
+   **Newer (08:27, pre-merge #4 with the owners' 08:16–08:26 commits, 516 rows incl. v15): 11 left** — bug 17,
+   "how many floors", "kellarikerros" and the 7th-floor premises fixed; v15 shows bug 18 on Swiss plans is 0/10
+   (5 more at ≥ 0.95); W1 059e9c4 drops 7 right "ground floor" answers to 0.29 (see "Pre-merge check #4").
+   Unscored but visible: two-part questions to dxf answer one part at 0.60 ("3" with unit m² for "how many rooms
+   and what is their total area", bug 20, W2); on scans, unanswerable questions still get an invented number (514
+   seats at 0.34) with no reason given (v10, W4).
+5. **Demo safety.** 19 of the 21 demo/tour questions are as expected on the test-2 build; the other 2 are known
+   (the deliberate step-10 miss and an unquoted corridor wording the script avoids) (`demo/LIVE-CHECK.md`, 08:16). Judge-style questions on the three demo drawings (v6, v9, v12,
+   v14) are sorted into safe / avoid in `demo/DEMO.md` ("If a judge types their own question").
 
-| family (rows) | what it asks | 753eccb: right · wrong at ≥ 0.8 |
+| family (rows) | what it asks | bb94fe4 (test 2): scored right · false premises handled · wrong at ≥ 0.8 |
 |---|---|---|
-| v1 control/perturb/image/unit/absent (174) | surface noise, injection, image transforms, unit traps, objects that don't exist | see v1 table; 0 confident misses |
-| v1–v2 false premise / unanswerable (24) | storeys/rooms/models that don't exist, facts no drawing holds | 22/24 handled · 0 |
-| v2 wording (20) | "how big is …", "what's the size of …" | 20/20 · 0 |
-| v3/v4 compositions (78) | "A and B in total" in 7 + 4 languages, with atomic controls | 75/78 · 0 (SV raster 3/6 at ≤ 0.75) |
-| v5 storey nouns (36) / room names (10) / yes-no (24) | "doors in the basement", "How big is the Küche?", "Onko asunnossa sauna?" | 24/36 · 6 · rooms 5/5 unique, **5 ambiguous at 0.98** · yes/no 24/24 |
-| v6 judge on demo drawings (21) | what a judge might type on stage | 14/20 + flag · 1 ("how many floors" → 7) |
-| v7 scope words (36) | "in the whole building" / "on this floor" in 9 languages | 33/36 · 3 (Italian) |
-| v8 scope premises (8) | "whole building" on a one-floor plan, "7th floor" in a 5-storey model | 2/2 ordinals · **5 of 6 premises at ≥ 0.8** |
-| v9 Finnish judge (14) | Finnish on the demo drawings | 11/14 · 0 |
-| v10 scan follow-ups (8) | date / author / scale; floor-plan questions on an elevation | 4/4 facts · premises answered without a reason |
-| v11 number formats (10) | "1,200 euros", "1.200 €", "1'200 CHF", "450,50", "80,5 m²" | 6/10 · **2** ("1,200" → 1.2 in ifc) |
+| v1 control/perturb/image/unit/absent (174) | surface noise, injection, image transforms, unit traps, objects that don't exist | 155/161 · 13/13 · 0 |
+| v2 wording + false premises (31) | "how big is …", storeys/rooms/models that don't exist, facts no drawing holds | 20/20 · 9/11 · 0 |
+| v3/v4 compositions (78) | "A and B in total" in 7 + 4 languages, with atomic controls | 75/78 · — · 0 (SV raster at ≤ 0.75) |
+| v5 everyday storey / room words, yes/no (70) | "doors in the basement", "How big is the Küche?", "Onko asunnossa sauna?" | 64/65 · ambiguous names at 0.50 · 1 (FI kellarikerros) |
+| v6 judge on demo drawings (21) | what a judge might type on stage | 14/20 · 1/1 · 1 ("how many floors" → 7) |
+| v7 scope words (36) | "in the whole building" / "on this floor" in 9 languages | 33/36 · — · 0 (Italian 0/3: the sheet's storey at 0.53–0.68, no longer confident but not fixed) |
+| v8 scope premises (8) | "whole building" on a one-floor plan, "7th floor" in a 5-storey model | 2/2 · 0/6 · **5** |
+| v9 Finnish judge (14) | Finnish on the demo drawings | 11/14 · — · 0 |
+| v10 scan follow-ups (8) | date / author / scale; floor-plan questions on an elevation / site plan | 4/4 · 3/4 · 0 |
+| v11 number formats (10) | "1,200 euros", "1.200 €", "1'200 CHF", "450,50", "80,5 m²" | 6/10 · — · **2** |
+| v12 Estonian labels (5) | English room words on an Estonian-labelled model | 4/5 · — · 0 |
+| v13 plan without its DXF (8) | the Swiss demo plan alone as PDF / PNG | 5/8 (PDF 4/4) · — · 0 |
+| v14 two-part, comparisons, heights, 'which' (31) | "how many X and how many Y", "is A's kitchen bigger", storey heights | 15/29 (20/29 with W1/W2 heads) · 2/2 · **3** |
 
 Chart of the rounds (confidently wrong answers per run, by family): `demo/redteam-rounds.png`.
-Re-run everything: see "Re-run" at the end. History (v1 → v10, with each round's verification) follows.
+Re-run everything: see "Re-run" at the end. History (v1 → v14, with each round's verification) follows.
 
 ## Results v1 (174 Qs; acc = eval scorer, which converts units; strict = the number is in the unit asked)
 | family | n | acc | strict | wrong at conf ≥ 0.8 | note |
@@ -480,7 +494,9 @@ many floors" → 7; v8 scope premises ×5.
 ## Pre-merge check #2 (05:13): night 753eccb + W1 cee4aa7 + W2 2254acb + W4 afc5be0 + R2 2db30c0 (scratch snapshot)
 All 450 rows, run `20261114-051156-pipeline-questions-ebdb` vs `98f0` (+ v11 `ccd8`): **0 answers lost, 11 won** —
 "basement" in EN/DE/NL/FR/SV → 'KG' 20 (at a deliberately modest 0.42), the Gdynia elevation sheet's basement 5 (0.80)
-and its room area 54.41; Italian "in tutto l'edificio" now the model total. Core 283: 96.5 %, 190/190 at ≥ 0.8, 0/24
+and its room area 54.41. *Correction (08:20): Italian "in tutto l'edificio" was NOT fixed in this round — it still
+answers the sheet's storey (46 / 50 / 20; gold 211 / 170 / 69), now at 0.53–0.68 instead of ≥ 0.8, so it left the
+confident-wrong count without becoming right. Same on bb94fe4 and on the 08:14 snapshot; W1 told 08:20.* Core 283: 96.5 %, 190/190 at ≥ 0.8, 0/24
 premises. All 450: **93.6 % scored, 273/277 right at ≥ 0.8**, $0.072 per 1,000. **9 confident-wrong left:** "1,200
 euros" / "€1,500" read as 1.2 / 1.5 (W1, bug 17), "7th / eighth floor" (W1), "how many floors" → 7 (W1), Finnish
 "kellarikerroksessa" (W1), one-floor "whole building" ×3 (W2).
@@ -516,6 +532,93 @@ W2's fix turns the 5 ambiguous room names from a silent sum at 0.98 into 0.50 + 
 the value is their total. Name the room number or the apartment." 15 confident-wrong left (W1: basement 'KG' ×6,
 Italian ×3, floors = 7, 7th floor ×2; W2: one-floor "whole building" ×3).
 
+## Pre-merge check #3 (08:14): night bb94fe4 (= test 2) + W1 fa12e77 + W2 0cbd7ba + W3 af941b0 + W4 73b01b6 (scratch snapshot)
+All 463 rows, run `20261114-081155-pipeline-questions-v13-70ad` vs night's `20261114-051643-pipeline-questions-292c`:
+**0 right answers lost** (one CubiCasa typo row flipped 0 → 1 with confidence 0.61 → 0.20: LoRA run-to-run noise,
+flagged either way). Won: the floor-to-floor height between '1.korrus' and '2.korrus' 6.7 → 3.35 (W1 8f1c2f8); German
+"Ist Wohnung B grösser als 80,5 m²?" yes/no at 0.45/0.60 → 0.80 (W2 0cbd7ba). Changed confidence: the six Italian
+compositions ("Qual è il numero totale di porte e finestre …") stay right but drop 0.75 → 0.30 (W4 73b01b6 no
+longer translates Italian whose object classes the rules found; under-confidence, not an error — W4 told).
+Swiss "1'200 CHF" 7200 at 0.75 → 36 at 0.30 (wrong either way, now flagged). Same 9 confident-wrong as bb94fe4.
+Analysis: `$JUNCTION_SHARED/artifacts/Q/c3-70ad.md`.
+
+## v14 (08:16): two questions in one, size comparisons, storey heights, "which" — 31 Qs
+Stoa said the hidden set's "answers are not so simple". Runs `20261114-081446-pipeline-v14-4484` (bb94fe4) and
+`-7216` (the 08:14 snapshot). Gold is independent of our solvers: storey elevations and per-storey door/window
+containment from plain ifcopenshell (esplanades in mm, smiley-west in m), Swiss room areas from the printed room
+areas (= dataset gold for 2.09 / 2.10), CubiCasa counts from the plan's dataset answers. Two-part rows are scored by
+`meta.parts` (every gold number must appear in the answer, each matched by its own number; counts exact, else 2 %),
+'which' rows by `meta.accept_re`.
+
+| kind (rows) | bb94fe4 | + W1/W2 heads | note |
+|---|---|---|---|
+| two-part (10) | 3/10, **3 at ≥ 0.8 wrong** | 3/10, same 3 | CubiCasa 2/2 via the agent ("3 bedrooms and 1 bathroom"); DE ifc split right (42; 60 at 0.80) |
+| yes/no size comparisons (8) | 7/8 | **8/8** | "Is room 2.27 larger than 20 m²?" no at 0.45 → yes at 0.99 (W2) |
+| storey heights (7) + premises (2) | 1/7 · 2/2 flagged | **5/7** · 2/2 | '1.korrus'→'5.korrus' 13.4, FI 3.35, DE '1.korrus'→'Katus' 17.0, 'EG'→'1.OG' 2.78 (W1 8f1c2f8) |
+| which (4) | 4/4 | 4/4 | largest / smallest kitchen A / D, largest room in D 2.27, floor with most doors 1.korrus |
+
+### 18. "How many X and how many Y?" is answered with X + Y (HIGH) — owner W4 (`stoa/router/compose.py`, sum-of-counts branch)
+"How many doors and how many windows are on '1.korrus'?" → **101 at 0.86** (gold 46 and 55); Swiss "How many doors
+and how many windows are drawn on this floor plan?" → **64 at 0.98** (gold 36 and 28). The trace holds both parts
+("door 46 + window 55 = 101"); only the value is wrong. Mechanism: the sum branch fires on a bare `and`/`plus`
+without a together-word. Fix: a repeated question word before the second noun (how many … and how many …, montako …
+ja montako …, wie viele … und wie viele …, combien … et combien …) → a list answer "46 doors; 55 windows" at the
+parts' confidence; with no together-word and no repeated question word, keep the sum but say "101 (46 doors + 55
+windows)" so both readings are answered.
+
+### 19. A multi-part split rewrites the place and the whole model is counted (HIGH) — owner W1 (`ifc` multi-part)
+"How many doors are on the ground floor, and how many on the top floor?" → **"211 (How many doors are on the ground
+floor of the building model); 211 (… top floor of the building model)" at 0.80** (gold 46; 39). The LLM split appends
+"of the building model" to make each part self-contained, and the parser reads "of the building" as whole-model
+scope, which overrides "ground floor". Separately, "top floor" resolves to 'Katus' (the roof storey: 0 doors, 0
+spaces) — "How high above the ground floor is the top floor?" → 15.10 at 0.50 (gold 13.4 to 5.korrus). Finnish
+"Montako ovea ja montako ikkunaa kerroksessa '2.korrus' on?" is not split (60 = windows only, 0.60).
+
+### 20. Two-part questions to dxf answer one part, sometimes in the other part's unit (MEDIUM) — owner W2 (dxf table QA)
+"How many rooms labelled 'Zimmer' does apartment C have, and what is their total area?" → **"3" with unit m²** at
+0.60 (gold 3 rooms, 43.82 m²); "What are the net areas of apartment A and of apartment B?" → 80.34 only; "Wie viele
+Küchen gibt es … und wie gross ist die grösste?" → 4 only. Not confident, but wrong on screen. Fix: detect the second
+question and answer every part, or cap ≤ 0.3 with "answers only the count".
+
+## v15 (08:26): bug-18 probe — "how many X and how many Y" in 8 languages, with controls — 22 Qs
+Run `20261114-082629-pipeline-v15-7ba9` on night 5996739 (identical on bb94fe4, `-d553`). A repeated question word
+asks for two numbers (meta.parts); "in total" asks for one; a bare "X and Y" is ambiguous (both numbers or the sum
+accepted). **Two numbers asked: ifc 3/3 (W1's multi-part split: ET "Mitu ust ja mitu akent …" → "46 …; 55 …" at
+0.80), CubiCasa 2/2 (agent: "3 bedrooms and 1 sauna"), Swiss 0/10** — EN wordings ("…, and how many windows?", "Give
+me the number of doors and the number of windows", "…, respectively?") → compose's sum 64 / 32 **at 0.98**; Finnish →
+the agent answers doors only, 36 **at 0.95**; DE/FR/IT/NL/SV → dxf sums, 64 at 0.59–0.69. Controls hold: "in total" /
+"insgesamt" / "altogether" 4/4, bare "doors and windows" 3/3 (sum). W4 (compose, agent) and W2 (dxf) have the rows.
+
+## Pre-merge check #4 (08:27): night 5996739 + W1 059e9c4 + W3 1882e96 + W4 d40778d + R2 2ccace2 + R1 2941e4a
+All 516 rows, run `20261114-082711-pipeline-questions-v15-2f2a` vs night (`70ad` + `7216` + `7ba9`, same code as
+snapshot #3): **9 won, 1 lost; scored 89.7 → 91.4 %; confident misses 17 → 11** (scored wrong at ≥ 0.8 12 → 8,
+false premises at ≥ 0.8 5 → 3); core 283 rows 187/187 right at ≥ 0.8, 0/24 premises. Won: **bug 17 fixed** ("1,200
+euros" → 55,200 and "€1,500" → 69,000 at 0.92, German "1.200 €" 55,200 at 0.75, Swiss "1'200 CHF" 43,200 at 0.89 via
+the agent), "how many floors" 7 → 5 (EN, FI), Finnish "kellarikerroksessa" 50 → 20, "top floor" 0 → 39, "1.korrus
+and 2.korrus together" 42 → 88, "the 7th / eighth floor" 46 at 0.98 → 0 at 0.50; "Are there more doors on '2.korrus'
+than on '5.korrus'?" now "yes (42 vs 3…)" at 0.89; the Swiss PNG's apartment B 16.78 → 77.79 m² at 0.50 (gold 80.83,
+W3). Lost: the Swiss "1,200 euros per door" → 91,200 at 0.45 (dxf table code multiplied by all objects; LLM noise,
+was 43,200 at 0.45). **Calibration regression (W1 059e9c4): 7 right "ground floor" answers drop from 0.98 to 0.29**
+— on smiley-west ('EG') and esplanades ('1.korrus') "ground floor" now "matches no single storey" and is answered
+for the sheet's storey, right only by coincidence. Left at ≥ 0.8: bug 18 (Swiss two-number questions, 5 + 3 in
+v14/v15), bug 19 (ifc "ground floor, and … top floor" → 211; 211), one-floor "whole building" ×3 (W2).
+
+## For Saturday noon: red-team Stoa's example questions in one command (`redteam/from_examples.py`)
+Put Stoa's examples in a jsonl (`path`, `question`, and `answer` / `unit` when known; a path may be absolute), then
+```
+PYTHONPATH=. $JUNCTION_VENV/bin/python redteam/from_examples.py EXAMPLES.jsonl --out $JUNCTION_SHARED/artifacts/Q/noon.jsonl --translate fi,de,sv
+$JUNCTION_VENV/bin/python -m stoa.eval --solver pipeline --split $JUNCTION_SHARED/artifacts/Q/noon.jsonl --no-leaderboard --workers 4
+PYTHONPATH=. $JUNCTION_VENV/bin/python redteam/from_examples.py --report <run>.jsonl
+```
+Per example: the example itself, 6 surface perturbations, translations by the local 8B (kept only when our own
+`to_english` reads them back as the same task and object class — it turns Finnish "bathtubs" into "bathrooms"
+otherwise), ft² / mm unit traps, a made-up storey/room name (expects a flag), and pairs of examples on one file asked
+as one question (both numbers expected). Without a gold answer, variants are checked for consistency with the
+example's own answer and confidence band. Dry run on 7 of our demo questions (73 rows, ~2 min, run
+`20261114-082413-pipeline-noon-dryrun-52ad`): 6 flagged — bug 18 again ("How many windows …, and how many bathtubs
+…?" → 32 at 0.98), two garbled Finnish translations answered at ≤ 0.60, and three CubiCasa variants whose answer
+stayed 3 but moved confidence band (0.75 → 0.35 / 0.92).
+
 ## What held (worth saying in the pitch)
 - Paraphrase / casing / context / distractor numbers: **0 of 56 answers changed**. Typos and injections changed 7
   answers, **all of them at conf ≤ 0.42**, so the confidence flagged every one.
@@ -525,8 +628,8 @@ Italian ×3, floors = 7, 7th floor ×2; W2: one-floor "whole building" ×3).
 - Rotated, grayscale, heavily compressed and half-resolution copies of a plan: 30/30 right, at the same confidence.
 
 ## Re-run
-`questions.jsonl` now has 463 rows: v1 (174) + v2 (31) + v3 Swiss compositions (42) + v4 CubiCasa compositions (36) +
-v5 natural references (70) + v6 judge questions on the demo drawings (21) + v7 scope words in 9 languages (36) + v8 scope premises (8) + v9 Finnish judge (14) + v10 scan follow-ups (8) + v11 number formats (10) + v12 Estonian labels (5) + v13 lone PDF/PNG (8) = 463; earlier rows are byte-identical across builds (checked with cmp), so runs on the first 205 /
+`questions.jsonl` now has 516 rows: v1 (174) + v2 (31) + v3 Swiss compositions (42) + v4 CubiCasa compositions (36) +
+v5 natural references (70) + v6 judge questions on the demo drawings (21) + v7 scope words in 9 languages (36) + v8 scope premises (8) + v9 Finnish judge (14) + v10 scan follow-ups (8) + v11 number formats (10) + v12 Estonian labels (5) + v13 lone PDF/PNG (8) + v14 two-part / comparisons / heights / which (31) + v15 bug-18 probe (22) = 516; earlier rows are byte-identical across builds (checked with cmp), so runs on the first 205 /
 283 rows compare directly (`python3 $JUNCTION_SHARED/artifacts/Q/subset_stats.py <run> 283`). Build with
 `PYTHONHASHSEED=0 PYTHONPATH=.`; v5 calls the ifc solver for its gold (deterministic, < 1 s per row).
 ```
