@@ -89,3 +89,33 @@ def test_scope_and_superlatives(solver):
     assert isinstance(name.value, str) and f"{big.value:.2f}" in name.value
     st = solver.solve(ESPL, "Which storey has the most doors?")
     assert st.value == "1.korrus"
+
+
+FZK = "data/ifc_models/kit-fzk-haus_ac20-fzk-haus_plan-01-erdgeschoss.pdf"
+
+
+@pytest.mark.skipif(not abspath(FZK).exists(), reason="dataset not available")
+def test_geometry_room_types_and_guards(solver):
+    doors = solver.solve(FZK, "How many doors are there on 'Erdgeschoss'?").value
+    a = solver.solve(FZK, "Wenn jede Tür 450 Euro kostet, wie viel kosten alle Türen im Erdgeschoss?")
+    assert a.value == pytest.approx(doors * 450) and a.unit == "EUR"
+    # the KIT FZK-Haus is a 12 m x 10 m house
+    assert solver.solve(FZK, "What is the gross floor area of 'Erdgeschoss'?").value == pytest.approx(120, rel=0.02)
+    assert solver.solve(FZK, "What is the perimeter of the building?").value == pytest.approx(44, rel=0.02)
+    h = solver.solve(FZK, "How tall is the building?")
+    assert 5 < h.value < 8 and h.unit == "m"
+    ext = solver.solve(FZK, "What is the total length of external walls on 'Erdgeschoss'?")
+    assert ext.value > 30 and ext.confidence <= 0.6  # no IsExternal in the model: walls on the outline
+    w = solver.solve(FZK, "What is the window-to-wall ratio of the building?")
+    assert w.unit == "%" and 5 < w.value < 40
+    bath = solver.solve(FZK, "What is the total area of all bathrooms in the building?")
+    rooms = solver.solve(FZK, "What is the total net floor area of all spaces in the whole building?")
+    assert 0 < bath.value < rooms.value / 3  # 'Bad' only, not every room
+    width = solver.solve(FZK, "What is the average door width on 'Erdgeschoss'?")
+    assert width.unit == "m" and 0.7 < width.value < 1.5
+    rel = solver.solve(FZK, "How many rooms on 'Erdgeschoss' have no window?")
+    assert rel.confidence <= 0.3
+    win = solver.solve(FZK, "What is the total window area on 'Erdgeschoss'?")
+    assert win.unit == "m2" and 5 < win.value < 60
+    share = solver.solve(FZK, "What percentage of the floor area on 'Erdgeschoss' is taken by the 'Wohnen' room?")
+    assert 5 < share.value < 60

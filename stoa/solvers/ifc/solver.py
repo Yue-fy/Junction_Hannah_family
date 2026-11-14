@@ -182,6 +182,61 @@ def vocabulary_group(idx: IfcIndex, question: str, names: list[str]) -> tuple[st
     return None, []
 
 
+_OUTLINE_CLASSES = ("IfcSpace", "IfcWall", "IfcWallStandardCase", "IfcColumn", "IfcCurtainWall")
+
+
+def storey_outline(idx: IfcIndex, storey_guid: str | None):
+    """Outer outline of one storey (or of the whole building when None): union of the plan footprints of its
+    rooms, walls, columns and curtain walls, small gaps closed, holes (courtyards excluded) filled. A shapely
+    (Multi)Polygon, or None when there is no geometry."""
+    from shapely.geometry import Polygon
+    from shapely.ops import unary_union
+
+    polys = []
+    for e in idx.elements.values():
+        if e.cls not in _OUTLINE_CLASSES or (storey_guid and e.storey != storey_guid) or not (e.geo and e.geo.footprint):
+            continue
+        for ring in e.geo.footprint:
+            if len(ring) >= 3:
+                p = Polygon(ring)
+                if not p.is_valid:
+                    p = p.buffer(0)
+                if p.area > 1e-4:
+                    polys.append(p)
+    if not polys:
+        return None
+    u = unary_union(polys).buffer(0.05, join_style=2).buffer(-0.05, join_style=2)
+    parts = [u] if u.geom_type == "Polygon" else list(getattr(u, "geoms", []))
+    parts = [Polygon(p.exterior) for p in parts if p.area > 1.0]
+    return unary_union(parts) if parts else None
+
+
+def external_by_outline(idx: IfcIndex, walls: list[Element]) -> list[Element]:
+    """Walls lying on the outer outline of their storey (for models without Pset_WallCommon.IsExternal)."""
+    from shapely.geometry import Polygon
+
+    out, cache = [], {}
+    for e in walls:
+        if not (e.geo and e.geo.footprint):
+            continue
+        if e.storey not in cache:
+            ol = storey_outline(idx, e.storey)
+            cache[e.storey] = ol.boundary if ol is not None else None
+        b = cache[e.storey]
+        if b is None:
+            continue
+        p = Polygon(e.geo.footprint[0])
+        if not p.is_valid:
+            p = p.buffer(0)
+        r = p.minimum_rotated_rectangle
+        xs = list(r.exterior.coords)
+        sides = sorted(((xs[i][0] - xs[i + 1][0]) ** 2 + (xs[i][1] - xs[i + 1][1]) ** 2) ** 0.5 for i in range(4))
+        long_side = sides[-1]
+        if long_side > 0 and b.intersection(p.buffer(0.08)).length >= max(0.3, 0.5 * long_side):
+            out.append(e)
+    return out
+
+
 @register("ifc")
 class IfcSolver(BaseSolver):
     sources = ("ifc_models", "ifc_bench", "opening_design")
@@ -241,6 +296,39 @@ class IfcSolver(BaseSolver):
                 ans.confidence = 0.3
                 ans.missing.append(f"the question gives the number(s) {', '.join(left[:3])}, which the rules did not use")
                 ans.trace.append(f"guard: number(s) {', '.join(left[:3])} in the question not used -> confidence 0.3")
+        if ans.value is not None and ctx.get("room_type_missing") and it.kind in (None, "space") \
+                and ans.confidence > 0.3:
+            ans.confidence = 0.3
+            ans.missing.append(f"no room in the model is labelled as a {ctx['room_type_missing']} (any language); "
+                               "the value covers rooms of every type")
+            ans.trace.append(f"guard: room type '{ctx['room_type_missing']}' not found among the room labels -> 0.3")
+        if ans.value is not None and not ctx.get("outer") and it.op != "diff" and it.mod != "share":
+            # "How many rooms have no window?", "doors leading to the kitchen": a relation between two element
+            # kinds that the rules do not model (they answer for one kind only)
+            from stoa.solvers.ifc.arith import text_of
+            from stoa.solvers.ifc.parse import _kind_hits
+
+            tq = text_of(question)
+            hits = [h for h in _kind_hits(tq) if h[2] != "storey"]
+            hits = [h for h in hits if not any(o is not h and o[0] <= h[0] and h[1] <= o[1] and (o[1] - o[0]) > (h[1] - h[0])
+                                               for o in hits)]  # "pipe" inside "pipe fittings" is not a 2nd kind
+            used = set(it.kinds or []) | {it.kind}
+            rel = None
+            for h0, h1, k in hits:
+                if k in used:
+                    continue
+                mrel = re.search(r"\b(with|without|have|has|having|no|containing|contains?|lead\w* (?:to|into)|"
+                                 r"connect\w* (?:to|with)|adjacent to|next to|ohne|mit|zonder|met|sans|avec|senza|bez|"
+                                 r"ilman)\s+(?:(?:a|an|any|no|the|one|two|\d+|at least \w+|more than \w+)\s+)?$",
+                                 tq[max(0, h0 - 30):h0])
+                if mrel:
+                    rel = (mrel.group(1), k)
+                    break
+            if rel and len({h[2] for h in hits}) >= 2 and ans.confidence > 0.3:
+                ans.confidence = 0.3
+                ans.missing.append(f"the relation '{rel[0]} {rel[1]}' between element kinds is not modelled; the "
+                                   "value counts one kind only")
+                ans.trace.append(f"guard: relation '{rel[0]} {rel[1]}' not modelled -> confidence 0.3")
         for note in it.notes:
             if note.startswith("exclusion"):
                 ans.trace.append(note)
@@ -248,6 +336,8 @@ class IfcSolver(BaseSolver):
                     ans.confidence = min(ans.confidence, 0.3)
                     ans.missing.append(f"the question excludes something the rules can't apply ({note[23:]}); "
                                        "the value ignores the exclusion")
+        if ctx.get("geo_external") and ans.value is not None:
+            ans.confidence = min(ans.confidence, 0.6)
         if ctx.get("material_unknown") and ans.value is not None:
             ans.confidence = min(ans.confidence, 0.3)
         if ans.value is not None and any("proxy/generic elements named like" in x for x in ans.trace):
@@ -357,7 +447,9 @@ class IfcSolver(BaseSolver):
     def _answer(self, path: str, model: str, idx: IfcIndex, it: Intent, trace: list[str], ctx: dict) -> Answer:
         assumptions: list[str] = []
         missing: list[str] = []
-        if ctx.get("compose", True) and not it.names:
+        st_n, oth_n = self._storey_names(idx, it) if it.names else ([], [])
+        if ctx.get("compose", True) and not oth_n and len(st_n) <= 1 and not ctx.get("no_dims"):
+            ctx["dims_storey"] = st_n[0][1] if st_n else None
             dim = self._dims_answer(model, idx, it, trace, ctx)
             if dim is not None:
                 ctx["dims_used"] = True
@@ -410,8 +502,23 @@ class IfcSolver(BaseSolver):
             return Answer.abstain(self.name, "no storey above and no geometry", trace=trace)
 
         # ---- room types: 'Bathroom' -> every space labelled so ------------------------------------------
-        if not groups and not rooms and it.kind is None:
-            lab, grp = vocabulary_group(idx, ctx.get("question", ""), it.names)
+        if not groups and not rooms and it.kind in (None, "space"):
+            from stoa.solvers.ifc.arith import label_has_type, room_type_in_question
+
+            # quoted names are resolved by _roles; a sub-question of a composed answer must not pick them up here
+            q_unq = ctx.get("question", "") if it.kind is None else _QUOTED_RX.sub(" ", ctx.get("question", ""))
+            lab, grp = vocabulary_group(idx, q_unq, it.names)
+            concept = room_type_in_question(q_unq) if not lab else None
+            if concept:
+                grp = [e for e in idx.by_class("IfcSpace") if label_has_type(e.long_name, concept)
+                       or label_has_type(e.name, concept)]
+                if grp:
+                    lab = concept
+                    labs = sorted({e.long_name or e.name or "" for e in grp})
+                    assumptions.append(f"'{concept}' = spaces labelled " + ", ".join(f"'{x}'" for x in labs[:6])
+                                       + (" ..." if len(labs) > 6 else ""))
+                else:
+                    ctx["room_type_missing"] = concept
             if lab:
                 if storey is not None and it.scope != "model":
                     grp = [e for e in grp if e.storey == storey.guid]
@@ -570,6 +677,16 @@ class IfcSolver(BaseSolver):
             for prop, want in it.filters.items():
                 vals = [(e, next((v for k, v in e.props.items() if k.endswith("." + prop)), None)) for e in els]
                 unknown = sum(1 for _, v in vals if v is None)
+                if prop == "IsExternal" and els and unknown == len(els) and kind == "wall":
+                    ext = external_by_outline(idx, els)
+                    ext_g = {e.guid for e in ext}
+                    els = [e for e in els if (e.guid in ext_g) == want]
+                    trace.append(f"no wall has IsExternal: {len(ext)} walls lie on the storey outline (geometry); "
+                                 f"kept {len(els)} {'external' if want else 'internal'}")
+                    assumptions.append("external walls = walls on the outer outline of their storey (the model has no "
+                                       "IsExternal property)")
+                    ctx["geo_external"] = True
+                    continue
                 els = [e for e, v in vals if v is not None and bool(v) == want]
                 trace.append(f"filter {prop}={want}: {len(els)} kept, {unknown} without the property")
                 assumptions.append(f"{prop}={want} from Pset_*Common.{prop}")
@@ -615,6 +732,33 @@ class IfcSolver(BaseSolver):
             return self._final(0.0, {"area": "m2", "volume": "m3", "length": "m"}[it.metric], it, conf * 0.3, [],
                                trace, assumptions, missing)
 
+        # ---- door / window opening area: width x height (or the Qto Area), not the footprint -------------
+        if it.metric == "area" and it.kind in ("window", "door") and not it.side_area and not it.group_by:
+            def opening(e: Element) -> tuple[float | None, str]:
+                q = next((v for k, v in e.qto.items() if k.endswith(".Area") and v), None)
+                if q:
+                    return float(q), "Qto Area"
+                d = e.dims or {}
+                if d.get("OverallWidth") and d.get("OverallHeight"):
+                    return d["OverallWidth"] * d["OverallHeight"], "OverallWidth x OverallHeight"
+                return None, ""
+            got = [(v, how, e) for e in els for v, how in [opening(e)] if v]
+            if got:
+                hows = sorted({h for _, h, _ in got})
+                assumptions.append(f"{it.kind} area = opening area ({' / '.join(hows)}), not the plan footprint")
+                if len(got) < len(els):
+                    missing.append(f"{len(els) - len(got)} of {len(els)} {it.kind}s have no size")
+                c = conf * 0.9 * len(got) / len(els)
+                if it.op in ("max", "min"):
+                    v0, _, e0 = (max if it.op == "max" else min)(got, key=lambda x: x[0])
+                    trace.append(f"{it.op} opening area over {len(got)} {it.kind}s: {e0.name or e0.guid} {v0:.3f} m²")
+                    return self._final(v0, "m2", it, c, [self._ev(model, e0, f"{e0.name or ''} {v0:.3f} m²")],
+                                       trace, assumptions, missing)
+                tot = sum(v for v, _, _ in got)
+                trace.append(f"opening area of {len(got)} {it.kind}s = {tot:.3f} m²")
+                return self._final(tot, "m2", it, c, [self._ev(model, e, f"{e.name or ''} {v:.3f} m²") for v, _, e in got],
+                                   trace, assumptions, missing)
+
         # ---- aggregated quantities ------------------------------------------------------------------
         if it.top_n and it.kind == "space":
             vals = sorted(((self._floor_area(e, it, [])[0] or 0.0, e) for e in els), key=lambda x: -x[0])
@@ -632,6 +776,32 @@ class IfcSolver(BaseSolver):
             ev = [self._ev(model, e, e.long_name or e.name or "") for e in els]
             return self._breakdown(idx, it, els, lambda e: self._floor_area(e, it, [])[0], ev, trace, assumptions,
                                    missing, conf, where, unit="m²")
+        gq = [_qto(e, (".GrossFloorArea",)) for e in els] if (it.metric == "area" and it.kind == "space") else []
+        if it.gross and gq and all(v is not None for v in gq) and not it.group_by:
+            assumptions.append("gross floor area = sum of the spaces' GrossFloorArea quantities")
+            return self._final(float(sum(gq)), "m2", it, conf * 0.85,
+                               [self._ev(model, e, f"{e.long_name or e.name} gross {v:.2f} m²") for e, v in zip(els, gq)],
+                               trace, assumptions, missing)
+        if it.metric == "area" and it.kind == "space" and it.gross and not it.group_by:
+            stored = [next((v for k, v in e.qto.items() if k.endswith("Area") and "Net" not in k and v), None)
+                      for e in els]
+            if any(v is not None for v in stored):
+                missing.append(f"the model's spaces store areas summing to {sum(v for v in stored if v):.2f} m² "
+                               "(no GrossFloorArea quantity); the value is the outline area")
+            sts = [storey.guid] if (storey is not None and where != "whole model") else \
+                [st.guid for st in idx.storeys]
+            outs = [(g, storey_outline(idx, g)) for g in sts]
+            outs = [(g, o) for g, o in outs if o is not None]
+            if outs:
+                gfa = sum(o.area for _, o in outs)
+                net = sum(self._floor_area(e, it, [])[0] or 0.0 for e in els)
+                trace.append("gross floor area: " + ", ".join(f"{idx.storey(g).name} {o.area:.2f} m²" for g, o in outs)
+                             + f" (net rooms {net:.2f} m²)")
+                assumptions.append("gross floor area = area inside the outer outline of each storey's walls and rooms "
+                                   "(plan footprints from the model geometry)")
+                ev = [Evidence(file=model, ifc_guid=g, note=f"storey {idx.storey(g).name} outline {o.area:.2f} m²")
+                      for g, o in outs]
+                return self._final(gfa, "m2", it, conf * 0.6, ev, trace, assumptions, missing)
         if it.metric == "area" and it.kind == "space":
             tot, ev = 0.0, []
             for e in els:
@@ -760,6 +930,63 @@ class IfcSolver(BaseSolver):
                           trace=trace, solver=self.name, assumptions=asm, missing=miss)
 
         trace.append(f"outer operation: {o.why}")
+        if o.op == "mul" and o.basis is None:  # "+10%": scale the asked quantity itself
+            it2 = dataclasses.replace(it, **base)
+            if it2.metric == "text" and it2.kind:
+                it2.metric = "count"
+            if it2.kind is None:
+                return None
+            st: list[str] = []
+            a = self._answer(path, model, idx, it2, st, {"question": question, "no_dims": True})
+            if not num(a):
+                return None
+            val = float(a.value) * o.n
+            return out(val, a.unit, [(a, st)], [f"{a.value} {a.unit} x {o.n:g} = {val:.3f}"],
+                       f"{o.why}: the model quantity scaled as the question says", 0.9)
+        if o.op == "wwr":
+            itw = dataclasses.replace(it, metric="area", kind="window", kinds=["window"], side_area=False, filters={},
+                                      material=None, asked_unit=None, **base)
+            a, sa = run(itw)
+            itx = dataclasses.replace(it, metric="area", kind="wall", kinds=["wall"], side_area=True, gross=True,
+                                      net=False, filters={"IsExternal": True}, material=None, asked_unit=None, **base)
+            b, sb = run(itx)
+            if not (num(a) and num(b)) or float(b.value) <= 0:
+                return None
+            val = float(a.value) / float(b.value) * 100.0
+            return out(val, "%", [(a, sa), (b, sb)],
+                       [f"window area {a.value} m² / external wall gross side area {b.value} m² = {val:.2f}%"],
+                       "window-to-wall ratio = window opening area / gross side area of the external walls", 0.85)
+        if o.op in ("height", "perimeter"):
+            if o.op == "height":
+                tops = [(e.geo.bbox[5], e) for e in idx.elements.values() if e.geo and e.geo.bbox
+                        and e.cls not in ("IfcSite", "IfcSpace", "IfcAnnotation", "IfcGrid", "IfcOpeningElement")]
+                if not tops:
+                    return None
+                z, e0 = max(tops, key=lambda x: x[0])
+                els_st = [st for st in idx.storeys if st.elevation is not None]
+                g = min(els_st, key=lambda st: abs(st.elevation)) if els_st else None
+                base_z = g.elevation if g is not None else min(e.geo.bbox[2] for _, e in tops)
+                val = z - base_z
+                trace.append(f"highest point {z:.3f} m ({e0.cls} {e0.name or e0.guid}) - ground level {base_z:.3f} m"
+                             + (f" (storey '{g.name}')" if g is not None else ""))
+                ans = self._final(val, "m", it, 0.7, [self._ev(model, e0, f"highest element, top {z:.2f} m")], trace,
+                                  [f"building height = highest point of any element above the ground-floor level "
+                                   f"({'storey ' + repr(g.name) if g is not None else 'lowest element'}, "
+                                   f"{base_z:.2f} m)"], [])
+            else:
+                storey, _r, _c, _g = self._roles(path, idx, dataclasses.replace(it, metric="length"), [], [])
+                gid = storey.guid if (storey is not None and it.scope != "model") else None
+                ol = storey_outline(idx, gid)
+                if ol is None:
+                    return None
+                val = ol.length if ol.geom_type == "Polygon" else sum(p.exterior.length for p in ol.geoms)
+                trace.append(f"outline of {'storey ' + repr(storey.name) if gid else 'the building'}: "
+                             f"{val:.2f} m perimeter, {ol.area:.2f} m² inside")
+                ans = self._final(val, "m", it, 0.6, [Evidence(file=model, ifc_guid=gid, note="outline")] if gid else [],
+                                  trace, ["perimeter = length of the outer outline of the walls and rooms (plan "
+                                          "footprints from the model geometry)"], [])
+            ctx["outer"], ctx["outer_spans"] = True, o.spans
+            return ans
         if o.op == "mul":
             if o.basis == "count":
                 k = o.basis_kind or it.kind
@@ -1072,7 +1299,7 @@ class IfcSolver(BaseSolver):
         assumptions: list[str] = []
         missing: list[str] = []
         i, _ = storey_mention(ctx.get("question", ""), [s.name for s in idx.storeys])
-        storey = idx.storeys[i] if i is not None else None
+        storey = ctx.get("dims_storey") or (idx.storeys[i] if i is not None else None)
         els = idx.by_class(*KIND_CLASSES[it.kind])
         if storey is not None:
             els = [e for e in els if e.storey == storey.guid]
