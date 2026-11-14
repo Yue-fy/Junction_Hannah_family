@@ -89,6 +89,13 @@ export function crossChecks(a: Answer, asks: string[] = []): { text: string; ok:
   return [...uniq.filter((x) => !x.ok), ...uniq.filter((x) => x.ok)].slice(0, Math.max(2, parts.size));
 }
 
+/** R1's calibrated 90% range for counts ("interval90: [lo, hi]" in the trace): shown under the value when lo < hi. */
+function rangeHtml(a: Answer) {
+  const m = (a.trace ?? []).map((l) => l.match(/interval90:\s*\[\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*\]/)).find((x) => x);
+  if (!m || typeof a.value !== "number" || Number(m[1]) >= Number(m[2])) return "";
+  return `<span class="range" title="Calibrated 90% range: on held-out drawings the true count lies in this range 9 times in 10">90% range ${esc(m[1])}–${esc(m[2])}</span>`;
+}
+
 /** One row per object: evidence items that share an ifc_guid (2D box + 3D element) are grouped. */
 export function groupEvidence(ev: Evidence[]): { idx: number[]; first: number }[] {
   const groups: { idx: number[]; first: number }[] = [];
@@ -367,7 +374,7 @@ export function renderCard(el: HTMLElement, a: Answer, opts: CardOpts) {
   el.innerHTML = `
     <div class="value-row${rich ? " rich" : ""}">
       ${rich ? `<span class="rich-lbl">Text answer · ${String(a.value).split(/\n+/).filter((l) => l.trim()).length} line(s)</span><div class="value text rich">${richText(String(a.value))}</div>`
-        : `<div class="value ${isText ? "text" : ""} ${isText && String(a.value).length > 40 ? "long" : ""}">${esc(fmtValue(a))}${unit ? `<span class="unit">${esc(unit)}</span>` : ""}</div>`}
+        : `<div class="value ${isText ? "text" : ""} ${isText && String(a.value).length > 40 ? "long" : ""}">${esc(fmtValue(a))}${unit ? `<span class="unit">${esc(unit)}</span>` : ""}${rangeHtml(a)}</div>`}
       <div class="conf ${confClass}" title="Calibrated confidence">
         <div class="conf-num">${conf}%</div><div class="conf-bar"><i style="width:${conf}%"></i></div><div class="conf-lbl">confidence</div>
       </div>
