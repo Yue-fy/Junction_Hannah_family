@@ -620,6 +620,13 @@ class IfcSolver(BaseSolver):
                                f"({', '.join(str(b) for b in buildings_of(idx)[:4])}); "
                                + ("answered for the main one" if any(t.startswith("multi-building") for t in ans.trace)
                                   else "the value covers all of them"))
+        role = next((n for n in it.notes if n.startswith("storey_by_role")), None)
+        if role and ans.value is not None:
+            cap = 0.6 if role.endswith(":elevation") else 0.85
+            if ans.confidence > cap:
+                ans.confidence = cap
+                ans.missing.append("which storey is meant: none is named; picked "
+                                   + ("by elevation (highest below 0)" if cap == 0.6 else "by its basement name"))
         if ctx.get("geo_external") and ans.value is not None:
             ans.confidence = min(ans.confidence, 0.6)
         if ctx.get("material_unknown") and ans.value is not None:
@@ -1567,6 +1574,21 @@ class IfcSolver(BaseSolver):
             if it.kind is None or it.kind == "storey":
                 it.kind = "storey"
             trace.append(f"'{mt_.group(0)}' -> storey '{pick.name}'")
+        # "the basement", "the underground level", "the cellar": the storey named so, else the highest storey below 0
+        mb_ = re.search(r"\b(basement|cellar|underground|below[- ]ground)(?:\s+(?:storey|story|floor|level))?\b", qf)
+        if mb_ and not it.names and idx.storeys and it.kind != "storey" and \
+                storey_mention(question, [s_.name for s_ in idx.storeys])[0] is None:
+            named = [st for st in own_storeys(idx) if re.search(
+                r"\b(kjeller|keller\w*|kelder\w*|basement\w*|cellar|sous[- ]sol|kellari|untergeschoss|souterrain|"
+                r"interrato|seminterrato|piwnica)\b|^\d+\.?\s*ug\b|^ug\b", fold(st.name or ""))]
+            neg = sorted([st for st in own_storeys(idx) if st.elevation is not None and st.elevation < -0.5],
+                         key=lambda st: -st.elevation)
+            pick = named[0] if len(named) == 1 else (neg[0] if not named and neg else None)
+            if pick is not None:
+                it.names = [pick.name]
+                it.notes.append("storey_by_role" + ("" if named else ":elevation"))
+                trace.append(f"'{mb_.group(0)}' -> storey '{pick.name}' ("
+                             + ("named as a basement" if named else f"highest storey below 0: {pick.elevation:.2f} m") + ")")
         # "compared to": show both values
         if re.search(r"\b(compared (to|with)|versus|vs\.?)\b", qf) and len(it.names) >= 2 and it.op in (None, "sum"):
             it.op = "compare"
