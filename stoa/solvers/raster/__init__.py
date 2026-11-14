@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import collections
 import json
+import re
 import threading
 from pathlib import Path
 
@@ -30,7 +31,7 @@ from stoa.data import source_of
 from stoa.solvers import register
 from stoa.solvers.base import BaseSolver
 from stoa.solvers.raster import vlm
-from stoa.solvers.raster.classes import ROOM_CLASSES, SYMBOL_CLASSES, question_class, question_op, type_code
+from stoa.solvers.raster.classes import ROOM_CLASSES, SYMBOL_CLASSES, label_class, question_class, question_op, type_code
 
 CANONICAL = {  # used when a composition needs a `direct` answer for one part
     "window": "How many windows are shown on this floor plan?",
@@ -43,6 +44,20 @@ CANONICAL = {  # used when a composition needs a `direct` answer for one part
     "shower_bath": "How many showers and bathtubs are drawn on this floor plan in total?",
 }
 IMG_EXT = (".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp")
+# sources whose non-template questions keep going to their own solvers / vlm_direct (no text-grounded raster answer)
+TEXT_OFF = {"cubicasa5k", "swiss_dwellings", "ifc_models", "ifc_bench", "opening_design"}
+# "How many rooms labelled 'Küche'", "Räume mit der Bezeichnung «Reduit»", "pièces portant la désignation « Bain »"
+_LABELLED = re.compile(r"(?:labell?ed|called|named|marked|Bezeichnung|bezeichnet|beschriftet|désignation|intitulée?s?|"
+                       r"denominazione|denominat[aeio]|etichettat[aeio]|nimellä|merkitty|märkt|benämn\w*)\s*"
+                       r"[«'\"‘“„]\s*(.+)\s*[»'\"’”“]", re.I)
+_COUNT_CUE = re.compile(r"how many|number of|wie viele|anzahl|combien|nombre de|quant[ie]|kuinka monta|montako|"
+                        r"hur många|antal", re.I)
+
+
+def labelled_query(question: str) -> str | None:
+    """The quoted room label of a 'how many rooms labelled X' question (greedy: "Cage d'escalier" stays whole)."""
+    m = _LABELLED.search(question or "")
+    return m.group(1).strip() if m and _COUNT_CUE.search(question) else None
 GATE_FILE = Path(__file__).with_name("gate.json")
 COND_FILE = Path(__file__).with_name("cond_prior.json")  # experiments/w3/cv/cond_prior.py --write
 
@@ -91,21 +106,43 @@ def class_prior() -> dict:
 class RasterSolver(BaseSolver):
     extensions = IMG_EXT
 
-    def __init__(self, gate: str = "", backend: str = "local", target_px: int | str = 2_000_000, **kwargs):
+    def __init__(self, gate: str = "", backend: str = "local", target_px: int | str = 2_000_000,
+                 text: int | str = 1, offdomain: int | str = 1, **kwargs):
         super().__init__(**kwargs)
         self.backend = backend
         self.target_px = int(target_px)
+        self.text = bool(int(text))  # text-grounded answers on scans (textqa.py); `--solver-arg text=0` = off
+        self.offdomain = bool(int(offdomain))  # non-CubiCasa images: labels for rooms, abstain on symbols
         self.gate = load_gate()
         for part in filter(None, (gate or "").split(",")):
             c, m = part.split(":")
             self.gate.setdefault(c, {"acc": {}})["method"] = m
 
     def can_handle(self, path: str, question: str) -> bool:
-        return self._raster_file(path) is not None and question_op(question)[0] != "none"
+        if self._raster_file(path) is None:
+            return False
+        return question_op(question)[0] != "none" or self._label_count_mode(path, question) or \
+            self._text_mode(path, question)
+
+    def _label_count_mode(self, path: str, question: str) -> bool:
+        """'How many rooms labelled X' on a non-CubiCasa image: an exact count in the text layer (any language)."""
+        return self.offdomain and source_of(path) != "cubicasa5k" and labelled_query(question) is not None
+
+    def _text_mode(self, path: str, question: str) -> bool:
+        """Questions no template covers, on scans and unseen raster sources only (cubicasa/swiss/ifc keep their
+        own solvers; there vlm_direct stays the fallback): answered from the text layer + image (textqa.py)."""
+        return self.text and source_of(path) not in TEXT_OFF and question_op(question)[0] == "none"
 
     # ----------------------------------------------------------------------------------------------
     def solve(self, path: str, question: str) -> Answer:
         op, classes = question_op(question)
+        if op == "none" and self._label_count_mode(path, question):
+            return self._text_count(path, None, labelled_query(question), [f"op=none, labelled count"])
+        if op == "none" and self._text_mode(path, question):
+            from stoa.solvers.raster import textqa
+
+            return textqa.answer(path, question, image_path=self._raster_file(path), backend=self.backend,
+                                 solver=self.name)
         if op in ("single", "none"):
             return self._solve_class(path, question, classes[0] if classes else None)
         # compositions over our classes: sum ("doors and windows in total"), diff ("how many more X than Y"),
@@ -145,6 +182,8 @@ class RasterSolver(BaseSolver):
         if cls is None:
             return Answer(value=None, unit="count", solver=self.name, trace=trace + ["unknown object class"],
                           missing=["question not recognised as a count of a known object class"])
+        if source_of(path) != "cubicasa5k" and self.offdomain:
+            return self._off_domain(path, cls, trace, question)
         g = self.gate.get(cls, {"method": "prior", "acc": {}})
         method = g["method"]
         acc = g.get("acc", {})
@@ -181,6 +220,47 @@ class RasterSolver(BaseSolver):
         except Exception as e:  # noqa: BLE001 - never refuse: fall back to the prior
             trace.append(f"{method} failed: {type(e).__name__}: {str(e)[:150]}")
         return self._prior_answer(cls, prior, trace, acc)
+
+    def _off_domain(self, path: str, cls: str, trace: list[str], question: str | None = None) -> Answer:
+        """Not a CubiCasa plan: the gate, the priors and the rules (sinks from rooms, WC seats from bedrooms) were all
+        fitted on Finnish CubiCasa apartments and mean nothing here (measured on Swiss plans given as PNG, R2's
+        swiss_png_counts_dev: raster 10% vs vlm_direct 40.5%). Room classes and quoted labels: count the printed
+        labels in the tiled text layer (7/7 on Swiss 'rooms labelled X' floors; the one-shot label reader 3/7).
+        Symbols: abstain, so the cascade asks the VLM instead of taking a Finnish prior."""
+        trace.append(f"source '{source_of(path)}' is not CubiCasa: raster's gate/priors/rules do not apply")
+        lab = labelled_query(question or "")
+        if lab or cls in ROOM_CLASSES:
+            return self._text_count(path, cls, lab, trace)
+        return Answer(value=None, unit="count", solver=self.name, trace=trace + ["abstain (off-domain symbol class)"],
+                      missing=[f"a {cls.replace('_', ' ')} detector for this drawing style (raster's are fitted on "
+                               f"CubiCasa plans only)"])
+
+    def _text_count(self, path: str, cls: str | None, label: str | None, trace: list[str]) -> Answer:
+        """Count printed room labels in the drawing's text layer: the exact quoted label when the question gives one,
+        else every label of the room class (EN/FI/SV/DE/FR/IT names, classes.label_class)."""
+        from stoa.solvers.raster import textlayer as T
+
+        img_path = self._raster_file(path)
+        if img_path is None:
+            return Answer(value=None, unit="count", solver=self.name, trace=trace, missing=["no raster image"])
+        tl = T.text_layer(img_path, backend=self.backend)
+        if label:
+            hits = [i for i in tl.items if T.norm(i.text) == T.norm(label)]
+            what = f"label '{label}'"
+        else:
+            hits = [i for i in tl.items if label_class(i.text) == cls]
+            what = f"{cls.replace('_', ' ')} label"
+        trace.append(f"text layer: {len(tl.items)} texts in {tl.tiles} tile(s); {len(hits)} x {what}: "
+                     + ", ".join(i.text for i in hits)[:300])
+        ev = [Evidence(file=img_path, page=0, bbox=[round(v, 1) for v in i.box], bbox_space="image_px",
+                       note=f"{what} {k + 1}: '{i.text}'") for k, i in enumerate(hits)]
+        # confidence: small-sample guesses (exact quoted labels 7/7 on Swiss PNG floors, class labels 5/7)
+        conf = (0.6 if label else 0.45) if hits else 0.3
+        return Answer(value=len(hits), unit="count", confidence=conf, evidence=ev, solver=self.name, trace=trace,
+                      assumptions=[f"counted the printed {what}s read from the drawing (tiled VLM text reading); "
+                                   f"one label = one room"],
+                      missing=[] if hits else [f"no {what} found in the text read from the drawing; an unlabelled "
+                                               f"room would be missed"])
 
     def _raster_file(self, path: str) -> str | None:
         """The image to read: the path itself, or a PNG/JPG sibling of a PDF/other format (same drawing)."""

@@ -24,10 +24,16 @@ from stoa.solvers.vector.pdftables import pdf_tables
 DOC = """Tables rebuilt from the text layer of one construction drawing sheet (US units; values are strings exactly
 as printed, e.g. "108 SF", "3' - 0\\"", "A1"; empty string = blank cell; multi-line headers are joined; a header
 may be wrong or "colN", so look at the values). Each table has a `row_id` column (unique across tables).
-Count/quantity/area columns are numbers; for values like "108 SF" a parsed twin column `<col>_num` exists; all
+Count/quantity/area columns are numbers; for values like "108 SF" or "110 CFM" a parsed twin column `<col>_num`
+exists (NaN where blank); all
 other columns (ids, room numbers, types) are strings: compare them with strings ("118", not 118).
 Use double quotes for strings that contain an apostrophe ("WOMEN'S LOCKER").
-Counting rows: one row = one item unless a Count/Qty column says otherwise.
+Counting rows: one row = one item unless a Count/Qty column says otherwise (then sum that column over the rows).
+Printed subtotal/total rows ("BASEMENT: 8 | 1091 SF", "Grand total: 39") are not table rows; they are in `notes`.
+A cell may hold several codes ("A, B"): match a code as a whole token, not inside "A-620" or "AL-1", e.g.
+df["Notes"].str.contains(r"(?<![\\w-])A(?![\\w-])").
+Dimensions are strings as printed (3' - 0"): never convert them to numbers; for "width and height" answer
+f"{{w}} wide x {{h}} high" with the printed strings.
 Text answers: give the value as printed; if the question also asks what a code means, find the code in `notes`
 (e.g. notes[notes.text.str.contains("F4")]) and answer "F4 - <meaning>"; if it asks for two things (how many
 and what total), answer one string with both ("3 rooms, 4541 SF"); include those notes rows in `used`.
@@ -36,6 +42,7 @@ and what total), answer one string with both ("3 rooms, 4541 SF"); include those
 
 NUM_RE = re.compile(r"^-?\d[\d,]*(?:\.\d+)?$")
 QTY_RE = re.compile(r"^(-?\d[\d,]*(?:\.\d+)?)\s*(SF|S\.F\.|sq\.?\s*ft|ft²|ft2|m²|m2|LF|EA)\.?$", re.I)
+ANY_QTY_RE = re.compile(r"^(-?\d[\d,]*(?:\.\d+)?)\s+([A-Za-z][A-Za-z/]{0,5})\.?$")
 UNIT_MAP = {"sf": "ft2", "sqft": "ft2", "sq ft": "ft2", "ft²": "ft2", "ft2": "ft2", "m²": "m2", "m2": "m2",
             "count": "count", "ft": "ft", "m": "m"}
 
@@ -53,7 +60,108 @@ def _typed(df: pd.DataFrame) -> pd.DataFrame:
         elif sum(bool(QTY_RE.match(v)) for v in vals) >= 0.6 * len(vals):
             df[f"{c}_num"] = pd.to_numeric(df[c].astype(str).str.extract(QTY_RE.pattern.strip("^$"), flags=re.I)[0]
                                            .str.replace(",", ""), errors="coerce")
+        else:  # "110 CFM", "1.5 KW", "40 GPM": one consistent unit word -> parsed twin
+            m = [ANY_QTY_RE.match(v) for v in vals]
+            units = {x.group(2).upper() for x in m if x}
+            if sum(bool(x) for x in m) >= 0.6 * len(vals) and len(units) == 1:
+                df[f"{c}_num"] = pd.to_numeric(df[c].astype(str).str.extract(ANY_QTY_RE.pattern.strip("^$"))[0]
+                                               .str.replace(",", ""), errors="coerce")
     return df
+
+
+CODE = r"(?:[A-Z]{1,3}-?\d{1,2}[A-Z]?|[A-Z]{2,3})"
+CODE_RE = re.compile(rf"^{CODE}$")
+CODES_ANSWER = re.compile(rf"^\s*{CODE}(?:\s*(?:&|,|/|\band\b)\s*{CODE})*\s*$")
+TOPICS = ("floor", "ceiling", "wall", "base", "door", "frame", "glaz", "glass", "window", "hardware", "partition",
+          "roof", "finish", "material")
+
+
+def _legend(rows) -> dict[str, list[tuple[str, tuple, int]]]:
+    """Legend lines of the sheet: a row that STARTS with a code cell ("F4") followed by its meaning
+    ("RESILIENT FLOORING (T.B.D.)"). Only the cell right after the code is the meaning (rows may merge columns)."""
+    out: dict[str, list] = {}
+    for k, r in enumerate(rows):
+        cells = r.cells
+        if len(cells) < 2:
+            continue
+        lead = 0 if CODE_RE.match(cells[0].text.strip()) else (
+            1 if len(cells) > 2 and not re.search(r"[A-Za-z]{2}", cells[0].text) and CODE_RE.match(cells[1].text.strip()) else None)
+        if lead is None:
+            continue
+        code, meaning = cells[lead].text.strip(), cells[lead + 1].text.strip()
+        if CODE_RE.match(meaning) or len(re.findall(r"[A-Za-z]{3,}", meaning)) < 1 or re.match(r"(?i)see\b", meaning):
+            continue
+        box = tuple(min(c.box[i] for c in cells[lead:lead + 2]) if i < 2 else max(c.box[i] for c in cells[lead:lead + 2])
+                    for i in range(4))
+        out.setdefault(code, []).append((meaning, box, k))
+    return out
+
+
+def _explain_codes(value: str, question: str, rows, legend) -> tuple[str, list[tuple[str, str, tuple]]] | None:
+    """'F2 & F3' -> 'F2 (ARTIFICIAL TURF) & F3 (RESILIENT ...)' from the sheet's own legend; None if nothing found."""
+    if not CODES_ANSWER.match(value):
+        return None
+    topics = [t for t in TOPICS if t in question.lower()]
+    found = []
+    for code in re.findall(CODE, value):
+        cands = legend.get(code)
+        if not cands:
+            continue
+
+        def score(c):
+            window = " ".join(cell.text for r in rows[max(0, c[2] - 15):c[2] + 1] for cell in r.cells).lower()
+            return sum(t in window for t in topics)
+        best = max(cands, key=score)
+        if topics and score(best) == 0:
+            continue  # e.g. a door type "B2" must not be explained by the base legend's "B2 = CERAMIC TILE"
+        meaning, box, _ = best
+        found.append((code, meaning, box))
+    if not found:
+        return None
+    if len(found) == 1 and len(re.findall(CODE, value)) == 1:
+        return f"{found[0][0]} - {found[0][1]}", found
+    out = value
+    for code, meaning, _ in found:
+        out = re.sub(rf"(?<![\w-]){re.escape(code)}(?![\w-])", f"{code} ({meaning})", out, count=1)
+    return out, found
+
+
+KINDS_RE = re.compile(r"\b(types?|kinds?|marks?|different|distinct|unique|rows?|entries|lines?|records?|styles?|"
+                      r"models?|categories|variants?)\b", re.I)
+
+
+def _qty_sum(value: int, used: list, tables: dict[str, pd.DataFrame], question: str) -> int | None:
+    """The model counted rows (len) of a table that has a Count/Qty column: answer the summed quantity instead,
+    unless the question counts kinds ("how many door TYPES ..."). None = keep the value."""
+    used = [int(u) for u in used if isinstance(u, (int, float)) and int(u) < 900000]
+    if not used or value != len(set(used)):
+        return None
+    question = re.sub(r"\([^)]*\)", " ", question)  # "(types SS, TT and UU)" filters, it is not the counted noun
+    m = re.search(r"how many\s+(.*?)(?:\b(?:are|is|does|do|have|has|carry|carries|appear|in|on|at|of|with|that|which|"
+                  r"whose|for|from|within|scheduled|listed|shown|use|uses|need|needs|require|get|belong)\b|[?,]|$)", question, re.I)
+    if m is None or KINDS_RE.search(m.group(1)):
+        return None
+    total = 0.0
+    for u in set(used):
+        hit = None
+        for name, df in tables.items():
+            if name == "notes" or df.empty:
+                continue
+            r = df[df["row_id"] == u]
+            if len(r):
+                hit = (df, r.iloc[0])
+                break
+        if hit is None:
+            return None
+        df, row = hit
+        qty = next((c for c in df.columns if re.search(r"^(count|qty|quantity|quan\.?|no\.?|number of units)$",
+                                                          str(c).strip(), re.I)
+                    and pd.api.types.is_numeric_dtype(df[c])), None)
+        if qty is None or pd.isna(row[qty]):
+            return None
+        total += float(row[qty])
+    total = int(round(total))
+    return total if total != value else None
 
 
 def _clean(name: str) -> str:
@@ -89,6 +197,7 @@ class ScheduleSolver(BaseSolver):
             df = _typed(t.df)
             ids = list(range(rid, rid + len(df)))
             df.insert(0, "row_id", ids)
+            df.index = pd.Index(ids)  # `.index` == row_id, so code that reports `.index.tolist()` cites the right rows
             for i, b in zip(ids, t.row_boxes):
                 boxes[i] = b
             rid += len(df) + 1000 - (len(df) % 1000)  # table k's row ids start at a multiple of 1000
@@ -98,6 +207,12 @@ class ScheduleSolver(BaseSolver):
         # legends and notes are short rows (long rows are table rows): a `notes` table, so the code can look up
         # what a code means ("F4") and the lines it used become evidence too
         notes, nid = [], 900000
+        for k, t in enumerate(tabs):  # printed subtotal/total rows taken out of the tables: a cross-check
+            for txt, box in t.totals:
+                name = f"t{k + 1}_{_clean(t.title)}" if t.title else f"t{k + 1}"
+                notes.append({"row_id": nid, "text": f"{name} printed total row: {txt}"})
+                boxes[nid] = box
+                nid += 1
         for r in rows:
             if len(r.cells) <= 3:
                 txt = " | ".join(c.text for c in r.cells)[:160]
@@ -107,6 +222,8 @@ class ScheduleSolver(BaseSolver):
                                        for k in range(4))
                     nid += 1
         tables["notes"] = pd.DataFrame(notes[:300])
+        if notes:
+            tables["notes"].index = pd.Index([n["row_id"] for n in notes[:300]])
         desc.append(f"- `notes`: other text lines of the sheet (legends, keys, general notes), {len(notes[:300])} rows,"
                     " columns ['row_id', 'text']")
         doc = DOC.format(tables="\n".join(desc))
@@ -114,13 +231,16 @@ class ScheduleSolver(BaseSolver):
             f"{n} ({len(df)}x{len(df.columns) - 1})" for n, df in tables.items())]
         try:
             res = tableqa.ask(question, tables, backend=self.backend, doc=doc, id_col="row_id",
-                              units='"count", "ft2", "m2", "ft", "m"')
+                              units='"count", "ft2", "m2", "ft", "m"', lookup_text=True, sep="|")
         except Exception as e:  # noqa: BLE001
             return Answer.abstain(self.name, f"table QA failed: {type(e).__name__}: {e}", trace)
         trace.append("table QA code: " + " ; ".join(ln.strip() for ln in (res.get("code") or "").splitlines()
                                                    if ln.strip())[:700])
-        if res.get("value") is None:
-            return Answer.abstain(self.name, f"table QA gave no answer ({res.get('error')})", trace)
+        if res.get("typed"):
+            trace.append("the model typed the answer from the table text; asked to look it up, the lookup failed, "
+                         "so the typed value is kept")
+        if res.get("value") is None or (isinstance(res["value"], float) and res["value"] != res["value"]):
+            return Answer.abstain(self.name, f"table QA gave no answer ({res.get('error') or 'NaN'})", trace)
         value, unit = res["value"], res.get("unit")
         unit = UNIT_MAP.get(str(unit).lower().replace(".", "").strip(), unit) if unit else unit
         if isinstance(value, bool):
@@ -148,9 +268,25 @@ class ScheduleSolver(BaseSolver):
         evidence = [Evidence(file=path, page=0, bbox=[round(v, 1) for v in boxes[i]], bbox_space="pdf_pt",
                              note=(f"note line {i - 900000}" if i >= 900000 else row_label.get(i, f"table row {i}")))
                     for i in res.get("used", []) if i in boxes]
-        # calibrated on dev (opening_design, local model): 78% right overall; answers that cite rows are right more often
-        conf = 0.8 if evidence else 0.5
-        missing = [] if evidence else ["the query did not report which rows it used"]
+        n_rows_used = len(evidence)
+        if unit == "count" and isinstance(value, int):
+            fixed = _qty_sum(value, res.get("used", []), tables, question)
+            if fixed is not None:
+                trace.append(f"count check: the code counted {value} rows, but their quantity column sums to {fixed}; "
+                             "answered the quantity")
+                value = fixed
+        if isinstance(value, str):
+            # a bare code answer ("F4") gets its meaning from the sheet's own legend: "F4 - RESILIENT FLOORING"
+            ex = _explain_codes(value, question, rows, _legend(rows))
+            if ex is not None:
+                value, found = ex
+                trace.append("legend: " + "; ".join(f"{c} = {m}" for c, m, _ in found))
+                evidence += [Evidence(file=path, page=0, bbox=[round(v, 1) for v in b], bbox_space="pdf_pt",
+                                      note=f"legend: {c} = {m}") for c, m, b in found]
+        # dev opening_design (v10, tuned on it): 100% of answers that cite rows right; self-written probes on 3 unlabelled
+        # sheets: ~85-90% (the first look at a new sheet 8/11). Typed-in answers whose lookup failed are less sure.
+        conf = (0.7 if res.get("typed") else 0.85) if n_rows_used else 0.5
+        missing = [] if n_rows_used else ["the query did not report which rows it used"]
         about_table = re.search(r"schedul|listed|table|legend|\bkey\b|specified|finish", question, re.I)
         about_drawing = re.search(r"\b(drawn|shown|depicted|visible)\b|\bin\s+(?:the\s+)?(?:enlarged\s+)?plan\b",
                                   question, re.I)

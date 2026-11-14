@@ -189,6 +189,39 @@ def interval(target: str, value: int, detector: int, level: int = 90) -> tuple[i
     return max(0, min(value, detector) - lo), max(value, detector) + hi
 
 
+_DET_CLASS = {"window": "windows", "door": "doors", "wc": "wc_seats", "sink": "sinks",
+              "windows": "windows", "doors": "doors", "wc_seats": "wc_seats", "sinks": "sinks"}
+
+
+def detector_interval(target: str, count: int, level: int = 90) -> tuple[int, int] | None:
+    """Calibrated range for a count the CC5K detector gives ALONE (raster_cc5k's own answers): [C - lo, C + hi],
+    margins per class x count bucket, split-conformal on original CC5K val; coverage on the original CC5K test list
+    (leak-safe, D8) at 90%: windows 89.7% (mean width 10.2), doors 93.2% (10.7), WC seats 91.3% (2.0), sinks 92.8%
+    (3.5) (experiments/r1/count_interval/det_interval.py). None for targets without a table."""
+    t = _table().get("detector_intervals") or {}
+    cls = _DET_CLASS.get(target)
+    edges = (t.get("buckets") or {}).get(cls or "")
+    if not edges:
+        return None
+    b = next((f"<={e}" for e in edges if count <= e), f">{edges[-1]}")
+    m = (t.get(str(level)) or {}).get(f"{cls}|{b}")
+    if m is None:
+        return None
+    return max(0, count - int(m[0])), count + int(m[1])
+
+
+def threshold_confidence(target: str, value: int, detector: int, n: int) -> float | None:
+    """Confidence for a yes/no threshold answer ("at least n?" / "more than n-1?") taken from another solver's count
+    `value`, given the CC5K `detector` count: P(the yes/no is right | detector on the same side of n or not), pooled
+    over n = 1..10 per group, fitted on train_gate (experiments/r1/count_interval/threshold_side.py). Dev check:
+    same side 95–98% right (conf 0.94–0.97); straddling 59% (openings, conf 0.53), 69% (fixtures, 0.68)."""
+    t = _table().get("threshold_side") or {}
+    g = (t.get("groups") or {}).get(target)
+    if g is None:
+        return None
+    return (t.get("table") or {}).get(f"{g}|{'same' if (value >= n) == (detector >= n) else 'straddle'}")
+
+
 def check(path: str, key: str | None, ans: Answer, source: str | None = None, live: bool | None = None,
           arbitrate: bool = True, other: int | None = None, other_name: str = "raster") -> Answer:
     """See the module docstring. `key`: intent key ("count:window:drawing") or a bare target ("window").
