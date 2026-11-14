@@ -53,6 +53,8 @@ UNSEEN_SCALE = 0.92  # unseen wording, ONE plain concept: hard's cubicasa paraph
 UNSEEN_MAX = 0.75  # an unseen wording never enters the >= 0.8 'trust' bin (F 04:05, hard2q aggregate)
 XCHECK_DISAGREE = 0.5  # agent vs an unsure rules answer to the same quantity, disagreeing (D19 (5))
 XCHECK_CAP = 0.7  # a disagreeing cross-check (✗) caps confidence (S0 04:00: sealed test, 21 such answers at >= 0.8, 76% right)
+LINK_IFC_ACCEPT = 0.8  # link question: ifc as asked answers when kg_qa gives nothing, at >= this (D20-4)
+LINK_DISAGREE = 0.6  # link question: kg_qa vs ifc as asked, same answer shape, different values
 UNSEEN_STRUCT_CAP = 0.35  # unseen wording WITH extra structure (comparison/exclusion words, numbers): F, held-out: 33%
 
 
@@ -408,6 +410,18 @@ def _fits(task: str, ans: Answer | None) -> bool:
     return k is None or task not in ("count", "area", "volume", "length") or k == task
 
 
+def _link_shape(v) -> tuple[str, object] | None:
+    """('num', x) | ('yn', 'yes'|'no') | None: the comparable core of a link answer ("no: model 55, plan draws 52"
+    -> ('yn', 'no'); 3 -> ('num', 3.0)); anything else (names, lists) is not compared."""
+    x = _num(v)
+    if x is not None:
+        return "num", round(x, 6)
+    m = re.match(r"\s*(yes|no|ja|nein|oui|non|kyllä|ei|sì|si|nej|nee)\s*($|[:;,.(\u2014-])", str(v or ""), re.I)
+    if m:
+        return "yn", "yes" if m.group(1).lower() in ("yes", "ja", "oui", "kyllä", "sì", "si") else "no"
+    return None
+
+
 def _cost_of(ans: Answer) -> Cost:
     c = ans.cost
     return Cost.model_validate(c) if isinstance(c, dict) else (c or Cost())
@@ -424,7 +438,7 @@ class Pipeline(BaseSolver):
                  compose: int | str = 1, normalise: int | str = 1, crosscheck: int | str = 1, agent: int | str = 1,
                  raw_first: int | str = 1, raw_accept: float | str = 0.45, raster_first: int | str = 1,
                  cc5k: int | str = 1, lora: int | str = 1, lora_second: int | str = 0, lora_conf: str = "own", translate: int | str = 1,
-                 translate_cap: float | str = 0.9, both_readings: int | str = 1, **kwargs):
+                 translate_cap: float | str = 0.9, both_readings: int | str = 1, links: int | str = 1, **kwargs):
         super().__init__(**kwargs)
         # R2's language front end (stoa.llm.should_translate / to_english): a non-English question the rules can't read
         # is translated to English once (local model, quoted names/numbers verbatim) and answered in English
@@ -434,6 +448,9 @@ class Pipeline(BaseSolver):
         # bin 97.1/99.1/100% right (R2/F 04:57: right translated answers all sat at 0.75)
         self.translate_cap = float(translate_cap)
         self.both_readings = bool(int(both_readings))
+        # Stoa point 4 (Q v17, D20-4): questions about the drawing set / plan <-> model links on an IFC project go to
+        # ifc as asked (W1's GlobalId set differences), then R1's kg_qa over stoa.kg; 0 = off
+        self.links = bool(int(links))
         self.accept = float(accept)
         self.agree = {"1": "cheap", "0": "never", "2": "always"}.get(str(agree), str(agree))  # cheap|never|always
         self.api = bool(int(api))
@@ -510,9 +527,19 @@ class Pipeline(BaseSolver):
         original = question
         question = normalise_scope(normalise_refs(normalise_numbers(question)), source_of(path))
         asked = question
+        link = self._link_question(path, asked, t0) if self.links else None
+        if link is not None:
+            return link
         question, tr_note, tr_cost = self._front_end(question) if self.translate else (question, None, None)
         if question != asked:  # the English translation may say "the B apartment in m²" (hardL_open tr: 321.76 @ 0.95)
             question = normalise_scope(normalise_refs(normalise_numbers(question)), source_of(path))
+            link = self._link_question(path, question, t0, asked=asked) if self.links else None
+            if link is not None:
+                if tr_cost:
+                    link.cost = _cost_of(link).add(tr_cost)
+                link.trace = [f"language front end: {tr_note}", *link.trace]
+                link.assumptions = [*link.assumptions, tr_note] if tr_note else link.assumptions
+                return link
         ans = self._per_room(path, question, t0)
         if ans is None:
             plan = decompose(source_of(path), question) if self.compose else None
@@ -883,6 +910,86 @@ class Pipeline(BaseSolver):
             return
         ans.cost = _cost_of(ans).add(Cost(llm_calls=m.calls, llm_tokens_in=m.llm_tokens_in,
                                           llm_tokens_out=m.llm_tokens_out, gpu_seconds=round(m.gpu_seconds, 3)))
+
+    def _link_question(self, path: str, question: str, t0: float, asked: str | None = None) -> Answer | None:
+        """D20-4 (Stoa point 4; Q v17, R1 09:06, W1 09:01): a question about the drawing SET or the plan <-> model
+        relation on an IFC project ("Do the floor plan and the IFC model agree on the windows on 'S'?", "How many
+        windows on 'S' are in the model but not drawn on this plan?", "How many floor plan sheets?", "Which storeys
+        have no plan?"). R1's narrow trigger (experiments.r1.kg_qa.is_link_question: 0 fires on the 127,044 dataset
+        questions and every open split), before the composer (it split "do the plan and the model agree on the
+        windows" into counts: bug 21, 297 @ 0.98).
+        Order measured here (R1 probe_kg, 21 Qs): ifc as asked first, kept at >= 0.8 -> 16/21 with 4 confident-wrong
+        (ifc answered '18' to a yes/no 'le même nombre', the largest room to 'which storeys have no rooms', 4 plan
+        sheets to 'plans, sections and elevations', DG1 vs itself); R1's kg_qa first -> 20/21. So: kg_qa first (fact
+        rows from stoa.kg + one local call, Python computes); ifc as asked (0 LLM) only cross-checks it when both
+        answers have the same shape (number vs number, yes/no vs yes/no): same -> ✓ + ifc's GUID evidence, different
+        -> ✗ capped at LINK_DISAGREE. kg_qa gives nothing -> ifc's answer if >= LINK_IFC_ACCEPT, else None (the
+        normal pipeline answers, as before this route existed)."""
+        if source_of(path) not in ("ifc_models", "ifc_bench"):
+            return None
+        try:
+            from experiments.r1.kg_qa.kgqa import is_link_question, solve as kg_solve
+
+            hit = is_link_question(question)
+        except Exception:  # noqa: BLE001  (R1's module missing: no link route)
+            return None
+        if not hit.get("fire"):
+            return None
+        trace = [f"route: link question ({hit.get('why')}) -> project knowledge graph (R1 kg_qa over stoa.kg), "
+                 "ifc as asked as a cross-check"]
+        try:
+            k = kg_solve(path, question)
+            if not isinstance(k, Answer):
+                k = Answer.model_validate(k)
+        except Exception as e:  # noqa: BLE001
+            trace.append(f"kg_qa: error {type(e).__name__}")
+            k = None
+        a = None
+        # ifc only where W1 reads the link deterministically (GlobalId set differences, plan sheets: 0 LLM), or when
+        # kg_qa gave nothing; on other kinds ifc falls back to its LLM text reader (+1.2k tokens/Q, not comparable)
+        ifc = self._get("ifc") if (k is None or k.value is None or re.search(
+            r"plan vs model|count sheets", str(hit.get("why")))) else None
+        if ifc is not None:
+            try:
+                a = ifc.solve(path, question)
+                if not isinstance(a, Answer):
+                    a = Answer.model_validate(a)
+            except Exception as e:  # noqa: BLE001
+                trace.append(f"ifc: error {type(e).__name__}")
+                a = None
+        a_ok = a is not None and a.value is not None
+        if k is None or k.value is None:
+            if a_ok and float(a.confidence or 0) >= LINK_IFC_ACCEPT:
+                out = a.model_copy(deep=True)
+                out.trace = trace + ["project knowledge graph: no answer", f"ifc (question as asked): {a.value} "
+                                     f"{a.unit or ''} at conf {a.confidence:.2f}, accepted (>= {LINK_IFC_ACCEPT})"] + \
+                    [f"[ifc] {t}" for t in a.trace[-10:]]
+                out.solver = "pipeline/ifc"
+                out.cost.wall_seconds = round(time.perf_counter() - t0, 4)
+                return out
+            return None
+        out = k.model_copy(deep=True)
+        out.trace = trace + ["project knowledge graph: " f"{k.value} {k.unit or ''} at conf {k.confidence:.2f}"] + \
+            [f"[kg_qa] {t}" for t in k.trace]
+        if a_ok and float(a.confidence or 0) >= 0.5:  # ifc's own unsure prose ("No information ...") is no reading
+            ka, ia = _link_shape(k.value), _link_shape(a.value)
+            if ka is not None and ia is not None and ka[0] == ia[0]:
+                if ka[1] == ia[1]:
+                    out.trace.append(f"cross-check: ifc as asked says {str(a.value)[:60]} ✓")
+                    out.evidence = [*out.evidence, *[e for e in a.evidence if getattr(e, "ifc_guid", None)][:12]]
+                elif out.confidence > LINK_DISAGREE:
+                    out.trace.append(f"cross-check: ifc as asked says {str(a.value)[:60]} (conf "
+                                     f"{float(a.confidence or 0):.2f}) ✗: confidence capped at {LINK_DISAGREE}")
+                    out.confidence = LINK_DISAGREE
+                    out.missing = [*out.missing, f"the IFC reader answered {str(a.value)[:60]} to the same question"]
+            else:
+                out.trace.append(f"ifc as asked: {str(a.value)[:60]} (another kind of answer; not compared)")
+        elif a_ok:
+            out.trace.append(f"ifc as asked: unsure ({float(a.confidence or 0):.2f}); not compared")
+        out.solver = "pipeline/kg_qa"
+        out.cost = _cost_of(k).add(_cost_of(a)) if a is not None else _cost_of(k)
+        out.cost.wall_seconds = round(time.perf_counter() - t0, 4)
+        return out
 
     def _per_room(self, path: str, question: str, t0: float) -> Answer | None:
         """D19 (4), R1 08:27: R1's measured per-room route (experiments.r1.room_graph.route.per_room: room-scoped /
