@@ -29,6 +29,10 @@ from stoa.llm import downscale, load_image  # noqa: E402
 from stoa.solvers.vlm_direct import DIRECT, SYSTEM  # noqa: E402
 
 MODEL = "/data/User/fangy4/models/hf/local/Qwen3-VL-8B-Instruct-from-QwenImage2.1"
+# chat-format markers per architecture: (turn start, assistant header after it, turn end)
+MARKERS = {"qwen3vl": ("<|im_start|>", "assistant\n", "<|im_end|>"),
+           "gemma4": ("<|turn>", "model\n", "<turn|>")}
+ARCH = "qwen3vl"
 
 
 def build(processor, rec: dict, max_pixels: int, max_turns: int, rng: random.Random):
@@ -47,9 +51,10 @@ def build(processor, rec: dict, max_pixels: int, max_turns: int, rng: random.Ran
     ids = enc["input_ids"][0]
     labels = torch.full_like(ids, -100)
     tok = processor.tokenizer
-    start = tok.convert_tokens_to_ids("<|im_start|>")
-    end = tok.convert_tokens_to_ids("<|im_end|>")
-    asst = tok.encode("assistant\n", add_special_tokens=False)
+    m_start, m_head, m_end = MARKERS[ARCH]
+    start = tok.convert_tokens_to_ids(m_start)
+    end = tok.convert_tokens_to_ids(m_end)
+    asst = tok.encode(m_head, add_special_tokens=False)
     i, n = 0, len(ids)
     while i < n:
         if ids[i] == start and ids[i + 1:i + 1 + len(asst)].tolist() == asst:
@@ -57,7 +62,7 @@ def build(processor, rec: dict, max_pixels: int, max_turns: int, rng: random.Ran
             k = j
             while k < n and ids[k] != end:
                 k += 1
-            labels[j:k + 1] = ids[j:k + 1]  # answer tokens + <|im_end|>
+            labels[j:k + 1] = ids[j:k + 1]  # answer tokens + end-of-turn marker
             i = k
         i += 1
     enc["labels"] = labels.unsqueeze(0)
@@ -81,7 +86,11 @@ def main() -> None:
     ap.add_argument("--save-every", type=int, default=1000, help="samples")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--init-adapter", default="", help="continue training this saved adapter (rank/targets from it)")
+    ap.add_argument("--arch", default="qwen3vl", choices=sorted(MARKERS))
+    ap.add_argument("--img-tokens", type=int, default=1120, help="gemma4 only: image soft-token budget (match the server)")
     a = ap.parse_args()
+    global ARCH
+    ARCH = a.arch
 
     from peft import LoraConfig, get_peft_model
     from transformers import AutoProcessor, Qwen3VLForConditionalGeneration
@@ -101,8 +110,15 @@ def main() -> None:
     print(f"{len(recs)} drawings, {total} samples planned, time box {a.minutes} min", flush=True)
 
     processor = AutoProcessor.from_pretrained(a.model)
-    model = Qwen3VLForConditionalGeneration.from_pretrained(a.model, dtype=torch.bfloat16,
+    if a.arch == "gemma4":
+        from transformers import AutoModelForImageTextToText
+
+        processor.image_processor.max_soft_tokens = a.img_tokens  # same budget as vLLM's --mm-processor-kwargs
+        model = AutoModelForImageTextToText.from_pretrained(a.model, dtype=torch.bfloat16,
                                                             attn_implementation="sdpa").cuda()
+    else:
+        model = Qwen3VLForConditionalGeneration.from_pretrained(a.model, dtype=torch.bfloat16,
+                                                                attn_implementation="sdpa").cuda()
     model.config.use_cache = False
     model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
     model.enable_input_require_grads()
@@ -112,8 +128,10 @@ def main() -> None:
         model = PeftModel.from_pretrained(model, a.init_adapter, is_trainable=True)
         print(f"continuing from adapter {a.init_adapter}", flush=True)
     else:
-        cfg = LoraConfig(r=a.rank, lora_alpha=2 * a.rank, lora_dropout=0.05, bias="none",
-                         target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"])
+        targets = ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
+        if a.arch == "gemma4":  # language model only (vision/audio towers reuse these names; vLLM serves LM LoRA)
+            targets = r".*language_model.*\.(q_proj|k_proj|v_proj|o_proj|gate_proj|up_proj|down_proj)"
+        cfg = LoraConfig(r=a.rank, lora_alpha=2 * a.rank, lora_dropout=0.05, bias="none", target_modules=targets)
         model = get_peft_model(model, cfg)
     model.print_trainable_parameters()
 
@@ -162,7 +180,7 @@ def main() -> None:
             print(f"time box reached after {si + 1} samples", flush=True)
             break
     model.save_pretrained(out)
-    meta = {"base": a.model, "data": a.data, "samples": si + 1, "minutes": round((time.time() - t0) / 60, 1),
+    meta = {"base": a.model, "arch": a.arch, "data": a.data, "samples": si + 1, "minutes": round((time.time() - t0) / 60, 1),
             "rank": a.rank, "lr": a.lr, "accum": a.accum, "max_pixels": a.max_pixels}
     (out / "r2_meta.json").write_text(json.dumps(meta, indent=1))
     print("saved", out, meta, flush=True)

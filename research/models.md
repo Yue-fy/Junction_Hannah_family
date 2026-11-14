@@ -49,8 +49,20 @@ Cost $0.035/1k (780 tok in, 2 out). Confidence: own map (CONF_MAPS["cc-v2"], fit
 Licence: CubiCasa5K images are CC BY-NC-SA 4.0 → the adapter is non-commercial (same as the CC5K weights).
 Scripts: `experiments/r2/lora/{build_data,train_lora,eval_lora.sh}`. Training env: `/data/User/fangy4/envs/junction-train`
 (= coder390-vllm packages via a read-only .pth + peft/accelerate).
-v3 ideas: 2 epochs (v2 saw each drawing once), rank 32, add swiss PNG-twin counts for style diversity
-(`build_data.py --sources swiss_dwellings --png-twins` → artifacts/R2/lora/train_swiss_png.jsonl, 547 drawings, 7.9k turns).
+**LoRA cc-v3 (trained 01:50–02:24) — cubicasa tie, better on unseen raster styles.** cc-v2 continued for 33 min
+(lr 5e-5) on `train_v3_mix.jsonl` = TRAIN cubicasa (no train_gate) + swiss PNG twins of TRAIN drawings (4,452 drawings,
+2,671 sampled). Adapter: `$JUNCTION_SHARED/artifacts/R2/lora/cc-v3`.
+| set | cc-v3 | cc-v2 | base 8B |
+|---|---|---|---|
+| dev cubicasa (800) | 74.6 | 73.9 | 50.4 |
+| train_gate cubicasa (480) | 76.2 | 76.7 | 45.6 |
+| hard cubicasa (283: translations, paraphrases, compositions) | 52.6 | 52.7 | |
+| cc5k_heldout_notLoRA (200) | 79.5 | 79.0 | 51.5 |
+| swiss dev counts on PNG twins (200, EN/DE/FR/IT) | **56.5** | 46.0 | 40.5 |
+Paired cc-v3 − cc-v2: dev +0.8 [−1.0, +2.5], train_gate −0.4 [−2.3, +1.5], swiss PNG **+10.5 [+4.4, +16.8]**.
+Verdict: more passes over the same cubicasa labels saturate; mixing a second drawing style transfers (+16 over the
+base on swiss PNGs, DE windows 0 → 33, WC 62 → 88). cc-v2 stays the cubicasa model (every gate is fitted on it);
+cc-v3 is the candidate for count questions on raster plans that are NOT cubicasa (the hidden set's "different" data).
 
 Cost accounting: local calls record `gpu_seconds = tokens_in/25k + tokens_out/1k` (amortised throughput measured
 at saturation), not HTTP wall time (which includes queueing behind other agents).

@@ -24,7 +24,10 @@ case "$PRESET" in
     : "${SERVED_NAME:=qwen3.6-35b-a3b}" ;;
   gemma4-e4b)  # Gemma 4 E4B-it (ungated, 16 GB bf16): bake-off candidate, Gemma prize. Use PORT=8002 + GPU lock.
     : "${MODEL:=$MODELS/hf/google/gemma-4-E4B-it}"
-    : "${SERVED_NAME:=gemma-4-e4b}" ;;
+    : "${SERVED_NAME:=gemma-4-e4b}"
+    # default image budget is 280 soft tokens (too coarse for floor plans); 1120 is the maximum
+    gemma_kw="{\"max_soft_tokens\":${GEMMA_IMG_TOKENS:-1120}}"
+    : "${EXTRA_ARGS:=--mm-processor-kwargs $gemma_kw}" ;;
   *) : "${MODEL:?set MODEL for a custom preset}"; : "${SERVED_NAME:=$PRESET}" ;;
 esac
 PORT=${PORT:-8001}
