@@ -556,6 +556,14 @@ def chat(
             delay = min(delay * 2, 60)
         except (APIConnectionError, APITimeoutError) as e:  # server restarting / overloaded
             last_err = e
+            if backend == "local2" and os.environ.get("STOA_LOCAL2_FALLBACK", "1") != "0":
+                # the optional second server (D21: 35B for free text) is gone: answer on :8001 NOW instead of waiting
+                # up to LLM_RESTART_WAIT for it (a demo must not hang), and tell text_backend() for the next 60 s
+                _TB_SEEN["local2"] = (False, time.time())
+                backend, client, cpath = "local", _client("local"), None
+                if kwargs.get("model") not in (None, "default"):
+                    kwargs["model"] = "default"
+                continue
             if is_local(backend) and isinstance(e, APIConnectionError) and waited < restart_budget:
                 attempt -= 1  # a restarting local server doesn't use up retries, only the time budget
             time.sleep(delay)
