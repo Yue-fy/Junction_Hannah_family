@@ -22,7 +22,7 @@ from stoa.router.canonical import canonical
 from stoa.router.intent import _NEGATION, _QUOTED, _TARGETS, Intent, modifiers, parse
 
 _TOGETHER = re.compile(r"\b(in total|together|altogether|combined|in all|total number|sum of|zusammen|insgesamt|"
-                       r"yhteens[aä]|au total|in totale|i alt|totaal)\b", re.I)
+                       r"yhteens[aä]|au total|in totale|i alt|totaal|sammanlagt|tillsammans)\b", re.I)
 # Q 08:21: "How many doors and how many windows are on '1.korrus'?" was summed (101 @ 0.86; gold 46 and 55): two counting
 # cues, or "respectively / each / separately", without a total cue -> one count per class
 _COUNT_CUE = re.compile(r"\bhow many\b|\bnumber of\b|\bwie viele\b|\bcombien\b|\bquant[ie]\b|\bkuinka monta\b|\bmontako\b|"
@@ -202,7 +202,7 @@ def decompose(source: str, question: str) -> Plan | None:
                 return Plan("list", subs, list(ts), "count")
     # sum of counts: "doors and windows in total", "toilets, washbasins and bathtubs altogether"
     # ('plus' is French 'more' in "de plus que", "plus de … que", "en plus": not a sum cue)
-    if base.task == "count" and (_TOGETHER.search(q) or re.search(r"\band\b|(?<!de )(?<!en )\bplus\b(?! de| que| d')",
+    if base.task == "count" and (_TOGETHER.search(q) or re.search(r"\b(?:and|och)\b|(?<!de )(?<!en )\bplus\b(?! de| que| d')",
                                                                    qn, re.I)):
         clause = qn
         mc = re.search(r"\bcounting (.+)", qn, re.I)  # "sanitary fixtures ..., counting toilet seats, sinks ..."
@@ -215,6 +215,19 @@ def decompose(source: str, question: str) -> Plan | None:
         for _, t in _targets_in(clause):
             if t not in ts and t not in ("room", "storey") and not (mc and t == "sanitary"):
                 ts.append(t)
+        if len(ts) < 2 and _TOGETHER.search(q):
+            # F 08:56: the parts are listed only INSIDE the parentheses ("Hur många våtrum har bostaden (badrum,
+            # separata toaletter och bastur tillsammans)?", "sanitetsenheter … (toalettstolar, handfat …)"): an
+            # enumeration of >= 2 classes there, with a total cue, is what to add up (a single class there stays a
+            # definition, as before)
+            for inner in re.findall(r"\(([^)]*)\)", re.split(r"\?", qn)[0]):
+                its = []
+                for _, t in _targets_in(_NEGATION.sub(" ", inner)):
+                    if t not in its and t not in ("room", "storey", "sanitary"):
+                        its.append(t)
+                if len(its) >= 2 and re.search(r",|\b(?:and|och|ja|und|et|e|en|og)\b", inner):
+                    ts = its
+                    break
         if any(t in _FIXTURES for t in ts):
             # F 08:45: "How many sinks are there in total, kitchen and bathroom together?" -> sink + kitchen + bathroom
             # = 5: rooms next to a counted fixture are where it is (scope), not more things to count

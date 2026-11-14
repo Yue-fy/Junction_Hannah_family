@@ -48,3 +48,16 @@ def test_no_balconies_is_an_exclusion():
     assert normalise_refs("apartment D net area in sq m (no balconies)") == "Apartment D net area in m² (excluding balconies)"
     assert normalise_refs("area of apartment C with no balcony") == "area of apartment C excluding balcony"
     assert normalise_refs("Are there no balconies?") == "Are there no balconies?"
+
+
+def test_swedish_compositions():
+    from stoa.router.compose import decompose
+
+    p = decompose("cubicasa5k", "Hur många sovrum och badrum (inte separata toaletter) har bostaden sammanlagt?")
+    assert p and p.op == "sum" and p.labels == ["bedroom", "bathroom"]
+    p = decompose("cubicasa5k", "Hur många våtrum har bostaden (badrum, separata toaletter och bastur tillsammans)?")
+    assert p and p.op == "sum" and p.labels == ["bathroom", "wc_room", "sauna"]
+    p = decompose("cubicasa5k", "Hur många toalettstolar, duschar och badkar finns det sammanlagt på planen?")
+    assert p and p.labels == ["wc", "shower_bathtub"]
+    # a single class inside parentheses stays a definition
+    assert decompose("cubicasa5k", "How many bedrooms (MH) are there in total?") is None
