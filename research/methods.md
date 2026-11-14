@@ -141,6 +141,13 @@ Tried and not adopted:
 - A per-class probability threshold instead of argmax (P(window) ≥ τ, τ = 0.15–0.45; 227 val drawings):
   never better (windows 44.1% argmax vs 43.6%). The missed windows are not near-misses in probability.
 
+- 2× upscaling with the maps KEPT at 2× (`dense2x.py`; `infer.py --scale 2 --keep-res`, so neighbouring symbols
+  don't merge again on the way back to 1×), for all 688 val+test plans ≤ 1500 px, min_frac × kernel grid on val.
+  Always-2×: windows val 40.1 → 34.7, test 33.9 → 32.5; doors val 46.3 → 40.6, test 39.6 → 36.0. The best gated
+  rule from val (2× only on small, dense plans) gives test windows +0.5 [−2.1, +3.4] and doors +1.1 [−1.4, +3.6],
+  which is selection noise (800 rules tried). The worst misses, such as 29 windows on a 785×355 plan, are not
+  caused by low resolution.
+
 **Memorisation check (D3).** Accuracy on drawings from the model's original *train* list is about the
 same as on held-out *test* drawings of the same style, so there is little memorisation:
 

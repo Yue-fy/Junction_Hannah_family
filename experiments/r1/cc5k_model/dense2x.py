@@ -27,17 +27,26 @@ def rows(split, gold, t, grid):
         if t not in gold.get(st, {}):
             continue
         z1, z2 = load(st, ""), load(st, "u2_")
-        if z1 is None or z2 is None:
+        if z1 is None:
             continue
         H, W = z1["icons"].shape
         c1 = counts(z1, t, *FROZEN[t])
-        c2 = {g: counts(z2, t, *g) for g in grid}
+        c2 = {g: counts(z2, t, *g) for g in grid} if z2 is not None else None  # test: only gated plans have 2x maps
         out.append(dict(st=st, g=gold[st][t], c1=c1, c2=c2, L=max(H, W), dens=c1 / (H * W / 1e6)))
     return out
 
 
 def acc(rs, pick):
+    rs = [r for r in rs if r["c2"] is not None or _gate_off(pick, r)]
     return sum(pick(r) == r["g"] for r in rs) / max(1, len(rs))
+
+
+def _gate_off(pick, r):
+    try:
+        pick(r)
+        return True
+    except TypeError:  # pick needed 2x maps this plan doesn't have
+        return False
 
 
 if __name__ == "__main__":
@@ -66,6 +75,6 @@ if __name__ == "__main__":
               f"{100*acc(test, pick):.1f} (2x used on {n2}/{len(test)} test plans)")
         # paired drawing-level bootstrap on test, gated vs 1x
         rng = np.random.default_rng(0)
-        d = np.array([(pick(r) == r["g"]) - (r["c1"] == r["g"]) for r in test], float)
+        d = np.array([(pick(r) == r["g"]) - (r["c1"] == r["g"]) for r in test if _gate_off(pick, r)], float)
         bs = [d[rng.integers(0, len(d), len(d))].mean() for _ in range(4000)]
         print(f"  test gated - 1x: {100*d.mean():+.1f} [{100*np.percentile(bs, 2.5):+.1f}, {100*np.percentile(bs, 97.5):+.1f}]")
