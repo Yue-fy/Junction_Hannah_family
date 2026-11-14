@@ -498,6 +498,11 @@ def _solve_one(path: str, question: str, backend: str = "local", llm_question: s
                       missing=["no linked model / sheet set for this drawing"])
     hit = is_link_question(question)
     want = _sheet_kinds(question)
+    if not want and "count sheets" in hit["why"] and not re.search(
+            r"\b(show\w*|zeig\w*|näyttä\w*|montr\w*|visa\w*|mostr\w*|toon\w*|muestr\w*|with|mit|containing|where|"
+            r"which|of the|for the|room|raum|huone|pièce|rum|stanz\w*|kamer)\b", question.lower()):
+        # 'How many drawings belong to this building model?' (v20): a generic sheet noun = every drawing sheet
+        want = {"plan", "section", "elevation"}
     if want and ("count sheets" in hit["why"] or "sheet exists" in hit["why"]):
         # deterministic: no model call (sheet kinds come from the file names W1's graph already classified)
         got = [r for r in rows if r["id"][0] == "F" and r.get("kind") in want]
@@ -754,7 +759,7 @@ def _solve_one(path: str, question: str, backend: str = "local", llm_question: s
         # Q 10:40 'Which floor has the biggest room?' -> 'yes (model 55 vs drawn 52)' @0.80: a which-question has no yes
         trace.append(f"kg_qa: which-question answered '{str(value)[:30]}' (op {op}) -> no answer")
         value, conf = None, 0.0
-    if counting_q and value is not None and op in ("lookup_storey", "lookup_sheet", "list_storeys"):
+    if (counting_q or counting) and value is not None and op in ("lookup_storey", "lookup_sheet", "list_storeys"):
         # W1 c8 'How many walls are there on the ground floor?' -> 'EG' @0.85 (a storey lookup): a count needs a number
         trace.append(f"kg_qa: count question answered with '{value}' (op {op}) -> no answer")
         value, conf = None, 0.0

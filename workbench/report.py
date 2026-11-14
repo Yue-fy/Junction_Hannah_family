@@ -35,7 +35,7 @@ def build() -> str:
 
     items = store.read("audit_items")
     audits = _last_by(store.read("audit"), "item_id")
-    qs = list(_last_by(store.read("questions"), "qid").values())
+    qs = [q for q in _last_by(store.read("questions"), "qid").values() if not q.get("deleted")]
     rules = store.read("rules")
     L = [f"# Expert workbench report (updated {time.strftime('%Y-%m-%d %H:%M')})", "",
          "Source: `$JUNCTION_SHARED/human/` (written by the workbench on :8200, agent H). "

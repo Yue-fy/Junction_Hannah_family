@@ -44,21 +44,24 @@ def main(argv=None) -> int:
     ap.add_argument("--seed", type=int, default=7)
     ap.add_argument("--oversample", type=float, default=2.0, help="candidates per slot (to find wrong ones)")
     ap.add_argument("--out", default=None)
+    ap.add_argument("--split", default="dev", help="dev uses QUOTA; other splits get a proportional quota per stratum")
+    ap.add_argument("--prefix", default="a", help="item_id prefix (a = first batch, b = harder batch, ...)")
     a = ap.parse_args(argv)
 
     from stoa.eval.runner import run_one
     from stoa.eval.splits import load_split
     from stoa.solvers import get_solver
 
-    scale = a.n / sum(QUOTA.values())
     rng = random.Random(a.seed)
     strata: dict[tuple, list] = defaultdict(list)
-    for q in load_split("dev"):
+    for q in load_split(a.split):
         strata[(q.source, q.type)].append(q)
+    quotas = QUOTA if a.split == "dev" else {k: len(v) for k, v in strata.items()}
+    scale = a.n / sum(quotas.values())
 
     solver = get_solver("pipeline")
     picked: list[dict] = []
-    for key, quota in QUOTA.items():
+    for key, quota in quotas.items():
         quota = max(1, round(quota * scale))
         pool = strata.get(key, [])
         rng.shuffle(pool)
@@ -98,7 +101,8 @@ def main(argv=None) -> int:
     tmp = out.with_suffix(".tmp")
     with open(tmp, "w", encoding="utf-8") as f:
         for i, r in enumerate(order, 1):
-            r["item_id"] = f"a{i:02d}-{r['qid']}"
+            r["item_id"] = f"{a.prefix}{i:02d}-{r['qid']}"
+            r["split"] = a.split
             r["made_at"] = time.strftime("%Y-%m-%dT%H:%M:%S")
             f.write(json.dumps(r, ensure_ascii=False, default=str) + "\n")
     tmp.replace(out)
