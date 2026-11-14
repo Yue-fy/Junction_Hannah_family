@@ -68,6 +68,22 @@ def _excluded_names(question: str) -> list[str]:
     return [next(g for g in x.groups() if g) for x in _QUOTED.finditer(q) if x.start() >= m.start()]
 
 
+_APT_NAMED = re.compile(r"\b(?:apartment|flat|unit|wohnung|appartement|appartamento|asunto|apartamento)\s+([A-Z]{1,2}\d{0,2})\b",
+                        re.I)
+APT_AREA_Q = ("What is the net floor area of apartment {a} in m², summing all its rooms except balconies, loggias, "
+              "terraces and other outdoor spaces?")
+FLOOR_AREA_Q = ("What is the total net floor area in m² of all numbered indoor rooms on this floor (excluding balconies, "
+                "loggias, terraces and other outdoor spaces, shafts and voids)?")
+
+
+def _excluded_apartment(question: str) -> str | None:
+    """The ONE apartment a question with an exclusion cue names ("... without apartment B", "leave B out"), else None."""
+    if "rest" not in modifiers(question):
+        return None
+    names = {m.group(1).upper() for m in _APT_NAMED.finditer(re.sub(r"'[^']*'|\"[^\"]*\"", " ", question))}
+    return names.pop() if len(names) == 1 else None
+
+
 def _echoes_question(value, question: str) -> bool:
     """Is the (numeric) answer one of the numbers written in the question, outside quoted names?"""
     try:
@@ -673,6 +689,27 @@ class Pipeline(BaseSolver):
                 trace.append(f"{name} (question as asked): {a.value} {a.unit or ''}, but its evidence is only "
                              f"'{excl[0]}', which the question leaves out: unsure")
                 return None, (name, a)
+            apt = _excluded_apartment(question) if name == "dxf" and a.confidence >= self.raw_accept and \
+                _UNIT_KIND.get(str(a.unit or "").lower()) == "area" else None
+            if apt:
+                # F 04:28 (held-out floor-minus-apartment): dxf returned the EXCLUDED apartment's own area at 0.90-0.96
+                # and the KG check 'confirmed' it. Wording-independent test: ask dxf the two plain quantities (rules,
+                # no LLM) and see whether the answer IS one of them -> the exclusion was not applied
+                for label, q2 in ((f"apartment {apt}'s own area", APT_AREA_Q.format(a=apt)),
+                                  ("the whole floor's total", FLOOR_AREA_Q)):
+                    try:
+                        b = s.solve(path, q2)
+                    except Exception:  # noqa: BLE001
+                        continue
+                    total = total.add(_cost_of(b))
+                    if b.value is not None and _agree(a.value, b.value, "area"):
+                        a = a.model_copy(deep=True)
+                        a.confidence = round(min(a.confidence, DERIVED_CAP), 3)
+                        a.missing = [*a.missing, f"{name}'s answer {a.value} m² equals {label} ({b.value} m²), but the "
+                                                 f"question leaves apartment {apt} out: the operation was not applied"]
+                        trace.append(f"{name} (question as asked): {a.value} {a.unit or ''} equals {label} "
+                                     f"({b.value}); the question leaves apartment {apt} out: unsure")
+                        return None, (name, a)
             if a.confidence < self.raw_accept:
                 trace.append(f"{name} (question as asked): {a.value} {a.unit or ''} at conf {a.confidence:.2f}, unsure"
                              + ("" if _fits(intent.task, a) else f" (a {a.unit} answer to a {intent.task} question)")
