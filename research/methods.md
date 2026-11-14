@@ -343,6 +343,22 @@ How to use it: show `7 windows (90%: 6–12)`. A comparison ("more bedrooms than
 two ranges don't overlap. A sum of two counts has the range [lo₁+lo₂, hi₁+hi₂], which covers the true sum at
 least 1−2α of the time (union bound). The ranges were fitted for LoRA answers only, so other solvers get none.
 
+**Detector alone (leak-safe).** When the pipeline sends a count to `raster_cc5k` first (windows on cc5k=1), no
+second counter exists. Then the range is `[C − lo, C + hi]`, with margins per class × count bucket. The margins are
+fitted on the original CC5K **val** list and checked on the original **test** list
+(`experiments/r1/count_interval/det_interval.py`, D8-clean). raster_cc5k's answers carry it automatically
+("interval90: [lo, hi]").
+
+| 90% nominal | test coverage | mean width | margins (bucket: −lo/+hi) |
+|---|---|---|---|
+| windows (n 368) | 89.7% | 10.2 | ≤4: −1/+3, ≤8: −3/+5, >8: −3/+13 |
+| doors (264) | 93.2% | 10.7 | ≤4: −1/+9, ≤8: −2/+9, >8: −3/+5 |
+| WC seats (367) | 91.3% | 2.0 | ≤1: −0/+1, >1: −1/+0 |
+| sinks (363) | 92.8% | 3.5 | ≤2: −0/+2, >2: −2/+1 |
+
+With a second independent counter, the fixture ranges are narrower at the same coverage: 1.4–1.7 values wide
+instead of 2.0–3.5. That is the measurable value of linking two sources (Stoa point 4).
+
 ### 8c. Linked data as a cross-check
 - Swiss (measured, `experiments/r1/link_dxf_pdf/fit_affine.py`): DXF → PDF is one affine map per floor,
   fitted by least squares on room numbers that occur once in both the DXF `ROOM_TEXT` and the PDF words
