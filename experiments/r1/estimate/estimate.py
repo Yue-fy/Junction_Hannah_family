@@ -218,7 +218,7 @@ PAINT = {  # local currency per m2 of painted SURFACE (labour + paint, 2 coats, 
 }
 # paintable wall surface per m2 of floor: square rooms of a m2, 2.6 m high, ~12% doors/windows ->
 # 4 * 2.6 * sqrt(a) * 0.88 / a = 9.15 / sqrt(a): a = 10 -> 2.9, 15 -> 2.4, 20 -> 2.0, 25 -> 1.8; tiled wet rooms left out
-WALL_PER_FLOOR = (2.4, 1.8, 3.2)
+WALL_PER_FLOOR = (2.6, 1.6, 4.0)  # geometry 2.4; IFC check (methods 8o): 1.5 x wall side / space area, median 2.9, IQR 1.8-4.2
 _CEIL = re.compile(r"\b(ceiling\w*|katto\w*|katot|katon|decke\w*|plafond\w*|soffitt\w*|tak|taket|taken|plafonds?|"
                    r"lagi|lae|techo\w*|cielo ?rasos?)\b", re.I)
 _WALLS = re.compile(r"\b(walls?|seinä\w*|seinät|wand|wände\w*|murs?|pareti|parete|vägg\w*|muren|muur|seina\w*|"

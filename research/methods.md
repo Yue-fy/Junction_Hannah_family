@@ -886,7 +886,7 @@ out-of-drawing like a rent rate, so it belongs in the estimate route next to ren
 - Value = floor area (the same `dwelling()` read as rent: IfcSpace sums per storey, DXF room polygons, CubiCasa room
   graph; else a typical dwelling) × painted surface per floor m² × a painter rate per m².
   Wall surface per floor m²: for square rooms of a m², 2.6 m high, ~12% openings, 4·2.6·√a·0.88 / a = 9.15/√a, which is
-  2.9 at 10 m², 2.4 at 15, 2.0 at 20 and 1.8 at 25 → **2.4 (range 1.8–3.2)**. Tiled wet rooms are left out. 'ceilings' adds
+  2.9 at 10 m², 2.4 at 15, 2.0 at 20 and 1.8 at 25 → 2.4 (range 1.8–3.2), now 2.6 (1.6–4.0) after the IFC check below. Tiled wet rooms are left out. 'ceilings' adds
   1.0 × floor area. If no surface is named, walls only (stated as an assumption).
   Rates (labour + paint, 2 coats) are **rules of thumb, not cited statistics**, and they are labelled "assumed": FI 15
   (10–25) EUR/m², CH 30 (20–45) CHF, US 30 (15–55) USD, EU 15 (8–30) EUR. Rounded to 100, conf 0.1, and `missing`
@@ -896,6 +896,12 @@ out-of-drawing like a rent rate, so it belongs in the estimate route next to ren
   `experiments/r1/estimate/probe_repaint.txt`. Those wordings are IN-SAMPLE (I wrote them together with the regex).
   One drawing per source gives sensible values (CubiCasa 106 m² → 3,800 EUR; Swiss 304 m² floor → 21,900 CHF walls,
   31,000 walls + ceilings; IFC storey 325 m² → 11,700 EUR; HABS/finna without an area → a typical dwelling, wide range).
-- Open: the 2.4 factor is geometry, not fitted. Fit it on IFC: Σ IfcWall side area per storey / Σ IfcSpace area. W1's
-  ifc solver already answers wall-side questions. On an IFC file the agent could also measure the real wall faces and
-  then use the stated or reference rate.
+- IFC check (11:23, `experiments/r1/estimate/wall_factor_ifc.py`, W1's ifc solver, 11 ifc_models projects in 150 s):
+  R = total wall net side area (one face) / total IfcSpace area: median 1.91, IQR 1.23–2.80. Range over projects 0.59
+  (gym hall) to 4.45 (warmond). Residential: duplex 2.06, fzk-haus 1.10, smiley-west 1.83, esplanades 1.91. Painted
+  surface ≈ 1.5 R (interior walls are painted on both faces, exterior walls on one) → median 2.9, IQR 1.8–4.2. Several
+  wall sums are the solver's fallback at conf 0.41. **WALL_PER_FLOOR is now 2.6 (1.6–4.0)** (was 2.4 (1.8–3.2)): between
+  the geometry and the IFC median, with the range widened to the measured IQR. n = 11, mostly non-residential, so
+  this is a sanity check, not a fit.
+- Open: on an IFC file, measure the real wall faces (the ifc solver's side area × 1.5, or per-wall faces) and use the
+  stated or reference rate. That is a better central value than any factor.
