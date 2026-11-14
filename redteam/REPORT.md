@@ -28,7 +28,9 @@ cuts confident false-premise answers 7 → 4 of 24 and makes drawings outside ou
 **Status 04:35:** W4, W1 and F shipped fixes; on night-W4 83d0dcb confident answers to false-premise/unanswerable
 questions are down to 2 of 24 (both W2's dxf room-name case), scored answers at conf ≥ 0.8 are 135/135 right, and
 the injection's 99 gets conf 0.10 (section "Verification").
-**Status 04:55 (night dde6347):** on the 283 v1–v4 rows no false-premise question is answered at ≥ 0.8 and every
+**Status 05:05 (night 753eccb):** W1's cross-language check fixed "whole building" in 5 of 6 languages and half of the
+storey nouns; 20 confident-wrong answers remain on 418 rows, all in the new families (section "Verification on night
+753eccb"). **Earlier, 04:55 (night dde6347):** on the 283 v1–v4 rows no false-premise question is answered at ≥ 0.8 and every
 scored answer at ≥ 0.8 is right (190/190). v5 asks the way people talk and breaks it again: **a storey named as
 "the basement" / "im Erdgeschoss" / "op de begane grond" is ignored and the sheet's storey is answered** (12 of 20
 non-English rows confidently wrong; bug 13, W1), "How big is the Küche?" with 8 kitchens returns their silent sum at
@@ -404,6 +406,32 @@ on this floor?" on the esplanades sheet, each in EN/DE/NL/FI/SV/FR/IT/ET/PL. Gol
   sheet's-storey default needs a positive cue — "this floor / plan / sheet" in any language, or no place words at all —
   otherwise conf ≤ 0.5 or translate and re-ask; (c) cross-check like with like (sheet symbols vs that storey's count).
 
+## v8 (05:03): a place the drawing does not show — 8 Qs
+"How many doors are there in the whole building?" / "Wie viele Türen gibt es im ganzen Gebäude?" / "How many apartments
+does the building have in total?" on the Swiss demo plan (the dataset holds ONE floor of building 2082) → 36 / 36 / 4
+at **0.99**, no note that only one floor is drawn (W2). "How many doors are there on the 7th floor?" / "… on the eighth
+floor?" on the esplanades demo sheet (1.–5.korrus) → **46 at 0.98**, the sheet's storey, while the quoted '7.korrus'
+is flagged at 0.29 (W1). CubiCasa "bedrooms on the second floor" → 3 at 0.75. Ordinals that exist work ("3rd floor"
+→ 42, "floor 5" → 39, at 0.53).
+
+## Verification on night 753eccb (05:00; W1 74728cf cross-language check, R2 glossary, W2 15ad113, W4 1431466)
+Run `20261114-045855-pipeline-questions-93c5`, all 418 rows; subsets by `subset_stats.py <run> N`.
+
+| | night dde6347 (5c3d) | **night 753eccb (93c5)** |
+|---|---:|---:|
+| v1–v4 (283): scored accuracy | 93.1 % | **96.5 %** |
+| v1–v4: false premises at conf ≥ 0.8 / right at ≥ 0.8 / AURC | 0/24 · 190/190 · 0.020 | 0/24 · 190/190 · **0.011** |
+| compose IT / NL / SV (6 each) | 3 / 3 / 3 | **6 / 6 / 6** |
+| v5 storey nouns, non-English (20): right / confidently wrong | 4 / 12 | **12 / 5** |
+| v7 "whole building" SV/FR/ET/FI/PL (15): right | 2 | **15** |
+| v7 "whole building" IT (3): right | 0 | 0 (all at 0.88–0.98) |
+| all 418: scored accuracy / conf ≥ 0.8 right | — | 92.1 % / 234 of 244 |
+| $ per 1,000 Qs | 0.079 | **0.059** |
+
+**Left (20 confident-wrong, all in v5–v8):** "basement" on Smiley West (storey 'KG') in all 6 languages → the 1.OG
+sheet's 50 at 0.88–0.98 (ground floor now works); Italian "in tutto l'edificio" ×3; ambiguous room names ×5 (W2); "how
+many floors" → 7; v8 scope premises ×5.
+
 ## What held (worth saying in the pitch)
 - Paraphrase / casing / context / distractor numbers: **0 of 56 answers changed**. Typos and injections changed 7
   answers, **all of them at conf ≤ 0.42**, so the confidence flagged every one.
@@ -413,8 +441,8 @@ on this floor?" on the esplanades sheet, each in EN/DE/NL/FI/SV/FR/IT/ET/PL. Gol
 - Rotated, grayscale, heavily compressed and half-resolution copies of a plan: 30/30 right, at the same confidence.
 
 ## Re-run
-`questions.jsonl` now has 410 rows: v1 (174) + v2 (31) + v3 Swiss compositions (42) + v4 CubiCasa compositions (36) +
-v5 natural references (70) + v6 judge questions on the demo drawings (21) + v7 scope words in 9 languages (36) = 410; earlier rows are byte-identical across builds (checked with cmp), so runs on the first 205 /
+`questions.jsonl` now has 418 rows: v1 (174) + v2 (31) + v3 Swiss compositions (42) + v4 CubiCasa compositions (36) +
+v5 natural references (70) + v6 judge questions on the demo drawings (21) + v7 scope words in 9 languages (36) + v8 scope premises (8) = 418; earlier rows are byte-identical across builds (checked with cmp), so runs on the first 205 /
 283 rows compare directly (`python3 $JUNCTION_SHARED/artifacts/Q/subset_stats.py <run> 283`). Build with
 `PYTHONHASHSEED=0 PYTHONPATH=.`; v5 calls the ifc solver for its gold (deterministic, < 1 s per row).
 ```

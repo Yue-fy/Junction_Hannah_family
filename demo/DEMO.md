@@ -91,7 +91,7 @@ By source on sealed test: Swiss vector plans 98 % areas / 100 % counts; IFC mode
   drops to 63 %, and derived quantities to 35 % on the code we froze for test 1. Cause: the deterministic solvers
   answered the template they recognised and ignored the extra step. Fix in place: detect the unexplained operation,
   compute it in code or lower the confidence (derived probe 29.5 % → 56.8 %, and 100 % right when confident).
-- **Red team** (`redteam/REPORT.md`, 353 adversarial questions; the first 205 built from answers we had right):
+- **Red team** (`redteam/REPORT.md`, 418 adversarial questions; the first 205 built from answers we had right):
   rewording, casing, distractor numbers: 0 of 56 answers changed; typos and prompt injections changed 7, all at
   confidence ≤ 0.42 (flagged) — but one injection obeyed once a VLM saw the question (99 at 0.71), so don't claim
   "injection-proof"; rotated / grayscale / JPEG / half-resolution copies: 30/30; objects that don't exist:
@@ -104,9 +104,12 @@ By source on sealed test: Swiss vector plans 98 % areas / 100 % counts; IFC mode
   24 to **0 of 24**, and every scored answer we gave at ≥ 0.8 confidence on those 283 questions was right (190/190).
   (Verified 04:46 on night dde6347; say "fixed" only if that code is in the frozen test-2 build — check
   `git merge-base --is-ancestor dde6347 <test-2 commit>`.) **And then we broke it again**: asked the way people talk —
-  "how many doors are in the basement?", "im Erdgeschoss?" — the IFC path answered the storey of the sheet on screen,
-  confidently (12 of 20 non-English rows). Same root cause, a new surface: the check verifies the number, not that it
-  is about the storey that was asked. That is the honest state of the system. (Update if W1's fix lands.)
+  "how many doors are in the basement?", "im Erdgeschoss?", "in the whole building" in Swedish — the IFC path answered
+  the storey of the sheet on screen, confidently (12 of 20 storey rows, 12 of 12 SV/FR/IT/ET "whole building" rows).
+  Same root cause, a new surface: the check verifies the number, not that it is about the place that was asked.
+  **One round later** (night 753eccb, 05:00): a cross-language reading (as asked + translated, compared) fixed "whole
+  building" in 5 of 6 languages and half the storey words; 20 of 418 red-team answers are still confidently wrong
+  ("basement", Italian, ambiguous room names). Say the latest numbers; check they are in the test-2 build.
 
 ### If a judge types their own question (measured 04:55 on dde6347, `redteam/REPORT.md` v6)
 - Esplanades IFC sheet — safe: "How many rooms / columns are on this floor?" (50 / 37), "How many doors are on the
