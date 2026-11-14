@@ -330,16 +330,34 @@ def solve(path: str, question: str, backend: str = "local") -> Answer:
             value, unit, conf = len({r["id"] for r in cited}), "count", 0.8
             ev = [e for r in cited if (e := evid(r, r["text"][:80]))]
     elif op in ("lookup_storey", "lookup_sheet") and cited:
+        # the sheet of a cited row: R/S rows carry 'plan'; F rows ARE the sheet ('path', kind plan/section/elevation)
+        def sheet_of(r):
+            if r["id"][0] == "F":
+                return r.get("path") if r.get("kind") in ("plan", "section", "elevation", "raster-plan") else None
+            if r.get("plan"):
+                return r["plan"]
+            # a room/storey row without a plan: the storey's own plan sheet, if any (S row of the same storey)
+            srow = next((x for x in rows if x["id"][0] == "S" and x.get("storey") == r.get("storey")), None)
+            return srow.get("plan") if srow else None
+
+        asks_sheet = op == "lookup_sheet" or bool(re.search(_WHICH_SHEET, ql) or re.search(_SHEET3, ql))
         st = sorted({r.get("storey") for r in cited if r.get("storey")})
-        if st:
-            if op == "lookup_sheet":
-                sheets = sorted({_short(r.get("plan")) for r in cited if r.get("plan")})
-                value = "; ".join(f"storey '{s}'" for s in st) + (f" (sheet {', '.join(sheets)})" if sheets else
-                                                                  " (no plan sheet for it)")
-            else:
-                value = ", ".join(st)
+        sheets = sorted({_short(x) for r in cited if (x := sheet_of(r))})
+        if asks_sheet and sheets:
+            value = ", ".join(f"plan-{x}" if not x.startswith(("plan", "section", "elevation")) else x for x in sheets)
+            if st:
+                value += " (storey " + ", ".join(f"'{s}'" for s in st) + ")"
+            conf = 0.85 if len(sheets) == 1 else 0.5
+        elif asks_sheet and st:
+            value = "; ".join(f"storey '{s}'" for s in st) + " (no plan sheet for it in this set)"
+            conf = 0.6
+        elif st:
+            value = ", ".join(st)
             conf = 0.85 if len(st) == 1 else 0.5
+        if value is not None:
             ev = [e for r in cited if (e := evid(r, r["text"][:80]))]
+            if op == "lookup_storey" and asks_sheet:
+                trace.append("kg_qa: question asks for a sheet -> sheet formatting")
     elif op in ("agree", "diff", "greater") and len([r for r in cited if r["id"][0] == "C"]) >= 1:
         c = next(r for r in cited if r["id"][0] == "C")
         if c.get("drawn") is None:
