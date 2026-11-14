@@ -383,6 +383,27 @@ on train_gate (`threshold_side.py`, `crosscheck.threshold_confidence()`):
 
 The pipeline today gives "at least two WC seats?" 0.82 whether the answer is right or wrong (hard2: 0.82 vs 0.79).
 
+### 8f. What the cubicasa second reader is worth (measured; cost cascade, 8b)
+The pipeline runs raster (VLM label reader) as a second opinion on every LoRA count and moves the confidence by
+agreement. That made cubicasa ~20× more expensive (S0 03:56: $0.02 → $0.42 per 1k). The values never change, so
+the reader can only help through confidence and evidence. `experiments/r1/cost_gate/second_reader.py RUN [--boot]`
+replays a run: today's confidence (the key's train hit rate, moved by agreement) vs vlm_lora's own per-question
+confidence (answer-digit probability mapped on train_gate, already in the trace, free).
+
+| split (LoRA answers) | own conf: ECE / AUROC / Brier | after cross-check | conf ≥ 0.8: own vs today |
+|---|---|---|---|
+| dev bb98 (662) | 0.022 / **0.899** / **0.112** | 0.035 / 0.881 / 0.122 | 60% @ 93.5% vs 47% @ 94.5% |
+| leak-free cc5k_heldout_notLoRA 7ec6 (152) | 0.051 / **0.941** / **0.076** | 0.067 / 0.861 / 0.102 | 72% @ 98% vs 66% @ 95% |
+| hard 8d9d (141) | 0.079 / 0.824 / 0.133 | 0.076 / 0.828 / 0.135 | 72% @ 92% vs 55% @ 92% |
+
+Drawing-cluster bootstrap on dev: the cross-check makes Brier worse by +0.009 [+0.0005, +0.018], and AUROC
+−0.018 [−0.039, +0.002]. Per kind, agreement helps only windows (AUROC 0.55 → 0.64); it hurts sinks, storeys,
+saunas, bedrooms and bathrooms. The reader's real value is evidence: it gives the only boxes on 159 of 662 LoRA
+answers (labels of bedrooms, saunas, WC rooms, balconies; kitchens for sinks; bedrooms for WC seats), and none for
+windows, doors, storeys or bathrooms. So use the LoRA's own confidence, and call the reader only to attach
+evidence for label kinds, or lazily on "Show where". Gating it by confidence band saves little, because the read is
+per drawing and 64–97% of drawings have at least one question in any useful band.
+
 ### 8c. Linked data as a cross-check
 - Swiss (measured, `experiments/r1/link_dxf_pdf/fit_affine.py`): DXF → PDF is one affine map per floor,
   fitted by least squares on room numbers that occur once in both the DXF `ROOM_TEXT` and the PDF words
