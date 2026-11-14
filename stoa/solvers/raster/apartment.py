@@ -212,6 +212,21 @@ def room_set(path: str, layer: T.TextLayer, question: str, px_per_m: float | Non
     return out
 
 
+def unit_region(path: str, layer: T.TextLayer, letter: str, px_per_m: float | None = None,
+                grow_m: float = 0.15) -> tuple[np.ndarray | None, T.TextItem | None]:
+    """(mask of the unit's region, its label) or (None, label-or-None) when the label or a closed boundary is missing."""
+    labels = unit_labels(layer)
+    lab = labels.get(letter)
+    if lab is None:
+        return None, None
+    rgb = np.asarray(Image.open(T._abspath(path)).convert("RGB"))
+    grow = max(3, int(round(grow_m * px_per_m))) if px_per_m else 4
+    comp = region(rgb, (int(lab.cx), int(lab.cy)), grow)
+    if comp is not None and any(k != letter and comp[int(it.cy), int(it.cx)] for k, it in labels.items()):
+        comp = None
+    return comp, lab
+
+
 def net_area(path: str, layer: T.TextLayer, question: str, px_per_m: float | None, **kw) -> dict | None:
     """One unit's net area (room_set with a unit letter)."""
     return room_set(path, layer, question, px_per_m, **kw) if unit_letter(question) else None

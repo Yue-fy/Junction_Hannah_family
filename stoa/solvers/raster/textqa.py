@@ -152,7 +152,11 @@ def answer(path: str, question: str, image_path: str | None = None, backend: str
         # the 'size' is a number the question itself names (room 0.20 -> '0.20 m²'): an echo, not a reading
         conf = 0.05
         missing = [*missing, "the answer repeats a number from the question (likely the room's number, not its size)"]
-    if unit_q and isinstance(value, (int, float)):
+    if unit_q and isinstance(value, (int, float)) and A.unit_labels(tl) and unit_q not in A.unit_labels(tl):
+        conf = min(conf, 0.1)
+        missing = [*missing, f"this plan labels units {', '.join(sorted(A.unit_labels(tl)))}; there is no apartment "
+                             f"{unit_q}"]
+    elif unit_q and isinstance(value, (int, float)):
         # a whole unit's area read off the texts: the reading usually takes one room (Q 05:16: apartment B -> room 2.10
         # alone, 16.78 of 80.83 m2 at 0.75); without the unit's drawn boundary nothing checks which rooms belong to it
         conf = min(conf, 0.2)

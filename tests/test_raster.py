@@ -346,3 +346,30 @@ def test_cubicasa_non_count_questions_go_to_text_mode(monkeypatch):
     assert s._text_mode("data/cubicasa5k/x.png", "What is the area of the living room (OH) in m²?")
     assert not s._text_mode("data/cubicasa5k/x.png", "How many rooms have a window?")
     assert not s._text_mode("data/cubicasa5k/x.png", "Kuinka monta makuuhuonetta on?")
+
+
+def test_label_count_in_a_unit_is_scoped_to_its_boundary(monkeypatch, tmp_path):
+    """'How many rooms labelled X in apartment B' counts inside B's drawn boundary; a unit the plan does not name is a
+    false premise (low confidence, said in `missing`)."""
+    import numpy as np
+    from PIL import Image
+
+    import stoa.solvers.raster as R
+    from stoa.solvers.raster import textlayer as T
+    from stoa.solvers.raster.textlayer import TextItem, TextLayer
+
+    img = np.full((200, 400, 3), 255, np.uint8)
+    img[20:23, 20:380] = img[177:180, 20:380] = (176, 58, 46)
+    img[20:180, 20:23] = img[20:180, 377:380] = img[20:180, 199:202] = (176, 58, 46)
+    p = tmp_path / "u.png"
+    Image.fromarray(img).save(p)
+    tl = TextLayer(path=str(p), size=(400, 200), items=[
+        TextItem("Whg. A", [40, 30, 90, 42]), TextItem("Whg. B", [240, 30, 290, 42]),
+        TextItem("Bad", [50, 100, 70, 110]), TextItem("Bad", [250, 100, 270, 110]), TextItem("Bad", [300, 140, 320, 150])])
+    monkeypatch.setattr(T, "text_layer", lambda *a, **k: tl)
+    s = R.RasterSolver()
+    a = s._text_count(str(p), None, "Bad", [], "How many rooms labelled 'Bad' are there in apartment B?")
+    assert a.value == 2 and a.confidence == 0.85
+    a = s._text_count(str(p), None, "Bad", [], "How many rooms labelled 'Bad' are there in apartment E?")
+    assert a.value == 3 and a.confidence <= 0.1 and "no apartment E" in a.missing[0]
+    assert s._text_count(str(p), None, "Bad", [], "How many rooms labelled 'Bad' are on this floor?").value == 3
