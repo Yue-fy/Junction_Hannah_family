@@ -6,4 +6,4 @@
 """
 
 from stoa.solvers.ifc.index import IfcIndex, ifc_index, load_index  # noqa: F401
-from stoa.solvers.ifc.solver import IfcSolver, model_for, plan_storey  # noqa: F401
+from stoa.solvers.ifc.solver import IfcSolver, model_for, plan_storey, plan_vs_model  # noqa: F401

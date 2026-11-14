@@ -4,6 +4,8 @@
 
 RUN = a run_id (prefix ok) or a predictions .jsonl path. Concepts pool a template with its translations
 (stoa.data.concept_map) when available. Prints n, accuracy per run, and mean tokens/GPU-s/API calls per run.
+A row with no gold and no judge verdict (e.g. Stoa's noon examples without answers) is NOT scored: the cell shows
+"-" (or the accuracy over the scored rows with their count). --show prints every question with each run's answer.
 """
 
 from __future__ import annotations
@@ -33,6 +35,7 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("runs", nargs="+")
     ap.add_argument("--source", default=None)
+    ap.add_argument("--show", action="store_true", help="print each question with gold and every run's value @ confidence")
     ap.add_argument("--by", default="concept", choices=["concept", "kind", "type", "source"],
                     help="group rows by dataset concept (default), meta.kind (probe/Stoa example kinds), type or source")
     a = ap.parse_args()
@@ -57,16 +60,38 @@ def main() -> None:
         by[key].append(q)
     hdr = "  ".join(f"{name[-22:]:>22}" for name, _ in runs)
     print(f"{'n':>4}  {hdr}  {a.by}")
-    tot = [0] * len(runs)
+
+    def score(row):  # True / False, or None = not scorable (no gold, no judge verdict)
+        if row.get("correct") is not None:
+            return bool(row["correct"])
+        return None if row.get("text_judge") is None else bool(row["text_judge"])
+
+    def cell(vals):
+        sc = [v for v in vals if v is not None]
+        if not sc:
+            return f"{'-':>22}"
+        if len(sc) == len(vals):
+            return f"{100 * sum(sc) / len(sc):22.1f}"
+        return f"{f'{100 * sum(sc) / len(sc):.1f} of {len(sc)}':>22}"
+
+    allv = [[] for _ in runs]
     for c, qs in sorted(by.items(), key=lambda kv: -len(kv[1])):
         accs = []
         for i, (_, rows) in enumerate(runs):
-            k = sum(bool(rows[q]["correct"] if rows[q].get("correct") is not None else rows[q].get("text_judge"))
-                    for q in qs)
-            tot[i] += k
-            accs.append(f"{100 * k / len(qs):22.1f}")
+            vals = [score(rows[q]) for q in qs]
+            allv[i] += vals
+            accs.append(cell(vals))
         print(f"{len(qs):4d}  {'  '.join(accs)}  {c[:70]}")
-    print(f"{len(common):4d}  " + "  ".join(f"{100 * t / max(1, len(common)):22.1f}" for t in tot) + "  ALL")
+    print(f"{len(common):4d}  " + "  ".join(cell(v) for v in allv) + "  ALL")
+    if a.show:
+        for q in sorted(common, key=lambda q: (str((runs[0][1][q].get("meta") or {}).get("kind")), q)):
+            r0 = runs[0][1][q]
+            print(f"\n[{(r0.get('meta') or {}).get('kind')}] {r0['question'][:160]}\n    file {r0['path']}  gold {r0.get('gold')}")
+            for name, rows in runs:
+                r = rows[q]
+                v = str(r.get("value"))[:100].replace("\n", " ")
+                print(f"    {name[-22:]:>22}: {v} {r.get('unit') or ''} @ {r.get('confidence')}  ({r.get('solver')})"
+                      + ("" if score(r) is None else (" ✓" if score(r) else " ✗")))
     for name, rows in runs:
         cs = [rows[q].get("cost") or {} for q in common]
         if cs and cs[0]:

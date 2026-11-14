@@ -23,6 +23,10 @@ SCALE_RE = re.compile(r"\d+\s*/\s*\d+\s*\"?\s*=\s*1'\s*-?\s*0\"|\b1\s*\"\s*=\s*\
                       r"\bscale\s*:|\bN\.?T\.?S\.?\b|not to scale", re.I)
 
 
+DIM_RE = re.compile(r"-?\d+\s*'\s*-?\s*\d*(?:\s+\d+/\d+)?\s*\"?|\d+(?:[.,]\d+)?\s*(?:mm|cm|m|ft|in|%|sf|m²)\.?", re.I)
+PAREN_RE = re.compile(r"\([A-Za-z][^()]{2,60}\)")
+
+
 @dataclass
 class TextGroup:
     text: str  # lines in reading order, joined with " / "
@@ -124,13 +128,19 @@ def _groups(lines) -> list[list[int]]:
         return i
 
     hz = sorted((i for i in range(n) if lines[i]["horiz"]), key=lambda i: lines[i]["v"][1])
+
+    def dim_label(i, j):
+        """A dimension value and its '(LABEL)' stacked across the dimension line ("35' - 0\"" over "(FRONT YARD
+        SETBACK)"): ~1 line height apart, so the 0.6 rule never joins them (W2 09:55: the setback lost its value)."""
+        ti, tj = lines[i]["t"], lines[j]["t"]
+        return (DIM_RE.fullmatch(ti) and PAREN_RE.fullmatch(tj)) or (DIM_RE.fullmatch(tj) and PAREN_RE.fullmatch(ti))
     count = {i: 1 for i in range(n)}
     for k, i in enumerate(hz):
         a = lines[i]["v"]
         ha = a[3] - a[1]
         for j in hz[k + 1:]:
             b = lines[j]["v"]
-            if b[1] - a[3] > 0.6 * ha:
+            if b[1] - a[3] > 1.6 * ha:
                 break
             hb = b[3] - b[1]
             if b[1] < a[1] + 0.5 * ha:  # same line height band: side-by-side, not stacked
@@ -138,7 +148,9 @@ def _groups(lines) -> list[list[int]]:
             if abs(lines[i]["size"] - lines[j]["size"]) > 0.25 * max(lines[i]["size"], lines[j]["size"], 1e-6):
                 continue
             if b[1] - a[3] > 0.6 * min(ha, hb):
-                continue
+                if not (b[1] - a[3] <= 1.6 * min(ha, hb) and dim_label(i, j) and
+                        abs(a[0] + a[2] - b[0] - b[2]) <= 2 * max(ha, hb)):
+                    continue
             if min(a[2], b[2]) - max(a[0], b[0]) <= 0:  # no horizontal overlap
                 continue
             # lines of one tag / paragraph share a left edge, right edge or centre; two tags placed diagonally
@@ -223,12 +235,14 @@ def _zip(groups: list[list[int]], lines) -> list[list[int]]:
                 oy0, oy1, left, _ = span[j]
                 if left - right > 40 * h:
                     break
-                if left - right <= 0 or oy1 < y0 or oy0 > y1:
+                if oy1 < y0 or oy0 > y1 or left <= min(lines[i]["v"][2] for i in g):
                     continue
                 pairs = []
                 for a in g:
                     b = min(o, key=lambda b: abs(yc(a) - yc(b)))
-                    if abs(yc(a) - yc(b)) < 0.4 * h:
+                    # per line: the value starts right of ITS label (a label list inside a note paragraph whose long
+                    # lines run past the value column: S-100 'A) SLABS-ON-GRADE ... 4000 PSI', W2 09:45)
+                    if abs(yc(a) - yc(b)) < 0.4 * h and 0 < lines[b]["v"][0] - lines[a]["v"][2] <= 40 * h:
                         pairs.append((a, b))
                 if len(pairs) < 2 or len(pairs) < 0.7 * min(len(g), len(o)) or len({b for _, b in pairs}) < len(pairs):
                     continue
@@ -245,6 +259,17 @@ def _zip(groups: list[list[int]], lines) -> list[list[int]]:
                 j, pairs = best
                 o = groups[j]
                 done.add(j)
+                if left_edge_cut := [a for a in g if lines[a]["v"][2] >= span[j][2]]:
+                    # the label lines sit inside a paragraph: only the run of paired lines becomes the list; the
+                    # paragraph lines above/below it stay one group each
+                    pa = sorted(g, key=yc)
+                    first = min(pa.index(a) for a, _ in pairs)
+                    last = max(pa.index(a) for a, _ in pairs)
+                    if first > 0:
+                        out.append(pa[:first])
+                    if last < len(pa) - 1:
+                        out.append(pa[last + 1:])
+                    g = pa[first:last + 1]
                 paired_a = {a: b for a, b in pairs}
                 paired_b = set(paired_a.values())
                 merged = []

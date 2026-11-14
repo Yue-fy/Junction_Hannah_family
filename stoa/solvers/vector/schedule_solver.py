@@ -182,6 +182,47 @@ def _qty_sum(value: int, used: list, tables: dict[str, pd.DataFrame], question: 
     return total if total != value else None
 
 
+MULT_Q = re.compile(r"\b(?:N|\d+)[- ]?(wide|panel|leaf|gang|bay|lite|light|unit)s?\b[^?]*?\b(?:consists?|contains?|"
+                    r"comprises?|is made|are made|has|have|equals?|=|holds?|means?|counts? as)\b[^?]*?\b(?:N|\d+)\b", re.I)
+
+
+def _assembly_total(question: str, tables: dict[str, pd.DataFrame], path: str = "") -> tuple[int, list[int], str] | None:
+    """'if every N-wide window assembly consists of N ESDH3066 window units, how many units ...': each row's own
+    '<k>-WIDE' times its Count/Qty, summed over the rows naming the question's item ids. Deterministic, because the
+    LLM-written code dropped the multiplier in 1 of 3 runs under load (S0 09:36, D22: 235 @0.85 vs gold 379).
+    Returns (total, row ids, formula) or None when the question has no per-row multiplier or no such column."""
+    m = MULT_Q.search(question)
+    if not m:
+        return None
+    word = m.group(1).lower()
+    cell_re = re.compile(rf"\b(\d+)\s*-?\s*{word}s?\b", re.I)
+    ids = tableqa.id_tokens(question, path)
+    for name, df in tables.items():
+        if name in ("notes", "text") or df.empty:
+            continue
+        qty = next((c for c in df.columns if re.search(r"^(count|qty|quantity|quan\.?|no\.?|number of units)$",
+                                                          str(c).strip(), re.I) and pd.api.types.is_numeric_dtype(df[c])),
+                   None)
+        if qty is None:
+            continue
+        cols = [c for c in df.columns if c not in ("row_id", qty)]
+        rows = []
+        for _, r in df.iterrows():
+            cells = " | ".join(str(r[c]) for c in cols)
+            km = cell_re.search(cells)
+            if km is None or pd.isna(r[qty]):
+                continue
+            up = cells.upper()
+            if ids and not all(i in up for i in ids):
+                continue
+            rows.append((int(r["row_id"]), int(km.group(1)), float(r[qty])))
+        if len(rows) >= 2:
+            total = int(round(sum(k * q for _, k, q in rows)))
+            formula = " + ".join(f"{k}x{q:g}" for _, k, q in rows)
+            return total, [i for i, _, _ in rows], f"{formula} = {total}"
+    return None
+
+
 SECOND_LOOK = ("\n(The tables are already loaded as pandas DataFrames under these names, with typed numeric columns; "
                "use them directly.)")
 COMPLEX_Q = re.compile(r"\bif\b|\beach\b|\bevery\b|\bper\b|consist|assum|\btimes\b|multipl|\bratio\b|percent|"
@@ -192,6 +233,22 @@ def _complex(question: str, res: dict) -> bool:
     """A multi-step question or query (where a second sample of the LLM-written code can disagree)."""
     stm = [ln for ln in (res.get("code") or "").splitlines() if ln.strip() and not ln.strip().startswith("#")]
     return len(stm) >= 4 or bool(COMPLEX_Q.search(question))
+
+
+def _echoes_question_number(value, question: str) -> bool:
+    """A numeric answer equal to a number written in the question ('room 0.1', 'unit 115', 'level 2'), unless the
+    question is a yes/no or compares with that number ('more than 50', 'is it 12 m²?')."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        m = re.fullmatch(r"\s*(-?\d+(?:[.,]\d+)?)\s*(?:m²|m2|sf|ft2|ft|m)?\s*", str(value or ""))
+        if not m:
+            return False
+        value = float(m.group(1).replace(",", "."))
+    if re.search(r"\b(?:more|less|fewer|greater|smaller|larger|bigger|over|under|above|below|at least|at most|exceed)"
+                 r"\w*\s+(?:than\s+)?\d|^\s*(?:is|are|does|do|was|were|has|have|can)\b", question, re.I):
+        return False
+    nums = {float(x.replace(",", ".")) for x in
+            re.findall(r"(?<![\w.'])-?\d+(?:[.,]\d+)?(?!\s*(?:st|nd|rd|th)\b)(?![\w.]*\d)", question)}
+    return float(value) in nums
 
 
 def _clean(name: str) -> str:
@@ -352,6 +409,27 @@ class ScheduleSolver(BaseSolver):
                 value, unit = d.replace("' - ", "'-"), None
         if unit not in ("count", "ft2", "m2", "ft", "m", None):
             unit = None
+        if isinstance(value, (int, float)) and not isinstance(value, bool) and unit in ("ft", None) and \
+                not COMPLEX_Q.search(question) and not re.search(r"how many|number of|count", question, re.I):
+            # a plain lookup whose number is not printed in its cited rows but sits within a foot of a printed
+            # feet-inch dimension there: the code converted/shifted it (Q/W4 v21: "22' - 5\"" -> 21.92 = 22.42 - 0.5
+            # in some runs); answer the printed dimension
+            texts = []
+            for u in res.get("used", []):
+                for df in tables.values():
+                    hit = df[df["row_id"] == u] if "row_id" in df.columns else df.iloc[0:0]
+                    if len(hit):
+                        texts.append(" | ".join(str(v) for k, v in hit.iloc[0].items() if k != "row_id"))
+                        break
+            dims = {re.sub(r"(\d+')\s*-\s*(\d)", r"\1-\2", m.group(0).strip()): sheettext._ftin(m.group(0))
+                    for t in texts for m in sheettext.DIM_IN_ROW.finditer(t)}
+            dims = {d: v for d, v in dims.items() if v is not None}
+            if dims and all(abs(v - float(value)) > 0.005 for v in dims.values()):
+                near = sorted((abs(v - float(value)), d) for d, v in dims.items() if abs(v - float(value)) < 1.0)
+                if len(near) == 1 or (len(near) > 1 and near[0][0] < near[1][0] - 0.1):
+                    trace.append(f"lookup check: {value} is not printed in the cited rows; the printed dimension "
+                                 f"{near[0][1]!r} is -> answered it")
+                    value, unit = near[0][1], None
         row_label = {}
         if "text" in tables:
             for _, row in tables["text"].iterrows():
@@ -431,7 +509,9 @@ class ScheduleSolver(BaseSolver):
         elif counted and not any(w.rstrip("s")[:5] in known for w in counted):
             conf = min(conf, 0.3)  # "how many pier types": no rebuilt table mentions piers
             missing.append(f"no rebuilt table mentions '{' '.join(counted)}'; the answer comes from other text")
-        if isinstance(value, (int, float)) and not isinstance(value, bool) and conf > 0.5 and _complex(question, res):
+        det = _assembly_total(question, tables, path) if unit == "count" or isinstance(value, (int, float)) else None
+        if det is None and isinstance(value, (int, float)) and not isinstance(value, bool) and conf > 0.5 and \
+                _complex(question, res):
             # S0 04:57: the same dev question gave 379 and 235 at conf 0.85 in two runs (LLM-written code is not
             # deterministic on the server). For multi-step questions/code, draw a second independent query; on
             # disagreement the answer is not sure. Simple lookups (75% of dev) were stable: no second call there.
@@ -457,9 +537,33 @@ class ScheduleSolver(BaseSolver):
                     conf = min(conf, 0.5)
                     missing.append(f"two independent table queries disagree ({value} vs {v2n}); the reading of the "
                                    "schedule is unstable, check the cited rows")
+        if det is not None:
+            total, det_rows, formula = det
+            trace.append(f"per-row multiplier (deterministic): {formula}" +
+                         (" -> agrees with the query" if value == total else f" -> replaces the query's {value!r}"))
+            value, unit = total, "count"
+            conf = 0.85
+            missing = [x for x in missing if not x.startswith("two independent table queries")]
+            evidence = [Evidence(file=path, page=0, bbox=[round(v, 1) for v in boxes[i]], bbox_space="pdf_pt",
+                                 note=row_label.get(i, f"table row {i}")) for i in det_rows if i in boxes]
+        if _echoes_question_number(value, question):
+            conf = min(conf, 0.2)
+            missing.append(f"the answer {value!r} is a number written in the question, not a value read for it")
         if isinstance(value, str) and value.strip().upper() in tableqa.id_tokens(question, path):
             conf = min(conf, 0.2)  # the answer only repeats an identifier from the question
             missing.append(f"the answer {value!r} repeats the question's identifier; the table row was not found")
+        used_notes = [i for i in res.get("used", []) if isinstance(i, int) and i >= 900000]
+        if used_notes and len(used_notes) == len(res.get("used", [])):
+            # Q 09:23: on a schedule sheet a question about the plan's notes was read from the `notes` lines by
+            # table-QA code at 0.85 ("FIBER CEMENT CLAPBOARD -" for its colour): free-text lines are the sheet-text
+            # reader's level (0.65), not a schedule row's
+            conf = min(conf, 0.65)
+            trace.append("answer read from free-text note lines only (not schedule rows) -> confidence <= 0.65")
+        if isinstance(value, str):
+            aw = set(re.findall(r"[a-z0-9]+", value.lower()))
+            if aw and aw <= set(re.findall(r"[a-z0-9]+", question.lower())):
+                conf = min(conf, 0.2)  # a label, not its value
+                missing.append(f"the answer {value!r} only repeats words of the question (a label, not its value)")
         return Answer(value=value, unit=unit, confidence=conf, evidence=evidence, trace=trace, solver=self.name,
                       assumptions=assumptions, missing=missing)
 
@@ -536,6 +640,12 @@ class ScheduleSolver(BaseSolver):
         elif res["op"] == "count" and re.search(r"\b(types?|marks?|kinds?)\b", question, re.I):
             conf = min(conf, 0.4)  # counting types/marks = reading a type list (a schedule) that was not rebuilt
             missing.append("counting types/marks needs a schedule table, which could not be rebuilt from the text")
+        if _echoes_question_number(res["value"], question):
+            # F 09:39: IFC sheet without its model, "net floor area of the room 'Hall (0.1)'" -> 0.1 m² @0.65 (5/5)
+            conf = min(conf, 0.2)
+            missing.append(f"the answer {res['value']!r} is a number written in the question (an id or room number), "
+                           "not a value read for it")
+            trace.append("guard: the answer repeats a number of the question -> confidence <= 0.2")
         assumptions = [f"read from {len(evidence)} printed text group(s) of the sheet (room/unit tags, notes, title "
                        "block); stacked lines within ~0.6 line heights were grouped into one tag"]
         if res["op"] in ("count", "sum", "max", "min", "mean"):

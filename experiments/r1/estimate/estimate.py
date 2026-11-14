@@ -44,21 +44,22 @@ _LIVE = (r"(live|lives|living|reside|stay|occupy|sleep|accommodat\w*|house[ds]?|
 KINDS = [
     ("occupants", rf"\b(how many|wie viele|kuinka monta|montako|hur många|combien de|quante|quanti|hoeveel|mitu|"
                   rf"cuántas|cuantas|number of)\s+(\w+\s+)?{_PEOPLE}\b.{{0,60}}\b{_LIVE}\b|"
-                  rf"\b(occupancy|household size|asukasmäärä|asukasluku|bewohnerzahl|antal (boende|personer))\b|"
+                  rf"\b(household size|asukasmäärä\w*|asukasluku\w*|bewohnerzahl|antal (boende|personer)|occupancy (count|number|"
+                  rf"capacity)|occupant (count|number))\b|"
                   rf"\b{_PEOPLE}\b.{{0,20}}\b(live|lives|wohnen|asuu|bor|vivent|vivono|wonen|elab|viven)\s+(here|in (this|the))"),
-    ("rent", r"\b(rent|rental (price|cost|income)|monthly rent|miete|mietzins|kaltmiete|vuokra\w*|hyra|hyran|hyres\w*|"
-             r"loyer|affitto|canone|huur|huurprijs|üür\w*|alquiler|renta mensual)\b"),
+    ("rent", r"\b(rent|rental (price|cost|income)|monthly rent|miete\w*|mietzins\w*|kaltmiete\w*|vuokra\w*|hyra\w*|hyran|hyres\w*|"
+             r"loyer|affitto|canone|huur|huurprijs\w*|üür\w*|alquiler|renta mensual)\b"),
     ("price", r"\b(market value|sale price|selling price|asking price|purchase price|property value|what is .{0,30}worth|"
-              r"how much .{0,40}(sell|buy|worth)|kauppahinta|myyntihinta|velaton hinta|markkina-arvo|"
-              r"verkaufspreis|marktwert|kaufpreis|verkehrswert|prix de vente|valeur (vénale|marchande|du bien)|"
-              r"prezzo di vendita|valore di mercato|marknadsvärde|försäljningspris|köpeskilling|vraagprijs|"
-              r"marktwaarde|koopprijs|turuhind|müügihind|precio de venta|valor de mercado)\b"),
+              r"how much .{0,40}(sell|buy|worth)|kauppahinta\w*|myyntihinta\w*|velaton hinta|markkina-arvo\w*|"
+              r"verkaufspreis|marktwert\w*|kaufpreis\w*|verkehrswert\w*|prix de vente|valeur (vénale|marchande|du bien)|"
+              r"prezzo di vendita|valore di mercato|marknadsvärde\w*|försäljningspris\w*|köpeskilling\w*|vraagprijs\w*|"
+              r"marktwaarde|koopprijs\w*|turuhind\w*|müügihind\w*|precio de venta|valor de mercado)\b"),
     ("construction_cost", r"\b(construction cost|cost to (build|construct)|cost .{0,30}to (build|construct)|"
                           r"build(ing)? cost|did .{0,40}cost|cost of (building|constructing|construction)|"
                           r"rakennuskustannu\w*|rakentamis\w* (hinta|kustannu\w*|maksoi)|maksoi rakentaa|"
-                          r"baukosten|erstellungskosten|kosten .{0,20}(bau|errichtung)|coût de (construction|la construction)|"
-                          r"costo di costruzione|costi di costruzione|byggkostnad\w*|kostade .{0,20}bygga|bouwkosten|"
-                          r"ehituskulu\w*|ehitusmaksumus|costo de construcción|coste de construcción)\b"),
+                          r"baukosten|erstellungskosten\w*|kosten .{0,20}(bau|errichtung)|coût de (construction|la construction)|"
+                          r"costo di costruzione|costi di costruzione|byggkostnad\w*|kostade .{0,20}bygga|bouwkosten\w*|"
+                          r"ehituskulu\w*|ehitusmaksumus\w*|costo de construcción|coste de construcción)\b"),
     ("u_value", r"\b(u[- ]?values?|u[- ]?factor|thermal transmittance|u[- ]?wert|wärmedurchgangskoeffizient|u[- ]?arvo\w*|"
                 r"lämmönläpäisy\w*|valeur u|coefficient de transmission thermique|trasmittanza( termica)?|"
                 r"u[- ]?värde|värmegenomgångskoefficient|warmtedoorgangsco\w*|u[- ]?waarde|soojusläbivus\w*|"
@@ -66,16 +67,70 @@ KINDS = [
     ("year_built", r"\b((what|which) year .{0,40}(built|constructed|completed|erected)|when was .{0,40}"
                    r"(built|constructed|completed|erected)|year of (construction|completion)|construction year|"
                    r"year built|built in (what|which) year|how old is (this|the) (building|house)|"
-                   r"rakennusvuo\w*|valmistumisvuo\w*|milloin .{0,40}rakennettu|baujahr|wann wurde .{0,40}(gebaut|errichtet)|"
+                   r"rakennusvuo\w*|valmistumisvuo\w*|milloin .{0,40}rakennettu|baujahr\w*|wann wurde .{0,40}(gebaut|errichtet)|"
                    r"année de construction|quand .{0,40}construit|anno di costruzione|quando .{0,40}costruit\w*|"
-                   r"byggår|byggnadsår|när byggdes|bouwjaar|wanneer .{0,40}gebouwd|ehitusaasta|millal .{0,40}ehitati|"
+                   r"byggår|byggnadsår\w*|när byggdes|bouwjaar\w*|wanneer .{0,40}gebouwd|ehitusaasta\w*|millal .{0,40}ehitati|"
                    r"año de construcción|cuándo se construyó)\b"),
     ("energy", r"\b(energy (consumption|use|demand)|heating (energy|demand|need)|annual (energy|heating)|"
-               r"energiankulutu\w*|lämmitysenergi\w*|energieverbrauch|heizwärmebedarf|heizenergie\w*|"
+               r"energiankulutu\w*|lämmitysenergi\w*|energieverbrauch\w*|heizwärmebedarf\w*|heizenergie\w*|"
                r"consommation (d'énergie|énergétique)|besoin de chauffage|consumo (energetico|di energia|de energía)|"
-               r"fabbisogno termico|energiförbrukning|uppvärmningsbehov|energieverbruik|warmtevraag|"
-               r"energiatarbimine|energiakulu)\b"),
+               r"fabbisogno termico|energiförbrukning\w*|uppvärmningsbehov\w*|energieverbruik\w*|warmtevraag\w*|"
+               r"energiatarbimine|energiakulu\w*)\b"),
 ]
+# language-general co-occurrence forms (tuned on half A of probe_para.jsonl; R1 09:21 lesson: verb lists miss
+# unseen wordings): a count word + a people word; a cost word near a build word; a market word near a value word; ...
+_COUNTW = (r"(how many|number of|wie viele|anzahl|kuinka (monta|paljon)|montako|hur många|antal|combien|nombre de|"
+           r"quant[ie]|numero di|hoeveel|aantal|mitu|kui palju|cuánt[oa]s|cuant[oa]s|número de)")
+_COSTW = (r"(cost|costs|costed|expense|expenditure|spent|kosten|gekostet|kostete|kostet|coût\w*|coute|coûté|costo|"
+          r"costato|costò|costi|kostnad\w*|kostade|kostte|kulu\w*|maksoi|maksumus|maksma|costó|coste|gast\w*|rahaa)")
+_BUILDW = (r"(build|built|building it|construct\w*|bau|baus|bauen|errichtung|erbau\w*|errichte\w*|rakent\w*|"
+           r"construire|construit\w*|costruire|costruzione|costruit\w*|bygga|bygge|byggde|byggt|bouw|bouwen|bouwkosten\w*|"
+           r"ehita\w*|ehitus\w*|ehitati|construir\w*|edificar|construcción)\b")
+_MARKET = r"(market|markkina\w*|markt\w*|marché|mercato|marknad\w*|turu\w*|mercado)"
+_VALUEW = (r"(value|price|worth|hinta|arvo|wert|preis|valeur|prix|valore|prezzo|värde|värd|pris|waarde|prijs|"
+           r"väärtus\w*|hind\w*|valor|precio)")
+_WALLW = r"(walls?|wände|wand|seinä\w*|murs?|pareti|parete|väggar|vägg\w*|muren|muur|sein\w*|paredes|muros|envelope|facade)"
+_INSUL_TERM = (r"(thermal (transmittance|performance|resistance)|trasmission\w* termic\w*|värmeledning\w*|"
+               r"varmeledning\w*|warmteoverdracht\w*|warmtedoorgang\w*|wärmedurchgang\w*|lämmönläpäis\w*)")
+# bare 'insulation' asks for a property of the model (thickness, type, volume: IFC-Bench) unless asked as a QUALITY
+_INSUL = (rf"({_INSUL_TERM}|(how well|how good|how (thermally )?efficient|kuinka hyvin|miten hyvin|wie gut|"
+          r"comment|quanto bene|hur (bra|väl)|hoe goed|kui hea|qué tan( bien)?)\b.{0,30}\b(insulat\w*|eriste\w*|"
+          r"eristy\w*|gedämmt|dämm\w*|isol\w*|soojust\w*|aislad\w*|aislamiento))")
+_WHENW = (r"(what year|which year|when|vuonna|vuosi|milloin|jahr|wann|année|quand|anno|quando|år|när|jaar|wanneer|"
+          r"aasta\w*|millal|año|cuándo|cuando|date|datum|how old|wie alt|kuinka vanha|quel âge|quanti anni|hur gammal|"
+          r"hoe oud|kui vana|qué antigüedad)")
+_BUILTW = (r"(built|constructed|construction|completed|erected|rakennettu|rakennettiin|valmistui|valmistunut|gebaut|"
+           r"erbaut|errichtet|fertiggestellt|construit\w*|achevé|costruit\w*|completat\w*|byggd\w*|byggdes|uppförd\w*|"
+           r"gebouwd|opgeleverd|ehitati|ehitatud|valmis|construy\w*|construid\w*|terminad\w*)")
+_ENERGYW = (r"(energy|energi\w*|énergie|energia|energie|energía|kwh|kilowatt\w*|heat|heating|lämmit\w*|heiz\w*|"
+            r"chauffage|riscaldamento|värme\w*|verwarming\w*|küte\w*|calefacción)")
+_USEW = (r"(consum\w*|use|uses|used|usage|demand|need|kulut\w*|verbrauch\w*|bedarf|consomm\w*|consuma\w*|consumo|"
+         r"använd\w*|förbruk\w*|gebruik\w*|verbruik\w*|tarbi\w*|kulu\w*)")
+_PERYEAR = (r"(per year|a year|each year|annual\w*|yearly|vuodessa|vuosittain|jährlich|pro jahr|im jahr|par an|annuel\w*|"
+            r"all'anno|annu\w*|per år|om året|årlig\w*|per jaar|jaarlijks|aastas|al año|anual\w*)")
+_PERMONTH = (r"(per month|a month|each month|monthly|kuussa|kuukaudessa|kuukausi\w*|pro monat|im monat|monatlich\w*|"
+             r"par mois|mensuel\w*|al mese|mensil\w*|per månad|i månaden|månatlig\w*|per maand|maandelijks|kuus|"
+             r"kuu kohta|igakuu\w*|al mes|mensual\w*)")
+_HOLD = (r"(hold|house|accommodat\w*|sisältää|majoittaa|aufnehmen|beherbergen|accueillir|loger|ospitare|accogliere|"
+         r"innehålla|rymma|huisvesten|herbergen|hoida|mahutada|albergar|alojar)")
+_GENERAL = {
+    "occupants": rf"\b{_COUNTW}\s+(\w+\s+){{0,2}}{_PEOPLE}\b|\b{_PEOPLE}\b.{{0,40}}\b{_HOLD}\b",
+    "rent": rf"\b{_COSTW}\b.{{0,40}}\b{_PERMONTH}|\b{_PERMONTH}.{{0,30}}\b{_COSTW}\b|\bkuukausi(maksu|vuokra)\w*",
+    "price": rf"\b{_MARKET}\W{{0,3}}{_VALUEW}|\b{_VALUEW}\b.{{0,30}}\b{_MARKET}\b|\b{_MARKET}\w*\b.{{0,30}}\b{_VALUEW}\b|"
+             rf"\b(sell|sold|sale)\b.{{0,30}}\b(for|price)\b|\bprice point\b",
+    "construction_cost": rf"\b{_COSTW}\b.{{0,50}}\b{_BUILDW}|\b{_BUILDW}\b.{{0,50}}\b{_COSTW}\b",
+    "u_value": rf"\b{_INSUL}\b.{{0,50}}\b{_WALLW}\b|\b{_WALLW}\b.{{0,50}}\b{_INSUL_TERM}|"
+               rf"\b(how well|how good|kuinka hyvin|miten hyvin|wie gut|quanto bene|hur (bra|väl)|hoe goed|kui hea|"
+               rf"qué tan)\b.{{0,15}}\b{_WALLW}\b.{{0,30}}\b(insulat\w*|eriste\w*|eristy\w*|gedämmt|isol\w*|"
+               rf"soojust\w*|aislad\w*)",
+    "year_built": rf"\b{_WHENW}\b.{{0,50}}\b{_BUILTW}\b|\b(how old|wie alt|kuinka vanha|quel âge|quanti anni|"
+                  rf"hur gammal|hoe oud|kui vana|qué antigüedad|age of|alter de[sr]|ikä|âge d\w*|età|ålder|leeftijd|"
+                  rf"vanus|antigüedad|edad)\b.{{0,30}}\b(building|house|home|structure|gebäude|haus|hauses|rakennus\w*|"
+                  rf"talo\w*|bâtiment|maison|edifici\w*|casa|byggnad\w*|hus|huset|gebouw|huis|hoone|maja|estructura)\b",
+    "energy": rf"\b{_ENERGYW}\b.{{0,50}}\b{_USEW}\b.{{0,40}}\b{_PERYEAR}|\b{_PERYEAR}.{{0,50}}\b{_ENERGYW}|"
+              rf"\b{_ENERGYW}\b.{{0,60}}\b{_PERYEAR}",
+}
+KINDS = [(k, f"(?:{p})|(?:{_GENERAL[k]})" if k in _GENERAL else p) for k, p in KINDS]
 _KINDS = [(k, re.compile(p, re.I)) for k, p in KINDS]
 # a question that STATES its own rate / constant is a derived quantity (answered exactly elsewhere): not ours
 _STATED = re.compile(r"(\d[\d\s.,']*\s*(€|eur\w*|chf|fr\.?|francs?|\$|usd|dollars?|kr|sek|%|percent|prosent\w*|"
@@ -89,8 +144,15 @@ _CAPACITY = re.compile(r"\b(could|can|might|would|max(imum)?|at most|sleep|accom
                        r"zou(den)?|kunnen|saaks|mahub|podría\w*|pueden)\b", re.I)
 
 
+_SPEC = re.compile(r"\b(specified|stated|noted|listed|given|shown|printed|according to|required|minimum|maximum "
+                   r"allowed|per code|schedule|angegeben|vorgeschrieben|ilmoitettu|merkitty|vaadittu|indiqué|spécifié|"
+                   r"indicato|specificat\w*|angiven|angivet|vermeld|aangegeven|märgitud|indicad\w*|especificad\w*)\b", re.I)
+
+
 def kind_of(question: str) -> dict:
     q = " ".join(question.split())
+    if _SPEC.search(q):
+        return {"fire": False, "kind": None, "why": "asks for a value the drawing specifies (a reading, not an estimate)"}
     for k, rx in _KINDS:
         m = rx.search(q)
         if m:
@@ -199,6 +261,8 @@ _APT = re.compile(r"\b(apartment|flat|unit|wohnung|asunto|lägenhet|appartement|
                   r"piso|vivienda)\s+['\"]?([A-Z0-9]{1,3})\b['\"]?")
 
 
+_AGE = re.compile(r"\b(how old|age of|wie alt|alter de[sr]|kuinka vanha|ikä|quel âge|âge d\w*|quanti anni|età|"
+                  r"hur gammal|ålder|hoe oud|leeftijd|kui vana|vanus|qué antigüedad|antigüedad|edad)\b", re.I)
 _GENERIC = re.compile(r"^(zimmer|pièce|piece|stanza|chambre|room|rum|huone)$", re.I)
 _LIVING = re.compile(r"(wohn|séjour|sejour|soggiorno|living|vardagsrum|olohuone)", re.I)
 
@@ -345,7 +409,9 @@ def _catalogue_year(path: str) -> tuple[int, int] | None:
     return None
 
 
-def solve(path: str, question: str, kind: dict | None = None) -> Answer | None:
+def solve(path: str, question: str, kind: dict | None = None, as_text: bool = False) -> Answer | None:
+    """as_text: the value is a sentence ("Not recorded on this drawing; estimate ~ 1,330 EUR/month (range ...)") for
+    text-judged sources (IFC-Bench golds say "This information is not available ...")."""
     t0 = time.perf_counter()
     k = kind or kind_of(question)
     if not k.get("fire"):
@@ -425,11 +491,22 @@ def solve(path: str, question: str, kind: dict | None = None) -> Answer | None:
             val, lo, hi, ref = YEAR.get(src, (1975, 1900, 2024, "no source prior: wide range"))
             assumptions.append(f"prior for this collection: {ref}")
     unit = UNIT[kind].format(cur=cur)
+    if kind == "year_built" and _AGE.search(question):  # 'how old is it' asks for an age, not a year
+        now = time.localtime().tm_year
+        val, lo, hi = now - val, now - hi, now - lo
+        unit = "years"
+        assumptions.append(f"age = {now} - construction year")
     v, lo, hi = _round(kind, val), _round(kind, lo), _round(kind, hi)
     assumptions.insert(0, f"ESTIMATE, not read from the drawing: {v} {unit} (plausible range {lo}-{hi})")
     if d.get("scope") == "building" and kind in ("occupants", "rent", "price") and d.get("n_dwellings", 1) > 1:
         assumptions.append(f"scope: all {d['n_dwellings']} apartments of the floor together")
     trace.append(f"value {v} {unit}, range {lo}-{hi}; conf {CONF[kind]} (an estimate, not a reading)")
+    if as_text:
+        why = next((x for x in assumptions[1:] if x.startswith(("rate:", "typical occupancy", "assumed built",
+                                                                "historical", "prior", "the archive", "capacity"))), "")
+        v = (f"Not recorded on this drawing/model; estimate ~ {v:,} {unit} (plausible range {lo:,}-{hi:,})"
+             + (f", {why}" if why else "") + f". {MISSING[kind][0].upper()}{MISSING[kind][1:]}.")
+        unit = None
     return Answer(value=v, unit=unit, confidence=CONF[kind], evidence=d.get("evidence") or [], trace=trace,
                   solver="estimate", assumptions=assumptions, missing=[MISSING[kind]],
                   cost=Cost(wall_seconds=round(time.perf_counter() - t0, 4)))

@@ -629,11 +629,22 @@ class IfcSolver(BaseSolver):
                             r"discrepan\w*|mismatch\w*|uberein\w*|ueberein\w*|stimmen|stimmt|overeen\w*|vastaa\w*|"
                             r"kooskola\w*|sama palju|samma antal|coincid\w*|concord\w*|zgodn\w*|corrispond\w*|"
                             r"meme nombre|meme quantite|zelfde aantal|gleiche anzahl|sama maara|ta sama liczba|"
-                            r"mismo numero|stesso numero)\b")
+                            r"mismo numero|stesso numero|unterscheid\w*|abweich\w*|verschil\w*|afwijk\w*|eroa\w*|"
+                            r"poikke\w*|erinev\w*)\b")
     _PVM_PLAN = re.compile(r"\b(plan|drawing|sheet|2d|grundriss\w*|zeichnung|plattegrond|tekening|pohjapiirustu\w*|"
                            r"piirustu\w*|plaan\w*|joonis\w*|ritning\w*|dessin|plano|pianta|rzut\w*)\b")
     _PVM_MODEL = re.compile(r"\b(model|ifc|bim|3d|modell\w*|malli\w*|mudel\w*|modele|modelo|modello|maquette)\b|ifc-")
-    _PVM_MORE = re.compile(r"\b(more|fewer|less)\b[^?]{0,60}\bthan\b[^?]{0,50}\b(plan|drawing|sheet|model|ifc)\b")
+    # comparatives in the languages the parser knows: 'Zeigt dieser Plan weniger Fenster als das IFC-Modell …?' (W1 c8
+    # probe: German/Finnish fell to the fact-card LLM and said 'no' @ 0.30); group 1 = more/fewer word, group 2 = than
+    _PVM_FEWER = r"fewer|less|weniger|vahemman|moins|minder|farre|mniej|vahem|menos|meno"
+    _PVM_MORE = re.compile(r"\b(more|fewer|less|mehr|weniger|enemman|vahemman|plus|moins|meer|minder|fler|farre|wiecej|"
+                           r"mniej|rohkem|vahem|mas|menos|piu|meno)\b[^?]{0,60}?\b(than|als|kuin|que|dan|an|kui|niz|"
+                           r"di|del|della|dello|che)\b[^?]{0,50}\b(plan|drawing|sheet|model|ifc|grundriss\w*|zeichnung|"
+                           r"plattegrond|tekening|piirustu\w*|plaan\w*|joonis\w*|ritning\w*|dessin|plano|pianta|rzut\w*|"
+                           r"modell\w*|malli\w*|mudel\w*|modele|modelo|modello|maquette)\b")
+    # 'Does the plan show as many windows as the model has on this storey?' (W1 c8: fact-card LLM @ 0.30)
+    _PVM_ASMANY = re.compile(r"\bas many\b[^?]{0,50}\bas\b|\b(genauso|ebenso|gleich) viele\b|\bso viele\b[^?]{0,50}\bwie\b|"
+                             r"\byhta monta\b|\bautant de\b|\bevenveel\b|\blika manga\b|\btyle samo\b|\btantas?\b[^?]{0,40}\bcomo\b")
     _PVM_OTHER = re.compile(r"\b(plan|drawing|sheet)\b[^?]{0,30}\b(shows?|draws?|contains?|includes?)\b[^?]{0,50}\b(that|which)\b"
                             r"[^?]{0,20}\bmodel\b[^?]{0,15}\b(does not|doesn.t|do not|don.t)\b[^?]{0,10}\b(assign|place|put|"
                             r"have|locate|attach)\w*|\bof (other|another|different) (storeys?|floors?|levels?)\b")
@@ -737,8 +748,14 @@ class IfcSolver(BaseSolver):
             names = {st.guid: st.name for st in idx.storeys}
             ev = [Evidence(file=p, page=0, note=f"plan of storey '{names.get(g, '?')}'") for g, p in plans]
             secs, elevs = sheets_of("section"), sheets_of("elevation")
-            all_kinds = re.search(r"\b(in total|altogether|all (the )?(sheets|drawings)|every (sheet|drawing)|sections?|"
-                                  r"elevations?|of any kind|including)\b", qf) and not re.search(r"\bfloor ?plans?\b|\bplan sheets?\b", qf)
+            # sections/elevations named -> every kind; 'in total' alone -> every kind unless floor plans are named
+            kinds_named = re.search(r"\b(sections?|elevations?|schnitt\w*|aufriss\w*|ansicht\w*|sneden|doorsnede\w*|gevels?|"
+                                    r"leikkau\w*|julkisivu\w*|coupes?|facades?|loike\w*|vaated?)\b", qf)
+            total_w = re.search(r"\b(in total|altogether|all (the )?(sheets|drawings)|every (sheet|drawing)|of any kind|"
+                                r"including|insgesamt|in totaal|yhteensa|kokku|au total|en total|totalt|lacznie)\b", qf)
+            all_kinds = kinds_named or (total_w and not re.search(
+                r"\bfloor ?plans?\b|\bplan sheets?\b|\bgrundriss\w*|\bplattegrond\w*|\bpohjapiirustu\w*|"
+                r"\bkorruse plaan\w*|\bplans? d.etage\b|\bplanritning\w*", qf))
             if all_kinds:
                 # 'How many sheets in total belong to this building (plans, sections and elevations)?' (R1 kg09: 4 vs 10)
                 n_all = len(plans) + len(secs) + len(elevs)
@@ -800,14 +817,18 @@ class IfcSolver(BaseSolver):
             ans = self._sheet_of_room(model, idx, question)
             if ans is not None:
                 return ans
-        agree = bool(self._PVM_AGREE.search(qf) and self._PVM_PLAN.search(qf) and self._PVM_MODEL.search(qf))
+        agree = bool((self._PVM_AGREE.search(qf) or self._PVM_ASMANY.search(qf)) and self._PVM_PLAN.search(qf)
+                     and self._PVM_MODEL.search(qf))
         # 'Does this drawing show every window that the model has on S?' (Q v17: 297 @ 0.30): drawn ⊇ modelled?
         complete = bool(self._PVM_ALL.search(qf) and self._PVM_PLAN.search(qf) and self._PVM_MODEL.search(qf))
         agree = agree or complete
         notdrawn = bool(self._PVM_NOTDRAWN.search(qf))
         mm_ = self._PVM_MORE.search(qf)
+        # 'By how many windows does the model exceed this plan?' (W1 c8: 297 @ 0.50): 'exceed' = more than
+        mx_ = None if mm_ else re.search(r"\b(exceed\w*|outnumber\w*|ubersteig\w*|ubertrifft|ylitta\w*)\b", qf)
+        cmp_word, cmp_end = (mm_.group(1), mm_.end(2)) if mm_ else ("more", mx_.end(1)) if mx_ else ("", 0)
         # 'Does the model contain more windows on S than the S floor plan shows?' (R1 kg12: 'no (36 = 36)' @ 0.89)
-        more_q = bool(mm_ and self._PVM_PLAN.search(qf) and self._PVM_MODEL.search(qf))
+        more_q = bool((mm_ or mx_) and self._PVM_PLAN.search(qf) and self._PVM_MODEL.search(qf))
         # 'Does the UG2 floor plan show doors that the model does not assign to UG2?' (R1 kg21)
         other_q = bool(self._PVM_OTHER.search(qf) and self._PVM_PLAN.search(qf))
         if not (agree or notdrawn or more_q or other_q):
@@ -859,6 +880,18 @@ class IfcSolver(BaseSolver):
                         + (" ..." if len(missing_els) > 20 else "") + f" ({why_nd})")
             return Answer(value=txt, unit=None, confidence=0.85, evidence=(ev or [self._ev(model, e, e.eff_cls) for e in drawn])[:MAX_EVIDENCE],
                           trace=trace, solver=self.name, assumptions=asm, missing=[])
+        how_many = bool(re.search(r"\bhow many\b|\bby how (many|much)\b|\bwie viele\b|\bum wie viele\b|\bkuinka monta\b|"
+                                  r"\bmontako\b|\bcombien\b|\bhoeveel\b|\bmitu\b|\bile\b|\bhur manga\b|\bcuantas?\b|"
+                                  r"\bquant[ie]\b", qf))  # not 'number of': 'Does the plan differ in the number of doors?' is yes/no
+        yes_no = bool(re.match(r"\s*(is|are|does|do|did|has|have|can|will|gibt|sind|ist|hat|zeigt|onko|ovatko|naytta\w*ko|"
+                               r"y a-t-il|est-ce|le plan|existe|hay|zijn|is er|staan|toont|finns|kas)\b", qf)) and not how_many
+        if notdrawn and not agree and yes_no:
+            # 'Are there windows in the 3D model that this sheet does not draw?' (Q v23: 3, gold 'yes')
+            txt = (f"{'yes' if missing_els else 'no'}: {len(missing_els)} of the {len(on)} {word} of the model on "
+                   f"'{storey.name}' are not drawn on {Path(plan).name}" + (f" ({why_nd})" if missing_els else ""))
+            return Answer(value=txt, unit=None, confidence=0.85,
+                          evidence=(ev or [self._ev(model, e, e.eff_cls) for e in drawn])[:MAX_EVIDENCE],
+                          trace=trace, solver=self.name, assumptions=asm, missing=[])
         if notdrawn and not agree:
             return Answer(value=len(missing_els), unit="count", confidence=0.85, evidence=ev[:MAX_EVIDENCE],
                           trace=trace + [f"in the model but not drawn: {len(on)} - {len(drawn)} = {len(missing_els)}; "
@@ -872,17 +905,34 @@ class IfcSolver(BaseSolver):
             return Answer(value=txt, unit=None, confidence=0.85, evidence=ev_o or ev[:MAX_EVIDENCE], trace=trace,
                           solver=self.name, assumptions=asm, missing=[])
         if more_q:
-            pre = qf[:mm_.start()]
-            subj_plan = bool(self._PVM_PLAN.search(pre)) and (not self._PVM_MODEL.search(pre) or
-                                                             self._PVM_PLAN.search(pre).start() < self._PVM_MODEL.search(pre).start())
+            # the side named right after 'than' is the reference; the other is the subject, wherever it stands
+            # ('Are there fewer windows on this drawing than in the model?' read the model as subject: 'no' @ 0.85)
+            post = qf[cmp_end:]
+            pm_, mm2_ = self._PVM_PLAN.search(post), self._PVM_MODEL.search(post)
+            ref_plan = bool(pm_) and (not mm2_ or pm_.start() < mm2_.start())
+            subj_plan = not ref_plan
             n_plan = len(drawn) + len(other)
             a_, b_ = (n_plan, len(on)) if subj_plan else (len(on), n_plan)
-            res = a_ > b_ if mm_.group(1) == "more" else a_ < b_
+            fewer = bool(re.fullmatch(self._PVM_FEWER, cmp_word))
+            res = a_ < b_ if fewer else a_ > b_
+            ev_ = (ev or [self._ev(model, e, e.eff_cls) for e in drawn])[:MAX_EVIDENCE]
+            if re.search(r"\bhow many\b|\bby how (many|much)\b|\bwie viele\b|\bum wie viele\b|\bkuinka monta\b|"
+                         r"\bmontako\b|\bcombien\b|\bhoeveel\b|\bmitu\b|\bile\b|\bhur manga\b|\bcuantas?\b|\bquant[ie]\b", qf):
+                # 'How many more windows does the model have on this storey than the plan shows?' -> the difference
+                d_ = (b_ - a_) if fewer else (a_ - b_)
+                return Answer(value=abs(d_), unit="count", confidence=0.85 if d_ >= 0 else 0.6, evidence=ev_,
+                              trace=trace + [f"difference: model {len(on)} vs plan {n_plan} -> {abs(d_)}"
+                                             + ("" if d_ >= 0 else " (the comparison runs the other way)")],
+                              solver=self.name, assumptions=asm,
+                              missing=[] if d_ >= 0 else ["the question assumes the opposite order of the two counts"])
             txt = (f"{'yes' if res else 'no'}: the model has {len(on)} {word} on '{storey.name}', the plan draws {n_plan}"
                    + (f" ({len(missing_els)} of the model's not drawn; {why_nd})" if missing_els else "")
                    + (f" ({len(other)} of other storeys)" if other else ""))
-            return Answer(value=txt, unit=None, confidence=0.85, evidence=(ev or [self._ev(model, e, e.eff_cls) for e in drawn])[:MAX_EVIDENCE],
-                          trace=trace, solver=self.name, assumptions=asm, missing=[])
+            return Answer(value=txt, unit=None, confidence=0.85, evidence=ev_,
+                          trace=trace + [f"subject: {'the plan' if subj_plan else 'the model'} ({a_}) "
+                                         f"{'<' if fewer else '>'} {'the model' if subj_plan else 'the plan'} ({b_})? "
+                                         f"{'yes' if res else 'no'}"],
+                          solver=self.name, assumptions=asm, missing=[])
         if complete and not self._PVM_AGREE.search(qf):
             txt = (f"yes: all {len(on)} {word} of the model on '{storey.name}' are drawn on {Path(plan).name}" if not missing_els
                    else f"no: {len(drawn)} of the {len(on)} {word} of the model on '{storey.name}' are drawn; "
@@ -891,8 +941,23 @@ class IfcSolver(BaseSolver):
                           evidence=(ev or [self._ev(model, e, e.eff_cls) for e in drawn])[:MAX_EVIDENCE],
                           trace=trace, solver=self.name, assumptions=asm, missing=[])
         same = len(drawn) == len(on) and not other
-        txt = (f"yes: the IFC model and the plan both have {len(on)} {word} on '{storey.name}'" if same else
-               f"no: the IFC model has {len(on)} {word} on '{storey.name}', the plan draws {len(drawn)}"
+        if how_many and not complete and re.search(r"\b(differ\w*|discrepan\w*|mismatch\w*|difference|unterscheid\w*|"
+                                                   r"eroa\w*|erinev\w*|verschil\w*)\b", qf):
+            # 'By how many doors does this plan differ from the IFC model?' (Q v23: 'yes: both 46', gold 0)
+            n_plan = len(drawn) + len(other)
+            return Answer(value=abs(len(on) - n_plan), unit="count", confidence=0.85,
+                          evidence=(ev or [self._ev(model, e, e.eff_cls) for e in drawn])[:MAX_EVIDENCE],
+                          trace=trace + [f"difference: model {len(on)} vs plan {n_plan} -> {abs(len(on) - n_plan)}"],
+                          solver=self.name, assumptions=asm, missing=[])
+        # 'Does the plan differ from the model in the number of windows?' asks the opposite of 'agree?' (was 'no: 55
+        # vs 52'); a question naming both ('agree or differ?') keeps the agree reading
+        differ_q = bool(re.search(r"\b(differ\w*|discrepan\w*|mismatch\w*|deviat\w*|unterscheid\w*|abweich\w*|"
+                                  r"poikke\w*|eroa\w*|erinev\w*|verschil\w*|afwijk\w*)\b", qf)) and not re.search(
+            r"\b(agree\w*|match(es)?|consistent|same|correspond\w*|tally|uberein\w*|ueberein\w*|stimm\w*|overeen\w*|"
+            r"vastaa\w*|kooskola\w*|gleich\w*|meme|zelfde|sama|mismo|stesso|coincid\w*|concord\w*)\b", qf)
+        yn = ("no" if same else "yes") if differ_q else ("yes" if same else "no")
+        txt = (f"{yn}: the IFC model and the plan both have {len(on)} {word} on '{storey.name}'" if same else
+               f"{yn}: the IFC model has {len(on)} {word} on '{storey.name}', the plan draws {len(drawn)}"
                + (f" ({len(missing_els)} not drawn; {why_nd})" if missing_els else "")
                + (f" and {len(other)} of other storeys" if other else ""))
         return Answer(value=txt, unit=None, confidence=0.85, evidence=(ev or [self._ev(model, e, e.eff_cls) for e in drawn])[:MAX_EVIDENCE],
@@ -2241,7 +2306,13 @@ class IfcSolver(BaseSolver):
                            r"\bnell.?edificio\b|\btout le batiment\b|\bl.?ensemble du batiment\b|\bhela (byggnaden|huset)\b|"
                            r"\bhele (bygningen|huset)\b|\bkoko (rakennukse\w*|rakennus|talo\w*)\b|\bkogu (hoone\w*|maja\w*)\b|"
                            r"\b(calym|caly|cały) budyn\w*\b|\bcele(m)? budov\w*\b|\btodo o edificio\b|\begesz epulet\w*\b|"
-                           r"\bintreag\w* cladir\w*\b|\bwhole of the (building|house)\b")
+                           r"\bintreag\w* cladir\w*\b|\bwhole of the (building|house)\b|"
+                           # F 10:22: 'How many doors are in this building?' on the foundation sheet = 0 (sheet storey;
+                           # gold 16): 'this' + building is the building, not 'this plan'
+                           r"\bthis (building|house|model|project)\b(?!.s)|\b(dieses|diesem) (gebaude|haus|modell)\b|"
+                           r"\bdit gebouw\b|\bdeze woning\b|\b(ce|cet) (batiment|edifice|immeuble)\b|\beste edificio\b|"
+                           r"\bquesto edificio\b|\b(tassa|tama|taman) rakennu\w*\b|\b(selles|see|selle) hoone\w*\b|"
+                           r"\bw tym budynku\b|\bi denna byggnad\b|\bi den har byggnaden\b|\bv teto budove\b")
 
     _STOREY_WORD = re.compile(r"\b(top|highest|uppermost|lowest|bottom|ground|first|second|third|fourth|fifth|\d+(?:st|nd|rd|"
                               r"th)?)\s+(floor|storey|story|level)\b|\b(basement|cellar|attic|loft|ground[- ]floor|"
@@ -3761,3 +3832,25 @@ class IfcSolver(BaseSolver):
 
 
 _ = fold  # re-exported helpers used by tests
+
+
+def plan_vs_model(path: str, question: str) -> Answer | None:
+    """The deterministic plan <-> model reading only (GlobalId set differences, comparatives, sheet counts; 0 LLM
+    calls): an Answer, or None when the question is not one this reads. For the pipeline's link route (W4), which
+    cross-checks R1's kg_qa with ifc only on some trigger reasons because the full solver falls back to its LLM text
+    reader elsewhere (W1 c8: kg_qa 'fewer windows on this plan than the model?' -> 'no' @ 0.85, never checked)."""
+    from stoa.solvers.ifc.arith import ungroup_question
+
+    t0 = time.perf_counter()
+    model = model_for(path)
+    if model is None:
+        return None
+    s = IfcSolver()
+    try:
+        a = s._plan_vs_model(path, model, load_index(model), ungroup_question(question))
+    except Exception:  # noqa: BLE001 - a cross-check must never break the caller
+        return None
+    if a is not None:
+        a.solver = s.name
+        a.cost.wall_seconds = time.perf_counter() - t0
+    return a

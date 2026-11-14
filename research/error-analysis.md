@@ -1,6 +1,6 @@
 # Error analysis (E = agent F)
 
-Updated 08:55, 14 Nov 2026 (sections newest first). Regenerate the tables with
+Updated 10:45, 14 Nov 2026 (sections newest first). Regenerate the tables with
 `/data/User/fangy4/envs/junction/bin/python -m stoa.eval.analyze <run_id> --baseline <dummy run_id> --top 20`.
 For paired significance use `python3 experiments/r1/stats/compare.py RUN_A RUN_B --by template` (cluster CI).
 
@@ -13,7 +13,81 @@ answer) vs `20261113-234812-dummy-dev` (template prior), both on dev v2 (hash f4
 | dummy (prior) | 26.1% | 40.4% | 0 | 0% |
 | vlm_direct | 32.0% (28.0–36.5) | 44.1% | 200 (all IFC) | 0% |
 
-## LATEST (08:55, cycle 225): same-gold wording probes in 8 languages: where a judge's own wording breaks us
+## LATEST (10:45, cycle 227): end-of-night state — the same-gold suite, and what is still confidently wrong
+
+**One command for the whole OPEN probe suite** (18 probes, 10,062 rows, ~8 min with 3 streams):
+`PYTHONPATH=. $JUNCTION_VENV/bin/python experiments/F/probe_suite.py run --tag X` then
+`python3 experiments/F/probe_suite.py compare $JUNCTION_SHARED/artifacts/F/probe_suite/X.json` (default base = night
+1a4e2af; lists every lost row). Use it on any change made after Stoa's noon reveal.
+
+Night 7a78559 → 1a4e2af (S0 cycles 40–41), paired on 9,410 common rows: **60 won / 8 lost, confident-wrong 67 → 65**.
+All 8 losses are low-confidence flips (≤ 0.61: LoRA counts, an agent sum, a Swedish doors-minus-windows compose).
+Wins: W1 6f1edf1 sheets with meaningless names know their storey (this_plan_nh 86.5 → 100, 44 W), apt_wording_scope_nh
+95.6 → 100. New probe `whole_top` (+ hashed `_nh`; 326 rows each; `experiments/F/whole_top_probe.py`): 'whole building',
+'across all floors', 'entire model', nl/de/fr building words, 'top floor' / 'uppermost storey' / 'oberstes Geschoss' on
+models and other-storey sheets: all 100%, 0 confident-wrong; the one miss family is **"How many N are in this building?"
+asked on a plan sheet → that sheet's storey (3/18, max conf 0.68)** (W1 told).
+
+**The 65 confident-wrong suite rows (conf ≥ 0.8) are 4 known causes, all also wrong in the dataset wording:**
+| cause | rows | owner | note |
+|---|---:|---|---|
+| two Swiss apartments dxf reads 3% high (site171 floor1442 A, site790 floor7704 B) | 29 | W2 | every wording |
+| CubiCasa LoRA fixture counts (WC, sinks, saunas, bathrooms) at the concept gate's 0.82–0.86 | 25 | R2 | model limit; calibrated per concept |
+| CubiCasa compose bedrooms + bathrooms | 6 | W4/R2 | parts from the LoRA |
+| Swiss dxf totals 2–3% high / site753 apartments +16% | 5 | W2 | see below |
+
+**Dev at S0's c40 gate (run 20261114-095337-pipeline-dev-07a7): 35 confident-wrong = 26 CubiCasa LoRA + 9 Swiss dxf
+areas, every one of the 9 ABOVE gold (+2.2 … +16.4%).** site753_bldg1637_floor7293: apartment A 79.03 @0.9 vs 67.88; the
+gap is exactly room 5.04, an unlabeled numbered room (11.14 m², no name, no printed area) that the gold leaves out.
+`experiments/F/unlabeled_rooms.py`: on 1,497 train apartment questions an apartment that contains an unlabeled numbered
+room ≥ 4 m² is right 34/50 (68%) vs 1407/1447 (97.2%) otherwise; dropping the room is worse (11/50) → a confidence CAP
+(≈ 0.65 + an assumption line), not a rule (W2 told 10:40). NEGATIVE: a dxf-vs-pdf_vector disagreement check is no
+detector: they disagree (> 2%) on 10 of 400 dev Swiss area Qs and dxf is right on 7 of the 9 confident ones
+(run 20261114-102530-pdf_vector-dev-a2aa); the other 7 confident-wrongs have both readers agreeing.
+
+Files outside the dataset: documented in `docs/CONTRACT.md` ("Files outside the dataset"): what `source_of` /
+`siblings` / `dataset_rel` infer, the measured cost per layout, and the recommended layout for Stoa's files
+(`<ROOT>/data/<source>/<name>.<ext>`, twins under one stem, the IFC model next to its sheets).
+
+## Earlier (09:50, cycle 226): the same files outside our dataset folders (Stoa's noon files, demo uploads)
+
+Every test we run uses dataset paths (`data/<source>/<file>`). Stoa's files and a visitor's upload won't sit there,
+and several routes read the path: `source_of()` takes the source from the folder name, `siblings()` finds same-stem
+twins, IFC sheets find their model by file-name prefix, caches/gates are keyed by dataset-relative paths.
+**Neutral-path probe** (`experiments/F/neutral_path_probe.py`, OPEN: 168 dev questions, the same bytes hard-linked
+under `/data/User/fangy4/stoa-neutral/`, 5 kinds of path; report `python3 experiments/F/neutral_compare.py RUN`):
+
+| variant (meta.wording) | what it is | before (2b1a) | after 749e5c3 (3cb0) | LLM calls / Q |
+|---|---|---:|---:|---:|
+| dataset | control | 91.1 | 91.1 | 0.35 |
+| twins_name | neutral folder, original names, all twins (dxf/png/svg/.ifc) | 66.7 | **90.5** | 0.71 |
+| twins_hash | same, hashed names ("A101.pdf") | 66.1 | **89.9** | 0.68 |
+| srcdir_lone | the file alone in `.../data/<source>/`, hashed | 65.5 | 66.1 | 0.36 |
+| lone_hash | the file alone, hashed (a single upload) | 66.7 | 66.1 | 1.63 |
+
+Per source (after the fix):
+- **ifc_models sheets (43 Qs)**: with the model in the folder 100% (before: **0–21%**: source 'unknown' → no model
+  sibling, no `ifc` route, `ifc.can_handle` False → vlm_direct guesses at ≤0.32, pdf_text echoing the room number
+  '(0.1)' as an area at 0.65–0.75). Fix in `stoa/data.py` (F-owned): an outside sheet whose model sits next to it
+  (prefix name, or the ONLY .ifc in a project folder that isn't laid out as data/ifc_models/) is source 'ifc_models'.
+  A sheet without its model: 0/43 (prior at ≤0.23 or vlm_direct; calibrated except the pdf_text echo, W2 told).
+- **Swiss (60 Qs)**: areas 93.3 → 100 (pdf_vector answers; it is right on two floors where dxf's room total is 2.2% high
+  at 0.9–0.975); counts 100 → 90 (dxf declines a DXF twin outside data/swiss_dwellings/: DE/FR windows). W2 told.
+- **CubiCasa (56 Qs)**: 76.8% in every variant; vlm_lora answers all (raster_cc5k and the prior gate drop out),
+  tokens 630 → 1,056–1,521 per Q. **Schedules** (9 Qs) and **ifc_bench free text on an outside .ifc** (14 Qs, judged):
+  unchanged (one schedule LLM flake 379 → 235 @0.85 in 1 of 10 identical runs).
+
+**Sheets named without their storey** (`experiments/F/this_plan_probe.py` + `experiments/F/neutralize.py --mode hash`:
+163 dev sheet questions that name the sheet's own storey, re-asked "on this floor plan" / "on this floor"):
+dataset names 163/163; hashed names counts 1/19, volumes 0/12, lengths 0/3, area totals −11 (room-by-name areas
+fine), all at 0.475–0.485: "no storey named or implied (not a plan file); whole model". The sheet states its storey
+in its own text ("— Floor plan: 0") and through its room labels. W1 told. Runs -093821-…-this_plan-5fca vs
+-093834-…-this_plan_nh-92ec.
+
+`experiments/F/neutralize.py IN OUT --mode hash|name|lone` re-asks any open probe on neutral copies (same qids);
+pair with `kind_compare.py`. Use it on any new route before trusting it on Stoa's files.
+
+## Earlier (08:55, cycle 225): same-gold wording probes in 8 languages: where a judge's own wording breaks us
 
 All probes are OPEN (dev drawings / open hard + hard2 bases; quote and fix freely). Each re-asks a dataset question in
 the words a judge might type, with the SAME gold; most carry the dataset wording of the same base as a control

@@ -484,6 +484,12 @@ def _swiss_total_check(val: float, scope, filt: dict, rooms: list[dict]) -> str 
     dxf = sum(r["area_m2_dxf"] for r in sel)
     named = [r for r in sel if r["name"]]
     dxf_named = sum(r["area_m2_dxf"] for r in named)
+    # W2 10:25: unnamed numbered rooms worth >= 2% of the total are a READING choice (count them or not), and a dxf /
+    # pdf_vector answer sums the same polygons -> the polygon sum is not an independent check there: '?' (no lift).
+    # dxf's own 0.80 on these is calibrated (train: 54/69 apartments, 43/51 floors right); the ✓ lifted F's two
+    # wrong-in-every-wording apartments to 0.90 (site171 apt A 123.1 vs 119.14, site790 apt B 105.78 vs 102.63)
+    amb = len(named) < len(sel) and dxf - dxf_named >= 0.02 * max(dxf, 1e-9)
+    n_unnamed, a_unnamed = len(sel) - len(named), dxf - dxf_named
     if _mark(val, dxf, 0.02) != "✓" and len(named) < len(sel) and _mark(val, dxf_named, 0.02) == "✓":
         # numbered rooms without a name (shafts/voids/storage?) are the dataset's one ambiguity: say which reading
         parts = [f"DXF polygons of the {len(named)} named {what} {dxf_named:.2f} m² ✓ (with the "
@@ -497,7 +503,11 @@ def _swiss_total_check(val: float, scope, filt: dict, rooms: list[dict]) -> str 
         parts.append(f"sum of their printed areas {pv:.2f} m² {_mark(val, pv, 0.02)}")
     elif printed:
         parts.append(f"{len(printed)}/{len(sel)} rooms have a printed area")
-    return f"answer {val:.2f} m² vs " + "; ".join(parts)
+    out = f"answer {val:.2f} m² vs " + "; ".join(parts)
+    if amb:  # no sum settles whether the unnamed rooms count: a match is '?', a mismatch stays ✗
+        out = out.replace("✓", "?") + (f"; ? {n_unnamed} numbered room(s) without a name ({a_unnamed:.2f} m²): "
+                                       "whether they count is a reading choice the sums cannot confirm")
+    return out
 
 
 def _mark(a, b, tol=0.0) -> str:
@@ -530,9 +540,13 @@ def _crosscheck(path: str, intent, answer) -> str | None:
         if task == "count" and target in _TARGET_CLASSES and scope in (None, "drawing", "storey"):
             classes = _TARGET_CLASSES[target]
             model_classes = ("IfcStair",) if target == "stair" else classes
+            sg = {idx.elements[x].storey for x in guids if x in idx.elements}
             if st is None and guids:  # .ifc question: take the storey of the answer's own elements
-                sg = {idx.elements[x].storey for x in guids if x in idx.elements}
                 st = idx.storey(next(iter(sg))) if len(sg) == 1 else None
+            elif st is not None and len(sg) == 1 and next(iter(sg)) != st.guid and idx.storey(next(iter(sg))) is not None:
+                # 'How many walls are there on the ground floor?' asked on the 1.OG sheet: the answer (81, EG's walls)
+                # was checked against the SHEET's storey (70) -> false ✗, 0.97 -> 0.68 (W1 c8); check the asked storey
+                st = idx.storey(next(iter(sg)))
             if st is None:
                 return None
             mc = len(idx.in_storey(st.guid, *model_classes))
