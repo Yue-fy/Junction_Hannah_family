@@ -141,17 +141,31 @@ def text_trigger(question: str) -> dict:
     return {"fire": False, "kind": "", "match": ""}
 
 
+# questions that ask for an AREA: these stay with the pipeline (route_policy.py: on the untouched probe v4 the
+# pipeline's VLM read printed room areas 6/13 vs room_graph 2/13 -- the area reader's VLM boxes put numbers in the
+# wrong regions), while relations / per-room counts go to room_graph (8/9 vs 2/9 untouched).
+AREA_Q = re.compile(r"\b(?:area|size|how\s+(?:big|large)|square\s+(?:met|feet|foot)|m2|m²|sq\.?\s*m|floor\s+space|"
+                    r"fläche|wie\s+gro(?:ß|ss)|pinta-?ala|superficie|surface|yta|kokoinen)\b", re.I)
+
+
 def per_room(question: str, path: str | Path | None = None) -> dict:
-    """Route test: fire only on raster images.  in_domain = CubiCasa-style plan (the room graph was measured there)."""
+    """Route test: fire (-> room_graph.solve) on raster images when the question is scoped to a room AND does not ask
+    for an area.  fire_any = the room-scope trigger alone (area questions included).  in_domain = CubiCasa-style
+    plan (where the room graph was measured)."""
     t = text_trigger(question)
     p = str(path or "")
     raster = Path(p).suffix.lower() in _RASTER if p else True
     in_domain = "cubicasa" in p.lower() or not p
-    fire = bool(t["fire"] and raster)
+    area = bool(AREA_Q.search(question))
+    fire_any = bool(t["fire"] and raster)
+    fire = fire_any and not area
     why = (f"question scoped to a room ({t['kind']}: '{t['match']}')" if t["fire"] else "no room scope")
     if t["fire"] and not raster:
         why += "; not a raster image (use the vector/IFC solvers)"
-    return {"fire": fire, "kind": t["kind"], "match": t["match"], "in_domain": in_domain, "why": why}
+    if fire_any and area:
+        why += "; asks for an area: keep the pipeline (reads printed m² better than the room graph)"
+    return {"fire": fire, "fire_any": fire_any, "area": area, "kind": t["kind"], "match": t["match"],
+            "in_domain": in_domain, "why": why}
 
 
 if __name__ == "__main__":
