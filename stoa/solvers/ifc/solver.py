@@ -776,18 +776,13 @@ class IfcSolver(BaseSolver):
             ev = [self._ev(model, e, e.long_name or e.name or "") for e in els]
             return self._breakdown(idx, it, els, lambda e: self._floor_area(e, it, [])[0], ev, trace, assumptions,
                                    missing, conf, where, unit="m²")
-        gq = [_qto(e, (".GrossFloorArea",)) for e in els] if (it.metric == "area" and it.kind == "space") else []
-        if it.gross and gq and all(v is not None for v in gq) and not it.group_by:
-            assumptions.append("gross floor area = sum of the spaces' GrossFloorArea quantities")
-            return self._final(float(sum(gq)), "m2", it, conf * 0.85,
-                               [self._ev(model, e, f"{e.long_name or e.name} gross {v:.2f} m²") for e, v in zip(els, gq)],
-                               trace, assumptions, missing)
         if it.metric == "area" and it.kind == "space" and it.gross and not it.group_by:
-            stored = [next((v for k, v in e.qto.items() if k.endswith("Area") and "Net" not in k and v), None)
-                      for e in els]
+            # a space's own GrossFloorArea is the room's area (ArchiCAD: = net), not the storey's gross area
+            stored = [_qto(e, (".GrossFloorArea",)) or next((v for k, v in e.qto.items() if k.endswith("Area")
+                                                             and "Net" not in k and v), None) for e in els]
             if any(v is not None for v in stored):
-                missing.append(f"the model's spaces store areas summing to {sum(v for v in stored if v):.2f} m² "
-                               "(no GrossFloorArea quantity); the value is the outline area")
+                missing.append(f"the rooms' stored areas sum to {sum(v for v in stored if v):.2f} m²; the value is "
+                               "the area inside the outer wall outline (gross floor area incl. walls)")
             sts = [storey.guid] if (storey is not None and where != "whole model") else \
                 [st.guid for st in idx.storeys]
             outs = [(g, storey_outline(idx, g)) for g in sts]
