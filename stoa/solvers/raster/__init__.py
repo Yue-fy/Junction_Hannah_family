@@ -45,6 +45,15 @@ CANONICAL = {  # used when a composition needs a `direct` answer for one part
 }
 IMG_EXT = (".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp")
 # sources whose non-template questions keep going to their own solvers / vlm_direct (no text-grounded raster answer)
+def _siblings(path: str) -> dict:
+    try:
+        from stoa.data import siblings
+
+        return siblings(path)
+    except Exception:  # noqa: BLE001
+        return {}
+
+
 TEXT_OFF = {"cubicasa5k", "swiss_dwellings", "ifc_models", "ifc_bench", "opening_design"}
 # "How many rooms labelled 'Küche'", "Räume mit der Bezeichnung «Reduit»", "pièces portant la désignation « Bain »"
 _LABELLED = re.compile(r"(?:labell?ed|called|named|marked|Bezeichnung|bezeichnet|beschriftet|désignation|intitulée?s?|"
@@ -107,12 +116,13 @@ class RasterSolver(BaseSolver):
     extensions = IMG_EXT
 
     def __init__(self, gate: str = "", backend: str = "local", target_px: int | str = 2_000_000,
-                 text: int | str = 1, offdomain: int | str = 1, **kwargs):
+                 text: int | str = 1, offdomain: int | str = 1, twins: int | str = 1, **kwargs):
         super().__init__(**kwargs)
         self.backend = backend
         self.target_px = int(target_px)
         self.text = bool(int(text))  # text-grounded answers on scans (textqa.py); `--solver-arg text=0` = off
         self.offdomain = bool(int(offdomain))  # non-CubiCasa images: labels for rooms, abstain on symbols
+        self.twins = bool(int(twins))  # 0 = act as if no vector twin existed (simulates an unseen PNG-only plan)
         self.gate = load_gate()
         for part in filter(None, (gate or "").split(",")):
             c, m = part.split(":")
@@ -131,7 +141,14 @@ class RasterSolver(BaseSolver):
     def _text_mode(self, path: str, question: str) -> bool:
         """Questions no template covers, on scans and unseen raster sources only (cubicasa/swiss/ifc keep their
         own solvers; there vlm_direct stays the fallback): answered from the text layer + image (textqa.py)."""
-        return self.text and source_of(path) not in TEXT_OFF and question_op(question)[0] == "none"
+        if not self.text or question_op(question)[0] != "none":
+            return False
+        src = source_of(path)
+        if src not in TEXT_OFF:
+            return True
+        # a Swiss-style plan with NO vector twin (an unseen PNG/JPEG floor): dxf can't answer, so raster reads and
+        # measures it (scale bar + room fill: Swiss PNG dev rooms median error 5-6.5%, vs VLM guesses ~50%)
+        return src == "swiss_dwellings" and (not self.twins or not ({".pdf", ".dxf", ".ifc"} & set(_siblings(path))))
 
     # ----------------------------------------------------------------------------------------------
     def solve(self, path: str, question: str) -> Answer:
