@@ -171,10 +171,11 @@ On older builds more of these break: see the git history of this file (08:20 and
   plan-02-eg), "Which storey does this sheet show, and does its door count match?" (both halves), rankings that name a
   tie ("Which floor has the most rooms?" → "2.korrus and 3.korrus and 4.korrus (tie, 60 each)" at 0.56), "the three
   largest rooms on '1.korrus'" (0.90), "the total area of the three largest rooms" (232.88 m²), "top floor" (5.korrus).
-  **Steer away from (bugs 27–28, W1, fixes pending at 10:46):** "the floor above / below this one" (answers the open
-  sheet's own storey at 0.98), "Which floor has *no* X?" (lists the floors that have X), "Of the floors …, which has
-  the fewest?" (answers the smallest room), the Italian / German which-floor and top-3 wordings ("Quale piano ha …" →
-  a count). Also "How big is the laundry room?" (870 at 0.30) and "the same area as room X" (returns X's area). If one
+  **On the 11:15 build (pre-merge #11) also right:** "How many doors are on the floor above this one?" (42), "… the
+  floor below this one?" (0 — the foundation), "Which floor has no MAGAMISTUBA?" (1.korrus), "Which floor has the
+  biggest room?" (1.korrus), "Quale piano ha il maggior numero di porte?" (frigento: Piano 1). **Steer away from:**
+  "the storey *directly* above this one" (answers the open sheet's storey at 0.88), "How many windows does the floor
+  with the most doors have?" (agent: 297 at 0.95). Also "How big is the laundry room?" (870 at 0.30) and "the same area as room X" (returns X's area). If one
   of these comes up, open the evidence and say it: "the trace shows what it computed — this is a known failure, it's
   on the failure slide."
 - Esplanades rooms are labelled in Estonian; English room words work and the card says which labels it used:
