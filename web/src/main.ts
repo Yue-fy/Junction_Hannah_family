@@ -399,6 +399,7 @@ async function uploadFiles(files: File[]) {
     $<HTMLSelectElement>("source").value = "";
     $<HTMLInputElement>("search").value = "";
     await refreshFiles();
+    $("landing").hidden = true; // an upload from the project page opens it right away
     await openFile(first);
     $("question").focus();
   } catch (e) {
