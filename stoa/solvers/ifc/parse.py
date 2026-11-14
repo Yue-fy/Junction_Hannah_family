@@ -402,6 +402,10 @@ def parse(question: str) -> Intent:
     asked_unit = None
     if re.search(r"ft3|ft³|cubic f(ee|oo)t|cu\.? ?ft", t):
         asked_unit = "ft3"
+    elif re.search(r"\b(in|as|to) (millimet(er|re)s?|mm)\b", t):
+        asked_unit = "mm"
+    elif re.search(r"\b(in|as|to) (centimet(er|re)s?|cm)\b", t):
+        asked_unit = "cm"
     elif re.search(r"\b(litres?|liters?)\b", t):
         asked_unit = "l"
     elif re.search(r"ft2|ft²|sq\.? ?ft|square f", t):
