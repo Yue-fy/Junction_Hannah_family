@@ -99,6 +99,9 @@ Point at the chart: the families already asked go to 0 after each fix; each new 
 new surface (storeys in everyday words, "whole building" in Swedish, "1,200 euros", two-part questions).
 
 **Backup for questions (don't read out):**
+- **Latest (08:33, night + the owners' six newest commits, not yet merged): 4 of 564 at confidence ≥ 0.8, and 338
+  of 339 confident scored answers right** — say this instead if S0 merges them before the pitch (`redteam/REPORT.md`
+  "Pre-merge check #5"); the chart's last bar.
 - **What still breaks on the test-2 build (bb94fe4), 12 of 494 at confidence ≥ 0.8:** "how many doors *and how
   many* windows" summed into one number (101 at 0.86; two separate answers were asked, W4); "how many doors on the
   ground floor and how many on the top floor" read as the whole building (W1); "how many floors" counts the

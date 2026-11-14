@@ -1,7 +1,7 @@
 # Red team report (agent Q) — can we break the pipeline?
 
-**494 adversarial questions** (`redteam/questions.jsonl`, built by `redteam/build.py`, analysed by `redteam/analyze.py`),
-in fourteen families written one after another tonight; each new family was aimed at the mechanism the last one exposed.
+**564 adversarial questions** (`redteam/questions.jsonl`, built by `redteam/build.py`, analysed by `redteam/analyze.py`),
+in sixteen families written one after another tonight; each new family was aimed at the mechanism the last one exposed.
 Builds on F's `hard` (translations/paraphrases/compositions/ft²) and `hard2` (new operators) and covers what those
 don't. The first 205 rows start from dev questions the pipeline had **right at conf ≥ 0.8**, so a failure there is
 caused by the perturbation, not by the drawing.
@@ -34,9 +34,10 @@ caused by the perturbation, not by the drawing.
      building in total" on a single-floor Swiss plan → that floor's 36 / 4 at 0.99 (W2).
    - v6: "How many floors does this building have?" → 7 at 0.85 (foundation and roof counted, W1); v5: Finnish
      "kellarikerroksessa" → 50 at 0.88 (W1).
-   **Newer (08:27, pre-merge #4 with the owners' 08:16–08:26 commits, 516 rows incl. v15): 11 left** — bug 17,
-   "how many floors", "kellarikerros" and the 7th-floor premises fixed; v15 shows bug 18 on Swiss plans is 0/10
-   (5 more at ≥ 0.95); W1 059e9c4 drops 7 right "ground floor" answers to 0.29 (see "Pre-merge check #4").
+   **Newer (08:33, pre-merge #5 = night + the six newest owner heads, 564 rows incl. v15/v16): 4 left; 338 of 339
+   scored answers at ≥ 0.8 right** — bug 17, bug 18 (English), "how many floors", "kellarikerros" and the 7th-floor
+   premises fixed (see "Pre-merge check #5"); left: one-floor "whole building" ×3 (W2), Finnish two-number → one
+   part at 0.95 (W4). (#4 at 08:27: 11 left, with a W1 "ground floor" confidence drop that #5's W1 commit undoes.)
    Unscored but visible: two-part questions to dxf answer one part at 0.60 ("3" with unit m² for "how many rooms
    and what is their total area", bug 20, W2); on scans, unanswerable questions still get an invented number (514
    seats at 0.34) with no reason given (v10, W4).
@@ -603,6 +604,25 @@ was 43,200 at 0.45). **Calibration regression (W1 059e9c4): 7 right "ground floo
 for the sheet's storey, right only by coincidence. Left at ≥ 0.8: bug 18 (Swiss two-number questions, 5 + 3 in
 v14/v15), bug 19 (ifc "ground floor, and … top floor" → 211; 211), one-floor "whole building" ×3 (W2).
 
+## v16 (08:33): four other Swiss dev plans handed over alone, as PNG and as PDF — 48 Qs
+The first 4 Swiss dev drawings after a seeded shuffle, copied outside our folder without their DXF; each asked its own
+English dataset questions (apartments, doors, windows, rooms labelled X, apartment area, total area of rooms labelled X).
+Night 5996739 (run `20261114-083258-pipeline-v16-23d8`): **PDF alone 22/24** (`pdf_vector`; 2 window counts wrong at
+0.50); **PNG alone 8/24** — apartments 4/4 (0.75) and label counts 4/4 (0.85) right, every door / window / area wrong
+but at conf ≤ 0.34 (calibrated). With W3 2e81496 (snapshot #5): PNG label-area totals **4/4 within 2 %** at 0.50
+(54.38 vs 55.03, 63.36 vs 62.63, 109.67 vs 111.73, 37.55 vs 38.07), apartment areas 1/4 within 2 % and the others
+2.4–5 % off at 0.30 (69.68 vs 72.33, 144.78 vs 152.85, 78.3 vs 80.24). W3's gains generalise beyond the demo plan.
+
+## Pre-merge check #5 (08:33): night 5996739 + F 2ebb80b + W1 64d1367 + W3 2e81496 + W4 0319d93 + R1 8ac4c60 + R2 2ccace2
+All 564 rows, run `20261114-083258-pipeline-questions-v16-80fc` vs night (`70ad` + `7216` + `7ba9` + `23d8`):
+**22 won, 1 lost (dxf LLM table code at 0.45); scored 87.2 → 91.2 %; scored answers at ≥ 0.8 325/337 → 338/339
+right; confident misses 17 → 4**; core 283 rows 192/192 right at ≥ 0.8, 0/24 premises. New on top of #4: **bug 18
+fixed on the English Swiss path** (W4 0319d93: "door: 36; window: 28" at 0.98, controls unchanged), W1 64d1367 undoes
+059e9c4's "ground floor" confidence drop (0.98 again), W3's twin-less areas (v16). Left at ≥ 0.8: one-floor "whole
+building" ×3 (dxf, W2) and Finnish "Montako ovea ja montako ikkunaa …" → doors only 36 at 0.95 (agent, W4).
+Below 0.8 but wrong: DE/FR/IT/NL/SV two-number questions summed by dxf (64 at 0.59–0.69, W2), bug 19 (0.77),
+Italian "in tutto l'edificio" (0.53–0.68). Scorer-invisible: "in cm²" / "in SF" answered in m² at 0.96–0.99 (bug 6).
+
 ## For Saturday noon: red-team Stoa's example questions in one command (`redteam/from_examples.py`)
 Put Stoa's examples in a jsonl (`path`, `question`, and `answer` / `unit` when known; a path may be absolute), then
 ```
@@ -628,8 +648,8 @@ stayed 3 but moved confidence band (0.75 → 0.35 / 0.92).
 - Rotated, grayscale, heavily compressed and half-resolution copies of a plan: 30/30 right, at the same confidence.
 
 ## Re-run
-`questions.jsonl` now has 516 rows: v1 (174) + v2 (31) + v3 Swiss compositions (42) + v4 CubiCasa compositions (36) +
-v5 natural references (70) + v6 judge questions on the demo drawings (21) + v7 scope words in 9 languages (36) + v8 scope premises (8) + v9 Finnish judge (14) + v10 scan follow-ups (8) + v11 number formats (10) + v12 Estonian labels (5) + v13 lone PDF/PNG (8) + v14 two-part / comparisons / heights / which (31) + v15 bug-18 probe (22) = 516; earlier rows are byte-identical across builds (checked with cmp), so runs on the first 205 /
+`questions.jsonl` now has 564 rows: v1 (174) + v2 (31) + v3 Swiss compositions (42) + v4 CubiCasa compositions (36) +
+v5 natural references (70) + v6 judge questions on the demo drawings (21) + v7 scope words in 9 languages (36) + v8 scope premises (8) + v9 Finnish judge (14) + v10 scan follow-ups (8) + v11 number formats (10) + v12 Estonian labels (5) + v13 lone PDF/PNG (8) + v14 two-part / comparisons / heights / which (31) + v15 bug-18 probe (22) + v16 Swiss dev plans alone as PNG/PDF (48) = 564; earlier rows are byte-identical across builds (checked with cmp), so runs on the first 205 /
 283 rows compare directly (`python3 $JUNCTION_SHARED/artifacts/Q/subset_stats.py <run> 283`). Build with
 `PYTHONHASHSEED=0 PYTHONPATH=.`; v5 calls the ifc solver for its gold (deterministic, < 1 s per row).
 ```
