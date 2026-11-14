@@ -6,7 +6,7 @@ Builds on F's `hard` (translations/paraphrases/compositions/ft²) and `hard2` (n
 don't. The first 205 rows start from dev questions the pipeline had **right at conf ≥ 0.8**, so a failure there is
 caused by the perturbation, not by the drawing.
 
-## Now (11:36) — bug 29, found by the noon dry run: on scanned sheets the evidenced scale answer depends on the wording
+## Now (11:32) — bug 29, found by the noon dry run: on scanned sheets the evidenced scale answer depends on the wording
 - **'What is the scale of this drawing?' on 12 seeded HABS sheets (night 637a6df): the text-layer answer (0.75, the
   printed scale note boxed) on 4 / 12; 'What is the drawing scale?' 7 / 12; 'What scale is this drawing?' 5 / 12.** The
   other sheets fall to vlm_direct at 0.20 with no box, often with the SAME value (va0315 1/8"=1'-0", md0351 1:48,
@@ -1124,7 +1124,7 @@ were ignored. Same family as bug 13 / 24 (a storey named the way people talk los
 is the drawing scale?' 7 / 12; the rest go to vlm_direct at 0.20 with no box, often with the same value. textlayer.scales()
 found the note and the prompt says so; the 8B returns an empty "answer" and textqa.answer() abstains (line 117).
 Deterministic for a wording (cache on). Also "1 inch = 12,000 feet" → "1:12000" at 0.75 (is 1:144,000). Fix: answer a
-scale question from scales() with its box at 0 LLM calls; ratios only from scales(). Sent to W3 + S0 11:37 (day team).
+scale question from scales() with its box at 0 LLM calls; ratios only from scales(). Sent to W3 + S0 11:32 (day team).
 
 ## "You know what you don't know — but refusing is not useful" (Stoa point 3), audited on be57171 (09:15)
 **Re-audited 11:05 on pre-merge #11 (all 1015 rows, run `-105439-…-all-snap12-e712`):** 0 bare refusals — one empty
