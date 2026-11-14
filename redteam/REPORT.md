@@ -18,6 +18,10 @@ it answers a *different* storey/model at conf 0.96–0.98 (5 of 5). The IFC solv
 confidence was 0.29–0.30 on three of them, with "could not resolve '…'" in its assumptions): the **pipeline overwrote
 that doubt with the template's train hit rate**. This is the same failure shape as the 7 confident IFC misses on
 sealed test 1 (all at conf ≥ 0.8). Fix is one line in the pipeline plus two name-matching guards in `ifc` (below).
+v2 (31 more questions) found the same shape on Swiss vector plans: a real room number with the wrong name
+('room 2.23 (Sauna)', a corridor) is answered at 0.99, and size questions worded "how big / what's the size" come back
+as *counts* (one at 0.97). Common cause: **a check verifies the number the solver computed, never that it answers
+what was asked** (name, storey, model, kind of quantity).
 
 ## Results (174 Qs; acc = eval scorer, which converts units; strict = the number is in the unit asked)
 | family | n | acc | strict | wrong at conf ≥ 0.8 | note |
@@ -102,6 +106,11 @@ they are rarely right to begin with. Typos are mechanical letter swaps, not real
   drawing") and, for areas on raster plans without a scale, add the assumption explicitly. Don't send non-symbol
   "how many people/cars/…" questions to the counting LoRA.
 
+- Copying a number from the question: "what is the area of room 999 (Ballroom)" (no such room) → vlm_direct
+  **999.0 m²** (conf 0.32). W1 has an unused-number guard inside `ifc`; the same check belongs in the pipeline for
+  every solver: an answer equal to a number the question contains (room number, distractor, year) → conf ≤ 0.1
+  unless the operation uses that number.
+
 ### 6. Answers are not in the unit asked (MEDIUM, cosmetic for the scorer, visible to a person) — owners W1 (ifc), W2 (dxf)
 - "…in cm²?" → 17.58 m² (dxf, conf 0.99); "…in millimetres?" → 291.802 m (ifc, conf 0.95). The eval converts, so
   this costs no score, but the card shows a number in a unit nobody asked for. ft²/SF and m² from ft² schedules are
@@ -113,6 +122,63 @@ they are rarely right to begin with. Typos are mechanical letter swaps, not real
   IFC fact-card LLM answers "…63.8 m²." as text at conf 0.30 (right number, scored wrong, 9.7 s). "How big is
   apartment B?" on Swiss works (dxf). Fix: "how big / how large / what size / wie gross / quelle taille / kuinka
   suuri" → task area.
+
+### 8. The questions we can't answer are the most expensive ones (MEDIUM, cost is scored) — owner W4
+| family | LLM calls / Q | tokens in / Q | max latency | $ / 1k Qs |
+|---|---:|---:|---:|---:|
+| control (answerable) | 1.0 | 2,199 | 6.7 s | 0.12 |
+| image transforms | 0.9 | 606 | 5.6 s | 0.04 |
+| objects that don't exist | 4.3 | 9,905 | 63.6 s | 0.68 |
+| unanswerable | 3.7 | 10,656 | 51.5 s | 0.57 |
+| false premise | 1.3 | 8,848 | **109.1 s** | 0.59 |
+- "How many swimming pools…" on a Swiss PDF: dxf and pdf_vector abstain ("question not understood"), then
+  vlm_direct + agent: **13 LLM calls, 64 s**, to answer 0. "Area of room 999 (Ballroom)": 7 calls, 109 s.
+- Fix: a per-question budget (e.g. ≤ 4 LLM calls / 20 s) once the deterministic solvers abstained and the intent
+  target is `unknown`; return the best estimate so far with its confidence and `missing`. Stoa scores cost; a hidden
+  set "harder and different" will hit this path more often than dev does.
+
+## v2 (04:15, run `20261114-041509-pipeline-questions-ae3c`, same code, 205 Qs = v1 + 31 new)
+New rows: everyday area wordings ("How big is room 4.17 (Bain)?", "How many square metres is …", "what's the size of
+the küche, room 3.09?"), Swiss false premises (room 9.99 'Ballsaal', apartment Z, **a real room number with the wrong
+name**), and questions for another format (fire rating on a Swiss plan, "IfcWall elements" on a raster plan).
+
+| family | n | acc | wrong at conf ≥ 0.8 | note |
+|---|---:|---:|---:|---|
+| "How many square metres is …" (Swiss + IFC) | 8 | 100 % | 0 | |
+| "How big is room N (name)?" Swiss | 4 | 100 % | 0 | dxf, conf 0.98 |
+| **"How big is the room 'X' on 'S'?" IFC** | 4 | **0 %** | **1** | answered a **count** (19, 6, 5): 'Hall (0.1)' → "5 count" at **0.97** |
+| **"what's the size of the küche, room 3.09?"** Swiss | 4 | **0 %** | 0 | answered "how many rooms are labelled Küche" (6, 27, 13 count) at 0.50–0.69 |
+| room 9.99 'Ballsaal', apartment Z (don't exist) | 5 | — | 0 | all conf ≤ 0.32 ✓ |
+| **room number exists, name wrong ('2.23 (Sauna)' is a Korridor)** | 2 | — | **2** | dxf answers room 2.23 at **0.99**; its own cross-check prints "room 2.23 'Korridor' … ✓" |
+| fire rating of a door on a Swiss plan | 2 | — | 0 | dxf returns "door8" / "4.05" at **0.60** after its LLM operation check said "disagree" |
+| "How many IfcWall elements" on a raster plan | 2 | — | 0 | counting LoRA answers 13 / 17 at 0.22 (low, but should say "no IFC model") |
+
+**Run-to-run determinism** (the 173 v1 questions asked again, same code, LLM cache off, GPU shared): 1 answer changed
+(the wording of a free-text cost estimate), no confidence moved by more than 0.05, no question changed solver. So
+the numbers in this report are not noise from sampling.
+
+### 9. An answer of the wrong kind is accepted (HIGH) — owners W4 (pipeline), W1 (ifc), W2 (dxf)
+- **Seen:** "How big is the room 'Hall (0.1)' on '0'?" → ifc "5 count" at 0.97 (gold 3.38 m²); "what's the size of
+  the zimmer, room 1.49?" → dxf "27 count" (rooms labelled Zimmer) at 0.69.
+- **Mechanism:** the intent is `text` (bug 7: "how big / size" is not an area cue), so `_fits(intent.task, ans)`
+  passes anything; the deterministic solvers fall back to their default operation (count) and their own parse finds
+  a label to count.
+- **Fix (general):** a count answer needs a counting cue in the question (how many / number of / count / wie viele /
+  combien / quanti / kuinka monta / hoeveel / mitu …); without one, cap conf at 0.3 and say "read as a count of …" in
+  `assumptions`. Plus bug 7's intent cue for size words.
+
+### 10. A room asked by number AND name answers the number even when the name is different (HIGH) — owner W2 (dxf)
+- **Seen:** "What is the net floor area of room 2.23 ('Sauna') in m²?" → 13.15 m² at 0.99; room 2.23 is a
+  'Korridor' (the trace says so in its own ✓ cross-check). Same shape as the IFC false premises (bug 1/3) and W4's
+  03:57 note: a geometry ✓ verifies the quantity computed, not that it is the room asked about.
+- **Fix:** when the asked name is not the room's label (after the usual DE/FR/IT/EN synonym map), conf ≤ 0.3 and
+  `missing: ["room 2.23 on this plan is labelled 'Korridor', not 'Sauna'"]`. A wrong *number* with the right name
+  should be checked the same way.
+
+### 11. dxf keeps a parse its own LLM check rejected (MEDIUM) — owner W2
+- "What is the fire rating of the entrance door of apartment A?" → parsed as count(door); "operation check (LLM):
+  'K' = something else; rules applied sum -> **disagree**" → still returned "door8" / "4.05" at **0.60**. When the
+  check disagrees, abstain (or conf ≤ 0.2) so the cascade moves on.
 
 ## What held (worth saying in the pitch)
 - Paraphrase / casing / context / distractor numbers: **0 of 56 answers changed**. Typos and injections changed 7

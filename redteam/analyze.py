@@ -80,6 +80,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("run")
     ap.add_argument("--md", default=None)
+    ap.add_argument("--rerun", default=None, help="another run over the same questions: report answer changes")
     a = ap.parse_args()
     rows = [json.loads(line) for line in open(a.run)]
     out = []
@@ -180,6 +181,18 @@ def main():
     for k, c, r in flip_rows:
         p(f"- [{k}] {r['path'].split('/')[-1][:45]}: {c['value']} ({c['confidence'] or 0:.2f}, {c['solver']}) → "
           f"{r['value']} ({r['confidence'] or 0:.2f}, {r['solver']}); gold {r['gold']}")
+    if a.rerun:  # the same questions in another run of the same code: is the pipeline deterministic?
+        other = {r["qid"]: r for r in map(json.loads, open(a.rerun))}
+        both = [(r, other[r["qid"]]) for r in rows if r["qid"] in other]
+        changed = [(x, y) for x, y in both if not same_value(x["value"], y["value"], x["type"])]
+        dconf = [abs((x["confidence"] or 0) - (y["confidence"] or 0)) for x, y in both]
+        p("")
+        p(f"Run-to-run (same question, same code, other run {a.rerun.split('/')[-1]}): {len(both)} shared questions, "
+          f"answer changed on {len(changed)}, confidence moved > 0.05 on {sum(d > 0.05 for d in dconf)}, "
+          f"solver changed on {sum(x['solver'] != y['solver'] for x, y in both)}.")
+        for x, y in changed:
+            p(f"- [{(x.get('meta') or {}).get('kind')}] {x['question'][:80]}: {y['value']} ({y['confidence'] or 0:.2f}, "
+              f"{y['solver']}) → {x['value']} ({x['confidence'] or 0:.2f}, {x['solver']}); gold {x['gold']}")
     txt = "\n".join(out)
     print(txt)
     if a.md:

@@ -81,9 +81,10 @@ By source on sealed test: Swiss vector plans 98 % areas / 100 % counts; IFC mode
 - **Red team** (`redteam/REPORT.md`, 174 adversarial questions built from answers we had right):
   rewording, casing, distractor numbers: 0 of 56 answers changed; typos and prompt injections changed 7, all at
   confidence ≤ 0.42 (flagged); rotated / grayscale / JPEG / half-resolution copies: 30/30; objects that don't exist:
-  8/8 "0"; questions a drawing can't answer: all at confidence ≤ 0.40. **What broke:** asked about a storey or model
-  that doesn't exist, the IFC path answered a different storey at 0.96–0.98 confidence. The solver knew (0.29), the
-  router overwrote it. That is the same failure as our 7 confident misses on the sealed test — so we know exactly
+  8/8 "0"; questions a drawing can't answer: all at confidence ≤ 0.40; asking the same 173 questions twice changed 1
+  free-text answer. **What broke:** asked about a storey, model or room that doesn't exist (or a real room number with
+  the wrong name), the vector and IFC paths answered *something else* at 0.96–0.99 confidence. The IFC solver even
+  knew (0.29); the router overwrote it. Our checks verified the number, not that it answered what was asked. That is the same failure as our 7 confident misses on the sealed test — so we know exactly
   why, and the fix is a guard, not more training. (Say "fixed" only if W4/W1's fix is merged and re-run.)
 
 ## 2:55–3:00 · Close
