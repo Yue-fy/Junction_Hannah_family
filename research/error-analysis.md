@@ -30,13 +30,15 @@ Code: night c1d6149 (S0 cycle 37 merges incl. W4 0319d93 apartment normalisation
 | apt_wording_cc (CubiCasa casual FI/EN) | 1080 | 73.2 | 71.8 vs 75.8 | 18 | composer: "sinks … kitchen and bathroom together" → sink+kitchen+bathroom (0/30); FI '…keittiössä ja kylpyhuoneessa yhteensä' → kitchen+bathroom @0.92; 'Laske ikkunat.' → text |
 | comp_ml (Swiss hard/hard2 compositions DE/FR/IT) | 780 | 93.3* | 537/585 vs control 573/585; all 36 losses in two buckets | 36 | **FR 'de plus que' summed (compose.py 'plus' = +) 23/23 @0.976; IT 'Di quanti m² … più grande del …' → max (room name) 13/13 @0.99** |
 | comp_ml_cc (CubiCasa hard/hard2 count compositions FI/SV) | 399 | 45.4 | FI = control (7/7 recipes); SV 42.1 vs 51.9 | 2 | **SV 'våtrum (badrum, separata toaletter och bastur)' → 'sauna' via LoRA @0.75 (0/25); 'sovrum och badrum … sammanlagt' → 'bedroom'** (no sv sum cues; front end skips because a target was found) |
+| apt_wording_syn (Swiss fixture synonyms EN) | 660 | 99.1 | 98.8 vs 100 | 0 | 'tubs' 36/40, 'loos' 36/38 (vlm_direct ≤0.34, calibrated) |
+| apt_wording_typo (quick typing: lower-case ids, misspellings, decimal comma) | 534 | 78.6 | **72.8 vs 98.6** | 2 | 'room 5,11' 2/30; 'apartment d' 12/30; 'apartmnet' 14/30; 'appartment' 19/30; 'sq m' 11/30 (all ≤0.6: accuracy, not calibration) |
 
 \* first run had a probe bug (sanitary item list always 'bathtubs'; English bases vary bathtubs/showers): 15 false
 losses, fixed; clean re-run 20261114-084910-pipeline-comp_ml-a0c6 = the baseline (all 36 confident-wrong are the FR
 'de plus que' and IT 'di quanti m²' rows; ECE 0.218, AUROC 0.40: right DE/FR/IT compositions sit under the unseen cap).
 
 Runs: 20261114-083551-pipeline-apt_wording-93e0, -083721-…-apt_wording_ml-7b6c, -084334-…-apt_wording_ml2-1f56,
--084147-…-apt_wording_ifc-f27a, -084051-…-apt_wording_cc-1bc6, -084910-…-comp_ml-a0c6, -085023-…-comp_ml_cc-4f34; plural mini-probe -083814-…-areas_plural-e14a.
+-084147-…-apt_wording_ifc-f27a, -084051-…-apt_wording_cc-1bc6, -084910-…-comp_ml-a0c6, -085023-…-comp_ml_cc-4f34, -090345-…-apt_wording_syn-1d9e (62754aa), -090539-…-apt_wording_typo-6f1b (62754aa); plural mini-probe -083814-…-areas_plural-e14a.
 
 **Reading.** Per-entity atomic questions are wording- and language-robust everywhere we looked (Swiss rooms/labels/
 fixtures in DE/FR/IT, IFC in 7 languages, CubiCasa casual FI/EN: 100% / 100% / = control). The failures are all in
