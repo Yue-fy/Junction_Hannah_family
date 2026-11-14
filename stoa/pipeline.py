@@ -434,6 +434,28 @@ def _fits(task: str, ans: Answer | None) -> bool:
     return k is None or task not in ("count", "area", "volume", "length") or k == task
 
 
+def _fuzzy_count_cue(question: str) -> bool:
+    """W3 09:27: a mistyped counting cue ("Kunika monta saunaa …", OSA <= 1 on monta/kuinka/anzahl/combien/…; 0 fires on
+    113k dataset questions) is still a how-many question (raster's right 0 was capped at 0.3)."""
+    try:
+        from stoa.solvers.raster.classes import fuzzy_count_cue
+    except Exception:  # noqa: BLE001
+        return False
+    try:
+        return bool(fuzzy_count_cue(question))
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _clip(v, n: int = 120) -> str:
+    """Text for a trace line, cut at a word boundary (W5 09:21: the demo card shows trace lines verbatim)."""
+    t = " ".join(str(v).split())
+    if len(t) <= n:
+        return t
+    cut = t[:n].rsplit(" ", 1)[0].rstrip(",;:(")
+    return (cut or t[:n]) + " …"
+
+
 def _link_shape(v) -> tuple[str, object] | None:
     """('num', x) | ('yn', 'yes'|'no') | None: the comparable core of a link answer ("no: model 55, plan draws 52"
     -> ('yn', 'no'); 3 -> ('num', 3.0)); anything else (names, lists) is not compared."""
@@ -636,7 +658,8 @@ class Pipeline(BaseSolver):
         elif tr_note:
             ans.trace = [f"language front end: {tr_note}"] + ans.trace
         if ans.value is not None and str(ans.unit or "").lower() == "count" and ans.confidence > 0.3 and \
-                not any(rx.search(x) for rx in (_COUNT, _COUNT_CUE) for x in (question, asked)):
+                not any(rx.search(x) for rx in (_COUNT, _COUNT_CUE) for x in (question, asked)) and \
+                not _fuzzy_count_cue(asked):
             # Q 04:18: "How big is the room 'Hall (0.1)'?" -> ifc '5 count' at 0.97. A count nobody asked for is a
             # misreading (0 such answers on dev/hard/hard2 = 3,182 questions, so this costs nothing measured)
             ans.trace.append("a count answer, but the question asks no 'how many': confidence capped at 0.3")
@@ -1007,8 +1030,8 @@ class Pipeline(BaseSolver):
             return None
         if not hit.get("fire"):
             return None
-        trace = [f"route: link question ({hit.get('why')}) -> project knowledge graph (R1 kg_qa over stoa.kg), "
-                 "ifc as asked as a cross-check"]
+        trace = [f"route: link question ({hit.get('why')}) -> project knowledge graph (R1 kg_qa over stoa.kg); "
+                 "ifc as asked checks it"]
         try:
             k = kg_solve(path, question)
             if not isinstance(k, Answer):
@@ -1047,15 +1070,15 @@ class Pipeline(BaseSolver):
             ka, ia = _link_shape(k.value), _link_shape(a.value)
             if ka is not None and ia is not None and ka[0] == ia[0]:
                 if ka[1] == ia[1]:
-                    out.trace.append(f"cross-check: ifc as asked says {str(a.value)[:60]} ✓")
+                    out.trace.append(f"cross-check: ifc as asked says {_clip(a.value)} ✓")
                     out.evidence = [*out.evidence, *[e for e in a.evidence if getattr(e, "ifc_guid", None)][:12]]
                 elif out.confidence > LINK_DISAGREE:
-                    out.trace.append(f"cross-check: ifc as asked says {str(a.value)[:60]} (conf "
+                    out.trace.append(f"cross-check: ifc as asked says {_clip(a.value)} (conf "
                                      f"{float(a.confidence or 0):.2f}) ✗: confidence capped at {LINK_DISAGREE}")
                     out.confidence = LINK_DISAGREE
-                    out.missing = [*out.missing, f"the IFC reader answered {str(a.value)[:60]} to the same question"]
+                    out.missing = [*out.missing, f"the IFC reader answered {_clip(a.value)} to the same question"]
             else:
-                out.trace.append(f"ifc as asked: {str(a.value)[:60]} (another kind of answer; not compared)")
+                out.trace.append(f"ifc as asked: {_clip(a.value)} (another kind of answer; not compared)")
         elif a_ok:
             out.trace.append(f"ifc as asked: unsure ({float(a.confidence or 0):.2f}); not compared")
         out.solver = "pipeline/kg_qa"
@@ -1347,7 +1370,7 @@ class Pipeline(BaseSolver):
                 best.value is not None and not best.evidence:
             self._room_evidence(path, best, trace, intent.target)
         if self.crosscheck and best.value is not None:
-            self._kg_crosscheck(path, intent, best, trace)
+            self._kg_crosscheck(path, intent, best, trace, question)
         measured = any(re.search(r"scale bar|flood fill", str(x), re.I)
                        for x in [*(e.note for e in best.evidence), *best.trace]) if best.value is not None else False
         if intent.task in ("area", "length", "volume") and best.value is not None and not measured and \
@@ -1618,7 +1641,7 @@ class Pipeline(BaseSolver):
                 best.missing = [*best.missing, f"the router read this as a {intent.task} question; {name} answered "
                                                f"in {a.unit} with confidence {a.confidence:.2f}"]
             if self.crosscheck:
-                self._kg_crosscheck(path, intent, best, trace)
+                self._kg_crosscheck(path, intent, best, trace, question)
             best.cost = total
             best.cost.wall_seconds = round(time.perf_counter() - t0, 4)
             best.trace = trace + [f"[{name}] {t}" for t in best.trace[-8:]]
@@ -1679,8 +1702,16 @@ class Pipeline(BaseSolver):
                 return out
         return ans
 
-    def _kg_crosscheck(self, path: str, intent: Intent, ans: Answer, trace: list[str]) -> None:
+    def _kg_crosscheck(self, path: str, intent: Intent, ans: Answer, trace: list[str], question: str = "") -> None:
         """Stoa point 4: compare with another source of the same building (W1's stoa.kg, when available)."""
+        mods = [m for m in modifiers(question) if m != "multi"] + [m for m in modifiers(question) if m in DERIVED] \
+            if question else []
+        if mods:
+            # W1 09:25: "How many rooms on '1.korrus' are larger than 50 m²?" -> ifc 4 @ 0.92 compared with the storey's
+            # 50 rooms (✗) -> 0.645. A filtered / combined quantity is not what the linked source counts
+            trace.append(f"cross-check skipped: the question applies an operation ({', '.join(dict.fromkeys(mods))}); "
+                         "the linked source knows only plain totals")
+            return
         try:
             from stoa.kg import crosscheck
         except Exception:  # noqa: BLE001 - not merged yet

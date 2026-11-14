@@ -38,3 +38,22 @@ def test_question_budget(monkeypatch):
         assert "budget" in budget.skip("the general agent")
         assert "the general agent skipped" in budget.note()
     assert budget.spent() == (0, 0)
+
+
+def test_kg_crosscheck_skipped_for_operator_questions():
+    """W1 09:25: a threshold count compared with the storey's full room count is a false ✗."""
+    from stoa.contract import Answer
+    from stoa.router.intent import parse
+
+    q = "How many rooms on '1.korrus' are larger than 50 m²?"
+    a = Answer(value=4, unit="count", confidence=0.92, solver="ifc")
+    tr: list[str] = []
+    Pipeline()._kg_crosscheck("data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf", parse(q), a, tr, q)
+    assert a.confidence == 0.92 and tr and "skipped" in tr[0]
+
+
+def test_clip_cuts_at_a_word():
+    from stoa.pipeline import _clip
+
+    t = _clip("no: the IFC model has 55 windows on '1.korrus', the plan draws 52 (the other 3 lie above)", 60)
+    assert t.endswith(" …") and len(t) <= 62 and not t[:-2].endswith("dra")
