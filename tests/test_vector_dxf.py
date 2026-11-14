@@ -572,3 +572,26 @@ def test_outdoor_label_in_an_exclusion_clause_is_not_the_target():
     qr = qparse.parse("Wie gross ist der Balkon der Wohnung A?", vocab)
     assert [(t.kind, t.arg, t.scope) for t in qr.terms] == [("area_label", "Balkon", ["A"])]
     assert not qparse.covered("Welche Räume hat die Wohnung B?", qparse.parse("Welche Räume hat die Wohnung B?", vocab))
+
+
+def test_dxf_unnamed_room_caveat_and_swiss_layer_sniff(tmp_path):
+    from shapely.geometry import box
+
+    from stoa.solvers.vector.dxf_solver import _swiss_layers, _unnamed_caveat
+    from stoa.solvers.vector.floor import Room
+
+    def room(i, area, name):
+        return Room(idx=i, poly=box(0, 0, 1, 1), bbox=(0, 0, 1, 1), area=area, number=f"1.{i:02d}", name=name)
+
+    named = [room(1, 50.0, "Wohnen"), room(2, 30.0, "Zimmer")]
+    assert _unnamed_caveat(named, 80.0) == (0.97, [], [])
+    conf, asm, miss = _unnamed_caveat(named + [room(3, 1.0, "")], 81.0)  # 1.2% unnamed: small caveat
+    assert conf == 0.95 and "1.03" in asm[0] and miss
+    conf, asm, _ = _unnamed_caveat(named + [room(4, 11.14, "")], 91.14)  # F 10:40: an 11 m² unlabelled room
+    assert conf == 0.78 and "80.00 m²" in asm[0]  # below the >= 0.8 'confident' bin (train 54/69 right)
+    swiss = tmp_path / "a.dxf"
+    swiss.write_text("0\nTABLE\n2\nLAYER\n0\nLAYER\n2\nROOM_OUTLINE\n0\nLAYER\n2\nDOOR\n0\nENDTAB\n")
+    other = tmp_path / "b.dxf"
+    other.write_text("0\nTABLE\n2\nLAYER\n0\nLAYER\n2\nA-WALL\n0\nLAYER\n2\nA-DOOR\n0\nENDTAB\n")
+    assert _swiss_layers(str(swiss)) and not _swiss_layers(str(other))
+    assert not _swiss_layers(str(tmp_path / "missing.dxf"))

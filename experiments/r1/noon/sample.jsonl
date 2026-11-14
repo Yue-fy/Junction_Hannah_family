@@ -1,0 +1,10 @@
+{"path": "data/cubicasa5k/colorful-10052.png", "question": "How many doors are shown on this floor plan?"}
+{"path": "data/cubicasa5k/colorful-10052.png", "question": "Is the kitchen next to the living room?"}
+{"path": "data/cubicasa5k/colorful-10052.png", "question": "What would this apartment rent for per month?"}
+{"path": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf", "question": "What is the net floor area of apartment A excluding the balcony?"}
+{"path": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf", "question": "Which apartment has the most bedrooms, and how much larger is it than the smallest one?"}
+{"path": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf", "question": "Is every bedroom reachable without passing through another bedroom?"}
+{"path": "data/ifc_models/bimspeed-barlad_ro-arc-m3-e-pth-0000_plan-02-ground-level.pdf", "question": "Does this plan show the same number of doors as the IFC model has on this storey?"}
+{"path": "data/ifc_models/bimspeed-barlad_ro-arc-m3-e-pth-0000_plan-02-ground-level.pdf", "question": "What is the fire rating of the doors on this floor?"}
+{"path": "data/habs/ak0003_sheet_00019.jpg", "question": "In what year was this drawing made, and what scale is it at?"}
+{"path": "data/habs/ak0003_sheet_00019.jpg", "question": "Estimate the overall length of the building shown on this sheet."}
