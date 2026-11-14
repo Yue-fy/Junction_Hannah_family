@@ -725,3 +725,16 @@ count cue + 'all/every/aligned' → agree, deterministic storey lists: **258/318
 mostly the trigger on poor machine translations: 'kerrosluokka', 'paperi'). Fresh probe_kg after the broadening:
 20/21 again (kg21 now fires and is answered 'no' @ 0.8: the drawn-from-another-storey case stays the known miss);
 v17 9/9. Runs -091809-pipeline_kg-probe_kg-624b, -091829-pipeline_kg-v17-2f7f.
+
+**8j addendum (cycle 244): per_room trigger on wordings R1 did not write.** The local LLM rewrote the 78 probe
+questions 3× in English + once in fi/de/sv/fr/it/nl/es (780 rows, `probe/probe_para.jsonl`, committed before scoring;
+`para_route.py make|score`, trigger as asked, then after the to_english front end for uncovered languages). Recall
+on the 73 originals that fire: non-area `fire` 68% overall (en 80%, de 58%, fr 57%, it 58%, nl 25%). Added
+language-general forms — compound room-noun suffixes (Technik*zimmer*, utility*kamer*), per-room counts with
+'hat/ha/heeft/tiene/a + det + room', 'y a-t-il dans / ci sono nella / zijn er in / hay en', relation question words in
+6 languages ('van welk vertrek', 'par quelles pièces', 'da quale stanza', 'desde qué habitación', 'from what room'),
+per-room area forms, AREA_Q in 8 languages — tuned on half A (by original question): **held-out half B non-area fire
+65% → 78% (A 71% → 87%), still 0 text fires on 85,514 dataset CubiCasa questions** (route_eval.py; other sources stay
+behind the raster + cubicasa gate). End to end on 40 routed non-English half-B paraphrases: room_graph 33/40 vs 36/40
+for the same questions in English (4 lost / 1 won: balcony/terrace access, the known relation failure); conf ≥ 0.7 on
+30 (25 right). Since W4's pipeline imports `experiments.r1.room_graph.route.per_room`, this lands with the merge.
