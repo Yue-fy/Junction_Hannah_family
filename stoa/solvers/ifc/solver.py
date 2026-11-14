@@ -91,7 +91,9 @@ def model_for(path: str) -> str | None:
 # languages the parser has (template) vocabulary for, besides English: the dataset's ifc question languages
 PARSER_LANGS = ("de", "nl", "pl", "et", "it", "ro", "fi", "fr")
 _KNOWN_WORDINGS: set[str] | None = None
-_AUX_LEVEL = re.compile(r"\b(roof\w*|dach\w*|dak\w*|toit\w*|tetto|katto|katus|tak|cubierta|telhado|foundation\w*|"
+# roof words as whole words only: 'Dach' / 'Roof' / 'Katus' are roof levels, 'Dachgeschoss' / 'dakverdieping' are attic
+# FLOORS (IFC-Bench gold: ac20 5 levels incl. 'Dachgeschoss', fzk_house 2 storeys incl. 'Dachgeschoss')
+_AUX_LEVEL = re.compile(r"\b(roof|roofs|roof level|dach|dak|toit|tetto|katto|katus|tak|cubierta|telhado|foundation\w*|"
                         r"fundament\w*|vundament\w*|fdn|t/fdn|footing\w*|fondation\w*|fondazion\w*|cimentaci\w*|"
                         r"perustu\w*|site|terrain|gelande|maaiveld)\b")
 

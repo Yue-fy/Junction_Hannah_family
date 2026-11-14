@@ -125,3 +125,12 @@ def test_plumbing_fixtures_listed_from_the_model(solver):
     assert isinstance(a.value, str) and "21" in a.value and "Toilet-Domestic-3D: 9" in a.value
     assert "Urinal-Wall-3D: 4" in a.value and len(a.evidence) == 21 and a.cost.llm_calls == 0
     assert solver.solve(ARC4351, "How many plumbing fixtures are there?").value == 21
+
+
+@pytest.mark.parametrize("model,gold", [("data/ifc_bench/ac20_arc.ifc", 5), ("data/ifc_bench/digital_hub_arc.ifc", 3),
+                                        ("data/ifc_bench/fzk_house_arc.ifc", 2), ("data/ifc_bench/smiley_west_arc.ifc", 4)])
+def test_number_of_levels_matches_ifc_bench_gold(solver, model, gold):
+    # IFC-Bench free-text golds 'Number of Levels': 'Dachgeschoss' (attic floor) counts, 'Dach' (roof level) does not
+    if not abspath(model).exists():
+        pytest.skip("dataset not available")
+    assert solver.solve(model, "What is the number of levels in the building?").value == gold
