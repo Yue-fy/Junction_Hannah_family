@@ -184,8 +184,9 @@ def _build(rows: list[Row], run: list[int], h: float, _depth: int = 0) -> Table 
     xs = xs[:end]
     x_right = xs[-1] + 12 * h
 
-    def col_of(c: Cell) -> int | None:
-        if c.x0 < x_left - 2 or c.xc > x_right:
+    def col_of(c: Cell, header: bool = False) -> int | None:
+        # a centred header word may start left of the left-aligned ids below it
+        if c.x0 < x_left - 2 - (min(c.x1 - c.x0, 3 * h) / 2 if header else 0) or c.xc > x_right:
             return None
         return min(range(len(xs)), key=lambda k: abs(xs[k] - c.xc))
 
@@ -198,7 +199,7 @@ def _build(rows: list[Row], run: list[int], h: float, _depth: int = 0) -> Table 
             if k is not None:
                 vals[k] = (vals[k] + " " + c.text).strip()
                 bs.append(c.box)
-        if len(xs) >= 4 and sum(bool(v) for v in vals) <= 1:
+        if not bs or (len(xs) >= 4 and sum(bool(v) for v in vals) <= 1):
             continue  # stray word / blank row inside the table, not a record
         data.append(vals)
         boxes.append(_union(bs))
@@ -209,9 +210,10 @@ def _build(rows: list[Row], run: list[int], h: float, _depth: int = 0) -> Table 
     j = first - 1
     n_head = 0
     extra = []
+    head_cells: list[tuple[int, Cell]] = []  # (header line, 1 = the line right above the data), cell
     while j >= 0 and rows[first].y - rows[j].y < 9 * h and n_head < 5:
-        hc = [c for c in rows[j].cells if col_of(c) is not None]
-        if (len({col_of(c) for c in hc}) >= max(3, 0.5 * len(xs)) and any(ch.isdigit() for c in hc for ch in c.text)
+        hc = [c for c in rows[j].cells if col_of(c, header=True) is not None]
+        if (len({col_of(c, header=True) for c in hc}) >= max(3, 0.5 * len(xs)) and any(ch.isdigit() for c in hc for ch in c.text)
                 and _depth < 3):
             extra.append(j)  # a data row whose key cell is blank/elsewhere: belongs to the table, not the header
             first = j
@@ -223,8 +225,9 @@ def _build(rows: list[Row], run: list[int], h: float, _depth: int = 0) -> Table 
                 title = hc[0].text
                 break
             for c in hc:
-                k = col_of(c)
+                k = col_of(c, header=True)
                 head[k] = (c.text + " " + head[k]).strip()
+                head_cells.append((n_head, c))
         j -= 1
     if extra:
         return _build(rows, sorted(set(run) | set(extra)), h, _depth + 1)
@@ -238,6 +241,8 @@ def _build(rows: list[Row], run: list[int], h: float, _depth: int = 0) -> Table 
             if cap:
                 title = cap[0].text
                 break
+    head = _group_headers(head, xs, head_cells)
+    xs, head, data = _merge_split_columns(xs, head, data)
     names, seen = [], {}
     for k, hname in enumerate(head):
         nm = re.sub(r"\s+", " ", hname).strip() or f"col{k}"
@@ -247,6 +252,56 @@ def _build(rows: list[Row], run: list[int], h: float, _depth: int = 0) -> Table 
     bbox = _union(boxes)
     return Table(title=title, columns=names, df=df, row_boxes=boxes, bbox=bbox, run=list(run), xs=list(xs),
                  y0=rows[run[0]].y, y1=rows[run[-1]].y)
+
+
+def _group_headers(head: list[str], xs: list[float], head_cells: list[tuple[int, Cell]]) -> list[str]:
+    """Grouped headers: "Door | Frame" over "Type Matl | Matl Type" gives two "Matl" columns. A duplicated name is
+    a sign of a group label on a higher header line: prefix each duplicate with the nearest label above it
+    ("Door Matl", "Frame Matl"). Words repeated by stacked lines are dropped ("Door Door Type" -> "Door Type")."""
+    head = [re.sub(r"\b([A-Za-z]{2,})(?:\s+\1\b)+", r"\1", re.sub(r"\s+", " ", h).strip(), flags=re.I) for h in head]
+    upper = [c for line, c in head_cells if line >= 2]
+    groups: dict[str, list[int]] = {}
+    for k, h in enumerate(head):
+        if h:
+            groups.setdefault(h.lower(), []).append(k)
+    for ks in groups.values():
+        if len(ks) < 2 or not upper:
+            continue
+        pref = []
+        for k in ks:
+            near = min(upper, key=lambda c: abs(c.xc - xs[k]))
+            pref.append(near.text.strip())
+        if len(set(p.lower() for p in pref)) == len(ks):  # every duplicate gets its own group label
+            for k, p in zip(ks, pref):
+                if not head[k].lower().startswith(p.lower()):
+                    head[k] = f"{p} {head[k]}"
+    return head
+
+
+def _merge_split_columns(xs: list[float], head: list[str], data: list[list[str]]):
+    """One printed column can be split in two when its cells are aligned differently (left vs centred): an unnamed
+    column whose filled cells never share a row with a named neighbour's filled cells is that neighbour."""
+    k = 0
+    while k < len(xs) and data:
+        if head[k].strip() or not any(r[k] for r in data):
+            k += 1
+            continue
+        cands = []
+        for nb in (k - 1, k + 1):
+            if 0 <= nb < len(xs) and head[nb].strip() and not any(r[k] and r[nb] for r in data) \
+                    and any(r[nb] for r in data):
+                cands.append((abs(xs[nb] - xs[k]), nb))
+        if not cands:
+            k += 1
+            continue
+        nb = min(cands)[1]
+        for r in data:
+            r[nb] = r[nb] or r[k]
+        for r in data:
+            del r[k]
+        del xs[k]
+        del head[k]
+    return xs, head, data
 
 
 def _merge(rows: list[Row], tables: list[Table], h: float) -> list[Table]:

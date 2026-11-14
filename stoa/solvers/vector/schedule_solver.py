@@ -27,7 +27,11 @@ may be wrong or "colN", so look at the values). Each table has a `row_id` column
 Count/quantity/area columns are numbers; for values like "108 SF" a parsed twin column `<col>_num` exists; all
 other columns (ids, room numbers, types) are strings: compare them with strings ("118", not 118).
 Use double quotes for strings that contain an apostrophe ("WOMEN'S LOCKER").
-Counting rows: one row = one item unless a Count/Qty column says otherwise.
+Counting rows: one row = one item unless a Count/Qty column says otherwise (then sum that column over the rows).
+A cell may hold several codes ("A, B"): match a code as a whole token, not inside "A-620" or "AL-1", e.g.
+df["Notes"].str.contains(r"(?<![\\w-])A(?![\\w-])").
+Dimensions are strings as printed (3' - 0"): never convert them to numbers; for "width and height" answer
+f"{{w}} wide x {{h}} high" with the printed strings.
 Text answers: give the value as printed; if the question also asks what a code means, find the code in `notes`
 (e.g. notes[notes.text.str.contains("F4")]) and answer "F4 - <meaning>"; if it asks for two things (how many
 and what total), answer one string with both ("3 rooms, 4541 SF"); include those notes rows in `used`.
@@ -113,6 +117,43 @@ def _explain_codes(value: str, question: str, rows, legend) -> tuple[str, list[t
     return out, found
 
 
+KINDS_RE = re.compile(r"\b(types?|kinds?|marks?|different|distinct|unique|rows?|entries|lines?|records?|styles?|"
+                      r"models?|categories|variants?)\b", re.I)
+
+
+def _qty_sum(value: int, used: list, tables: dict[str, pd.DataFrame], question: str) -> int | None:
+    """The model counted rows (len) of a table that has a Count/Qty column: answer the summed quantity instead,
+    unless the question counts kinds ("how many door TYPES ..."). None = keep the value."""
+    used = [int(u) for u in used if isinstance(u, (int, float)) and int(u) < 900000]
+    if not used or value != len(set(used)):
+        return None
+    m = re.search(r"how many\s+(.*?)(?:\b(?:are|is|does|do|have|has|carry|carries|appear|in|on|at|of|with|that|which|"
+                  r"whose|for|from|within|scheduled|listed|shown|use|uses|need|needs|require|get|belong)\b|[?,]|$)", question, re.I)
+    if m is None or KINDS_RE.search(m.group(1)):
+        return None
+    total = 0.0
+    for u in set(used):
+        hit = None
+        for name, df in tables.items():
+            if name == "notes" or df.empty:
+                continue
+            r = df[df["row_id"] == u]
+            if len(r):
+                hit = (df, r.iloc[0])
+                break
+        if hit is None:
+            return None
+        df, row = hit
+        qty = next((c for c in df.columns if re.search(r"^(count|qty|quantity|quan\.?|no\.?|number of units)$",
+                                                          str(c).strip(), re.I)
+                    and pd.api.types.is_numeric_dtype(df[c])), None)
+        if qty is None or pd.isna(row[qty]):
+            return None
+        total += float(row[qty])
+    total = int(round(total))
+    return total if total != value else None
+
+
 def _clean(name: str) -> str:
     return re.sub(r"\W+", "_", name).strip("_").lower()[:30] or "table"
 
@@ -146,6 +187,7 @@ class ScheduleSolver(BaseSolver):
             df = _typed(t.df)
             ids = list(range(rid, rid + len(df)))
             df.insert(0, "row_id", ids)
+            df.index = pd.Index(ids)  # `.index` == row_id, so code that reports `.index.tolist()` cites the right rows
             for i, b in zip(ids, t.row_boxes):
                 boxes[i] = b
             rid += len(df) + 1000 - (len(df) % 1000)  # table k's row ids start at a multiple of 1000
@@ -164,6 +206,8 @@ class ScheduleSolver(BaseSolver):
                                        for k in range(4))
                     nid += 1
         tables["notes"] = pd.DataFrame(notes[:300])
+        if notes:
+            tables["notes"].index = pd.Index([n["row_id"] for n in notes[:300]])
         desc.append(f"- `notes`: other text lines of the sheet (legends, keys, general notes), {len(notes[:300])} rows,"
                     " columns ['row_id', 'text']")
         doc = DOC.format(tables="\n".join(desc))
@@ -171,11 +215,14 @@ class ScheduleSolver(BaseSolver):
             f"{n} ({len(df)}x{len(df.columns) - 1})" for n, df in tables.items())]
         try:
             res = tableqa.ask(question, tables, backend=self.backend, doc=doc, id_col="row_id",
-                              units='"count", "ft2", "m2", "ft", "m"')
+                              units='"count", "ft2", "m2", "ft", "m"', lookup_text=True)
         except Exception as e:  # noqa: BLE001
             return Answer.abstain(self.name, f"table QA failed: {type(e).__name__}: {e}", trace)
         trace.append("table QA code: " + " ; ".join(ln.strip() for ln in (res.get("code") or "").splitlines()
                                                    if ln.strip())[:700])
+        if res.get("typed"):
+            trace.append("the model typed the answer from the table text; asked to look it up, the lookup failed, "
+                         "so the typed value is kept")
         if res.get("value") is None:
             return Answer.abstain(self.name, f"table QA gave no answer ({res.get('error')})", trace)
         value, unit = res["value"], res.get("unit")
@@ -206,6 +253,12 @@ class ScheduleSolver(BaseSolver):
                              note=(f"note line {i - 900000}" if i >= 900000 else row_label.get(i, f"table row {i}")))
                     for i in res.get("used", []) if i in boxes]
         n_rows_used = len(evidence)
+        if unit == "count" and isinstance(value, int):
+            fixed = _qty_sum(value, res.get("used", []), tables, question)
+            if fixed is not None:
+                trace.append(f"count check: the code counted {value} rows, but their quantity column sums to {fixed}; "
+                             "answered the quantity")
+                value = fixed
         if isinstance(value, str):
             # a bare code answer ("F4") gets its meaning from the sheet's own legend: "F4 - RESILIENT FLOORING"
             ex = _explain_codes(value, question, rows, _legend(rows))
