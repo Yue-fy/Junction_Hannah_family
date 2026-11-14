@@ -82,6 +82,27 @@ KINDS = {
         "total": ("What is the total window count on this plan?", False),
         "count_imp": ("Count the windows in this drawing.", False),
     }),
+    # CubiCasa (08:32): the LoRA was trained on these exact wordings; does a judge's wording still reach it?
+    "cc_wc": (r"^How many toilet bowls \(WC seats\) are drawn on this floor plan\?$", {
+        "toilets": ("How many toilets are there in this apartment?", False),
+        "count_imp": ("Count the WC seats on this plan.", False),
+        "number": ("What is the number of toilet bowls in this floor plan?", False),
+    }),
+    "cc_windows": (r"^How many windows are shown on this floor plan\?$", {
+        "apartment": ("How many windows does this apartment have?", False),
+        "count_imp": ("Count the windows.", False),
+        "number": ("What's the number of windows in this plan?", False),
+    }),
+    "cc_saunas": (r"^How many saunas are on this floor plan\?$", {
+        "is_there": ("Is there a sauna, and if so how many?", True),
+        "apartment": ("How many saunas does this flat have?", False),
+        "number": ("Number of saunas on the plan?", False),
+    }),
+    "cc_bedrooms": (r"^How many bedrooms \(makuuhuone, usually marked MH\) are on this floor plan\?$", {
+        "plain": ("How many bedrooms are there?", False),
+        "apartment": ("How many bedrooms does this apartment have?", False),
+        "number": ("What is the number of bedrooms on this floor plan?", False),
+    }),
     # IFC (08:33): room by name + storey, per-storey counts and totals
     "ifc_room": (r"^What is the net floor area of the room '(?P<R>[^']+)' on '(?P<S>[^']+)', in m²\?$", {
         "unquoted": ("What is the area of {R} on {S}?", False),
@@ -121,7 +142,8 @@ def main():
     with open(out, "w", encoding="utf-8") as f:
         for kind, (rx, wordings) in KINDS.items():
             bases, seen = [], set()
-            source = "ifc_models" if kind.startswith("ifc_") else "swiss_dwellings"
+            source = ("ifc_models" if kind.startswith("ifc_") else "cubicasa5k" if kind.startswith("cc_")
+                      else "swiss_dwellings")
             for q in dev_all:
                 m = re.match(rx, q.question) if q.source == source else None
                 if m and q.path not in seen:

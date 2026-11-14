@@ -274,7 +274,10 @@ async function openFile(f: FileInfo, question = "", keep: Answer | null = null, 
     markAnswerCheck($("linked"), undefined, undefined);
     $("xbanner").hidden = true;
     $("card").className = "card empty";
-    $("card").innerHTML = `<p class="hint">Ask a question about this ${f.ext === ".ifc" ? "model" : "drawing"}.</p>`;
+    // the first thing a visitor reads: what every answer carries
+    $("card").innerHTML = `<p class="hint">Ask about this ${f.ext === ".ifc" ? "model" : "drawing"} in any language, or pick an example. Every answer
+      shows how sure we are, what it cost and how it was worked out, and points at where it came from (${f.ext === ".ifc" ? "elements in the 3D model" : "boxes on the drawing"}),
+      checked against a second source when there is one.</p>`;
   }
   $("pick").hidden = true;
   $("bench").hidden = true;

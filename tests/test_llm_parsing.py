@@ -175,3 +175,16 @@ def test_protect_keeps_grouped_thousands_as_one_number():
         masked, spans = _protect(q)
         assert num in spans and "'200" not in masked and "200" not in masked
         assert _restore(masked, spans) == (q, True)
+
+
+def test_should_translate_fires_on_unread_compositions_outside_rule_languages():
+    from stoa.llm import should_translate
+
+    # Swedish 'och' + 'totalt': the composer reads neither, so the question reached the LoRA as balconies only
+    assert should_translate("Hur många toalettstolar och balkonger finns det totalt på planritningen?")
+    assert should_translate("Hur många sovrum och bastur finns det totalt på planritningen?")
+    # two classes + a 'total' word the composer reads (NL 'in totaal'): keep the original (no translation cap)
+    assert not should_translate("Hoeveel deuren en ramen staan er in totaal op deze plattegrond?")
+    # rule languages compose themselves; no conjunction -> nothing to split
+    assert not should_translate("Wie viele Türen und Fenster gibt es insgesamt?")
+    assert not should_translate("Hur många dörrar finns det?")
