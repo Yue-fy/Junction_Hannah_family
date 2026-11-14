@@ -80,6 +80,9 @@ Sealed test 2 = S0's run b391 on the test-2 build bb94fe4 (08:12, aggregates onl
 | **New wordings of the same kinds** (sealed, nobody tuned on it) | **80.4 %** (test 1: 63.0) | |
 | **Derived quantities: prices, rates, shares** (sealed) | **62.2 %** (test 1: 34.6) | |
 
+(The dev column is the test-2 build's. The final night 637a6df, gate c43c at 11:18: **dev 90.0 % / 83.4 % weighted**,
+answers at conf ≥ 0.8 on 81 % of questions at 98.5 % right, AUROC 0.949, ECE 0.032, $0.038 per 1,000, p95 4.0 s. If a
+judge asks "and the build on stage?", say these; the sealed numbers stay test 2's.)
 By source on sealed test 2: Swiss vector plans 99.0 %, IFC models 100 % (397/397), scanned apartment plans
 (CubiCasa) 70.4 % (a VLM alone: 50 % on dev).
 > "When we say we're sure — 79 % of answers — we are right 98 % of the time; calibration error 0.02. Cost: 3 cents

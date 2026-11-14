@@ -6,7 +6,30 @@ Builds on F's `hard` (translations/paraphrases/compositions/ft²) and `hard2` (n
 don't. The first 205 rows start from dev questions the pipeline had **right at conf ≥ 0.8**, so a failure there is
 caused by the perturbation, not by the drawing.
 
-## Now (11:21) — the short version
+## Now (11:36) — bug 29, found by the noon dry run: on scanned sheets the evidenced scale answer depends on the wording
+- **'What is the scale of this drawing?' on 12 seeded HABS sheets (night 637a6df): the text-layer answer (0.75, the
+  printed scale note boxed) on 4 / 12; 'What is the drawing scale?' 7 / 12; 'What scale is this drawing?' 5 / 12.** The
+  other sheets fall to vlm_direct at 0.20 with no box, often with the SAME value (va0315 1/8"=1'-0", md0351 1:48,
+  ut0164, nm0179). Deterministic (6 wordings on va0315, cache on): textlayer.scales() finds the notes ("Scale notes
+  found: 'SCALE 1/8"=1'-0"' = 1:96" is in the prompt), but the 8B's JSON comes back with an empty "answer" and
+  textqa.answer() abstains (stoa/solvers/raster/textqa.py:117). Also one unit slip at 0.75: ar0135 prints
+  "1 inch = 12,000 feet" (1:144,000), the 'drawing scale' wording answered "1:12000".
+- Mechanism: the scale is a printed FACT the program already parsed, but the answer still has to come out of the LLM.
+  Fix (W3, day team, answer-changing so after the freeze): when the question asks for the scale (scale / mittakaava /
+  Maßstab / échelle / skala / schaal) and textlayer.scales() found a note, answer from the note with its box at 0 LLM
+  calls (several different notes: list them, conf 0.5); at least, fall back to the note when the LLM's answer is empty.
+  Any ratio the program writes ("1:12000") must come from scales()' own ratio, never from the LLM's arithmetic.
+- Probe: `artifacts/Q/noon_scale_habs.jsonl` (36 rows; run `20261114-112637-pipeline-noon_scale_habs-d019`) and
+  `artifacts/Q/noon_scale_probe.jsonl` (6 wordings, one sheet; run `-112551-…-1386`). The Finnish demo question
+  (step 12, Olympic Stadium 1:500) is not affected (raster answers it with the box).
+- Noon tooling: `from_examples.py` now stops on example rows without a `path` and points to R2's
+  `experiments/r2/attach_drawings.py` (text-only examples); `--report` converts ft²/mm variants back before comparing,
+  treats equal scales as equal ('1:96' = '1/8"=1'-0"' = '1/8 inch = 1 foot') and counts the changes that involve an
+  answer at conf ≥ 0.5 first. Text-only dry run: 3 made-up examples → 25 rows, ~1 min, $0.49/1k
+  (run `-112418-pipeline-noon_dry_textonly-a6ed`): 9 flagged, 5 with an answer ≥ 0.5 (the scale rows above, and the
+  Finnish IFC 'doors on the storey with the most windows' 20 @0.30 vs 20 @0.95 in English).
+
+## Earlier (11:21) — the short version
 - **Final night 637a6df: v1–v18 397/397 at conf ≥ 0.8 right, 0 false premises at ≥ 0.8; all 1015 rows 607/616; the
   259 IFC questions on renamed files 213/213 at ≥ 0.8; 1 won / 0 lost vs b656826; demo pre-flight 23/23 unchanged.
   The only confident misses left on tonight's 27 families: 5 CubiCasa uploads (bug 26).**
@@ -1096,6 +1119,13 @@ on the storey above" (40) score as right only because 2.OG has the same counts a
 were ignored. Same family as bug 13 / 24 (a storey named the way people talk loses to the sheet's storey). Sent to W1
 10:41.
 
+### 29. A scanned sheet's printed scale is parsed but answered only for some wordings (MEDIUM, not confident: 0.20 vs 0.75) — owner W3 (`raster` textqa)
+'What is the scale of this drawing?' on 12 HABS sheets (night 637a6df): the boxed text-layer answer on 4 / 12, 'What
+is the drawing scale?' 7 / 12; the rest go to vlm_direct at 0.20 with no box, often with the same value. textlayer.scales()
+found the note and the prompt says so; the 8B returns an empty "answer" and textqa.answer() abstains (line 117).
+Deterministic for a wording (cache on). Also "1 inch = 12,000 feet" → "1:12000" at 0.75 (is 1:144,000). Fix: answer a
+scale question from scales() with its box at 0 LLM calls; ratios only from scales(). Sent to W3 + S0 11:37 (day team).
+
 ## "You know what you don't know — but refusing is not useful" (Stoa point 3), audited on be57171 (09:15)
 **Re-audited 11:05 on pre-merge #11 (all 1015 rows, run `-105439-…-all-snap12-e712`):** 0 bare refusals — one empty
 value ("What is the monthly rent of this apartment in euros?" on a CubiCasa plan, conf 0.25) carries the line "a unit
@@ -1129,7 +1159,9 @@ All 622 answers of run `…-090509-…-v19b-a85a` (+ 25 v19b/v20 rows: same pict
   on PNGs, W3 08:46). Owner: W4 (pipeline/agent missing lines), W5 (card wording).
 
 ## For Saturday noon: red-team Stoa's example questions in one command (`redteam/from_examples.py`)
-Put Stoa's examples in a jsonl (`path`, `question`, and `answer` / `unit` when known; a path may be absolute), then
+Put Stoa's examples in a jsonl (`path`, `question`, and `answer` / `unit` when known; a path may be absolute).
+**Text only (no drawings)?** First `PYTHONPATH=. python experiments/r2/attach_drawings.py EXAMPLES.txt --per-source 3 --out
+WITH_PATHS.jsonl` (night-R2; one question per line, `[habs]` / `[answer=12]` tags), then use WITH_PATHS.jsonl below. Then
 ```
 PYTHONPATH=. $JUNCTION_VENV/bin/python redteam/from_examples.py EXAMPLES.jsonl --out $JUNCTION_SHARED/artifacts/Q/noon.jsonl --translate fi,de,sv
 $JUNCTION_VENV/bin/python -m stoa.eval --solver pipeline --split $JUNCTION_SHARED/artifacts/Q/noon.jsonl --no-leaderboard --workers 4
