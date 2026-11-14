@@ -356,3 +356,14 @@ def test_pdftext_groups_tags_and_views(tmp_path):
         assert gs["COMMUNITY / ROOM / 115 - 410 SF / 27.3 O.L."].view == "LIFE SAFETY PLAN - BASEMENT"
         assert gs["FITNESS / 113 - 210 SF"].view == "LIFE SAFETY PLAN - 1ST FLOOR"
         assert sum(g.is_title for g in gs.values()) == 2
+
+
+def test_pdf_text_only_for_pdfs_outside_the_dataset_sources():
+    """`pdf_text` (the pipeline's route for unknown vector PDFs) reads schedules + sheet text like `schedule`, but never
+    takes a dataset PDF (swiss/ifc_models have twins, opening_design goes to `schedule`)."""
+    from stoa.solvers import get_solver
+    s = get_solver("pdf_text")
+    assert s.can_handle("/somewhere/uploads/life_safety.pdf", "Who is the architect?")
+    for p in ("data/swiss_dwellings/site1_bldg2_floor3.pdf", "data/opening_design/CTR/A700.pdf",
+              "data/ifc_models/x_plan-01.pdf", "/somewhere/plan.png"):
+        assert not s.can_handle(p, "How many doors?"), p
