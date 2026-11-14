@@ -140,6 +140,16 @@ Conclusion: like the Nemotron planner (04:01), a stronger planner/translator doe
 a 4× bigger base VLM on our counting. :8001 stays Qwen3-VL-8B + cc-v2/cc-v3. EXCEPTION: long free-text answers, where the 35B wins
 (above) → `llm.text_backend()` (opt-in via STOA_TEXT_BACKEND=local2, falls back to :8001); permanent :8002 is S0's decision (09:08).
 
+**D21 (09:28): YES. :8002 serves qwen3.6-35b-a3b permanently since 09:40** (`PORT=8002 GPU_UTIL=0.48 SERVED_NAME=qwen3.6-35b-a3b
+serving/start.sh qwen36-35b-a3b`, 130 s; GPU 94.6 of 97.9 GB with :8001). Demo/API env sets STOA_TEXT_BACKEND=local2; gates don't.
+Cost of one answer (D21 item 4), measured, not assumed:
+- Throughput on this GPU, 16 concurrent requests (`experiments/r2/tput.py`): 35B prefill 25.3k tok/s, decode 722 tok/s; 8B at the
+  same time (under other agents' load) 14.5k / 856. A3B = ~3B active parameters, so per token the 35B costs about what the 8B does.
+- The meter bills local2 at 25k prefill / 700 decode tok/s (8B: 25k / 1k), `stoa.llm.PER_BACKEND_TPS`.
+- dev ifc_bench (200 Qs; 0.58 fact-card calls per question): 2.6k tokens in / ~90 out per question either way → **0.235 GPU-s per
+  question on the 35B vs 0.196 on the 8B (+20%)**; per fact-card call ≈ 4.5k in / 155 out ≈ 0.40 vs 0.34 GPU-s. Mean latency
+  1.9 s vs 4.5 s (the 8B queue is shared with every agent; :8002 is not).
+
 ## Language front end, morning fixes (08:35–08:45)
 - Conjunction trigger (adec1a2): `should_translate` also fires on a count/area question in a language outside en/fi/de/fr/it whose
   'and' joins words, unless the composer already reads it (2 classes + `compose._TOGETHER`). Q multilingual probe 143 → 146/150
