@@ -517,6 +517,8 @@ class IfcSolver(BaseSolver):
         if ans.value is not None and not it.mod and not it.which and it.op is None and not ctx.get("outer"):
             # an operator word the parse did not turn into an operator: the atomic value may not be what was asked
             w = _OPERATOR_WORD.search(fold(question))
+            if w and it.group_by == "storey" and re.fullmatch(r"per (storey|floor|level)", w.group(0)):
+                w = None  # "how many doors per storey?" IS the per-storey breakdown the rules gave
             if w and ans.confidence > 0.5:
                 ans.confidence = 0.5
                 ans.missing.append(f"the question has an operator word ('{w.group(0)}') the rules did not apply")
@@ -2236,7 +2238,10 @@ class IfcSolver(BaseSolver):
         type_key = _type_key_fn(els)
         for e in els:
             if it.group_by == "storey":
-                key = idx.storey(e.storey).name if e.storey and idx.storey(e.storey) else "(no storey)"
+                st_ = idx.storey(e.storey) if e.storey else None
+                key = st_.name if st_ else "(no storey)"
+                if st_ is not None and len(buildings_of(idx)) > 1 and st_.building != main_building(idx):
+                    key = f"{st_.name} ({st_.building})"  # neighbours' storeys share the main building's names
             else:
                 key = type_key(e)
             v = 1.0 if value_of is None else (value_of(e) or 0.0)
