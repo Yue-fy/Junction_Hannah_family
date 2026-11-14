@@ -2,7 +2,8 @@
 
 **Latest: run `20261114-083951-pipeline-live_questions-c243` on night c1d6149** (S0 cycle 37 = the pre-merge-#5 heads:
 W1 64d1367, W3 2e81496, W4 0319d93, F, R1, R2, W5 b43bdac), via night-Q b1a848c, 08:40 14 Nov: **the same 21 answers,
-confidences and box counts as on the test-2 build bb94fe4** (run `…-081638-…-ea8f`, 08:16) and as on 753eccb / dde6347.
+confidences and box counts as on the test-2 build bb94fe4** (run `…-081638-…-ea8f`, 08:16); the answers are also
+those of 753eccb / dde6347.
 Latencies in this run are inflated (2–14 s) because three other evals shared the GPU server; on an idle server they
 are the 0.1–5 s of the bb94fe4 run below. Run `web/demo.sh` before going on stage so every tour answer is warm.
 New since 753eccb: the fine-tuned model's bedroom and sauna answers carry boxes (3 'MH' labels, 1 sauna label: W4
