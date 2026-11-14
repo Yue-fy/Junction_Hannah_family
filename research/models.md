@@ -135,8 +135,10 @@ the FP8 experts (harmless; :8001 unaffected). Text calls ~0.3 s. Harness: `exper
 | base VLM (vlm_direct, no LoRA) | dev cubicasa n200 | 54.0 | 47.5 (base) / **cc-v2 ~75** | +6.5 [−0.5, +13.4] vs base, −21.0 [−27.5, −14.7] vs cc-v2 |
 | base VLM | swiss PNG counts dev (200) | 45.0 | 40.5 (base) / **cc-v3 56.5** | +4.5 [−1.6, +10.7] vs base, −11.5 vs cc-v3 |
 | base VLM | smoke (184 paired) | | | +0.5 [−6.2, +7.2] vs base |
+| **free-text IFC answers** (W1's fact cards; only factcard.py moved, judge = 8B) | dev ifc_bench (200, 3 projects) | **62.0** | 54.5 | 21 W / 6 L; hosted Nemotron re-judging the 27 discordant: 6 vs 0; $0.144 vs $0.18/1k |
 Conclusion: like the Nemotron planner (04:01), a stronger planner/translator does not move our numbers; a fine-tuned 8B beats
-a 4× bigger base VLM on our counting. :8001 stays Qwen3-VL-8B + cc-v2/cc-v3. A 35B LoRA is the only route left (hours; not tonight).
+a 4× bigger base VLM on our counting. :8001 stays Qwen3-VL-8B + cc-v2/cc-v3. EXCEPTION: long free-text answers, where the 35B wins
+(above) → `llm.text_backend()` (opt-in via STOA_TEXT_BACKEND=local2, falls back to :8001); permanent :8002 is S0's decision (09:08).
 
 ## Language front end, morning fixes (08:35–08:45)
 - Conjunction trigger (adec1a2): `should_translate` also fires on a count/area question in a language outside en/fi/de/fr/it whose
@@ -160,7 +162,7 @@ a 4× bigger base VLM on our counting. :8001 stays Qwen3-VL-8B + cc-v2/cc-v3. A 
 | model | size | vLLM | why interesting | verdict |
 |---|---|---|---|---|
 | Qwen3-VL-8B-Instruct | 17.5 GB bf16 | ✅ Qwen3VL | strong grounding (0..1000), OCR, fast | **serving** (already on disk) |
-| Qwen3.6-35B-A3B-FP8 | 37.5 GB | ✅ Qwen3_5Moe | newest Qwen (Nov 2026), MoE: only 3B active → cheap per token, likely much stronger | **tested 08:12–08:31: no role** (see 'Qwen3.6-35B-A3B bake-off') |
+| Qwen3.6-35B-A3B-FP8 | 37.5 GB | ✅ Qwen3_5Moe | newest Qwen (Nov 2026), MoE: only 3B active → cheap per token, likely much stronger | **tested 08:12–09:08: only free-text answers** (see 'Qwen3.6-35B-A3B bake-off') |
 | Qwen3.5-9B | 19.3 GB bf16 | ✅ Qwen3_5 | newer than Qwen3-VL-8B, hybrid thinking | download cancelled to give 3.6 the bandwidth |
 | Qwen3.6-27B-FP8 | 30.9 GB | ✅ | dense 27B: slower than 35B-A3B | skip |
 | Molmo2-8B / 4B | ~17 / ~9 GB | ✅ Molmo2 | trained for pointing + counting (PixMo-Points) → count-by-pointing with evidence | next download candidate if counting stays weak |
