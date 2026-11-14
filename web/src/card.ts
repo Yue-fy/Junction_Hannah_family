@@ -141,6 +141,21 @@ function rangeHtml(a: Answer) {
 /** Why a yes/no answer is yes or no, in one line under it: the compared quantity and the threshold, read from the
  * solver's own assumption or trace line (W1 ifc: "yes/no: is the model quantity (46 count) > 40"; agent/calc lines
  * like "46 > 40 → yes"). Nothing is recomputed here; no line, no basis shown. */
+/** Multi-part answers (W1 ifc: "154 (How many rooms…); 2451.41 m2 (What is the total area…)"): one row per part, the
+ *  value big and the sub-question it answers small, instead of one long sentence. null when the value is not that shape. */
+export function multiPart(a: Answer): { v: string; u: string; q: string }[] | null {
+  if (typeof a.value !== "string") return null;
+  const parts = a.value.split(/\);\s+/).map((x, i, all) => (i < all.length - 1 ? `${x})` : x));
+  if (parts.length < 2) return null;
+  const rows = parts.map((x) => x.match(/^\s*(-?\d[\d,]*(?:\.\d+)?|yes|no)\s*([A-Za-z²³%€/0-9]{0,12})\s*\((.{3,200})\)\s*$/i));
+  if (rows.some((m) => !m)) return null;
+  return rows.map((m) => {
+    const n = Number(m![1].replace(/,/g, ""));
+    const v = Number.isFinite(n) && Math.abs(n) >= 10000 ? n.toLocaleString("en") : m![1];
+    return { v, u: /^count$/i.test(m![2]) ? "" : m![2], q: m![3].trim() };
+  });
+}
+
 export function yesNoBasis(a: Answer): string {
   if (typeof a.value !== "boolean" && (typeof a.value !== "string" || !/^(yes|no|true|false|ja|nein|oui|non|kyllä|ei|si|sì)$/i.test(a.value.trim()))) return "";
   const OP = String.raw`(>=|<=|≥|≤|>|<|==|=|!=|≠)`;
@@ -159,10 +174,35 @@ export function yesNoBasis(a: Answer): string {
       ?? l.match(new RegExp(String.raw`${NUM}\s*(m2|m²|m3|m³|m|count|%)?\s*${OP}\s*${NUM}\s*(?:→|->|=>|:)\s*(?:yes|no|true|false)`, "i"));
     if (!m) continue;
     const [, x, u, op, y] = m;
+    const sym = ({ ">=": "≥", "<=": "≤", "==": "=", "!=": "≠" } as Record<string, string>)[op] ?? op;
+    // dxf: "[dxf] apartment B: 7 numbered indoor rooms … = 80.83 m²" … "[dxf] comparison: 80.83 > 80.34 -> yes": take
+    // the unit (and the name before the colon) from the line that computed each number
+    const UNIT = String.raw`(m2|m²|m3|m³|m|%|EUR|€|CHF)`;
+    const src = (n: string) => {
+      const re = new RegExp(String.raw`^(?:\[\w+\]\s*)?([^:\[\]]{2,40}?):.*?(?:=|is)\s*${n.replace(/[.]/g, "\\.")}\s*${UNIT}(?![\w²³])`, "i");
+      for (const t of a.trace ?? []) {
+        const k = t.match(re);
+        if (k && t !== l) return { name: k[1].trim(), unit: unitLabel(k[2]) };
+      }
+      return null;
+    };
+    const sx = !u || /^count$/i.test(u.trim()) ? src(x) : null;
+    const sy = sx ? src(y) : null;
+    if (sx && sy) {
+      return `<span class="range basis" title="${esc(l)}">${esc(sx.name)} ${esc(x)} ${esc(sx.unit)} ${esc(sym)} ${esc(sy.name)} ${esc(y)} ${esc(sy.unit)}</span>`;
+    }
     const unit = !u || /^count$/i.test(u.trim()) ? (a.intent?.target && !/unknown/.test(a.intent.target) ? ` ${a.intent.target}s` : "")
       : ` ${unitLabel(u.trim())}`;
-    const sym = ({ ">=": "≥", "<=": "≤", "==": "=", "!=": "≠" } as Record<string, string>)[op] ?? op;
     return `<span class="range basis" title="${esc(l)}">${esc(x)}${esc(unit)} ${esc(sym)} ${esc(y)}</span>`;
+  }
+  // ifc: "[ifc] window=55, door=46" (the two counts compared, no operator logged): show both, ordered by the numbers
+  for (const l of a.trace ?? []) {
+    const k = l.match(/^(?:\[\w+\]\s*)?([a-z_]{2,30})=(-?\d+(?:\.\d+)?),\s*([a-z_]{2,30})=(-?\d+(?:\.\d+)?)\s*$/i);
+    if (!k) continue;
+    const [, wa, xa, wb, xb] = k;
+    const pl = (w: string, n: string) => `${n} ${w.replace(/_/g, " ")}${Number(n) === 1 ? "" : "s"}`;
+    const sym = Number(xa) > Number(xb) ? ">" : Number(xa) < Number(xb) ? "<" : "=";
+    return `<span class="range basis" title="${esc(l)}">${esc(pl(wa, xa))} ${sym} ${esc(pl(wb, xb))}</span>`;
   }
   return "";
 }
@@ -536,6 +576,7 @@ export function renderCard(el: HTMLElement, a: Answer, opts: CardOpts) {
     <div class="value-row${rich ? " rich" : ""}">
       ${rich && a.checked?.length ? checkedHtml(a, String(a.value))
         : rich ? `<span class="rich-lbl">Text answer · ${String(a.value).split(/\n+/).filter((l) => l.trim()).length} line(s)</span><div class="value text rich">${richText(String(a.value))}</div>`
+        : multiPart(a) ? `<div class="value parts">${multiPart(a)!.map((r) => `<div class="part"><span class="pv">${esc(r.v)}${r.u ? `<span class="unit">${esc(unitLabel(r.u))}</span>` : ""}</span><span class="pq">${esc(r.q)}</span></div>`).join("")}</div>`
         : `<div class="value ${isText ? "text" : ""} ${isText && String(a.value).length > 40 ? "long" : ""}">${esc(fmtValue(a))}${unit ? `<span class="unit">${esc(unit)}</span>` : ""}${rangeHtml(a)}${yesNoBasis(a)}</div>`}
       <div class="conf ${confClass}" title="${a.checked?.length ? "The pipeline's calibrated confidence in its text answer, before the browser counted the types it names in the model (table)" : "Calibrated confidence"}">
         <div class="conf-num">${conf}%</div><div class="conf-bar"><i style="width:${conf}%"></i></div><div class="conf-lbl">${a.checked?.length ? "before the check" : "confidence"}</div>
