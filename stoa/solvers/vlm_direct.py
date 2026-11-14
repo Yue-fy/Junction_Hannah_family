@@ -49,6 +49,9 @@ CONF_MAP: dict[str, list[tuple[float, float]]] = {
 CONF_MAPS: dict[str, dict[str, list[tuple[float, float]]]] = {
     "cc-v2": {"count": [(0.44214, 0.22), (0.68038, 0.659), (0.86552, 0.817), (0.95507, 0.915), (0.98891, 0.963),
                         (1.0, 0.988)]},
+    # cc-v3 answers NON-cubicasa raster plans (VlmLora.model_for): fit on swiss train_gate counts asked on PNG twins
+    # (168 Qs it never saw, run 20261114-032600-…-01b3), AUROC 0.904; on swiss PNG dev ECE 0.062 raw -> 0.048 mapped.
+    "cc-v3": {"count": [(0.13357, 0.114), (0.37391, 0.371), (0.6033, 0.486), (0.97979, 0.857), (1.0, 0.974)]},
 }
 
 
