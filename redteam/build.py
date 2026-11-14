@@ -717,6 +717,42 @@ def main():
         r_["meta"]["accept_re"] = rx
         out.append(r_)
 
+    # ===== v15 (08:30): bug 18 probe — "how many X and how many Y" in 8 languages, with sum controls ===============
+    # A repeated question word asks for two numbers (meta.parts); "in total" asks for one (scored by the eval as a
+    # count); a bare "X and Y" is ambiguous, so either both numbers or their sum is right (meta.parts = list of
+    # alternatives). Gold as v14 (Swiss dataset answers, esplanades containment, CubiCasa dataset answers).
+    for path, q, parts, kind in [
+        (SW, "Wie viele Türen und wie viele Fenster sind auf diesem Grundriss eingezeichnet?", [36, 28], "multi:de"),
+        (SW, "Combien de portes et combien de fenêtres sont dessinées sur ce plan ?", [36, 28], "multi:fr"),
+        (SW, "Quante porte e quante finestre sono disegnate su questa pianta?", [36, 28], "multi:it"),
+        (SW, "Montako ovea ja montako ikkunaa pohjapiirustukseen on piirretty?", [36, 28], "multi:fi"),
+        (SW, "Hur många dörrar och hur många fönster finns på planritningen?", [36, 28], "multi:sv"),
+        (SW, "Hoeveel deuren en hoeveel ramen staan er op deze plattegrond?", [36, 28], "multi:nl"),
+        (SW, "How many doors are there on this plan, and how many windows?", [36, 28], "multi:en"),
+        (SW, "Give me the number of doors and the number of windows on this floor plan.", [36, 28], "multi:en"),
+        (SW, "How many doors and windows are drawn on this floor plan, respectively?", [36, 28], "multi:en"),
+        (SW, "How many windows and how many bathtubs are drawn on this floor plan?", [28, 4], "multi:en"),
+        (E, "Mitu ust ja mitu akent on korrusel '1.korrus'?", [46, 55], "multi:et"),
+        (E, "Hoeveel deuren en hoeveel ramen zijn er op '2.korrus'?", [42, 60], "multi:nl"),
+        (E, "How many rooms and how many columns are on this floor?", [50, 37], "multi:en"),
+        (CC, "How many bedrooms and how many saunas does this apartment have?", [3, 1], "multi:en"),
+        (CC, "Montako makuuhuonetta ja montako saunaa asunnossa on?", [3, 1], "multi:fi"),
+    ]:
+        out.append(multi(path, q, parts, "multi15:" + kind.split(":")[1], "repeated question word: two numbers"))
+    for path, q, alts, note in [
+        (SW, "How many doors and windows are drawn on this floor plan?", [[36, 28], [64]], "ambiguous: both or sum"),
+        (SW, "Wie viele Türen und Fenster gibt es auf diesem Grundriss?", [[36, 28], [64]], "ambiguous: both or sum"),
+        (E, "How many doors and windows are on '1.korrus'?", [[46, 55], [101]], "ambiguous: both or sum"),
+    ]:
+        out.append(multi(path, q, alts, "multi15:ambig", note))
+    for path, q, g in [
+        (SW, "How many doors and windows are drawn on this floor plan in total?", 64),
+        (SW, "Wie viele Türen und Fenster gibt es insgesamt auf diesem Grundriss?", 64),
+        (E, "How many doors and windows are there on '1.korrus' altogether?", 101),
+        (CC, "How many bedrooms and saunas does this apartment have in total?", 4),
+    ]:
+        out.append(row(path, q, g, "count", "count", "multi15:sum", "same", note="explicit total: one number"))
+
     with open(OUT, "w", encoding="utf-8") as f:
         for r in out:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")

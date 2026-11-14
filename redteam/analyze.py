@@ -87,7 +87,10 @@ def yesno_ok(value, gold):
 
 
 def parts_ok(value, parts):
-    """Every gold number appears among the answer's numbers (ints exact, else within 2 %); '1,200' / '12,05' read."""
+    """Every gold number appears among the answer's numbers (ints exact, else within 2 %); '1,200' / '12,05' read.
+    parts may be a list of alternatives ([[36, 28], [64]]: both numbers, or their sum)."""
+    if parts and isinstance(parts[0], list):
+        return any(parts_ok(value, alt) for alt in parts)
     s = str(value or "")
     s = re.sub(r"(?<=\d)[,'’ ](?=\d{3}\b)", "", s)  # thousands separators
     s = re.sub(r"(?<=\d),(?=\d{1,2}\b)", ".", s)  # decimal comma
