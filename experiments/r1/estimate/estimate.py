@@ -432,6 +432,23 @@ def _catalogue_year(path: str) -> tuple[int, int] | None:
     return None
 
 
+FACES_PER_SIDE = (1.5, 1.2, 1.9)  # painted faces per one-face wall side area: exterior walls 1 (inside), interior 2
+
+
+def _ifc_wall_side(path: str) -> float | None:
+    """One-face net side area of all walls in an IFC model (W1's ifc solver, 0 LLM), or None."""
+    if not path.endswith(".ifc"):
+        return None
+    try:
+        from stoa.solvers import get_solver
+
+        w = get_solver("ifc").solve(path, "What is the total net side area of all walls in the model?")
+        v = w.value if isinstance(w.value, (int, float)) else None
+        return float(v) if v and v > 0 and (w.confidence or 0) >= 0.3 else None
+    except Exception:
+        return None
+
+
 def solve(path: str, question: str, kind: dict | None = None, as_text: bool = False) -> Answer | None:
     """as_text: the value is a sentence ("Not recorded on this drawing; estimate ~ 1,330 EUR/month (range ...)") for
     text-judged sources (IFC-Bench golds say "This information is not available ...")."""
@@ -503,7 +520,16 @@ def solve(path: str, question: str, kind: dict | None = None, as_text: bool = Fa
         f, flo, fhi = wf + (1.0 if ceil else 0.0), wlo + (0.95 if ceil else 0.0), whi + (1.05 if ceil else 0.0)
         surf = area[0] * f
         what = " + ".join(x for x, on in (("walls", walls), ("ceilings", ceil)) if on)
-        if walls:
+        side = _ifc_wall_side(path) if walls and d.get("scope") == "building" else None
+        if side:  # measured walls (whole model): painted area = one-face side area x faces per side
+            fs, fslo, fshi = FACES_PER_SIDE
+            cs = (1.0, 0.95, 1.05) if ceil else (0.0, 0.0, 0.0)
+            surf = side * fs + area[0] * cs[0]
+            slo, shi = side * fslo + area[1] * cs[1], side * fshi + area[2] * cs[2]
+            trace.append(f"ifc: net wall side area {side:.1f} m2 (one face, openings out)")
+            assumptions.append(f"painted wall area = the model's net wall side area {side:.0f} m2 x {fs:g} faces "
+                               f"(range {fslo:g}-{fshi:g}: exterior walls painted inside only, interior walls both sides)")
+        elif walls:
             assumptions.append(f"painted wall area ~ {wf:g} x floor area (range {wlo:g}-{whi:g}): 2.6 m ceilings, "
                                "rooms of 10-20 m2, doors/windows and tiled wet-room walls left out")
         if ceil:
@@ -511,7 +537,10 @@ def solve(path: str, question: str, kind: dict | None = None, as_text: bool = Fa
         if not _CEIL.search(question) and not _WALLS.search(question):
             assumptions.append("walls only (ceilings not included)")
         assumptions.append(f"{what}: ~{surf:.0f} m2 to paint")
-        val, lo, hi = surf * c * fx, area[1] * flo * lo_r * fx, area[2] * fhi * hi_r * fx
+        if side:
+            val, lo, hi = surf * c * fx, slo * lo_r * fx, shi * hi_r * fx
+        else:
+            val, lo, hi = surf * c * fx, area[1] * flo * lo_r * fx, area[2] * fhi * hi_r * fx
         assumptions.append(f"rate: {ref}")
         if fx != 1.0:
             assumptions.append(f"currency: 1 {CUR[country]} = {TO_EUR[CUR[country]] / TO_EUR[cur]:.2f} {cur} (assumed)")
