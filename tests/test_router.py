@@ -351,3 +351,15 @@ def test_file_subject_gate():
     for q in ("Are there doors in the IFC model?", "Are there more windows in the plan than in the IFC model?",
               "How many windows does the IFC model have on this storey?", "Is there a balcony?"):
         assert not _FILE_SUBJECT.search(q), q
+
+
+def test_upload_window_route():
+    """W3 10:58: an uploaded twin-less image's window count -> raster before vlm_lora; doors and dataset files unchanged."""
+    from stoa.pipeline import route
+    from stoa.router.intent import parse
+
+    up = "/tmp/some_upload/plan.png"
+    assert route(up, parse("How many windows are shown on this floor plan?"))[:2] == ["raster", "vlm_lora"]
+    assert route(up, parse("How many doors are shown on this floor plan?"))[:2] == ["vlm_lora", "raster"]
+    assert route("data/cubicasa5k/colorful-10052.png", parse("How many windows are shown on this floor plan?"))[:2] == \
+        ["raster", "vlm_lora"]
