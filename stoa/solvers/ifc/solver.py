@@ -237,6 +237,34 @@ def external_by_outline(idx: IfcIndex, walls: list[Element]) -> list[Element]:
     return out
 
 
+def _poly(e: Element):
+    from shapely.geometry import Polygon
+
+    if not (e.geo and e.geo.footprint and len(e.geo.footprint[0]) >= 3):
+        return None
+    p = Polygon(e.geo.footprint[0])
+    return p if p.is_valid else p.buffer(0)
+
+
+def adjacent(idx: IfcIndex, space: Element, classes: tuple[str, ...], reach: float = 0.35) -> list[Element]:
+    """Doors/windows (or any elements) of `classes` that touch a room: their plan footprint is within `reach` m of the
+    room's footprint and their heights overlap. A door in a wall touches both rooms it connects; a window touches the
+    room behind its wall. Geometric, so it works without IfcRelSpaceBoundary."""
+    sp = _poly(space)
+    if sp is None or not (space.geo and space.geo.bbox):
+        return []
+    z0, z1 = space.geo.bbox[2], space.geo.bbox[5]
+    zone = sp.buffer(reach)
+    out = []
+    for e in idx.by_class(*classes):
+        p = _poly(e)
+        if p is None or not e.geo.bbox or e.geo.bbox[5] < z0 + 0.1 or e.geo.bbox[2] > z1 - 0.1:
+            continue
+        if zone.intersects(p):
+            out.append(e)
+    return out
+
+
 @register("ifc")
 class IfcSolver(BaseSolver):
     sources = ("ifc_models", "ifc_bench", "opening_design")
@@ -268,7 +296,9 @@ class IfcSolver(BaseSolver):
                      "threshold_list": "threshold_list" in it.notes, "rank": next((int(n[5:]) for n in it.notes
                                                                                     if n.startswith("rank:")), 1)}
         try:
-            ans = self._outer(path, model, idx, it, question, trace, ctx)
+            ans = self._relation(path, model, idx, it, question, trace, ctx)
+            if ans is None:
+                ans = self._outer(path, model, idx, it, question, trace, ctx)
             if ans is None:
                 ans = self._answer(path, model, idx, it, trace, ctx)
         except Exception as ex:  # noqa: BLE001 - report as a refusal with the reason, never crash the eval
@@ -938,6 +968,71 @@ class IfcSolver(BaseSolver):
         from stoa.solvers.ifc.arith import room_type_in_question
 
         return bool(room_type_in_question(question) or vocabulary_group(idx, _QUOTED_RX.sub(" ", question), [])[0])
+
+    def _relation(self, path: str, model: str, idx: IfcIndex, it: Intent, question: str, trace: list[str],
+                  ctx: dict) -> Answer | None:
+        """Room <-> door/window relations by plan geometry (`adjacent`): "How many doors does room 'X' have?",
+        "How many rooms on S have no window?", "Which rooms have a door to the corridor?" (not the last one)."""
+        import dataclasses
+
+        from stoa.solvers.ifc.arith import text_of
+        from stoa.solvers.ifc.parse import _kind_hits
+
+        tq = text_of(question)
+        kinds = {"door": KIND_CLASSES["door"], "window": KIND_CLASSES["window"]}
+        m = re.search(r"\b(rooms?|spaces?)\b[^?]{0,40}?\b(have|has|having|with|without|contain\w*|lack\w*)\s+"
+                      r"(no|not any|any|a|an|at least one|one or more|more than one|two or more)?\s*"
+                      r"(?P<k>doors?|windows?|deur\w*|tur\w*|tuer\w*|fenster\w*|ramen|raam)\b", tq)
+        if m and it.kind in ("space", None, "door", "window"):
+            kb = "door" if re.match(r"door|deur|tur|tuer", m.group("k")) else "window"
+            q = m.group(3) or ""
+            none_ = m.group(2).startswith(("without", "lack")) or q in ("no", "not any")
+            many = q in ("more than one", "two or more")
+            it2 = dataclasses.replace(it, metric="count", kind="space", kinds=["space"], op=None, mod=None,
+                                      threshold=None, which=False, yes_no=False, top_n=False, group_by=None)
+            asm: list[str] = []
+            storey, rooms, conf, _g = self._roles(path, idx, it2, trace, asm)
+            sp_els = (idx.in_storey(storey.guid, "IfcSpace") if storey is not None and it2.scope != "model"
+                      else idx.by_class("IfcSpace"))
+            if not sp_els:
+                return None
+            res = [(e, adjacent(idx, e, kinds[kb])) for e in sp_els]
+            hit = [(e, a) for e, a in res if (len(a) == 0 if none_ else len(a) >= (2 if many else 1))]
+            where_s = f"on '{storey.name}'" if storey is not None and it2.scope != "model" else "in the model"
+            cond = f"{'no' if none_ else 'more than one' if many else 'at least one'} {kb}"
+            trace.append(f"relation by geometry: {len(hit)} of {len(sp_els)} rooms {where_s} have {cond} "
+                         f"(a {kb} footprint within 0.35 m of the room)")
+            lab = lambda e: (f"{e.long_name} ({e.name})" if e.long_name and e.name and e.long_name != e.name
+                             else (e.long_name or e.name or e.guid))
+            ev = [self._ev(model, e, f"{lab(e)}: {len(a)} {kb}(s)") for e, a in hit][:MAX_EVIDENCE]
+            asm += [f"a room has a {kb} when the {kb}'s plan footprint is within 0.35 m of the room's (geometry; "
+                    "no IfcRelSpaceBoundary used)"]
+            ctx["outer"] = True
+            if re.match(r"\s*(which|list|name|what rooms|show)\b", tq):
+                txt = f"{len(hit)} rooms {where_s} with {cond}: " + "; ".join(lab(e) for e, _ in hit[:40])
+                return Answer(value=txt, unit=None, confidence=conf * 0.6, evidence=ev, trace=trace, solver=self.name,
+                              assumptions=asm, missing=[])
+            return self._final(len(hit), "count", it2, conf * 0.65, ev, trace, asm, [])
+        # "How many doors does the room 'X' have?" / "windows in room 'X'"
+        hits = [h[2] for h in _kind_hits(tq) if h[2] in kinds]
+        if hits and it.names and re.search(r"\b(room|space|raum|ruimte|kamer|piece|huone)\b", tq) and \
+                re.search(r"\b(how many|number of|count)\b", tq):
+            sts, others = self._storey_names(idx, it)
+            sg = sts[0][1].guid if sts else None
+            if len(others) == 1:
+                ms = match_space(idx, others[0], sg)
+                if ms and ms[0].score >= 90 and ms[0].method != "fuzzy":
+                    e0 = ms[0].obj
+                    adj = adjacent(idx, e0, kinds[hits[0]])
+                    trace.append(f"room '{others[0]}' -> {ms[0].label}; {len(adj)} {hits[0]}s within 0.35 m of its "
+                                 "footprint (geometry)")
+                    ctx["outer"] = True
+                    return self._final(len(adj), "count", it, 0.65 * (1.0 if len(ms) == 1 else 0.6),
+                                       [self._ev(model, x, f"{x.eff_cls} {x.name or ''}") for x in adj] +
+                                       [self._ev(model, e0, f"room {ms[0].label}")], trace,
+                                       [f"{hits[0]}s of a room = {hits[0]}s whose plan footprint is within 0.35 m of "
+                                        "the room's (doors count for both rooms they connect)"], [])
+        return None
 
     def _superlative(self, model: str, it: Intent, vals: list, conf: float, trace: list[str], assumptions: list[str],
                      missing: list[str], where_s: str, rank: int = 1) -> Answer:

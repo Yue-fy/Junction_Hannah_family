@@ -113,8 +113,8 @@ def test_geometry_room_types_and_guards(solver):
     assert 0 < bath.value < rooms.value / 3  # 'Bad' only, not every room
     width = solver.solve(FZK, "What is the average door width on 'Erdgeschoss'?")
     assert width.unit == "m" and 0.7 < width.value < 1.5
-    rel = solver.solve(FZK, "How many rooms on 'Erdgeschoss' have no window?")
-    assert rel.confidence <= 0.3
+    rel = solver.solve(FZK, "How many rooms on 'Erdgeschoss' have a balcony door facing the garden?")
+    assert rel.confidence <= 0.3  # not modelled: guarded
     win = solver.solve(FZK, "What is the total window area on 'Erdgeschoss'?")
     assert win.unit == "m2" and 5 < win.value < 60
     share = solver.solve(FZK, "What percentage of the floor area on 'Erdgeschoss' is taken by the 'Wohnen' room?")
@@ -169,3 +169,14 @@ def test_lists_ranks_heights_and_storeys(solver):
     cmpd = s(ESPL2, "How many doors are there on '2.korrus' compared to '3.korrus'?")
     assert "2.korrus" in cmpd.value and "3.korrus" in cmpd.value
     assert s(ESPL2, "How many doors does the room 'KORIDOR (219)' have?").confidence <= 0.3
+
+
+@pytest.mark.skipif(not abspath(FZK).exists(), reason="dataset not available")
+def test_room_relations_by_geometry(solver):
+    s = solver.solve
+    ifc = "data/ifc_models/kit-fzk-haus_ac20-fzk-haus.ifc"
+    no_win = s(ifc, "How many rooms on 'Erdgeschoss' have no window?")
+    rooms = s(ifc, "How many rooms are there on 'Erdgeschoss'?").value
+    assert no_win.unit == "count" and 0 <= no_win.value < rooms and no_win.confidence <= 0.7
+    assert "Flur" in s(ifc, "Which rooms have more than one door?").value
+    assert 1 <= s(ifc, "How many windows does the room 'Wohnen' have?").value <= 5
