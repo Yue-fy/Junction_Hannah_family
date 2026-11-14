@@ -148,7 +148,9 @@ export function multiPart(a: Answer): { v: string; u: string; q: string }[] | nu
   // W4 compose 'list' ("How many doors and how many windows …?"): "door: 46; window: 55"
   const named = a.value.split(/;\s+/).map((x) => x.match(/^\s*([A-Za-z][\w ()'.-]{0,40}?):\s*(-?\d[\d,]*(?:\.\d+)?)\s*([A-Za-z²³%€/]{0,12})\s*$/));
   if (named.length >= 2 && named.every((m) => m)) {
-    return named.map((m) => ({ v: m![2], u: /^count$/i.test(m![3]) ? "" : m![3], q: m![1].replace(/_/g, " ") }));
+    // "door" → "doors" for plain class words (counts other than 1)
+    const pl = (w: string, v: string) => (/^[a-z ]+$/.test(w) && !/s$/.test(w) && Number(v) !== 1 ? `${w}s` : w);
+    return named.map((m) => ({ v: m![2], u: /^count$/i.test(m![3]) ? "" : m![3], q: pl(m![1].replace(/_/g, " "), m![2]) }));
   }
   const parts = a.value.split(/\);\s+/).map((x, i, all) => (i < all.length - 1 ? `${x})` : x));
   if (parts.length < 2) return null;
