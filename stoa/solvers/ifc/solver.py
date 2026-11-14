@@ -512,6 +512,40 @@ class IfcSolver(BaseSolver):
                      missing=[m for _, a_ in subs for m in a_.missing][:6])
         return out
 
+    _VDIST = re.compile(r"\b(floor[- ]to[- ]floor|vertical(ly)?|height difference|difference in (height|elevation|level)|"
+                        r"elevation difference|level difference|how far apart|distance between|hohenunterschied|"
+                        r"hoogteverschil|korkeusero)\b")
+
+    def _storey_distance(self, model: str, idx: IfcIndex, question: str, trace: list[str]) -> Answer | None:
+        """'Floor-to-floor height / vertical distance / height difference between storeys A and B' = |z_B - z_A|
+        from IfcBuildingStorey elevations (W1 c5: was the difference of the two storey heights at 0.69)."""
+        qf = fold(question)
+        if not self._VDIST.search(qf) or re.search(r"\b(room|space|window|door|wall|ceiling|raum|ruimte)s?\b", qf):
+            return None
+        found: list[Storey] = []
+        for g in _QUOTED_RX.findall(question):
+            n = next((x for x in g if x), "") if isinstance(g, tuple) else g
+            ms = match_storey(idx, n.strip()) if n.strip() else None
+            if ms is not None and ms.score >= 90 and ms.obj not in found:
+                found.append(ms.obj)
+        if len(found) < 2:
+            bare = fold(_QUOTED_RX.sub(" ", question))
+            for st in sorted(own_storeys(idx), key=lambda st: -len(st.name or "")):
+                k = fold(st.name or "")
+                if k and len(k) >= 2 and re.search(r"(?<![\w.])" + re.escape(k) + r"(?![\w])", bare) and st not in found:
+                    found.append(st)
+                    bare = bare.replace(k, " ")
+        if len(found) != 2 or any(st.elevation is None for st in found):
+            return None
+        a, b = sorted(found, key=lambda st: st.elevation)
+        d = b.elevation - a.elevation
+        trace.append(f"vertical distance: '{b.name}' at {b.elevation:.3f} m - '{a.name}' at {a.elevation:.3f} m = {d:.3f} m")
+        ev = [Evidence(file=model, ifc_guid=st.guid, note=f"IfcBuildingStorey {st.name} elevation {st.elevation:.3f} m")
+              for st in (a, b)]
+        return Answer(value=round(d, 4), unit="m", confidence=0.85, evidence=ev, trace=trace, solver=self.name,
+                      assumptions=["vertical distance = difference of the IfcBuildingStorey elevations (finished floor "
+                                   "levels as modelled)"])
+
     # ------------------------------------------------------------------------------------------------
     def _core(self, path: str, model: str, idx: IfcIndex, question: str) -> tuple[Answer, Intent, dict]:
         """Rules + guards for one wording of the question (no LLM call)."""
@@ -529,7 +563,9 @@ class IfcSolver(BaseSolver):
                      "threshold_list": "threshold_list" in it.notes, "rank": next((int(n[5:]) for n in it.notes
                                                                                     if n.startswith("rank:")), 1)}
         try:
-            ans = self._relation(path, model, idx, it, question, trace, ctx)
+            ans = self._storey_distance(model, idx, question, trace)
+            if ans is None:
+                ans = self._relation(path, model, idx, it, question, trace, ctx)
             if ans is None:
                 ans = self._outer(path, model, idx, it, question, trace, ctx)
             if ans is None:
@@ -1617,6 +1653,11 @@ class IfcSolver(BaseSolver):
             if it.kind is None or it.kind == "storey":
                 it.kind = "storey"
             trace.append(f"'{mt_.group(0)}' -> storey '{pick.name}'")
+        if it.kind == "storey" and it.metric in ("count", "text") and it.names and (
+                re.search(r"\bhow tall\b", qf) or (re.search(r"\bhow high\b", qf)
+                                                   and re.search(r"\b(storey|story|floor|level)\b", qf))):
+            it.metric = "length"
+            trace.append("'how tall/high' + a storey -> storey height")
         # "the basement", "the underground level", "the cellar": the storey named so, else the highest storey below 0
         mb_ = re.search(r"\b(basement|cellar|underground|below[- ]ground)(?:\s+(?:storey|story|floor|level))?\b", qf)
         if mb_ and not it.names and idx.storeys and it.kind != "storey" and \
