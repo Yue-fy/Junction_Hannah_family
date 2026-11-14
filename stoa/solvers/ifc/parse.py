@@ -135,7 +135,7 @@ _LEX: list[tuple[str, tuple[str, ...]]] = [
                "camer", "incaper", "stanz", "piece", "salle", "huone", "tila", "rom ")),
     ("door", ("door", "tur", "tuer", "puerta", "dor", "doer", "deur", "uks", "ust", "drzwi", "usi", "porte",
               "porta", "ovi", "ovet", "dorr")),
-    ("window", ("window", "fenster", "ventana", "vindu", "raam", "ramen", "aken", "akna", "okien", "okn",
+    ("window", ("window", "glazing", "glazed", "verglasung", "beglazing", "fenster", "ventana", "vindu", "raam", "ramen", "aken", "akna", "okien", "okn",
                 "ferestr", "fenetre", "finestr", "ikkun", "fonster")),
     ("wall", ("wall", "wand", "waend", "wande", "muro", "muros", "vaeg", "vag", "seina", "sein", "scian",
               "sciana", "perete", "pereti", "mur", "murs", "paret", "parete", "sein", "seinä", "vagg")),
