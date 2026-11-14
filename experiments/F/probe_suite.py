@@ -46,7 +46,9 @@ def _run_one(probe, solver, workers, note, py):
     cmd = [py, "-m", "stoa.eval", "--solver", solver, "--split", str(PROBE_DIR / f"{probe}.jsonl"),
            "--workers", str(workers), "--note", note]
     t0 = time.time()
-    out = subprocess.run(cmd, capture_output=True, text=True, env=dict(os.environ, PYTHONPATH="."))
+    # the suite is a bulk run (10k rows): never let a solver reach Google's hackathon Gemini key (COMMON.md, Sat 10:50)
+    env = {k: v for k, v in os.environ.items() if k not in ("GEMINI_API_KEY", "GOOGLE_API_KEY")}
+    out = subprocess.run(cmd, capture_output=True, text=True, env=dict(env, PYTHONPATH="."))
     m = re.search(r"predictions: (\S+\.jsonl)", out.stdout + out.stderr)
     if not m:
         sys.stderr.write(f"[{probe}] no predictions file (exit {out.returncode}):\n{(out.stderr or out.stdout)[-800:]}\n")

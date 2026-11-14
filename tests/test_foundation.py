@@ -210,3 +210,16 @@ def test_outside_sheet_next_to_its_model(tmp_path):
     lone.write_bytes(b"x")
     assert source_of(str(lone)) == "unknown"
     assert source_of(str(pkg / "house.ifc")) == "unknown"
+
+
+def test_eval_hides_gemini_key_on_bulk_runs(monkeypatch, capsys):
+    """COMMON.md (Sat 10:50): no bulk Gemini. Runs above GEMINI_BULK_CAP questions hide the key from solvers."""
+    from stoa.eval import runner
+
+    monkeypatch.setenv("GEMINI_API_KEY", "fake")
+    monkeypatch.setenv("GOOGLE_API_KEY", "fake")
+    runner._hide_gemini(runner.GEMINI_BULK_CAP + 1)
+    import os
+
+    assert "GEMINI_API_KEY" not in os.environ and "GOOGLE_API_KEY" not in os.environ
+    assert "hidden from solvers" in capsys.readouterr().err
