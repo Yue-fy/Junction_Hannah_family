@@ -46,6 +46,12 @@
   "locate": true
  },
  {
+  "file": "data/cubicasa5k/colorful-4539.png",
+  "q": "",
+  "rooms": true,
+  "note": "The same plan as a graph: every room with its kind, printed label and an area estimate, and every door as a link between two rooms. The hall 'ET' leads to 6 rooms and opens onto the kitchen and living room. Read from the pixels by the pretrained CubiCasa5K model plus geometry rules, no language model; with no scale printed, areas come from the measured door widths (80% band on hover). Hover any room to see its links."
+ },
+ {
   "file": "data/cubicasa5k/high_quality_architectural-14797.png",
   "q": "How many saunas are on this floor plan?",
   "locate": true,

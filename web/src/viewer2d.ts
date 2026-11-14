@@ -12,7 +12,7 @@
  */
 import * as pdfjs from "pdfjs-dist";
 import pdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
-import type { Evidence } from "./types";
+import type { Evidence, RoomGraph, RoomGraphRoom } from "./types";
 
 pdfjs.GlobalWorkerOptions.workerSrc = pdfWorker;
 
@@ -23,6 +23,10 @@ const MAX_CANVAS_SIDE = 4200;
 type Mat = [number, number, number, number, number, number];
 const apply = (m: Mat, x: number, y: number): [number, number] => [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]];
 
+/** Room-graph regions worth drawing: unlabelled regions with no door and no open link are segmentation fragments
+ *  (a strip along a wall, the CubiCasa logo), not rooms of the graph. */
+export const roomShown = (r: RoomGraphRoom) => !!r.label || (r.door_to ?? []).length > 0 || (r.open_to ?? []).length > 0;
+
 export class Viewer2D {
   readonly el: HTMLElement;
   private stage: HTMLDivElement;
@@ -30,6 +34,7 @@ export class Viewer2D {
   private guidLayer: SVGGElement;
   private evLayer: SVGGElement;
   private kgLayer: SVGGElement;
+  private roomLayer: SVGGElement;
   private w = 1;
   private h = 1;
   private z = 1;
@@ -55,7 +60,9 @@ export class Viewer2D {
     this.evLayer = document.createElementNS(SVGNS, "g");
     this.kgLayer = document.createElementNS(SVGNS, "g");
     this.kgLayer.classList.add("kg-layer");
-    this.overlay.append(this.guidLayer, this.kgLayer, this.evLayer);
+    this.roomLayer = document.createElementNS(SVGNS, "g");
+    this.roomLayer.classList.add("room-layer");
+    this.overlay.append(this.guidLayer, this.roomLayer, this.kgLayer, this.evLayer);
     el.append(this.stage);
     this.installPanZoom();
   }
@@ -68,6 +75,7 @@ export class Viewer2D {
     this.guidLayer.replaceChildren();
     this.evLayer.replaceChildren();
     this.kgLayer.replaceChildren();
+    this.roomLayer.replaceChildren();
     this.guidEls.clear();
     this.el.dataset.state = "loading";
     if (/\.pdf$/i.test(file)) {
@@ -171,6 +179,83 @@ export class Viewer2D {
     text.textContent = label;
     this.kgLayer.append(rect, text);
     return this.zoomTo(r, 0.8);
+  }
+
+  /**
+   * R1's room graph of a CubiCasa plan (image px): each room tinted by kind with its printed label and ~m², each
+   * door as a small box, and every door drawn as a link room → door → room (dashed: open-plan links, no door).
+   * `null` clears it. Hovering a room lights up its links. Returns the number of rooms drawn.
+   */
+  /** Light up one room of the room graph and its links (null: all equal). */
+  focusRoom: (id: string | null) => void = () => {};
+
+  setRoomGraph(g: RoomGraph | null) {
+    this.roomLayer.replaceChildren();
+    this.roomLayer.classList.remove("focus");
+    if (!g) return 0;
+    const side = Math.max(this.w, this.h);
+    const el = (tag: string, attrs: Record<string, string | number>, parent: SVGElement = this.roomLayer) => {
+      const n = document.createElementNS(SVGNS, tag);
+      for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, String(v));
+      parent.append(n);
+      return n;
+    };
+    const byId = new Map(g.rooms.map((r) => [r.id, r]));
+    const name = (r: RoomGraphRoom) => r.label || r.cls;
+    const rooms = el("g", { class: "rg-rooms" });
+    const links = el("g", { class: "rg-links" });
+    const doors = el("g", { class: "rg-doors" });
+    const labels = el("g", { class: "rg-labels" });
+    const linkEls = new Map<string, SVGElement[]>();
+    const boxes = new Map<string, SVGElement>();
+    this.focusRoom = (id) => {
+      this.roomLayer.querySelectorAll(".on").forEach((n) => n.classList.remove("on"));
+      this.roomLayer.classList.toggle("focus", !!id);
+      if (!id) return;
+      boxes.get(id)?.classList.add("on");
+      (linkEls.get(id) ?? []).forEach((n) => n.classList.add("on"));
+    };
+    const addLink = (n: SVGElement, ...ids: string[]) => ids.forEach((id) => linkEls.set(id, [...(linkEls.get(id) ?? []), n]));
+    for (const d of g.doors) {
+      const c = [(d.box[0] + d.box[2]) / 2, (d.box[1] + d.box[3]) / 2];
+      const ends = d.between.map((id) => byId.get(id)).filter((r): r is RoomGraphRoom => !!r);
+      if (ends.length) {
+        const pts = ends.length === 2 ? [ends[0].centroid, c, ends[1].centroid] : [ends[0].centroid, c];
+        const pl = el("polyline", { points: pts.map((p) => p.join(",")).join(" "), class: `rg-link${ends.length === 1 ? " out" : ""}` }, links);
+        addLink(pl, ...ends.map((r) => r.id));
+      }
+      const r = el("rect", { x: d.box[0], y: d.box[1], width: d.box[2] - d.box[0], height: d.box[3] - d.box[1], class: "rg-door" }, doors);
+      el("title", {}, r).textContent = `door ${d.id}: ${d.between.map((id) => (byId.get(id) ? name(byId.get(id)!) : id)).join(" ↔ ")}`;
+    }
+    const seen = new Set<string>();
+    for (const r of g.rooms) for (const o of r.open_to ?? []) {
+      const k = [r.id, o].sort().join("|");
+      const b = byId.get(o);
+      if (seen.has(k) || !b) continue;
+      seen.add(k);
+      const ln = el("line", { x1: r.centroid[0], y1: r.centroid[1], x2: b.centroid[0], y2: b.centroid[1], class: "rg-link open" }, links);
+      addLink(ln, r.id, b.id);
+    }
+    const fs = side * 0.018;
+    for (const r of g.rooms.filter(roomShown)) {
+      const [x0, y0, x1, y1] = r.bbox;
+      const box = el("rect", { x: x0, y: y0, width: x1 - x0, height: y1 - y0, class: `rg-room k-${r.cls}` }, rooms);
+      const to = (r.door_to ?? []).map((id) => (byId.get(id) ? name(byId.get(id)!) : id));
+      el("title", {}, box).textContent = `${name(r)} (${r.cls})${r.m2 ? ` · ~${r.m2} m²${r.m2_80 ? ` (80%: ${r.m2_80[0]}–${r.m2_80[1]})` : ""}` : ""}`
+        + `${to.length ? ` · doors to: ${to.join(", ")}` : ""}${(r.open_to ?? []).length ? ` · open to: ${r.open_to!.map((id) => (byId.get(id) ? name(byId.get(id)!) : id)).join(", ")}` : ""}`
+        + `${(r.windows ?? []).length ? ` · ${r.windows!.length} window${r.windows!.length > 1 ? "s" : ""}` : ""}`;
+      boxes.set(r.id, box);
+      box.addEventListener("mouseenter", () => this.focusRoom(r.id));
+      box.addEventListener("mouseleave", () => this.focusRoom(null));
+      if (r.cls === "outdoor" && !r.label) continue;
+      const t = el("text", { x: r.centroid[0], y: r.centroid[1] - fs * 0.15, "font-size": fs, class: "rg-label" }, labels);
+      t.textContent = name(r);
+      if (r.m2) {
+        const m = el("text", { x: r.centroid[0], y: r.centroid[1] + fs * 0.95, "font-size": fs * 0.72, class: "rg-label sub" }, labels);
+        m.textContent = `~${r.m2} m²`;
+      }
+    }
+    return g.rooms.filter(roomShown).length;
   }
 
   /** Draw evidence that lives on this file (bbox), plus GUID highlights for ifc_guid evidence. */

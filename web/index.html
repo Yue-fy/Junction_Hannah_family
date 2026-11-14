@@ -68,6 +68,7 @@
             <button data-mode="split" role="tab">Side by side</button>
           </div>
           <select id="storey" aria-label="Storey" hidden></select>
+          <button id="roomsBtn" class="ghost" hidden title="Rooms and the doors that link them, read from the plan by the pretrained CubiCasa5K model + geometry rules (no language model)">Rooms &amp; doors</button>
           <button id="fitBtn" class="ghost" title="Frame the evidence">Frame evidence</button>
           <button id="benchBtn" class="ghost" title="Accuracy, generality and cost on held-out drawings">How well it works</button>
         </div>
@@ -75,7 +76,7 @@
         <div id="views" data-mode="2d">
           <div id="xbanner" class="xbanner" hidden></div>
           <section id="bench" class="bench" hidden aria-label="How well it works"></section>
-          <div id="pane2d" class="pane"><div id="v2d"></div><div class="pane-label">Drawing</div><div class="loading" id="load2d"></div></div>
+          <div id="pane2d" class="pane"><div id="v2d"></div><div class="pane-label">Drawing</div><div class="loading" id="load2d"></div><div id="rgLegend" class="rg-legend" hidden></div></div>
           <div id="pane3d" class="pane"><div id="v3d"></div><div class="pane-label">IFC model</div><div class="loading" id="load3d"></div>
             <div id="pick" class="pick" hidden></div></div>
         </div>

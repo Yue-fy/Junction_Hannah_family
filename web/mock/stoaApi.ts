@@ -180,6 +180,32 @@ function kgFromDisk(rel: string) {
 const KG_REPO = process.env.STOA_KG_REPO ?? path.resolve(__dirname, "../..");
 const PY = process.env.JUNCTION_VENV ? `${process.env.JUNCTION_VENV}/bin/python` : "python3";
 const kgCache = new Map<string, Promise<{ body: Record<string, unknown>; backend: string }>>();
+/**
+ * Room graph of a CubiCasa plan (R1, experiments/r1/room_graph/graph.py): rooms (class, printed label, ~m² with an
+ * 80% band, box, centroid), doors and which rooms each links, open-plan links, windows. Read from R1's cached
+ * pretrained-CubiCasa5K segmentation (live=False: never runs the network here); no LLM. Local only, cached per path.
+ */
+const ROOMS_PY = "import json,sys\nfrom experiments.r1.room_graph.graph import room_graph\ng = room_graph(sys.argv[1], live=False)\nprint(json.dumps(g))";
+const roomsCache = new Map<string, Promise<Record<string, unknown> | null>>();
+function roomGraph(rel: string) {
+  if (!roomsCache.has(rel)) {
+    roomsCache.set(rel, new Promise((resolve) => {
+      execFile(PY, ["-c", ROOMS_PY, rel], { cwd: KG_REPO, timeout: 60_000, maxBuffer: 16 << 20, env: { ...process.env, STOA_DATA: DATA } },
+        (err, stdout) => {
+          let g: Record<string, unknown> | null = null;
+          try {
+            g = err ? null : JSON.parse(stdout);
+          } catch {
+            g = null;
+          }
+          if (!g) roomsCache.delete(rel);
+          resolve(g);
+        });
+    }));
+  }
+  return roomsCache.get(rel)!;
+}
+
 const KG_PY = "import json,sys\nfrom stoa.kg import links\nprint(json.dumps(links(sys.argv[1])))";
 function kg(rel: string) {
   if (!kgCache.has(rel)) {
@@ -390,7 +416,7 @@ async function handle(req: Connect.IncomingMessage, res: http.ServerResponse, ne
     const body = req.method === "POST" ? await readBody(req) : Buffer.alloc(0);
     const askBody = route === "/ask" && req.method === "POST" ? (() => { try { return JSON.parse(body.toString() || "{}"); } catch { return {}; } })() : null;
     const hosted = !!askBody && isHosted(askBody);
-    const live = route === "/bench" ? null : await forward(req, route + url.search, body, hosted ? HOSTED_WAIT_MS : 600_000);
+    const live = route === "/bench" || route === "/rooms" ? null : await forward(req, route + url.search, body, hosted ? HOSTED_WAIT_MS : 600_000);
     if (hosted) {
       let ans: { value?: unknown } | null = null;
       try {
@@ -457,6 +483,12 @@ async function handle(req: Connect.IncomingMessage, res: http.ServerResponse, ne
     if (route === "/bench") {
       const b = bench();
       return b ? send(res, 200, b, "kg") : send(res, 404, { detail: "no leaderboard and no fixtures/bench.json" });
+    }
+    if (route === "/rooms") {
+      const rel = url.searchParams.get("path") ?? "";
+      if (!/^data\/cubicasa5k\/[^/]+\.png$/i.test(rel) || !safeAbs(rel)) return send(res, 404, { detail: "room graph: CubiCasa plans only" });
+      const g = await roomGraph(rel);
+      return g ? send(res, 200, g, "kg") : send(res, 404, { detail: "no cached CubiCasa5K segmentation for this plan" });
     }
     if (route === "/kg") {
       const rel = url.searchParams.get("path") ?? "";
