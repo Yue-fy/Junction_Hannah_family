@@ -393,9 +393,14 @@ class Pipeline(BaseSolver):
         task); keep the English only if ITS parse finds a target (lang4 CS/HU/TR/RO 38 -> 48/48; hard's 175
         non-English questions: fires on 0, while translating all of them loses 7)."""
         try:
-            from stoa.llm import should_translate, to_english
+            from stoa.llm import COVERED_LANGS, lang_guess, should_translate, to_english
 
-            if not should_translate(question, parse(question)):
+            it0 = parse(question)
+            if not should_translate(question, it0):
+                return question, None, None
+            if lang_guess(question) in COVERED_LANGS and it0.target not in (None, "unknown"):
+                # a language the rules read, with the object class found: translating only adds slips (derived DE
+                # 'WC-Becken' -> 'toilet sinks' -> 3 sinks x 420 = 1260 instead of 420, 8/8 lost)
                 return question, None, None
         except Exception:  # noqa: BLE001  (no llm module / parser error: answer the original)
             return question, None, None
