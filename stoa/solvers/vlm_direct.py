@@ -309,7 +309,7 @@ class VlmDirect(BaseSolver):
                                      else 64 if direct and kind != "text" else 256 if direct else
                                      max(self.max_tokens, 2048) if grounded else self.max_tokens),
                          thinking=self.thinking, max_pixels=self.max_pixels,
-                         logprobs=5 if (direct and self.samples <= 1 and self.backend == "local"
+                         logprobs=5 if (direct and self.samples <= 1 and llm.is_local(self.backend)
                                         and self.conf_mode != "const" and kind != "text") else 0,
                          **({"n": self.samples, "temperature": 0.7} if (direct and self.samples > 1) else {}))
             if r.finish_reason == "length" and (not direct or self.backend == "nvidia") and "ANSWER:" not in r.text:

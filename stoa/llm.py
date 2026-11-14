@@ -1,6 +1,6 @@
 """Shared LLM / VLM client for every agent (owner: R2).
 
-Two backends, both OpenAI-compatible:
+Backends, all OpenAI-compatible ("local2" = a second local vLLM, $LLM2_BASE_URL, default :8002):
   - "local"  : our vLLM server ($LLM_BASE_URL, default http://127.0.0.1:8001/v1). Model alias "default"
                always points at whatever serving/start.sh launched (see `served_model()`).
   - "nvidia" : NVIDIA hosted API (https://integrate.api.nvidia.com/v1, key in $NVIDIA_API_KEY).
@@ -52,6 +52,15 @@ BACKENDS: dict[str, dict[str, Any]] = {
         "coords": "rel1000",
         "timeout": 300.0,
     },
+    # A second local vLLM (e.g. a bigger reasoning model on :8002 next to the shared :8001), billed like "local".
+    # Lets one component (the agent's planner) use another model while every atomic solver stays on :8001.
+    "local2": {
+        "base_url": os.environ.get("LLM2_BASE_URL", "http://127.0.0.1:8002/v1"),
+        "api_key_env": None,
+        "model": os.environ.get("LLM2_MODEL", "default"),
+        "coords": "rel1000",
+        "timeout": 300.0,
+    },
     "nvidia": {
         "base_url": os.environ.get("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1"),
         "api_key_env": "NVIDIA_API_KEY",
@@ -60,6 +69,11 @@ BACKENDS: dict[str, dict[str, Any]] = {
         "timeout": 300.0,
     },
 }
+
+def is_local(backend: str) -> bool:
+    """Our own GPU (billed in GPU seconds), as opposed to a hosted API (billed per call)."""
+    return backend in ("local", "local2")
+
 
 # Default pixel budget per image. Qwen3-VL: 1 visual token per 32x32 px => 3.1 Mpx ~ 3,000 tokens.
 DEFAULT_MAX_PIXELS = int(os.environ.get("LLM_MAX_PIXELS", 3_200_000))
@@ -220,7 +234,7 @@ class Cost:
             self.cached_calls += 1 if res.cached else 0
             # Disk-cache hits are billed as if computed (F, 00:53): a warm dev run must cost the same as the
             # cold test run Stoa will see.
-            if res.backend == "local":
+            if is_local(res.backend):
                 self.gpu_seconds += gpu_seconds_estimate(res.prompt_tokens or 0, res.completion_tokens or 0)
             else:
                 self.api_calls += 1
@@ -280,7 +294,7 @@ def _charge(res: "ChatResult") -> "ChatResult":
     except ImportError:  # older contract without cost metering
         return res
     tin, tout = res.prompt_tokens or 0, res.completion_tokens or 0
-    if res.backend == "local":
+    if is_local(res.backend):
         record_cost(llm_calls=1, llm_tokens_in=tin, llm_tokens_out=tout, gpu_seconds=gpu_seconds_estimate(tin, tout))
     else:
         record_cost(llm_calls=1, llm_tokens_in=tin, llm_tokens_out=tout, api_calls=1, api_tokens_in=tin,
@@ -439,7 +453,7 @@ def chat(
     if thinking is not None:
         body.setdefault("chat_template_kwargs", {})["enable_thinking"] = bool(thinking)
     if json_schema is not None:
-        if backend == "local":
+        if is_local(backend):
             body["structured_outputs"] = {"json": json_schema}
         else:
             body["guided_json"] = json_schema
@@ -460,7 +474,7 @@ def chat(
     use_cache = use_cache and temperature == 0.0
     cpath = None
     if use_cache:
-        concrete = served_model(backend) if (backend == "local" and model == "default") else model
+        concrete = served_model(backend) if (is_local(backend) and model == "default") else model
         cpath = _cache_path({"b": backend, "m": concrete, "k": {**kwargs, "model": concrete}})
         if cpath.exists():
             d = json.loads(cpath.read_text())
@@ -512,7 +526,7 @@ def chat(
             delay = min(delay * 2, 60)
         except (APIConnectionError, APITimeoutError) as e:  # server restarting / overloaded
             last_err = e
-            if backend == "local" and isinstance(e, APIConnectionError) and waited < restart_budget:
+            if is_local(backend) and isinstance(e, APIConnectionError) and waited < restart_budget:
                 attempt -= 1  # a restarting local server doesn't use up retries, only the time budget
             time.sleep(delay)
             waited += delay
@@ -779,7 +793,7 @@ if __name__ == "__main__":  # smoke test: python -m stoa.llm [backend]
     import sys
 
     be = sys.argv[1] if len(sys.argv) > 1 else "local"
-    print("model:", served_model(be) if be == "local" else BACKENDS[be]["model"])
+    print("model:", served_model(be) if is_local(be) else BACKENDS[be]["model"])
     img = Image.new("RGB", (800, 400), "white")
     from PIL import ImageDraw
 
