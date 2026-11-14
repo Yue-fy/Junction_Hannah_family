@@ -6,6 +6,13 @@ Backends, all OpenAI-compatible ("local2" = a second local vLLM, $LLM2_BASE_URL,
   - "nvidia" : NVIDIA hosted API (https://integrate.api.nvidia.com/v1, key in $NVIDIA_API_KEY).
                Default model nvidia/nemotron-3.5-super-vl-120b-a12b. Rate-limited across *all* processes
                on this machine through a file lock (env NVIDIA_RPM, default 30 requests/minute).
+  - "gemini" : Google Gemini API, OpenAI-compatible endpoint (key in $GEMINI_API_KEY, from Sat 10:50). Default model
+               $GEMINI_MODEL or gemini-3-flash-preview (gemini-3.1-pro-preview for hard cases). Google's rules: no
+               abuse, so it is for visible, high-value steps only (demo, low-confidence escalation), NEVER in bulk eval
+               loops. Enforced here: a per-agent daily call cap ($GEMINI_MAX_CALLS_PER_DAY, default 200; agent =
+               $STOA_AGENT), every request logged with its purpose ($JUNCTION_SHARED/logs/gemini_calls.jsonl; pass
+               chat(..., purpose="...") or $STOA_GEMINI_PURPOSE), GEMINI_RPM (default 10/min) across processes.
+               Boxes: Gemini answers box_2d as [ymin, xmin, ymax, xmax] in 0..1000 (swap before parse_boxes).
 
 Quick start:
     from stoa.llm import chat, parse_boxes
@@ -66,6 +73,13 @@ BACKENDS: dict[str, dict[str, Any]] = {
         "api_key_env": "NVIDIA_API_KEY",
         "model": os.environ.get("NVIDIA_MODEL", "nvidia/nemotron-3.5-super-vl-120b-a12b"),
         "coords": "rel1000",  # verify per model with experiments/r2/grounding_check.py
+        "timeout": 300.0,
+    },
+    "gemini": {
+        "base_url": os.environ.get("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai/"),
+        "api_key_env": "GEMINI_API_KEY",
+        "model": os.environ.get("GEMINI_MODEL", "gemini-3-flash-preview"),
+        "coords": "yx1000",  # box_2d = [ymin, xmin, ymax, xmax], 0..1000
         "timeout": 300.0,
     },
 }
@@ -398,11 +412,11 @@ def served_models(backend: str = "local", ttl: float = 60.0) -> frozenset:
     return ids
 
 
-def _nvidia_throttle() -> None:
-    """Space out NVIDIA API calls across every process on this machine (file lock + timestamp)."""
-    rpm = float(os.environ.get("NVIDIA_RPM", 30))
+def _nvidia_throttle(backend: str = "nvidia") -> None:
+    """Space out hosted API calls (nvidia, gemini) across every process on this machine (file lock + timestamp)."""
+    rpm = float(os.environ.get(f"{backend.upper()}_RPM", {"nvidia": 30, "gemini": 10}.get(backend, 10)))
     interval = 60.0 / max(rpm, 0.1)
-    lock = SHARED / "locks" / "nvidia-api.lock"
+    lock = SHARED / "locks" / f"{backend}-api.lock"
     lock.parent.mkdir(parents=True, exist_ok=True)
     with open(lock, "a+") as f:
         fcntl.flock(f, fcntl.LOCK_EX)
@@ -418,6 +432,51 @@ def _nvidia_throttle() -> None:
             f.flush()
         finally:
             fcntl.flock(f, fcntl.LOCK_UN)
+
+
+GEMINI_LOG = SHARED / "logs" / "gemini_calls.jsonl"
+
+
+def _agent_id() -> str:
+    return os.environ.get("STOA_AGENT") or os.environ.get("AGENT_ID") or "unknown"
+
+
+def gemini_calls_today(agent: str | None = None) -> int:
+    """Gemini requests this agent sent today (from the shared call log)."""
+    agent, day, n = agent or _agent_id(), time.strftime("%Y-%m-%d"), 0
+    try:
+        with open(GEMINI_LOG, encoding="utf-8") as f:
+            for line in f:
+                try:
+                    d = json.loads(line)
+                except ValueError:
+                    continue
+                n += d.get("agent") == agent and d.get("day") == day
+    except FileNotFoundError:
+        pass
+    return n
+
+
+def _gemini_guard() -> None:
+    cap = int(os.environ.get("GEMINI_MAX_CALLS_PER_DAY", 200))
+    n = gemini_calls_today()
+    if n >= cap:
+        raise RuntimeError(f"Gemini daily call cap reached for agent {_agent_id()!r} ({n} >= {cap}; Google's no-abuse "
+                           "rule, COMMON.md). Use the local server or hosted Nemotron.")
+
+
+def _gemini_log(model: str, purpose: str | None, ok: bool, status: str, t0: float, resp: Any = None) -> None:
+    u = getattr(resp, "usage", None)
+    rec = {"time": time.strftime("%H:%M:%S"), "day": time.strftime("%Y-%m-%d"), "agent": _agent_id(), "model": model,
+           "purpose": purpose or os.environ.get("STOA_GEMINI_PURPOSE") or "unspecified", "ok": ok, "status": status,
+           "tokens_in": getattr(u, "prompt_tokens", None), "tokens_out": getattr(u, "completion_tokens", None),
+           "latency_s": round(time.time() - t0, 2)}
+    try:
+        GEMINI_LOG.parent.mkdir(parents=True, exist_ok=True)
+        with open(GEMINI_LOG, "a", encoding="utf-8") as f:
+            f.write(json.dumps(rec) + "\n")
+    except OSError:
+        pass
 
 
 def _cache_path(key_obj: Any) -> Path:
@@ -447,6 +506,7 @@ def chat(
     cache: bool | None = None,
     extra_body: dict | None = None,
     logprobs: int = 0,
+    purpose: str | None = None,
 ) -> ChatResult:
     """One chat completion.
 
@@ -459,6 +519,7 @@ def chat(
     cache    : on-disk response cache (temperature 0 only). Default from env STOA_LLM_CACHE=1.
     logprobs : K > 0 -> return per-token logprobs of the first choice with the top-K alternatives in
                `ChatResult.logprobs` (see `answer_prob`). Free on vLLM; use it for a real confidence.
+    purpose  : backend "gemini" only: why this call is made (logged; COMMON.md asks for every call's purpose).
     """
     cfg = BACKENDS[backend]
     model = model or cfg["model"]
@@ -497,6 +558,14 @@ def chat(
     if logprobs:
         kwargs["logprobs"] = True
         kwargs["top_logprobs"] = int(logprobs)
+    if backend == "gemini":  # Google's OpenAI-compatible endpoint: no vLLM-only fields
+        body.pop("chat_template_kwargs", None)
+        body.pop("guided_json", None)
+        if thinking is not None:
+            kwargs["reasoning_effort"] = "high" if thinking else "low"
+        if json_schema is not None:
+            kwargs["response_format"] = {"type": "json_schema", "json_schema": {"name": "answer", "schema": json_schema}}
+        retries = min(retries, 3)
     if body:
         kwargs["extra_body"] = body
 
@@ -520,11 +589,15 @@ def chat(
     attempt = 0
     while attempt <= retries:
         attempt += 1
-        if backend == "nvidia":
-            _nvidia_throttle()
+        if backend in ("nvidia", "gemini"):
+            if backend == "gemini":
+                _gemini_guard()
+            _nvidia_throttle(backend)
         t0 = time.time()
         try:
             resp = client.chat.completions.create(**kwargs)
+            if backend == "gemini":
+                _gemini_log(model, purpose, True, "200", t0, resp)
             ch = resp.choices[0]
             msg = ch.message
             reasoning = getattr(msg, "reasoning_content", None) or getattr(msg, "reasoning", None)
@@ -547,6 +620,8 @@ def chat(
             return _charge(res)
         except RateLimitError as e:  # 429: back off, honour Retry-After when given
             last_err = e
+            if backend == "gemini":
+                _gemini_log(model, purpose, False, "429", t0)
             ra = None
             try:
                 ra = float(e.response.headers.get("retry-after"))  # type: ignore[union-attr]
@@ -571,6 +646,8 @@ def chat(
             delay = min(delay * 2, 30)
         except APIStatusError as e:
             last_err = e
+            if backend == "gemini":
+                _gemini_log(model, purpose, False, str(e.status_code), t0)
             if e.status_code in (500, 502, 503, 504):
                 time.sleep(delay)
                 delay = min(delay * 2, 30)
@@ -697,7 +774,10 @@ def extract_json(text: str) -> Any:
 
 
 def _to_px(x: float, y: float, info: ImageInfo | tuple[int, int] | None, coords: str) -> tuple[float, float]:
-    """Model coords -> original-image pixels. coords: rel1000 | rel1 | pct | abs (abs = pixels of the sent image)."""
+    """Model coords -> original-image pixels. coords: rel1000 | yx1000 (Gemini: [y, x] order, 0..1000) | rel1 | pct |
+    abs (abs = pixels of the sent image)."""
+    if coords == "yx1000":
+        x, y, coords = y, x, "rel1000"
     if info is None:
         return x, y
     if isinstance(info, tuple):
