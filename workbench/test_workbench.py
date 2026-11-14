@@ -133,6 +133,7 @@ def test_batch_from_run_without_reference(client, tmp_path, monkeypatch):
     # '?' afterwards withdraws it; '✓' on our answer makes our value the gold
     client.post("/api/audit", json={"item_id": q1["item_id"], "verdict": "cant_tell"})
     last = json.loads((tmp_path / "human" / "questions.jsonl").read_text().splitlines()[-1])
-    assert last["deleted"] is True and last["qid"] == hr[0]["qid"]  # the eval drops it from night-F ff1e88e on
+    assert last["deleted"] is True and last["qid"] == hr[0]["qid"]
+    assert _human_rows(tmp_path / "human" / "questions.jsonl") == []  # the eval drops it (night-F ff1e88e)
     client.post("/api/audit", json={"item_id": q1["item_id"], "verdict": "supports"})
     assert _human_rows(tmp_path / "human" / "questions.jsonl")[0]["answer"] == 4
