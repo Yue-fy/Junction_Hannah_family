@@ -42,11 +42,12 @@ and shows a one-line note:
    is a cut at floor + 1.2 m; 3 windows lie entirely above/below it) and the matching knowledge-graph pill is
    highlighted ("windows plan 52 · IFC 52 at the cut (55 on storey) ✓").
 4. Model-wide doors → 211 with evidence on 5 sheets (chips; click one to open that plan, same answer).
-5. A question no template covers ("what share of the total room area on '1.korrus' does 'KORIDOR (119)'
-   take?") → 7.34 %. The card says "share · not a template: ifc read the question itself and computed it in code";
-   the IFC solver parses the operator, sums the storey's room areas and divides in code (the arithmetic line is
-   shown in green in "Why"), and every summed room is evidence. No model call. Questions no solver can read go to
-   W4's planning agent instead (ask → ask → calc → answer; sub-questions clickable, evidence rows labelled by step).
+5. A question no template covers, with a number in it ("if each door costs 450 euros, what do all the doors on
+   '1.korrus' cost in total?") → 20,700 €. The card says "Understood as: factor 450 EUR per door · not a template: ifc
+   read the question itself and computed it in code"; "Why" shows `46 count x 450 = 20700.00 EUR` (green = arithmetic
+   done in code), and the 46 doors are the evidence in 2D and 3D. No model call. Same path: "what share of the total
+   room area on '1.korrus' does 'KORIDOR (119)' take?" → 7.34 %. Questions no solver can read go to W4's planning
+   agent (ask → ask → calc → answer; sub-questions clickable, evidence rows labelled by step).
 6. A free-text question about a model (4351_arc.ifc, "what plumbing fixtures are in this building and their counts?"):
    the solver's answer names Toilet-Domestic-3D ×9 and Urinal-Wall-3D ×4 but cites no elements. The browser finds the
    named types in the loaded IFC model by element name (`findNamed` in `src/viewer3d.ts`, no model call), highlights

@@ -36,7 +36,7 @@ export function costTier(c: Cost): "deterministic" | "local" | "api" {
   return "deterministic";
 }
 
-const UNIT_LABEL: Record<string, string> = { m2: "m²", m3: "m³", ft2: "ft²", count: "", m: "m" };
+const UNIT_LABEL: Record<string, string> = { m2: "m²", m3: "m³", ft2: "ft²", count: "", m: "m", EUR: "€", eur: "€", USD: "$", usd: "$" };
 
 const esc = (s: unknown) => String(s ?? "").replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
@@ -51,7 +51,9 @@ function fmtEur(usd: number) {
 function fmtValue(a: Answer) {
   if (a.value === null || a.value === undefined) return "—";
   if (typeof a.value === "number") {
-    const v = Number.isInteger(a.value) ? String(a.value) : a.value.toLocaleString("en", { maximumFractionDigits: 2 });
+    // thousands separators only from 10,000 up (years and model ids like 2011 stay as they are)
+    const v = Math.abs(a.value) >= 10000 ? a.value.toLocaleString("en", { maximumFractionDigits: 2 })
+      : Number.isInteger(a.value) ? String(a.value) : a.value.toLocaleString("en", { maximumFractionDigits: 2 });
     return v;
   }
   return String(a.value);
@@ -142,17 +144,19 @@ function richText(v: string) {
 }
 
 /** Trace lines: "[solver] text" → tag + text; long traces show the first steps and fold the rest. */
+const CALC = /\d(?:\s+[a-z]+)?\s*[x×*/÷+−-]\s*\d[^=]*=\s*-?\d/;
 function traceHtml(trace: string[], keep = 6) {
-  const li = (full: string) => {
+  const li = (full: string, n: number) => {
     const t = full.length > 260 ? `${full.slice(0, 240).replace(/\s*\n\s*/g, " ")} …` : full;
     const m = t.match(/^\[([\w:/-]+)\]\s*(.*)$/);
-    const cc = /cross-?check/i.test(t) ? " class=\"cc\"" : /\d\s*[x×*/÷+−-]\s*\d[^=]*=\s*-?\d/.test(t) ? " class=\"calc\"" : "";
-    return m ? `<li${cc}><span class="tag">${esc(m[1])}</span>${esc(m[2])}</li>` : `<li${cc}>${esc(t)}</li>`;
+    const cc = /cross-?check/i.test(t) ? " class=\"cc\"" : CALC.test(t) ? " class=\"calc\"" : "";
+    return m ? `<li value="${n}"${cc}><span class="tag">${esc(m[1])}</span>${esc(m[2])}</li>` : `<li value="${n}"${cc}>${esc(t)}</li>`;
   };
-  const head = trace.slice(0, keep).map(li).join("");
-  const rest = trace.slice(keep);
-  return `<ol class="trace">${head}</ol>` + (rest.length
-    ? `<details class="more-steps"><summary>${rest.length} more step${rest.length > 1 ? "s" : ""}</summary><ol class="trace" start="${keep + 1}">${rest.map(li).join("")}</ol></details>`
+  // the first steps, plus any arithmetic line further down (the jury should see "46 count x 450 = 20700" unfolded)
+  const shown = trace.map((t, i) => i).filter((i) => i < keep || (CALC.test(trace[i]) && !/cross-?check/i.test(trace[i])));
+  const rest = trace.map((t, i) => i).filter((i) => !shown.includes(i));
+  return `<ol class="trace">${shown.map((i) => li(trace[i], i + 1)).join("")}</ol>` + (rest.length
+    ? `<details class="more-steps"><summary>${rest.length} more step${rest.length > 1 ? "s" : ""}</summary><ol class="trace">${rest.map((i) => li(trace[i], i + 1)).join("")}</ol></details>`
     : "");
 }
 
@@ -236,8 +240,11 @@ function intentHtml(a: Answer, run: AgentRun | null) {
   // "operator question (modifier share …)" + "<solver> (question as asked): …": the template intent was not used
   const op = !run && (a.trace ?? []).find((l) => /^operator question \(modifiers? /.test(l))?.match(/modifiers? ([\w+]+)/)?.[1];
   const raw = !run && (a.trace ?? []).find((l) => /^\w+ \(question as asked\):/.test(l))?.match(/^(\w+)/)?.[1];
-  if (op && raw) {
-    bits.push(op.split("+").map((m) => `<b>${esc(m.replace(/_/g, " "))}</b>`).join(" + "));
+  // the solver's own operation line, e.g. "[ifc] outer operation: factor 450 EUR per door" (numbers given in the question)
+  const outer = !run && (a.trace ?? []).map((l) => l.match(/^(?:\[\w+\]\s*)?outer operation:\s*(.+)$/)?.[1]).find((x) => x);
+  if ((op || outer) && raw) {
+    if (op) bits.push(op.split("+").map((m) => `<b>${esc(m.replace(/_/g, " "))}</b>`).join(" + "));
+    if (outer) bits.push(`<b>${esc(outer)}</b>`);
     bits.push(`not a template: ${esc(raw)} read the question itself and computed it in code`);
   } else if (run) {
     // the template intent was NOT used (it misreads operators); say what the agent did instead

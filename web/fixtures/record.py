@@ -28,6 +28,8 @@ QUESTIONS = [
      "How many doors are there in the model 'Maleva tänav 18 korterelamu (Esplanades example model)'?"),
     ("data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
      "What share of the total room area on '1.korrus' does the room 'KORIDOR (119)' take, in percent?"),
+    ("data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "If each door costs 450 euros, what do all the doors on '1.korrus' cost in total?"),
     ("data/ifc_bench/4351_arc.ifc", "What plumbing fixtures are in this building and their respective counts?"),
     ("data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
      "How many doors (interior doors and entrance doors together) are drawn on this floor plan?"),
