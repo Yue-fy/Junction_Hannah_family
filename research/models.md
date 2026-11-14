@@ -21,6 +21,9 @@ Hardware: 1× RTX PRO 6000 Blackwell 96 GB. Shared server budget ≈ 45 GB (`--g
 - **Servers during the day:** :8001 (8B + LoRAs) and :8002 (35B) run detached; nothing restarts them if they die — recipe and an
   opt-in `serving/watchdog.sh` under "Serving now".
 - **Cost honesty:** every local call is billed from tokens at measured GPU throughput (not wall time, which includes queueing).
+- **Day-team patch for Stoa point 3 on LoRA counts** (11:2x): `artifacts/R2/vlm_lora_method_range.patch` (applies on night 637a6df;
+  pytest 398 with it). vlm_lora always states its method as an assumption, and below conf 0.8 a LoRA-only 90% range; values and
+  confidence unchanged. Details: "LoRA counts: method + 90% range" below.
 - Negative results are listed under each section and in board/R2.md ("don't repeat").
 
 ## Serving now
@@ -232,6 +235,31 @@ Cost of one answer (D21 item 4), measured, not assumed:
    steps (Nemotron prize) and as a second opinion on unsure answers, never bulk.
 3. To try another open model quickly: `experiments/r2/hold_8002.sh <preset> <name> <minutes>` (GPU lock, private :8002), then
    `experiments/r2/eval_backend.py --agent local2 -- --solver pipeline --split <file>` or `vlm_direct -k backend=local2`.
+
+## LoRA counts: method + 90% range (11:15–11:30, day-team patch; `experiments/r2/interval/lora_interval.py`)
+Problem (KNOWLEDGE 11:10): on the c43 gate, vlm_lora sets assumptions on 0 of 554 dev answers; the mid-confidence LoRA counts
+(0.5–0.8) list neither assumptions nor 'missing' (dev 43, hard 28), so Stoa's "what do you know / not know" is silent on them.
+- Range: residual (gold − LoRA) 5–95% quantiles of cc-v2 on **train_gate** (476 Qs, run ee1b; never dev/test), per predicted
+  count: 0 → [0, +1], 1–2 → [−1, +1], 3–5 → [−2, +3], 6–10 → [−5, +4], ≥11 → [−3, +11] (table `artifacts/R2/lora_interval_table.json`).
+- Coverage: dev cc-v2 run 26d4 (794 Qs) 97.6%, mean width 3.6 (conservative because counts are integers: 10–90% quantiles give
+  point intervals for 0–2, which claim certainty, so not used). On the c43 gate's vlm_lora answers: dev conf <0.5 96.9% (width
+  8.3), 0.5–0.8 100% (3.6), ≥0.8 99.7%; the 43 dev / 28 hard 'neither' rows 43/43 and 28/28 covered (width 3.5 / 2.4).
+- Patch (`artifacts/R2/vlm_lora_method_range.patch`, 4 files): `VlmLora._state_method` (my file) adds the assumption "count
+  read from the whole image by a fine-tuned 8B vision-language model (cc-v2); the individual symbols were not located …" and,
+  for conf < 0.8 without a range yet, "exact count not certain: 90% range lo–hi (this model's errors on training drawings); a
+  located symbol count (detector boxes) would settle it". Two 2-line hunks in R1's crosscheck.py and W4's pipeline.py drop the
+  LoRA-only range when the CubiCasa5K detector cross-check adds its better one (no duplicate ranges). + tests/test_vlm_lora_method.py.
+- Checked: no pipeline branch reads these strings to change a value or confidence (_PREMISE / _OP_FLAG / 'not understood' do
+  not match them). Side effect: `_absent_fact` and the "not traced to any value" note no longer fire on a low-conf LoRA count
+  (they only fire when 'missing' holds process notes alone); the range is the more useful statement there.
+- LIVE check (11:20, gate c43c done, --no-leaderboard, scratch copies of night 637a6df ± patch; 198 dev CubiCasa rows the gate answered with vlm_lora: all 158 below 0.8 + 40 random above): patched vs unpatched in the same minute: values 197/198, conf 194/198 identical (unpatched vs the gate run: 192 / 189 = vLLM batching noise of the same size); right 114 vs 115 (noise); method assumption on 198/198 LoRA answers; conf<0.8 LoRA answers with a range 155/155; rows stating NEITHER 41 → 0; duplicate range lines 0. Runs 20261114-112030-pipeline-lora_check-144b (patched) vs -112109-…-a85b (unpatched), ref -111300-pipeline-dev-cdc1.
+- v2 (11:26, W4's review 11:20): the two hunks no longer match a free-text substring; they call
+  `VlmLora.drop_lora_range(missing)` (filters on the constant `VlmLora.RANGE_NOTE`, which `_state_method` writes), so a
+  wording change cannot break the dedupe silently; a 4th test pins it. pytest 399 on night 637a6df + patch. Live, same 198 rows
+  (run 20261114-112449-pipeline-lora_check-fa83 vs v1 -112030-…-144b): right 115 vs 114, values 193/198 identical (batching
+  noise, as v1 vs unpatched), range text identical on all 183 rows with equal value + conf, 0 duplicate ranges, 153/153 conf<0.8
+  LoRA answers with a range, 0 rows stating neither. v1 kept as `artifacts/R2/vlm_lora_method_range.v1.patch`.
+  Day team: apply, pytest, then a full dev run to confirm before committing.
 
 ## Drawing style from image content (09:30–10:25, `stoa/style.py`; training in `experiments/r2/style/`)
 - `guess_style(path)` → (cubicasa5k | swiss_dwellings | ifc_models | scan, p): numpy softmax on ~110 cheap features (grey/sat/hue
