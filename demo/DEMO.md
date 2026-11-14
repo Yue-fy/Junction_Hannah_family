@@ -90,18 +90,20 @@ By source on sealed test 2: Swiss vector plans 99.0 %, IFC models 100 % (397/397
 ## 2:35–2:55 · Where it breaks, and why (slide 4 — the failure analysis)
 Slide image: `demo/redteam-rounds.png` (SVG next to it; regenerate with `python3 experiments/q/plot_rounds.py` and
 headless chromium, numbers from `redteam/REPORT.md`). **Say only this (≈ 20 s, 60 words):**
-> "We tried to break it ourselves: 494 adversarial questions — rewordings, nine languages, rotated scans, rooms that
+> "We tried to break it ourselves: 564 adversarial questions — rewordings, nine languages, rotated scans, rooms that
 > don't exist, questions no drawing can answer. Every confident mistake had one cause: we checked the number, not
-> that it answered what was asked. Each bar is a round of fixes. On the build we're showing, 283 of 290 confident
+> that it answered what was asked. Each bar is a round of fixes. On the build we're showing, 338 of 339 confident
 > answers are right."
+(Numbers for night c1d6149 and later. If the stage build is the test-2 build bb94fe4, say "494 … 283 of 290".)
 
 Point at the chart: the families already asked go to 0 after each fix; each new family finds the same cause on a
 new surface (storeys in everyday words, "whole building" in Swedish, "1,200 euros", two-part questions).
 
 **Backup for questions (don't read out):**
-- **Latest (08:33, night + the owners' six newest commits, not yet merged): 4 of 564 at confidence ≥ 0.8, and 338
-  of 339 confident scored answers right** — say this instead if S0 merges them before the pitch (`redteam/REPORT.md`
-  "Pre-merge check #5"); the chart's last bar.
+- **Latest (08:37, night c1d6149 = the owners' six newest commits, merged): 4 of 564 at confidence ≥ 0.8, and 338
+  of 339 confident scored answers right** (`redteam/REPORT.md` "Pre-merge check #5"; the chart's last bar). Left:
+  "whole building" asked on a single-floor Swiss plan (answers the floor, ×3) and a Finnish two-number question
+  answered with one number.
 - **What still breaks on the test-2 build (bb94fe4), 12 of 494 at confidence ≥ 0.8:** "how many doors *and how
   many* windows" summed into one number (101 at 0.86; two separate answers were asked, W4); "how many doors on the
   ground floor and how many on the top floor" read as the whole building (W1); "how many floors" counts the

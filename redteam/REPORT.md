@@ -34,7 +34,8 @@ caused by the perturbation, not by the drawing.
      building in total" on a single-floor Swiss plan → that floor's 36 / 4 at 0.99 (W2).
    - v6: "How many floors does this building have?" → 7 at 0.85 (foundation and roof counted, W1); v5: Finnish
      "kellarikerroksessa" → 50 at 0.88 (W1).
-   **Newer (08:33, pre-merge #5 = night + the six newest owner heads, 564 rows incl. v15/v16): 4 left; 338 of 339
+   **Newer (08:33, pre-merge #5 = night + the six newest owner heads, 564 rows incl. v15/v16; confirmed on the merged
+   night c1d6149 at 08:37, run `…-083658-…-v16-cabe`, 0 answers lost): 4 left; 338 of 339
    scored answers at ≥ 0.8 right** — bug 17, bug 18 (English), "how many floors", "kellarikerros" and the 7th-floor
    premises fixed (see "Pre-merge check #5"); left: one-floor "whole building" ×3 (W2), Finnish two-number → one
    part at 0.95 (W4). (#4 at 08:27: 11 left, with a W1 "ground floor" confidence drop that #5's W1 commit undoes.)
