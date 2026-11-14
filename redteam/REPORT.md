@@ -1071,6 +1071,14 @@ were ignored. Same family as bug 13 / 24 (a storey named the way people talk los
 10:41.
 
 ## "You know what you don't know — but refusing is not useful" (Stoa point 3), audited on be57171 (09:15)
+**Re-audited 11:05 on pre-merge #11 (all 1015 rows, run `-105439-…-all-snap12-e712`):** 0 bare refusals — one empty
+value ("What is the monthly rent of this apartment in euros?" on a CubiCasa plan, conf 0.25) carries the line "a unit
+price … from a cost plan, tender or market data is needed; the drawing gives only the quantities" (R1's estimate route,
+rent + range + assumptions with 0 LLM, is measured but not wired, D22). 134 wrong answers, 96 of them at conf < 0.5;
+**7 wrong answers carry no assumption and no "missing" line — all CubiCasa bedroom counts from the LoRA (vlm_lora)**,
+4 of them at 0.82. Of 596 "missing" lines, 294 (49 %) are still process notes ("no located evidence from this
+solver"), not what the documents lack.
+
 All 622 answers of run `…-090509-…-v19b-a85a` (+ 25 v19b/v20 rows: same picture), by confidence band:
 
 | confidence | answers | value None | with a "missing" line | with assumption or missing | wrong / scored |
