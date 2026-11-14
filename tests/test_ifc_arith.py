@@ -201,3 +201,22 @@ def test_revit_family_prefix():
     assert type_key_fn([e])(e) == 'Sink Vanity-Round:19" x 19"'
     e2 = Element(guid="h", cls="IfcWall", name="22_Wall_DD-ytong", type_name="22_Wall_DD-ytong")
     assert type_key_fn([e2])(e2) == "22_Wall_DD-ytong"
+
+
+@pytest.mark.skipif(not abspath(ESPL).exists(), reason="dataset not available")
+def test_fresh_wordings_of_operators(solver):
+    s = solver.solve
+    d1 = s(ESPL, "How many doors are there on '1.korrus'?").value
+    d5 = s(ESPL, "How many doors are there on '5.korrus'?").value
+    allv = s(ESPL, "How many doors are there in the whole building?").value
+    assert s(ESPL, "Does '1.korrus' or '2.korrus' contain more doors?").value == "1.korrus"
+    assert s(ESPL, f"By how many doors does '1.korrus' exceed '5.korrus'?").value == d1 - d5
+    assert s(ESPL, "Out of all doors in the model, what percentage sit on '1.korrus'?").value == \
+        pytest.approx(d1 / allv * 100, abs=0.01)
+    a1 = s(ESPL, "What is the total net floor area of all spaces on '1.korrus'?").value
+    a5 = s(ESPL, "What is the total net floor area of all spaces on '5.korrus'?").value
+    assert s(ESPL, "How many times larger is the room area on '1.korrus' than on '5.korrus'?").value == \
+        pytest.approx(a1 / a5, abs=0.001)
+    n = s(ESPL, "How many rooms are there on '1.korrus'?").value
+    assert s(ESPL, "Divide the total room area of '1.korrus' by its number of rooms. What do you get?").value == \
+        pytest.approx(a1 / n, abs=0.01)

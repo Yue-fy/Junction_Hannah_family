@@ -1185,6 +1185,33 @@ class IfcSolver(BaseSolver):
                 it.kind == "space" and re.search(r"\b(height|high|tall)\b", qf) and
                 not re.search(r"\b(how many|number of|count)\b", qf)):
             it.attr, it.kind, it.metric, it.mod, it.op = "room_height", "space", "length", None, None
+        # two named storeys compared: "Does A or B contain more doors?", "By how many doors does A exceed B?",
+        # "How many times larger is the room area on A than on B?", "ratio between A and B"
+        st2 = [n for n in it.names if (ms_ := match_storey(idx, n)) is not None and ms_.score >= 90]
+        if len(st2) == 2 and len(it.names) == 2 and not it.mod:
+            if re.search(r"\b(ratio|times (larger|bigger|more|as \w+|greater|smaller)|divided by)\b", qf):
+                it.op, it.which = "ratio", False
+            elif re.search(r"\b(by how (many|much)|how (many|much) (more|fewer|less)|difference|exceed\w*|"
+                           r"(\w+ )?more \w+ than|than)\b", qf) and not re.search(r"\bwhich\b", qf):
+                it.op, it.which, it.yes_no = "diff", False, False
+            elif re.search(r"\b(more|fewer|less|bigger|larger|greater|smaller|higher|lower)\b", qf) and \
+                    re.search(r"\b(or|which|what)\b", qf):
+                it.which = True
+                it.op = "argmin" if re.search(r"\b(fewer|less|smaller|lower)\b", qf) else "argmax"
+            if it.metric == "text" and it.kind not in (None, "storey", "space"):
+                it.metric = "count"
+        # "Divide the total room area of S by its number of rooms"
+        if not it.mod and re.search(r"\bdivid\w* .{0,60}\bby (its|the|their) (number|count) of\b", qf):
+            it.mod, it.op = "avg", None
+        # "Count the rooms among 'A', 'B' whose area is above 4 m²" (no 'how many')
+        if not it.mod and re.search(r"\b(count|number of|how many)\b", qf) and re.search(r"\b(rooms?|spaces?)\b", qf):
+            from stoa.solvers.ifc.parse import _LOWER as _LOW1, _THRESH as _TH1
+
+            mt1 = _TH1.search(qf)
+            if mt1 and re.search(r"\b(area|m2|square|size)\b", qf):
+                w = mt1.group(1)
+                it.threshold = ("lt" if w in _LOW1 else "gt", float(mt1.group(2).replace(",", ".")))
+                it.mod, it.op, it.kind, it.metric, it.yes_no = "threshold", None, "space", "area", False
         # "How much bigger is the largest room than the smallest?" -> largest minus smallest
         if re.search(r"\b(largest|biggest)\b.{0,60}\b(than|and|vs|minus)\b.{0,30}\b(smallest|tiniest)\b|"
                      r"\b(difference|range)\b.{0,30}\b(largest|biggest)\b.{0,30}\b(smallest)\b", qf):
@@ -1483,7 +1510,8 @@ class IfcSolver(BaseSolver):
             storeys = [(s_.name, s_) for s_ in idx.storeys if s_.name]
             it = dataclasses.replace(it, names=[n for n, _ in storeys], top_n=False)
             trace.append(f"which-storey over all {len(storeys)} storeys")
-        multi = len(storeys) >= 2 and not others and (it.op in ("sum", "argmax", "argmin", "diff", "max", "min", "compare")
+        multi = len(storeys) >= 2 and not others and (it.op in ("sum", "argmax", "argmin", "diff", "max", "min", "compare",
+                                                                "ratio")
                                                      or it.which or (it.op is None and not it.mod
                                                                      and it.metric in ("count", "area", "volume", "length")))
         if not (multi or it.mod):
@@ -1517,7 +1545,7 @@ class IfcSolver(BaseSolver):
                 return Answer(value=val, unit=None, confidence=max(0.0, min(1.0, conf)), evidence=ev[:MAX_EVIDENCE],
                               trace=trace, solver=self.name, assumptions=asm, missing=miss)
             if isinstance(val, float):
-                val = round(val, 3)
+                val = int(round(val)) if unit == "count" and abs(val - round(val)) < 1e-9 else round(val, 3)
             return Answer(value=val, unit=unit, confidence=max(0.0, min(1.0, conf)), evidence=ev[:MAX_EVIDENCE],
                           trace=trace, solver=self.name, assumptions=asm, missing=miss)
 
@@ -1550,6 +1578,10 @@ class IfcSolver(BaseSolver):
                 return done(pick[0] if not tie else tie_txt,
                             None, pparts, steps + [f"{it.op} over storeys -> {pick[0]}"],
                             f"compared {it.metric} per storey", 0.95 if not tie else 0.6)
+            if it.op == "ratio" and len(vals) == 2 and vals[1][1]:
+                r_ = vals[0][1] / vals[1][1]
+                return done(r_, None, [a for _, a, _ in parts], steps + [f"{vals[0][1]:g} / {vals[1][1]:g} = {r_:.4f}"],
+                            f"ratio of {it.metric} {vals[0][0]} / {vals[1][0]}")
             if it.op == "compare":
                 txt = ", ".join(f"{n}: {v:g} {unit if unit != 'count' else ''}".strip() for n, v in vals)
                 if len(vals) == 2:
@@ -1604,7 +1636,7 @@ class IfcSolver(BaseSolver):
                 whole, t2 = sub([n for n, _ in storeys], ctx_extra={"no_room_type": True}, kind="space")
                 wdesc = f"all rooms on '{storeys[0][0]}'"
             elif storeys:  # "share of the model's doors on storey S"
-                part, t1 = sub([n for n, _ in storeys])
+                part, t1 = sub([n for n, _ in storeys], scope="storey")
                 whole, t2 = sub([], scope="model")
                 wdesc = f"the whole model"
             else:
