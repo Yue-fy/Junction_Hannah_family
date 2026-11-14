@@ -536,6 +536,8 @@ async function showAnswer(a: Answer, roundTripMs: number) {
     }) as Answer["evidence"][number])));
     await showAnswer({
       ...a, evidence: [...ev, ...a.evidence],
+      checked: [...said.map((n) => ({ name: n.name, model: n.guids.length, said: n.said })),
+        ...missed.map((n) => ({ name: n.name, model: n.guids.length, said: null, notInAnswer: true }))],
       trace: [...(a.trace ?? []), `checked against the model by element name (in the browser, no model call): ${said.length ? `named in the answer ${said.map((n) => `${n.name} ×${n.guids.length}`).join(", ")}` : "the answer names no element type of the model"}${checks.length ? `; counts: ${checks.join(", ")}` : ""}${miss ? `; same kind, not named: ${miss}` : ""}`],
       missing: [...(a.missing ?? []), ...(miss ? [`the answer does not mention ${miss} (same kind of fixture in the model)`] : [])],
       assumptions: [...(a.assumptions ?? []), said.length ? "highlighted elements are matched by the family/type names the answer uses; the solver did not cite them"

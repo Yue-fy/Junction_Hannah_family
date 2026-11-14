@@ -463,6 +463,157 @@ def main():
                         ("sv", "Har lägenheten en bastu?")):
             out.append(row(p, q, g, None, "text", f"yesno:{lang}", "same", note=f"saunas = {yn_gold[p]}"))
 
+    # ===== v6 (05:00): what a judge might type on OUR demo drawings (W5's tour) ==================================
+    # On stage a judge can type anything on the three demo drawings. Gold: esplanades from plain ifcopenshell (storey
+    # containment, = the dataset's convention per F's probe; doors 211 = dataset gold), Swiss/CubiCasa from the
+    # drawing's own dataset answers. Text answers are avoided (comparisons asked as numbers) except 'which floor'.
+    E = "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf"
+    SW = "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf"
+    CC = "data/cubicasa5k/colorful-4539.png"
+    judge = [
+        (E, "How many windows does the whole building have?", 297, "count", "count", "297 IfcWindow in the model"),
+        (E, "Montako ikkunaa koko rakennuksessa on?", 297, "count", "count", "297 IfcWindow (Finnish)"),
+        (E, "How many rooms are on this floor?", 50, "count", "count", "50 IfcSpace in '1.korrus' (the sheet)"),
+        (E, "How many rooms are there in the building?", 285, "count", "count", "285 IfcSpace"),
+        (E, "How many doors are on the top floor?", 39, "count", "count", "5.korrus 39 (Katus = roof, no doors)"),
+        (E, "How many doors are on the ground floor?", 46, "count", "count", "1.korrus (elev 0) 46"),
+        (E, "How many windows are on '3.korrus'?", 60, "count", "count", "quoted storey on another sheet: control"),
+        (E, "How many doors are on 1.korrus and 2.korrus together?", 88, "count", "count", "46 + 42, unquoted"),
+        (E, "How many columns are on this floor?", 37, "count", "count", "37 IfcColumn in '1.korrus'"),
+        (E, "How many more windows than doors are there on this floor?", 9, "count", "count", "55 - 46"),
+        (E, "What is the floor-to-floor height between '1.korrus' and '2.korrus', in metres?", 3.35, "m", "length",
+         "elevations 0 and 3350 mm"),
+        (E, "How many floors does this building have?", 5, "count", "count",
+         "1.-5.korrus; the model also has 'Vundament' (foundation) and 'Katus' (roof) storeys"),
+        (SW, "How many apartments are on this floor?", 4, "count", "count", "dataset: apartments (residential units) 4"),
+        (SW, "By how many square metres is apartment B larger than apartment A?", 0.49, "m2", "area",
+         "80.83 - 80.34 (dataset)"),
+        (SW, "What is the combined area of apartments A and B?", 161.17, "m2", "area", "80.83 + 80.34 (dataset)"),
+        (SW, "How many square feet is apartment B?", round(80.83 * FT2, 2), "ft2", "area", "80.83 m² in ft²"),
+        (CC, "How many windows does this apartment have?", 8, "count", "count", "dataset 8 (raster windows are hard)"),
+        (CC, "How many toilets are there?", 2, "count", "count", "dataset WC seats 2"),
+        (CC, "Montako makuuhuonetta asunnossa on?", 3, "count", "count", "dataset bedrooms 3 (other Finnish wording)"),
+    ]
+    for path, q, g, unit, typ, note in judge:
+        out.append(row(path, q, g, unit, typ, "judge:" + path.split("/")[1].split("_")[0], "same", note=note))
+    out.append(row(E, "Which floor has the fewest doors?", "5.korrus", None, "text", "judge:ifc-text", "same",
+                   note="doors 46/42/42/42/39"))
+    out.append(row(CC, "How big is this apartment in square metres?", None, None, "area", "judge:cubicasa", "flag",
+                   note="no scale on the plan: an estimate must say so"))
+
+    # ===== v7 (05:05): scope words in 9 languages — "in the whole building" vs "on this floor" on a storey sheet ====
+    # v6 found FI 'koko rakennuksessa' answered for the sheet's storey at 0.88. Asked on a storey sheet, the sheet
+    # default is the trap for 'whole building' and the right answer for 'this floor'. Gold = the dataset's own
+    # "How many doors/windows are there in the model '…'?" answers (= ifcopenshell counts) and storey containment.
+    whole = {
+        "doors": {"en": "How many doors are there in the whole building?", "de": "Wie viele Türen gibt es im ganzen Gebäude?",
+                  "nl": "Hoeveel deuren zijn er in het hele gebouw?", "fi": "Montako ovea koko rakennuksessa on?",
+                  "sv": "Hur många dörrar finns det i hela byggnaden?",
+                  "fr": "Combien de portes y a-t-il dans tout le bâtiment ?",
+                  "it": "Quante porte ci sono in tutto l'edificio?", "et": "Mitu ust on kogu hoones?",
+                  "pl": "Ile drzwi jest w całym budynku?"},
+        "windows": {"en": "How many windows are there in the whole building?",
+                    "de": "Wie viele Fenster gibt es im ganzen Gebäude?", "nl": "Hoeveel ramen zijn er in het hele gebouw?",
+                    "fi": "Montako ikkunaa koko rakennuksessa on?", "sv": "Hur många fönster finns det i hela byggnaden?",
+                    "fr": "Combien de fenêtres y a-t-il dans tout le bâtiment ?",
+                    "it": "Quante finestre ci sono in tutto l'edificio?", "et": "Mitu akent on kogu hoones?",
+                    "pl": "Ile okien jest w całym budynku?"},
+    }
+    this_floor = {"en": "How many doors are there on this floor?", "de": "Wie viele Türen gibt es auf diesem Geschoss?",
+                  "nl": "Hoeveel deuren zijn er op deze verdieping?", "fi": "Montako ovea tässä kerroksessa on?",
+                  "sv": "Hur många dörrar finns det på den här våningen?", "fr": "Combien de portes y a-t-il à cet étage ?",
+                  "it": "Quante porte ci sono su questo piano?", "et": "Mitu ust on sellel korrusel?",
+                  "pl": "Ile drzwi jest na tym piętrze?"}
+    for path, k, g, sheet_g in [(E, "doors", 211, 46),
+                                (f"{M}kit-smiley-west_ac-20-smiley-west-10-bldg_plan-02-eg.pdf", "doors", 170, 50),
+                                (f"{M}bsc-gymzaal-amersfoort_example-project-location_plan-01-00-begane-grond.pdf",
+                                 "windows", 69, 20)]:
+        for lang, q in whole[k].items():
+            out.append(row(path, q, g, "count", "count", f"scope-whole:{lang}", "same",
+                           note=f"model {k} {g}; the sheet's storey has {sheet_g}"))
+    for lang, q in this_floor.items():
+        out.append(row(E, q, 46, "count", "count", f"scope-floor:{lang}", "same", note="1.korrus (the sheet) 46"))
+
+    # ===== v8 (05:05): scope false premises — a place the drawing does not show ===================================
+    # "the whole building" on a one-floor plan (the dataset holds 1 floor of bldg2082), a second floor on a one-floor
+    # apartment, a 7th floor in a 5-storey model, unquoted (quoted '7.korrus' is flagged at 0.29 since W1's guard).
+    for path, q, typ, note in [
+        (SW, "How many doors are there in the whole building?", "count", "only this floor of building 2082 is drawn"),
+        (SW, "Wie viele Türen gibt es im ganzen Gebäude?", "count", "only this floor of building 2082 is drawn"),
+        (SW, "How many apartments does the building have in total?", "count", "only this floor is drawn"),
+        (CC, "How many bedrooms are on the second floor?", "count", "the plan shows one floor"),
+        (E, "How many doors are there on the 7th floor?", "count", "the model has 1.-5.korrus"),
+        (E, "How many doors are on the eighth floor?", "count", "the model has 1.-5.korrus"),
+    ]:
+        out.append(row(path, q, None, None, typ, "scope-premise", "flag", note=note))
+    for q, g in [("How many doors are on the 3rd floor?", 42), ("How many doors are on floor 5?", 39)]:
+        out.append(row(E, q, g, "count", "count", "scope-ordinal", "same", note="Estonian 3./5.korrus"))
+
+    # ===== v9 (05:05): a Finnish judge on the demo drawings (Junction is in Helsinki) ============================
+    # Finnish counts storeys from the ground: '1. kerros' = the ground floor = esplanades '1.korrus' (Estonian, same).
+    fi_judge = [
+        (E, "Montako ikkunaa ensimmäisessä kerroksessa on?", 55, "count", "count", "1. kerros = 1.korrus 55"),
+        (E, "Kuinka monta huonetta tässä kerroksessa on?", 50, "count", "count", "IfcSpace in 1.korrus"),
+        (E, "Montako pilaria tässä kerroksessa on?", 37, "count", "count", "IfcColumn in 1.korrus"),
+        (E, "Mikä on käytävän KORIDOR (119) pinta-ala?", 63.84, "m2", "area", "dataset gold 63.84"),
+        (E, "Paljonko tämän kerroksen ovet maksavat yhteensä, jos yksi ovi maksaa 450 euroa?", 20700, None, "count",
+         "46 x 450 (price; scored as a number)"),
+        (E, "Montako kerrosta rakennuksessa on?", 5, "count", "count", "1.-5.korrus (+ foundation and roof levels)"),
+        (E, "Montako ovea viidennessä kerroksessa on?", 39, "count", "count", "5. kerros = 5.korrus 39"),
+        (SW, "Montako asuntoa tässä kerroksessa on?", 4, "count", "count", "dataset apartments 4"),
+        (SW, "Montako ovea pohjapiirroksessa on?", 36, "count", "count", "dataset doors 36"),
+        (SW, "Mikä on asunnon B pinta-ala?", 80.83, "m2", "area", "dataset apartment B 80.83"),
+        (SW, "Montako WC-istuinta ja pesuallasta piirustuksessa on yhteensä?", 8, "count", "count", "WC 4 + basins 4"),
+        (SW, "Kuinka monta neliötä asunnot A ja B ovat yhteensä?", 161.17, "m2", "area", "80.83 + 80.34"),
+        (CC, "Onko asunnossa sauna?", "yes", None, "text", "dataset saunas 1"),
+        (CC, "Montako WC-istuinta asunnossa on?", 2, "count", "count", "dataset WC seats 2"),
+    ]
+    for path, q, g, unit, typ, note in fi_judge:
+        kind = "yesno:fi-judge" if typ == "text" else "judge-fi:" + path.split("/")[1].split("_")[0]
+        out.append(row(path, q, g, unit, typ, kind, "same", note=note))
+
+    # ===== v10 (05:10): follow-up questions on the two historical scans in the tour ===============================
+    # Gold for HABS vi0026 sheet 3 from its printed title block (W5 04:10: 'HEAD HOUSE AND RESIDENCE NORTH ELEVATION',
+    # 'SCALE 1/4"=1'-0"', 'DELINEATED BY: CHALMERS G. LONG, JR., 1977'); text rows are scored by meta.accept
+    # (any listed substring in the answer, case/space-insensitive). False premises expect a flag.
+    H = "data/habs/vi0026_sheet_00003.jpg"
+    FN = "data/finna/mfa.81125dbb-8b52-48e3-bc9d-1128e233ac93.jpg"
+    scans = [
+        (H, "When was this drawing made?", ["1977"]),
+        (H, "Who drew this sheet?", ["Chalmers", "Long"]),
+        (H, "What is the scale of this drawing?", ["1/4", "1:48", "1 : 48"]),
+        (FN, "What is the scale of this drawing?", ["1:500", "1/500", "1 : 500"]),
+    ]
+    for path, q, acc in scans:
+        r_ = row(path, q, acc[0], None, "text", "scan:text", "same", note="printed on the sheet")
+        r_["meta"]["accept"] = acc
+        out.append(r_)
+    for path, q, note in [
+        (H, "How many bedrooms are shown on this floor plan?", "the sheet is an elevation, not a floor plan"),
+        (H, "What is the total floor area of the residence in square metres?", "an elevation shows no floor area"),
+        (FN, "How many seats does the stadium have?", "a site plan does not show seats"),
+        (FN, "How many doors are on this floor plan?", "it is a 1:500 site plan, not a floor plan"),
+    ]:
+        out.append(row(path, q, None, None, "other", "scan:premise", "flag", note=note))
+
+    # ===== v11 (05:12): number formats a European writes — thousands separators and decimal commas ==============
+    # "1,200" in English = 1200; "1.200" (de) and "1'200" (Swiss) = 1200; "1 200" (fi/fr) = 1200; "450,50" = 450.5.
+    for path, q, g, typ in [
+        (E, "If each door costs 1,200 euros, what do all the doors on '1.korrus' cost in total?", 55200, "count"),
+        (E, "If each door costs €1,500, what do all the doors on '1.korrus' cost in total?", 69000, "count"),
+        (E, "Wenn eine Tür 1.200 € kostet, was kosten alle Türen auf '1.korrus' zusammen?", 55200, "count"),
+        (E, "Jos yksi ovi maksaa 1 200 euroa, paljonko kaikki ovet kerroksessa '1.korrus' maksavat yhteensä?", 55200,
+         "count"),
+        (E, "If each door costs 450,50 euros, what do all the doors on '1.korrus' cost in total?", 20723, "count"),
+        (SW, "If each door costs 1,200 euros, what do all the doors on this floor plan cost in total?", 43200, "count"),
+        (SW, "Wenn eine Tür 1'200 CHF kostet, was kosten alle Türen auf diesem Grundriss?", 43200, "count"),
+        (SW, "Flooring costs 1,250 CHF per m². What does flooring apartment B cost?", 101037.5, "count"),
+        (SW, "Ist Wohnung B grösser als 80,5 m²?", "yes", "text"),
+        (SW, "Ist Wohnung B grösser als 81,2 m²?", "no", "text"),
+    ]:
+        kind = "yesno:numfmt" if typ == "text" else "numfmt"
+        out.append(row(path, q, g, None, typ, kind, "same", note="thousands separator / decimal comma"))
+
     with open(OUT, "w", encoding="utf-8") as f:
         for r in out:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")

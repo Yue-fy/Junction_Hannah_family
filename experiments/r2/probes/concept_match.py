@@ -32,7 +32,9 @@ tk = [json.loads(x) for x in (S / "artifacts/F/trigger_known.jsonl").open()]
 sets.append(("belek", extra))
 
 PROMPTS = {"A (no glossary)": L._TR_SYSTEM_BASE, "B2 (English terms)": L._TR_SYSTEM,
-           "B3 (B2 + source-language hints; default since 05:00)": L._TR_SYSTEM + L._TR_GLOSSARY}
+           "B3 (B2 + source-language hints; default)": L._TR_SYSTEM + L._TR_GLOSSARY,
+           "B4 (B3 + quantity/unit hints; not used)": L._TR_SYSTEM + L._TR_GLOSSARY + L._TR_GLOSSARY_Q}
+L._TR_GLOSSARY_Q = ""
 L._TR_GLOSSARY = ""  # the loop below sets the whole system prompt
 
 

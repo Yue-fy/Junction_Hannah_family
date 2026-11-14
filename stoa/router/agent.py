@@ -169,6 +169,10 @@ def _fmt(v) -> str:
     return f"{x:.4g}" if abs(x) < 1 else f"{x:.3f}".rstrip("0").rstrip(".")
 
 
+# W5 04:12: "46 doors x 450 EUR" showed 6 boxes; pass every counted item (the card groups 2D+3D per GUID, caps at 80 rows)
+EV_PER_STEP = 120
+EV_TOTAL = 300
+
 class Agent:
     """`ask_fn(path, question) -> Answer` answers simple sub-questions (the pipeline's atomic cascade)."""
 
@@ -501,12 +505,12 @@ class Agent:
                 conf *= max(0.05, c)
             assumptions.append("answer chosen by comparing the tool results above")
             for _, _, ev, w in asked:
-                evidence += [e.model_copy(update={"note": (f"{w[5:60]} — {e.note}" if e.note else w[5:60])}) for e in ev[:6]]
+                evidence += [e.model_copy(update={"note": (f"{w[5:60]} — {e.note}" if e.note else w[5:60])}) for e in ev[:EV_PER_STEP]]
         else:
             missing.append("the agent's answer is not backed by a tool result")
         cost.wall_seconds = round(time.perf_counter() - t0, 3)
         trace.insert(0, f"agent: general tool-using path ({len(trace)} steps, {cost.llm_calls} LLM calls)")
-        return Answer(value=final, unit=None, confidence=round(min(conf, 0.95), 3), evidence=evidence[:20], trace=trace,
+        return Answer(value=final, unit=None, confidence=round(min(conf, 0.95), 3), evidence=evidence[:EV_TOTAL], trace=trace,
                       solver="agent", assumptions=assumptions, missing=missing, cost=cost)
 
     def _finish(self, final, unit, results, evidence, trace, assumptions, missing, cost, t0, question) -> Answer:
@@ -569,14 +573,14 @@ class Agent:
             if value is not None:
                 missing.append("the agent's answer is not backed by a tool result")
         for _, _, ev, w in used:
-            for e in ev[:6]:
+            for e in ev[:EV_PER_STEP]:
                 evidence.append(e.model_copy(update={"note": (f"{w[5:60]} — {e.note}" if e.note else w[5:60])}))
         if value is None:
             missing.append("the agent did not reach an answer")
         cost.wall_seconds = round(time.perf_counter() - t0, 3)
         trace.insert(0, f"agent: general tool-using path ({len(trace)} steps, {cost.llm_calls} LLM calls)")
         return Answer(value=value, unit=unit if unit not in ("", "none") else None, confidence=round(min(conf, 0.95), 3),
-                      evidence=evidence[:20], trace=trace, solver="agent", assumptions=assumptions, missing=missing,
+                      evidence=evidence[:EV_TOTAL], trace=trace, solver="agent", assumptions=assumptions, missing=missing,
                       cost=cost)
 
 

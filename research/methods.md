@@ -534,3 +534,78 @@ exists and saves rooms + icons to artifacts/R1/cc5k_seg_live/; an uncached copy 
 in 4.7 s. Maps are keyed by file stem, so two different plans with the same file name would collide.
 How to use: answer a per-room question from the graph with the region box + icon boxes as evidence, and quote the
 room's label; if the region is `merged`, say so and answer for the region ("these two bedrooms have 2 windows").
+
+### 8i. Room graph vs the VLM and the pipeline on per-room questions (by-eye probe, leak-free plans)
+Why: 8h validated the graph's internals; this measures whether it answers the per-room questions a harder test
+may ask, against what the team ships today. Gold was written BY EYE (zoomed crops for every door/fixture call)
+before any method ran, on dev plans from CubiCasa5K's official TEST list (so D8 leak-free).
+Set v1 (development: 29 Qs, 8 plans) was used to find and fix failures; set v2 (confirmation: 14 Qs, 3 new plans)
+was written after the fixes were frozen. Files: `experiments/r1/room_graph/probe/probe_v1.jsonl`, `probe_v2.jsonl`
+(gold + how verified), `run.py answer|score`. Kinds: which room the sauna / walk-in closet / balcony / porch is
+entered from; windows or doors of a named room; rooms with a toilet; rooms off the hall; largest room; summed
+printed areas; total area.
+
+Method "graph": `graph_text(room_graph(path, printed=True))` + the question → local Qwen3-VL-8B as a TEXT model
+(no image), system prompt with a Finnish room-code glossary, JSON answer. ~1.4–1.6k tokens in / 60 out per
+question + one cached VLM call per plan that reads printed areas (8e) + CC5K on CPU (cached, or ~3–10 s live).
+
+| Method | v1 (dev, 29) | v2 (confirm, 14) | counts v2 | areas v2 | text v2 |
+|---|---:|---:|---:|---:|---:|
+| pipeline (night dde6347, default) | 17 | 6 | 1/4 | 1/3 | 4/7 |
+| vlm_direct (base VLM, image) | 19 | 6 | 1/4 | 1/3 | 4/7 |
+| VLM + image + my glossary/JSON prompt | 21 | 9 | 1/4 | 1/3 | 7/7 |
+| **room graph + 8B text LLM (final code)** | **25** | **11** | **3/4** | **2/3** | 6/7 |
+Paired (exact McNemar): v2 graph vs pipeline 5 right-only vs 0 (p = 0.062), vs vlm_direct 5 vs 0 (p = 0.062);
+v1 vs pipeline 10 vs 2 (p = 0.039). Small n: the direction is consistent on both sets, the size is not pinned down.
+Where it wins: windows/doors of ONE room (VLMs answer the whole plan's count or guess 2), "through which room is the
+sauna entered" (6 such questions over v1+v2: pipeline 1/6, vlm_direct 1/6, graph 6/6; the VLM paths answer 'living
+room' / 'master bedroom' from layout priors), sums of printed room areas.
+Fixes made on v1 (generic, all listed as known failures in 8h before the probe): (1) the printed label's room kind
+overrides the CC5K class when they disagree ('H' segmented as undefined → bedroom; CC5K class kept as
+`cls_cc5k`); (2) printed areas attached to rooms (`printed=True`; also numbers inside labels such as
+'MAKUUHUONE 13,1', which the area reader misses because there is no unit); (3) a region holding two printed room
+areas is flagged `merged`; (4) the text says printed areas are exact and estimates ±50%. v1 went 22 → 25.
+Remaining failures (v2): plan text rotated 90° → no printed areas or labels read → the LLM sums rough estimates
+(37.5 asked, 44.5 answered; fix: retry the area reader on the rotated image when it finds nothing); LLM arithmetic
+slips (12.5 + 12.0 → 24.0; route sums through a calculator, as W4's agent does); a toilet count of 3 for 2 by every
+method (a shower read as a toilet); 'porch entered from' → entry (the porch door was not linked to the living room).
+PITFALL found on the way (pipeline, not the graph): per-room counts get whole-plan answers. "How many windows does the
+living room have?" → raster_cc5k's drawing count 3 (gold 1); "windows of the two bedrooms in total" → compose
+parses windows + bedrooms = 6; "doors of the kitchen" → agent 2; "rooms that contain a toilet seat" → WC-room count 1
+at conf 0.75. Confidence was ≤ 0.48 on all but the last, so calibration mostly held; the scope was lost.
+How to use: an agent tool `room_graph(path)` → graph_text for cubicasa-style rasters whenever the question names a
+room or a relation (of the kitchen / entered from / next to / opens onto / largest room / area of the bedrooms).
+**Update (same cycle): wire-ready `solve()` and a third, untouched set.** `experiments/r1/room_graph/answer.py`
+`solve(path, question) -> stoa.contract.Answer` (value, unit, provisional confidence, evidence = boxes of the rooms
+used + the windows / doors / fixtures the question is about, image_px; trace; assumptions; missing). Changes after
+v1/v2: the LLM lists the numbers to add and Python adds them, only when its own value is within 10% of the sum (an
+arithmetic slip; a bigger gap = another basis such as a printed apartment total, kept); KHH is a utility room, not a
+bath (my naming map had it wrong); the area reader, when it finds no area with a unit, also tries unit-less numbers
+and the image turned 90° each way and keeps the orientation with the most areas (tie → turned), items flagged
+`unitless` (conf 0.6 instead of 0.85). Scoring made stricter for every method: an answer naming a different room that
+shares the type word ('bathroom (KHH)' when the sauna opens to PH) is wrong — this moved graph v2 from 11 to 10.
+| Set | solve() | pipeline | vlm_direct |
+|---|---:|---:|---:|
+| v1 (dev, 29) | 23 | 17 | 19 |
+| v2 (used to debug solve(), 14) | 11 | 6 | 6 |
+| **v3 (untouched confirmation, 11 Qs / 3 new plans)** | **8** | 4 | 4 |
+| all 54 Qs / 14 plans | **42 (78%)** | 27 (50%) | 29 (54%) |
+v3: 4 vs 0 discordant (p = 0.125). All 54: vs pipeline 18 vs 3 (McNemar p = 0.0015), **+27.8 pts, 95% plan-cluster
+bootstrap [+15.4, +41.4]**; vs vlm_direct 16 vs 3 (p = 0.004). v1/v2 were used for development, so the pooled gain is
+optimistic; v3 alone agrees in direction. Cost per question: one local 8B text call (~1.5k tokens in) + the plan's
+area reads (1 cached VLM call, 3 when nothing with a unit is printed) + CC5K on CPU; $0 hosted.
+v3 misses (all methods): the balcony door of a bedroom that also opens to the living room (all say living room); a
+closet entered from the hall (solve says bedroom); upper-floor bedroom areas on a two-storey sheet (graph has no
+floor split: 25.0 for 36.5).
+**Final version (night-R1, this commit):** prompt asks for the label quoted in the graph (no invented codes: it wrote
+'bathroom (KPH)' where the plan prints PH) and internal ids are stripped from text answers ('(R9)' → the room's
+label or nothing). Same cached LLM calls otherwise. Scores: v1 24/29, v2 12/14, v3 7/11 (ed6489a had 8/11 on v3:
+one balcony answer flipped from living room to bedroom, LLM wobble) → **43/54 (80%) vs pipeline 27/54, +29.6 pts
+[+18.5, +40.7], McNemar 19 vs 3 p = 0.0009; vs vlm_direct 17 vs 3 p = 0.003**; v3 alone 3 vs 0 (p = 0.25).
+Read: a robust direction over 14 plans, a size between ~+15 and +40 points; v3 is too small to confirm on its own.
+NEGATIVE (same cycle): splitting a sheet into its separate drawings (two floors side by side; components of the
+dilated footprint ≥ 15%: 6007 and 4828 split 52/48 and 57/43, single plans 99–100%) and prefixing each room line
+with [A]/[B] + "the ground floor normally has the entrance and kitchen" fixed no probe answer and broke 2 on the one
+two-storey v3 plan (4828, whose segmentation also merges TYÖH + KHH + LH into one region). Kept in the graph dict
+(`parts`, `room['part']`), off in graph_text (show_parts=False). Per-floor questions need a floor label reader
+('1 KRS' / '2 KRS', 'upper floor') and better segmentation first; n = 2 plans is too few to tune on.

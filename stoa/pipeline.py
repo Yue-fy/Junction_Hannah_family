@@ -81,6 +81,32 @@ _COUNT_CUE = re.compile(r"\b(?:quant[oa]s|kolik|ko[lľ]ko|koliko|kiek|h[aá]ny|k
                         r"tally|total number|count)\b", re.I)
 
 
+_NOT_CLASSES = {"room", "unknown", "sanitary", "apartment", "storey"}  # scopes/containers, not counted objects
+
+
+def _unused_classes(question: str, ans: Answer) -> set[str]:
+    """Object classes a multi-class question names that the answer's own trace and evidence never mention."""
+    from stoa.router.intent import targets_mentioned
+
+    named = set(targets_mentioned(question)) - _NOT_CLASSES
+    if len(named) < 2:
+        return set()
+    text = " ".join([*map(str, ans.trace), *(e.note or "" for e in ans.evidence)])
+    return named - set(targets_mentioned(text))
+
+
+# a rules solver saying the question's premise is false: the named thing is labelled otherwise / does not exist / the
+# drawing does not record that property (W2 05:02, W1 'could not resolve', Q's false premises)
+_PREMISE = re.compile(r"is labelled '|labelled '[^']*', not|does not record|could not resolve|does not exist|no such "
+                      r"(?:room|storey|space|apartment|model|sheet)|not on this (?:plan|floor|sheet)", re.I)
+
+
+def _premise_flag(unsure) -> str | None:
+    if unsure is None:
+        return None
+    return next((m for m in unsure[1].missing if _PREMISE.search(str(m))), None)
+
+
 def _excluded_apartment(question: str) -> str | None:
     """The ONE apartment a question with an exclusion cue names ("... without apartment B", "leave B out"), else None."""
     if "rest" not in modifiers(question):
@@ -100,6 +126,20 @@ def _echoes_question(value, question: str) -> bool:
                for t in re.findall(r"(?<![\w.])\d+(?:[.,]\d+)?(?![\w.])", q))
 
 
+def _question_numbers(question: str) -> list[float]:
+    q = re.sub(r"'[^']*'|\"[^\"]*\"|«[^»]*»|„[^“”]*[“”]", " ", question)
+    return [float(t.replace(",", ".")) for t in re.findall(r"(?<![\w.])\d+(?:[.,]\d+)?(?![\w.])", q)]
+
+
+def _code_applied_all(question: str, trace) -> bool:
+    """ifc's own arithmetic ('outer operation: factor 450 EUR per door' / 'per door') is trusted only when that line
+    uses EVERY number of the question: "35 € per door plus 10 € of brushes" -> 'factor 35' alone gave 1610 @ 0.92."""
+    # (its op line echoes the rest of the phrase, "factor 35 EUR per door plus 10 euros of bru", so matching numbers
+    # against it is not proof: one stated number at most, else the agent does the arithmetic)
+    ops = [str(t) for t in trace if re.match(r"outer operation: (?:factor|per)\b", str(t))]
+    return bool(ops) and len(_question_numbers(question)) <= 1
+
+
 def _tokens(s: str) -> set[str]:
     return set(re.findall(r"[^\W_]+", str(s).lower()))
 
@@ -115,6 +155,14 @@ CC5K_KEYS = {"count:window:drawing", "count:door:drawing", "count:wc:drawing", "
 GATING_CC5K = next((f for f in (Path(__file__).parent / "router" / "gating_cc5k.json",
                                  Path(__file__).parent / "solvers" / "raster_cc5k" / "gating_cc5k.json") if f.exists()),
                    Path(__file__).parent / "router" / "gating_cc5k.json")
+# cubicasa room-label kinds -> R1's room-graph region test (rooms: {'cls', 'label', 'bbox', ...})
+ROOM_KINDS = {
+    "bedroom": lambda r: r.get("cls") == "bedroom",
+    "kitchen": lambda r: r.get("cls") == "kitchen",
+    "sauna": lambda r: r.get("cls") == "sauna",
+    "wc_room": lambda r: r.get("cls") == "bath" and bool(re.search(r"\bWC\b", r.get("label") or "")),
+    "bathroom": lambda r: r.get("cls") == "bath" and not re.fullmatch(r"\s*WC\s*", r.get("label") or ""),
+}
 IMG_EXT = (".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp", ".gif")
 # tier of each solver (cost order); unknown names count as "local"
 TIER = {"dxf": "deterministic", "ifc": "deterministic", "schedule": "deterministic", "pdf_vector": "deterministic",
@@ -193,11 +241,16 @@ class Pipeline(BaseSolver):
                  max_tries: int | str = 3, vlm_args: str | dict | None = None, use_gate: int | str = 1,
                  compose: int | str = 1, normalise: int | str = 1, crosscheck: int | str = 1, agent: int | str = 1,
                  raw_first: int | str = 1, raw_accept: float | str = 0.45, cc5k: int | str = 1, lora: int | str = 1,
-                 lora_second: int | str = 0, lora_conf: str = "own", translate: int | str = 1, **kwargs):
+                 lora_second: int | str = 0, lora_conf: str = "own", translate: int | str = 1,
+                 translate_cap: float | str = 0.9, **kwargs):
         super().__init__(**kwargs)
         # R2's language front end (stoa.llm.should_translate / to_english): a non-English question the rules can't read
         # is translated to English once (local model, quoted names/numbers verbatim) and answered in English
         self.translate = bool(int(translate))
+        # max confidence of an answer to a machine-translated question without extra structure (with: UNSEEN_MAX).
+        # 0.9 vs 0.75 on lang4b / F's hardL_open / R2's lang4: ECE 0.187/0.140/0.184 vs 0.239/0.176/0.253, the >= 0.8
+        # bin 97.1/99.1/100% right (R2/F 04:57: right translated answers all sat at 0.75)
+        self.translate_cap = float(translate_cap)
         self.accept = float(accept)
         self.agree = {"1": "cheap", "0": "never", "2": "always"}.get(str(agree), str(agree))  # cheap|never|always
         self.api = bool(int(api))
@@ -280,13 +333,17 @@ class Pipeline(BaseSolver):
         if tr_cost:
             ans.cost = _cost_of(ans).add(tr_cost)
         if tr_note and question != asked:
-            # every gate/template rate was measured on questions WRITTEN in that wording; a machine translation can
-            # slip on a word (R2: "vasche da bagno" -> bathrooms) and still match a template -> never the trust bin
-            ans.trace = [f"language front end: {tr_note}"] + ans.trace
-            ans.assumptions = [*ans.assumptions, tr_note]
-            if ans.value is not None and ans.confidence > UNSEEN_MAX:
-                ans.trace.append(f"translated question: confidence capped at {UNSEEN_MAX}")
-                ans.confidence = UNSEEN_MAX
+            if ans.value is not None and ans.confidence < 0.5:
+                ans = self._original_if_sure(path, asked, ans, tr_note)
+            if not (ans.trace and str(ans.trace[0]).startswith("language front end")):
+                # every gate/template rate was measured on questions WRITTEN in that wording; a machine translation
+                # can slip on a word (R2: "vasche da bagno" -> bathrooms) and still match a template -> no trust bin
+                ans.trace = [f"language front end: {tr_note}"] + ans.trace
+                ans.assumptions = [*ans.assumptions, tr_note]
+                cap = self.translate_cap if not extra_structure(question) else UNSEEN_MAX
+                if ans.value is not None and ans.confidence > cap:
+                    ans.trace.append(f"translated question: confidence capped at {cap}")
+                    ans.confidence = cap
         elif tr_note:
             ans.trace = [f"language front end: {tr_note}"] + ans.trace
         if ans.value is not None and str(ans.unit or "").lower() == "count" and ans.confidence > 0.3 and \
@@ -296,6 +353,23 @@ class Pipeline(BaseSolver):
             ans.trace.append("a count answer, but the question asks no 'how many': confidence capped at 0.3")
             ans.confidence = 0.3
             ans.missing = [*ans.missing, "the question does not ask for a number of things; the answer is a count"]
+        if ans.value is not None and ans.confidence > 0.3 and str(ans.unit or "count").lower() == "count":
+            it_q = parse(question)
+            v = _num(ans.value)
+            if it_q.task == "count" and v is not None and abs(v - round(v)) > 1e-6 and not (
+                    set(modifiers(question)) & {"avg", "ratio", "share", "diff", *DERIVED}):
+                # F 04:34: a count answered with a fraction: 0 of 4,238 count questions on dev/hard/hard2/hard2q/hard3/
+                # test, 4 on hardL as-is (all wrong, 3 at >= 0.8: foreign questions the parse misread)
+                ans.trace.append(f"a count question answered with a fraction ({ans.value}): confidence capped at 0.3")
+                ans.confidence = 0.3
+                ans.missing = [*ans.missing, "a count should be a whole number; this answer may read the wrong quantity"]
+        if ans.value is not None and ans.confidence < 0.4 and not ans.missing:
+            # Q 05:04: "How many seats does the stadium have?" -> agent 514 @ 0.34 with nothing in missing. A low
+            # confidence must say what is missing (Stoa: best estimate + what would make it sure)
+            grounded = not any("ungrounded" in str(t) for t in ans.trace)
+            ans.missing = [("the number is not traced to any value read from the drawing (an estimate); " if not grounded
+                            else f"no reliable reading ({ans.solver}, confidence {ans.confidence:.2f}); ")
+                           + "a label, table or model property stating it directly would settle it"]
         question = asked
         ans.cost.wall_seconds = round(time.perf_counter() - t0, 4)
         if ans.value is not None and "vlm_" in (ans.solver or "") and _echoes_question(ans.value, question):
@@ -338,7 +412,52 @@ class Pipeline(BaseSolver):
         it2 = parse(tr.text)
         if it2.target in (None, "unknown"):
             return question, None, cost  # the English reads no better than the original
+        from stoa.llm import COVERED_LANGS, lang_guess
+        from stoa.router.intent import targets_mentioned
+
+        # only where the rules' class words are reliable (en/fi/de/fr/it); in other languages a class match is often
+        # spurious (TR 'döşemelerin' -> door; PT/LT '(... WC ...)' clauses) and rejecting the translation lost 7
+        lost = (set(targets_mentioned(question)) - set(targets_mentioned(tr.text))
+                if lang_guess(question) in COVERED_LANGS else set())
+        if lost:
+            # Q 04:48: IT "... WC e lavabi" (wc + washbasin, read by the rules) -> "toilets and sinks" -> dxf dropped
+            # a class (compose:it 6/6 -> 3/6). The rules already read the object classes; a translation that changes
+            # them is a slip, not a better reading
+            return question, (f"a machine translation (\"{tr.text}\") changed the object classes the question names "
+                              f"({', '.join(sorted(lost))} lost); answered the original wording"), cost
         return tr.text, tr.note, cost
+
+    def _original_if_sure(self, path: str, asked: str, ans: Answer, trace_note: str) -> Answer:
+        """The translated reading came back unsure: a deterministic solver that is sure about the ORIGINAL wording
+        wins (S0/F 04:51: PL 'Ile belek … w modelu …' -> 'How many balconies' -> 0 @ 0.3, while ifc read the original
+        as beams: 10 @ 0.97). Only rules solvers are asked (no LLM)."""
+        for name in [c for c in route(path, parse(asked)) if TIER.get(c) == "deterministic"]:
+            s = self._get(name)
+            if s is None:
+                continue
+            try:
+                if not s.can_handle(path, asked):
+                    continue
+                a = s.solve(path, asked)
+            except Exception:  # noqa: BLE001
+                continue
+            if not isinstance(a, Answer):
+                a = Answer.model_validate(a)
+            if a.value is None or a.confidence < 0.9 or a.confidence <= ans.confidence:
+                continue
+            out = a.model_copy(deep=True)
+            out.cost = _cost_of(ans).add(_cost_of(a))
+            out.confidence = round(min(a.confidence, UNSEEN_MAX), 3)
+            out.trace = [f"language front end: {trace_note}",
+                         f"the translated reading was unsure ({ans.value} {ans.unit or ''}, conf {ans.confidence:.2f}); "
+                         f"{name} on the ORIGINAL wording: {a.value} {a.unit or ''} at conf {a.confidence:.2f} -> kept "
+                         f"(capped at {UNSEEN_MAX}: a question in a language the rules do not cover)"] + \
+                        [f"[{name}] {t}" for t in a.trace[-8:]]
+            out.missing = [*a.missing, f"the English translation gave {ans.value} {ans.unit or ''} at conf "
+                                       f"{ans.confidence:.2f}"]
+            out.solver = f"pipeline/{name}"
+            return out
+        return ans
 
     def _solve_composed(self, path: str, question: str, plan) -> Answer:
         trace = [f"compound question → {plan.op} over {len(plan.subs)} parts: " + ", ".join(plan.labels)]
@@ -457,7 +576,10 @@ class Pipeline(BaseSolver):
                                              for m in unsure[1].missing)
         if op_flag:
             trace.append(f"{unsure[0]} flagged an operation it did not apply: no canonical rewrite")
-        if self.normalise and not known_template(question) and not modifiers(question) and not op_flag:
+        premise = _premise_flag(unsure)
+        if premise:
+            trace.append(f"{unsure[0]} says the question's premise does not hold ({premise[:90]}): no canonical rewrite")
+        if self.normalise and not known_template(question) and not modifiers(question) and not op_flag and not premise:
             # the canonical template drops operators ("average", "share", "not in apartment A"): never for those
             canon = canonical(src, intent)
         total = Cost()
@@ -556,13 +678,26 @@ class Pipeline(BaseSolver):
             best.solver = n_u
         if best is None:
             best = self._prior_answer(src, intent, trace, gate, question)
+        if premise and best.value is not None and best.confidence > 0.3:
+            # W2 05:02: "What's the area of room 6.09 (Cuisine)?" (6.09 is not the Cuisine) came back at 0.99 because
+            # another path answered the room number alone; the rules' 'labelled X, not Y' must survive
+            trace.append(f"premise check: {premise[:100]} -> confidence capped at 0.3")
+            best.confidence = 0.3
+            if premise not in best.missing:
+                best.missing = [*best.missing, premise]
         if self.cc5k and src == "cubicasa5k" and intent.key in CC5K_KEYS and best.value is not None and \
                 best.solver != "raster_cc5k":
             self._cc5k_evidence(path, canon or question, best, trace, intent.key)
+        elif self.cc5k and src == "cubicasa5k" and intent.task == "count" and intent.target in ROOM_KINDS and \
+                best.value is not None and not best.evidence:
+            self._room_evidence(path, best, trace, intent.target)
         if self.crosscheck and best.value is not None:
             self._kg_crosscheck(path, intent, best, trace)
-        if intent.task in ("area", "length", "volume") and best.value is not None and \
+        measured = any(re.search(r"scale bar|flood fill", str(x), re.I)
+                       for x in [*(e.note for e in best.evidence), *best.trace]) if best.value is not None else False
+        if intent.task in ("area", "length", "volume") and best.value is not None and not measured and \
                 Path(path).suffix.lower() in IMG_EXT and not ({".pdf", ".dxf", ".ifc"} & set(siblings(path))):
+            # (W3 04:50: raster measures with a graphic scale bar / flood fill: then the size IS measured)
             # Stoa: "documents may lack a scale" -> say so instead of implying a measurement
             best.assumptions = [*best.assumptions, "raster image with no known scale: the size is an estimate "
                                                    "(no dimension was measured on the drawing)"]
@@ -634,6 +769,33 @@ class Pipeline(BaseSolver):
                      f"{100 * p:.0f}% (cc5k_heldout n={n}) → first")
         return ["raster_cc5k"] + [c for c in order if c != "raster_cc5k"]
 
+    def _room_evidence(self, path: str, best: Answer, trace: list[str], target: str) -> None:
+        """Room-label counts on cubicasa (bedrooms, kitchens, saunas, bathrooms, WC rooms): the matching room regions of
+        R1's room graph (cached CC5K segmentation, no LLM, ~0.1 s) as evidence boxes WHEN their number equals the answer;
+        no confidence change (D8: the segmenter saw most cubicasa drawings in pretraining). S0 D16: evidence on dev
+        cubicasa 30.5% -> 47.6% (137 answers, 133 of them right) at $0, replacing the costly second reader."""
+        try:
+            from experiments.r1.room_graph.graph import room_graph
+
+            g = room_graph(path)
+        except Exception:  # noqa: BLE001
+            return
+        if not g:
+            return
+        rs = [r for r in g.get("rooms", []) if ROOM_KINDS[target](r)]
+        v = _num(best.value)
+        if v is None:
+            return
+        if len(rs) != round(v) or not rs:
+            trace.append(f"room segmentation (pretrained CubiCasa5K): {len(rs)} {target} region(s); no boxes attached")
+            return
+        best.evidence = [*best.evidence, *[Evidence(
+            file=path, bbox=[float(x) for x in r["bbox"]], bbox_space="image_px",
+            note=f"{target} region {r['id']} (CubiCasa5K room segmentation)"
+                 + (f", printed label '{r['label']}'" if r.get("label") else "")) for r in rs[:40]]]
+        trace.append(f"room segmentation (pretrained CubiCasa5K): {len(rs)} {target} region(s) = the answer ✓ "
+                     "(boxes attached as evidence; confidence unchanged)")
+
     def _cc5k_evidence(self, path: str, ask: str, best: Answer, trace: list[str], key: str = "") -> None:
         """The pretrained CubiCasa5K detector as a cross-check: agreement lends its symbol boxes (image_px) as evidence.
         No confidence change: its pretraining saw most of our cubicasa drawings (D8), so agreement is not independent."""
@@ -692,8 +854,8 @@ class Pipeline(BaseSolver):
             total = total.add(_cost_of(a))
             if a.value is None:
                 continue
-            if derived and not any(str(t).startswith("table QA code") or re.match(r"outer operation: (?:factor|per)\b", str(t))
-                                   for t in a.trace) and a.confidence >= self.raw_accept:
+            if derived and not any(str(t).startswith("table QA code") for t in a.trace) and \
+                    not _code_applied_all(question, a.trace) and a.confidence >= self.raw_accept:
                 # W1 04:15: ifc applies rates/prices in code ("outer operation: factor 450 EUR per door" / "per door";
                 # 26/26 right on derived.jsonl) -> trusted; its 'add N' is not ("15 metres of wall per day" -> "add 15"
                 # -> 19 at 0.92, gold 5.9 days), so add/remove stay capped for the agent
@@ -723,6 +885,27 @@ class Pipeline(BaseSolver):
                                          "operation was not applied"]
                 trace.append(f"{name} (question as asked): {a.value} {a.unit or ''}, but its evidence is only "
                              f"'{excl[0]}', which the question leaves out: unsure")
+                return None, (name, a)
+            said = next((str(t) for t in a.trace if re.search(r"not applied", str(t), re.I)), None)
+            if said and a.confidence >= self.raw_accept:
+                # the solver itself says part of the question was not applied, yet reports 0.9 (ifc on novel: "exclusion
+                # NOT applied: leaving out ?" 5 times, 1 wrong: 158.51 vs 190.82 m²). Never on dev/hard/hard2
+                a = a.model_copy(deep=True)
+                a.confidence = round(min(a.confidence, DERIVED_CAP), 3)
+                a.missing = [*a.missing, f"{name} says: {said[:120]} (the operation was not applied)"]
+                trace.append(f"{name} (question as asked): {a.value} {a.unit or ''}, but it says '{said[:80]}': unsure")
+                return None, (name, a)
+            unused = _unused_classes(question, a) if a.confidence >= self.raw_accept else set()
+            if unused:
+                # S0 04:01 'consume every content word': "How many toilets and sinks …" (a translation of wastafels)
+                # -> dxf counted toilets only (no 'sink' class on Swiss plans) at 0.95. A class the question names that
+                # never appears in the answer's own trace/evidence was not counted
+                a = a.model_copy(deep=True)
+                a.confidence = round(min(a.confidence, DERIVED_CAP), 3)
+                a.missing = [*a.missing, f"the question also names {', '.join(sorted(unused))}, which {name}'s answer "
+                                         "does not count: the operation was not applied to every class"]
+                trace.append(f"{name} (question as asked): {a.value} {a.unit or ''}, but its trace never mentions "
+                             f"{', '.join(sorted(unused))} (named in the question): unsure")
                 return None, (name, a)
             apt = _excluded_apartment(question) if name == "dxf" and a.confidence >= self.raw_accept and \
                 _UNIT_KIND.get(str(a.unit or "").lower()) == "area" else None
@@ -769,12 +952,20 @@ class Pipeline(BaseSolver):
         """Agent answer vs a deterministic solver's unsure answer to the same question: keep the surer, log both."""
         if unsure is None:
             return ans
+        premise = _premise_flag(unsure)
+        if premise and ans.value is not None and ans.confidence > 0.3:
+            ans.trace.append(f"premise check ({unsure[0]}): {premise[:100]} -> confidence capped at 0.3")
+            ans.confidence = 0.3
+            ans.missing = [*ans.missing, premise]
         n_u, a_u = unsure
         ans.cost = _cost_of(ans).add(_cost_of(a_u))
         if not _fits(intent.task, a_u):
             ans.trace.append(f"{n_u} answered {a_u.value} {a_u.unit} to a {intent.task} question: ignored")
             return ans
-        same = _agree(ans.value, a_u.value, intent.task)
+        x, y = _num(ans.value), _num(a_u.value)
+        # the 2% tolerance is for measured sizes; a price/rate/text answer must match exactly (1620 EUR is not 1610)
+        same = _agree(ans.value, a_u.value, intent.task) if intent.task in ("count", "area", "length", "volume") else (
+            abs(x - y) <= 1e-6 * max(1.0, abs(y)) if x is not None and y is not None else _agree(ans.value, a_u.value, "text"))
         note = (f"cross-check: agent {ans.value} = {n_u} {a_u.value} ✓" if same
                 else f"cross-check: agent {ans.value} ≠ {n_u} {a_u.value}")
         ans.trace.append(note)
