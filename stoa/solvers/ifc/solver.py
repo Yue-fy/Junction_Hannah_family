@@ -2613,8 +2613,10 @@ class IfcSolver(BaseSolver):
         mc_ = re.search(r"\b(most|fewest|least|greatest number of|highest number of|largest number of|lowest number of|"
                         r"smallest number of)\s+(?:\w+\s+){0,2}?(rooms?|spaces?|doors?|windows?|walls?|columns?|stairs?|"
                         r"slabs?|beams?)\b", qf)
+        pre_ = qf[:mc_.start()] if mc_ else ""
         if mc_ and it.metric in ("area", "text") and not re.search(r"\b(area|m2|square|sq|size|surface|volume|m3|length|"
-                                                                  r"large|big|small)\b", qf.replace(mc_.group(0), " ")):
+                                                                  r"large|big|small)\b", qf.replace(mc_.group(0), " ")) \
+                and re.search(r"\b(floors?|storeys?|stor(?:y|ies)|levels?)\b", pre_) and not re.search(r"\b(rooms?|spaces?)\b", pre_):
             it.metric = "count"
             if it.op in (None, "max", "min"):
                 it.op = "argmin" if mc_.group(1) in ("fewest", "least", "lowest number of", "smallest number of") else "argmax"
