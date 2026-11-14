@@ -207,7 +207,7 @@ def _read(path: str, backend: str, tile: int, upscale_to: int, max_tokens: int, 
     boxes = tile_boxes(W, H, tile)
     tl = TextLayer(path=path, size=(W, H), tiles=len(boxes))
 
-    def read_one(i_b):
+    def read_one(i_b, split: bool = True):
         i, (x0, y0, x1, y1) = i_b
         crop = img.crop((x0, y0, x1, y1))
         s = min(3.0, upscale_to / max(crop.size))
@@ -231,6 +231,22 @@ def _read(path: str, backend: str, tile: int, upscale_to: int, max_tokens: int, 
             notes.append(f"tile {i}: retry with repetition_penalty")
         elif r.finish_reason == "length":
             notes.append(f"tile {i}: text list truncated at {max_tokens} tokens")
+        if r.finish_reason == "length" and split and min(x1 - x0, y1 - y0) >= 300:
+            # a dense tile (R1 08:45: 9 of 20 CubiCasa tiles hit the cap, one plan came back with 3 texts): read its
+            # 2x2 sub-tiles too (each upscaled more) and merge; boxes go through the same overlap merge
+            mx, my = (x0 + x1) // 2, (y0 + y1) // 2
+            ox, oy = int(0.06 * (x1 - x0)), int(0.06 * (y1 - y0))
+            for it in items:
+                it.box = [round(it.box[0] + x0, 1), round(it.box[1] + y0, 1), round(it.box[2] + x0, 1),
+                          round(it.box[3] + y0, 1)]
+                it.tile = i
+            for sb in [(x0, y0, mx + ox, my + oy), (mx - ox, y0, x1, my + oy), (x0, my - oy, mx + ox, y1),
+                       (mx - ox, my - oy, x1, y1)]:
+                sub, snotes, sti, sto, snc = read_one((i, sb), split=False)  # boxes come back in image px
+                items += sub
+                tin, tout, ncalls = tin + sti, tout + sto, ncalls + snc
+            notes.append(f"tile {i}: truncated -> re-read as 2x2 sub-tiles")
+            return items, notes, tin + (r.prompt_tokens or 0), tout + (r.completion_tokens or 0), ncalls
         for it in items:
             it.box = [round(it.box[0] + x0, 1), round(it.box[1] + y0, 1), round(it.box[2] + x0, 1),
                       round(it.box[3] + y0, 1)]
