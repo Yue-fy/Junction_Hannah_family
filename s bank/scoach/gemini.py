@@ -9,7 +9,7 @@ from datetime import date
 DEFAULT_GEMINI_MODEL = 'gemini-3-flash-preview'
 MODEL_TIMEOUT_SECONDS = 9.0
 
-INTENTS = {'compare_periods', 'explain_change', 'show_transactions', 'preview_cashflow', 'plan_goal', 'safe_to_spend', 'investment_cashflow', 'home_financing_history', 'transaction_statistics', 'spending_profile', 'observed_tax_evidence', 'plan_tax'}
+INTENTS = {'compare_periods', 'explain_change', 'show_transactions', 'preview_cashflow', 'plan_goal', 'safe_to_spend', 'investment_cashflow', 'home_financing_history', 'transaction_statistics', 'spending_profile', 'observed_tax_evidence', 'vat_estimate', 'plan_tax'}
 PARAMETERS = {
     'compare_periods': {'period': str, 'comparison_period': str, 'category': str},
     'explain_change': {'period': str, 'comparison_period': str, 'category': str},
@@ -22,9 +22,10 @@ PARAMETERS = {
     'transaction_statistics': {'period': str, 'comparison_period': str, 'category': str, 'role': str, 'transaction_type': str, 'merchant_id': str},
     'spending_profile': {'period': str},
     'observed_tax_evidence': {'period': str},
+    'vat_estimate': {'period': str},
     'plan_tax': {},
 }
-REQUIRED = {'compare_periods': ['period', 'comparison_period'], 'plan_goal': ['target_cents', 'target_date'], 'spending_profile': ['period']}
+REQUIRED = {'compare_periods': ['period', 'comparison_period'], 'plan_goal': ['target_cents', 'target_date'], 'spending_profile': ['period'], 'vat_estimate': ['period']}
 ACTIONS = {
     'classify_row': {'transaction_ref': str, 'role': str},
     'exclude_from_scenario': {'transaction_ref': str, 'scenario_id': str},

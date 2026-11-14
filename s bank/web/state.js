@@ -1,5 +1,5 @@
 export function createState() {
-  return { customerId: 'CUST00001', selectedMonth: null, trendMonths: 12, observedStart: null, observedEnd: null, safeToSpend: null, investments: null, vat: null, view: 'home', overview: null, comparison: null, scenario: null, rows: [], goals: [], forecast: null, forecastAssumptions: {}, trends: null, exclusion: null, exclusionDetail: null, filter: null, transactionEvidence: null, pendingHandoff: null, busy: false, generation: 0, loadSequence: 0 };
+  return { customerId: 'CUST00001', selectedMonth: null, trendMonths: 12, observedStart: null, observedEnd: null, safeToSpend: null, investments: null, vat: null, view: 'home', overview: null, comparison: null, scenario: null, rows: [], categoryRows: [], categoryRowsAvailable: false, spendingGroup: 'all', categoryExpanded: false, selectedCategory: null, queryScope: null, conversation: [], goals: [], forecast: null, forecastAssumptions: {}, trends: null, exclusion: null, exclusionDetail: null, filter: null, transactionEvidence: null, pendingHandoff: null, pendingGoalCreation: null, busy: false, generation: 0, loadSequence: 0 };
 }
 export function selectPersona(state, customerId) {
   Object.assign(state, createState(), { customerId, trendMonths: state.trendMonths, generation: state.generation + 1 });

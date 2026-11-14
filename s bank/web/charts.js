@@ -1,7 +1,7 @@
 const esc = value => String(value ?? '').replace(/[&<>"']/g, x => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[x]));
 let chartLocale='en-IE', chartTranslate=null;
 export function configureCharts({locale,translate}){chartLocale=locale;chartTranslate=translate;}
-const ct=(key,values,fallback)=>chartTranslate?chartTranslate(key,values):String(fallback).replace(/\{(\w+)\}/g,(_,key)=>values?.[key]??'{'+key+'}');
+const ct=(key,values,fallback)=>{const translated=chartTranslate?.(key,values);return translated&&translated!==key?translated:String(fallback).replace(/\{(\w+)\}/g,(_,key)=>values?.[key]??'{'+key+'}');};
 const euro = value => new Intl.NumberFormat(chartLocale,{style:'currency',currency:'EUR'}).format(Number(value)/100);
 let sequence = 0;
 const svg = (title, description, body, height) => {
@@ -10,6 +10,59 @@ const svg = (title, description, body, height) => {
 };
 const empty = message => `<p class="empty-state">${esc(message)}</p>`;
 export const palette = ['#466d48','#c2d7a3','#e1bd91','#92a88b','#c7c8bd','#eadac2'];
+export const categoryPalette = Object.freeze({
+  'Housing':'#367d62', 'Utilities':'#8fac75', 'Groceries':'#b7cb63',
+  'Transportation':'#79b4b9', 'Restaurants':'#e7a274', 'Health':'#b5a0c7',
+  'Home & Tech':'#cfba84', 'Entertainment':'#d78eab', 'Lifestyle':'#8b9dc2',
+  'Travel':'#81b7a0'
+});
+
+const iconPaths = Object.freeze({
+  'Housing':'M3 10 12 3l9 7M5 9v11h14V9M9 20v-7h6v7',
+  'Utilities':'m13 2-8 12h6l-1 8 9-12h-6z',
+  'Groceries':'M3 5h2l2 12h11l3-9H6M9 21h.01M17 21h.01M10 4v7M7 7h6',
+  'Transportation':'M5 16H3V9l3-5h12l3 5v7h-2M5 16h14M5 9h14M6 16v4M18 16v4M7 12h.01M17 12h.01',
+  'Restaurants':'M5 3v7M9 3v7M5 7h4M7 10v11M17 21V3c-4 2-4 10 0 10',
+  'Health':'M10 3h4v7h7v4h-7v7h-4v-7H3v-4h7z',
+  'Home & Tech':'M3 4h18v12H3zM9 21h6M12 16v5',
+  'Entertainment':'m9 4 12-2v15M9 4v15M9 8l12-2M9 19c0 2-2 3-4 3s-3-1-3-2 2-3 4-3 3 1 3 2M21 17c0 2-2 3-4 3s-3-1-3-2 2-3 4-3 3 1 3 2',
+  'Lifestyle':'M5 7h14l2 14H3L5 7ZM8 8V6a4 4 0 0 1 8 0v2',
+  'Travel':'m3 10 8 2 4 9 2-1-1-9 6-6-1-2-7 5-9-2z'
+});
+
+export function categoryIcon(category) {
+  const path=iconPaths[category]||'M5 5h5v5H5zM14 5h5v5h-5zM5 14h5v5H5zM14 14h5v5h-5z';
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="${path}"/></svg>`;
+}
+
+/** Render a category-only consumption ring; source totals and category labels are supplied by the caller. */
+export function spendingRing(categories, selected=null) {
+  const rows=(Array.isArray(categories)?categories:[]).map(row=>({
+    ...row,
+    category:String(row.category??row.name??''),
+    label:String(row.label??row.category??row.name??''),
+    value:Number(row.total_cents??row.amount_cents??row.consumption_cents)
+  })).filter(row=>row.category&&Number.isSafeInteger(row.value)&&row.value>0);
+  const total=rows.reduce((sum,row)=>sum+row.value,0);
+  if(!total)return empty(ct('chart.noSpending',{},'No recorded spending in this selection.'));
+  const id='spending-ring-'+(++sequence),radius=110,circumference=2*Math.PI*radius;
+  const selectedCategory=typeof selected==='object'?selected?.category:selected;
+  const hasSelection=rows.some(row=>row.category===selectedCategory);
+  let offset=0;
+  const segments=rows.map(row=>{
+    const length=row.value/total*circumference;
+    const gap=Math.min(4,length*.2);
+    const percent=new Intl.NumberFormat(chartLocale,{style:'percent',maximumFractionDigits:1}).format(row.value/total);
+    const color=categoryPalette[row.category]||'#92ac87';
+    const label=`${row.label}: ${euro(row.value)} · ${percent}`;
+    const circle=`<circle class="ring-segment" cx="150" cy="150" r="${radius}" fill="none" stroke="${color}" stroke-width="32" stroke-dasharray="${(length-gap).toFixed(4)} ${(circumference-length+gap).toFixed(4)}" stroke-dashoffset="${(-offset-gap/2).toFixed(4)}" role="button" tabindex="0" aria-label="${esc(label)}" aria-pressed="${row.category===selectedCategory}" data-spending-category="${esc(row.category)}"><title>${esc(label)}</title></circle>`;
+    offset+=length;
+    return circle;
+  }).join('');
+  const description=rows.map(row=>`${row.label}: ${euro(row.value)}`).join('. ');
+  // Track and arcs share one SVG transform; CSS must not add a second rotation origin.
+  return `<svg xmlns="http://www.w3.org/2000/svg" class="spending-ring${hasSelection?' has-selection':''}" viewBox="0 0 300 300" role="group" aria-labelledby="${id}-title ${id}-desc"><title id="${id}-title">${esc(ct('chart.spendingCategories',{},'Spending by category'))}</title><desc id="${id}-desc">${esc(description)}. ${esc(ct('chart.selectCategory',{},'Select a segment or use the category list to explore its transactions.'))}</desc><g transform="rotate(-90 150 150)"><circle class="ring-track" cx="150" cy="150" r="${radius}" fill="none" stroke-width="32"/>${segments}</g></svg>`;
+}
 export function flowChart(flows) {
   const income = flows.find(row => row.role === 'income');
   const rows = flows.map((row,index)=>({...row,index})).filter(row => row.role !== 'income' && Number.isFinite(Number(row.total_cents)) && Math.abs(Number(row.total_cents)) > 0);

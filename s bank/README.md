@@ -4,41 +4,46 @@ S-Coach is a mobile-first, desktop-adaptive financial coach for the Junction 202
 
 The prototype runs locally by default. It uses no real customer data, makes no payments or credit decisions, and requires no third-party package for its core flow.
 
-**Current status:** the responsive demo and deterministic calculations are implemented. Natural-language scope interpretation is still incomplete; see [Known limitations](#known-limitations). A passing calculation test does not prove that the coach understood a question correctly.
-
-## Interface examples
-
-Screenshots from the running prototype's 14 November 2026 browser walkthrough, using the official synthetic demo data. These are actual interface captures, not design mockups. The same page adapts to each viewport.
-
-### Desktop overview
-
-![Desktop overview with a restaurant-spending insight, financial overview, and cash-flow preview](docs/images/home-desktop.png)
-
-### Phone and tablet
-
-| Phone · 390 px | Tablet · 768 px |
-|---|---|
-| <img src="docs/images/home-phone.png" width="240" alt="Phone home screen with one spending insight and bottom navigation"> | <img src="docs/images/home-tablet.png" width="470" alt="Tablet home screen with wider insight and account overview cards"> |
-
-### Trends and comparison
-
-![Desktop restaurant-spending trends with monthly bars and August versus September comparison](docs/images/trends-desktop.png)
-
-To explore the interfaces yourself, [start the app](#quick-start), then open the [local device preview](http://127.0.0.1:8088/device-preview.html). The screenshots are static; the preview includes interactive phone, tablet, and desktop presets.
+**Current status:** V2 has four primary pages—Home, Spending, Coach and Goals—with one spending ring, a full conversation page, title-only wishes and three guided customer stories. Coach now answers in prose first, keeps calculations behind supporting disclosures, and distinguishes everyday purchase plans from historical questions. It remains a local prototype; rendered desktop/mobile acceptance and live Gemini remain unverified. See the [conversation and logic audit](docs/CONVERSATION_REPAIR_ACCEPTANCE.md).
 
 ## What the prototype demonstrates
 
-- A financial overview with income, regular essentials, irregular essentials, everyday spending, saving/transfers, balance, trends, and selectable periods.
-- Guided coach topics and supported free-text patterns in English, Finnish, and Swedish. Optional Gemini can interpret additional query languages; live multilingual behavior has not been verified on this machine.
-- Account statistics calculated locally from explicitly selected rows. Correct arithmetic depends on selecting the intended category and period.
-- Restaurant totals, dining-out reduction scenarios, a neutral spender profile, and safe-to-spend. The partner's narrower taxi question remains a known defect.
-- A seven-day safe-to-spend estimate with reserve, qualified recurring outflows, historical spending buffer, assumptions, and source references.
-- A pattern-based 30-day cash-flow preview with editable assumptions and historical variation rather than false certainty.
-- Universal goals for a buffer, trip, vehicle, home, large purchase, or custom target.
-- Observed investment transfers only; no invented holdings, returns, risk, or product advice.
-- Optional historical mortgage context for the linked synthetic persona, never a current approval or affordability assessment.
-- Explicit tax-record evidence, a user-declared tax set-aside scenario, and a separate estimated VAT-inside-purchases lens.
-- A responsive phone/tablet/desktop experience and an unlinked local viewport preview utility.
+- **A clear financial home:** the last recorded balance and its date, one coaching action, three teaching baskets and a compact goal/wish summary. Spending owns the single interactive category ring and matching transaction details. Income and saving transfers stay separate from consumption; forecast, investment and VAT details are optional expansions.
+- **A complete Coach page:** a persistent conversation, visible account/date scope, starter questions, factual prose and recoverable errors. Calculation cards and charts support the answer through optional disclosures; earlier scenario actions remain attached to their original result. Home, Spending, Coach and Goals are the four primary destinations; Journal and notebook remain secondary. First-time visitors can try a short, skippable three-step tour and replay it later.
+- **Personalization with control:** choose a life goal, coaching style and spending to protect. Preferences work for the current visit; remembering them on this browser requires opt-in. Explicit conversational preferences produce a proposal for confirmation, never an automatic memory write.
+- **An editable notebook and financial journal:** add, edit or delete notes and revoke remembering. Structured goals and protected-spending choices guide current suggestions. Free-form notes are personal reflections for the user, not model instructions. The journal describes recorded income, housing payments and the largest purchase without inventing a biography.
+- **Goals at the customer's pace:** keep a wish with a title alone, explore it with Coach, then optionally supply an amount and date for a numeric plan. Wishes follow the same session-only/browser-memory consent as preferences. Optional milestones reflect the saved amount the customer entered; viewing or linking a scenario does not create saving progress or move money.
+- **Defined questions and exact calculations:** supported EN/FI/SV queries resolve category or merchant code, account, dates and metric before local calculations. Bounded follow-ups reuse a validated scope. Missing definitions or unavailable item details prompt clarification. Matching evidence follows the returned dates and filters.
+- **Planning with visible assumptions:** seven-day safe-to-spend, an explicitly labelled 30-day balance forecast, dining-reduction scenarios and goal pace. Plain summaries lead; calculations and evidence are available on demand, with technical hashes kept out of normal customer copy.
+- **Additional source-backed views:** observed investment transfers, optional linked historical mortgage context, explicit tax-record evidence, user-declared tax planning, and an estimated VAT-inside-purchases lens.
+- **One responsive application:** phone, tablet and desktop layouts, complete EN/FI/SV interface copy, and a local viewport preview utility. Optional Gemini can assist with additional query languages; live arbitrary-language behavior remains unverified.
+
+The current information hierarchy is recorded in [EXPERIENCE_V2_PLAN.md](docs/EXPERIENCE_V2_PLAN.md). Earlier design rationale and references to S-mobiili, Nordea, Monzo and Apple remain in [REDESIGN_PLAN.md](docs/REDESIGN_PLAN.md). [USER_TEST_JOURNEYS.md](docs/USER_TEST_JOURNEYS.md) defines eight customer journeys and 40 turns that evaluate usefulness, scope, readability and control; it is not a claim that human usability testing has already passed.
+
+## Interface examples
+
+<details>
+<summary>Earlier prototype screenshots — before the current redesign</summary>
+
+**These four images show the prior interface, captured on 14 November 2026. They do not show the V2 four-page layout, Coach page or wishes. No fresh browser capture of the redesign is claimed.** They are retained as historical project examples using synthetic data.
+
+### Earlier desktop overview
+
+![Earlier desktop overview before the current category-ring redesign](docs/images/home-desktop.png)
+
+### Earlier phone and tablet
+
+| Phone · 390 px | Tablet · 768 px |
+|---|---|
+| <img src="docs/images/home-phone.png" width="240" alt="Earlier phone home screen before the current redesign"> | <img src="docs/images/home-tablet.png" width="470" alt="Earlier tablet home screen before the current redesign"> |
+
+### Earlier trends and comparison
+
+![Earlier desktop restaurant-spending trends before the current redesign](docs/images/trends-desktop.png)
+
+</details>
+
+To explore the current interface, [start the app](#quick-start), then open the [local device preview](http://127.0.0.1:8088/device-preview.html).
 
 ## Quick start
 
@@ -132,7 +137,7 @@ PYTHONPATH="s bank" python3 -m scoach \
 
 Restart an already running server after changing environment configuration. `data.gemini_configured: true` in health only means configuration is present; it does not prove the key or remote model works. The latest local check had Gemini unconfigured. Live provider and arbitrary-language behavior remain unverified.
 
-Never commit a real key. Gemini receives an allowlisted, minimized context—not customer/account IDs, raw ledger rows, transaction references, mortgage event notes, or unrestricted actions. It may select an intent and phrase cited nonnumeric copy; Python performs every financial calculation. A bounded failure returns a deterministic answer with a diagnostic fallback reason. Enabling Gemini does not by itself resolve the known semantic defects.
+Never commit a real key. Gemini receives an allowlisted, minimized context—not customer/account IDs, raw ledger rows, transaction references, mortgage event notes, or unrestricted actions. It may select an intent and phrase cited nonnumeric copy; Python performs every financial calculation. A bounded failure returns a deterministic answer with a diagnostic fallback reason. Enabling Gemini does not add missing receipt items, holdings, verified tax liabilities, or unrestricted conversation memory.
 
 ## Tests
 
@@ -142,35 +147,44 @@ PYTHONPATH="s bank" python3 -m unittest discover -s "s bank/tests" -v
 
 HTTP integration tests need permission to bind a local test port. JavaScript checks use Node.js and are skipped when it is unavailable. The optional real-browser suite needs an existing Playwright installation and Chrome; set `SCOACH_PLAYWRIGHT_PATH` to the absolute module path to include it. Otherwise that browser test is skipped. No package installation is needed for the core Python tests.
 
-The earlier integration run passed 177 tests, including the browser suite. Later semantic audits found gaps that those assertions did not cover. Treat that result as historical test evidence, not proof of unrestricted conversational accuracy.
+Latest verification on 14 November 2026: **360 tests passed and one optional browser test skipped** out of 361 discovered. This includes planned-purchase intent and bounded price replies, natural-language tool summaries, retained actions and evidence scope, tax planning/liability separation, goal retry/link boundaries, title-only wishes and existing financial regressions. Independent source review found no remaining Critical/Important issues after repairs. JavaScript syntax and whitespace checks passed. Node-backed interaction tests use a minimal DOM, not a rendered browser. See the [conversation and logic audit](docs/CONVERSATION_REPAIR_ACCEPTANCE.md) for the current verification and remaining checks.
 
-Latest pre-push verification on 14 November 2026: **176 tests passed, one optional browser test skipped** (177 discovered). JavaScript syntax, Python compilation, documentation links, and screenshot files were checked. This run did not repeat the earlier browser walkthrough or a live Gemini request.
+Before this redesign, an integration run passed 177 tests including the browser suite. That browser run and the four screenshots describe the earlier interface; they do not establish fresh rendered visual acceptance. A live Gemini call has not been verified.
+
+The browser tool's saved origin permission currently blocks a rendered walkthrough. The user can inspect the local app and device preview manually; no alternate browser route is used to bypass that permission. Browser usability and live Gemini validation remain separate from calculation/helper assertions.
 
 ## Try the demo
 
-Select **Alex → September 2026 → English**, then open **Ask coach**. These baseline values assume the original demo classification; saved user corrections can affect derived results. Enter each question separately:
+Use **Try a story** to start Kai's weekly spending estimate, Alex's dining scenario, or Taylor's historical home-financing context. These are three real paths through the same data tools; Taylor's source records do not establish a current mortgage or family repayments. For the questions below select **Alex → September 2026 → English**, then open **Coach**. Values assume the original demo classification; saved user corrections can affect derived results. For a follow-up, ask `And groceries?` after the restaurant question; choose **Start a new question** to clear that context:
 
 | Question | Expected result |
 |---|---|
+| `I want to go see a movie this week` | Ask for the total budget; a plain `€20` reply continues this plan using the displayed historical account snapshot |
 | `How much did I spend on restaurants?` | EUR 225.70 across 10 purchases |
 | `How much did I spend on groceries?` | EUR 379.79 across 5 purchases |
+| `How much did I spend on restaurants in August 2026?` | EUR 115.43 across 10 purchases, even with September selected |
+| `How much did I spend on taxis in September 2026?` | No identified MCC 4121 rows; do not describe all Transportation as taxis |
 | `How much could I save if I reduced dining out by 20%?` | EUR 45.14, an unsaved scenario |
+| `How much could I save if I reduced dining out by 12.5%?` | EUR 28.21, using the complete decimal percentage |
+| `How much could I save if I reduced dining out by twenty percent?` | EUR 45.14; common EN/FI/SV number words are supported |
+| `How much VAT is inside my purchases in September?` | Approximately EUR 212.38, with period, coverage, limitations and source records |
 | `What kind of spender am I?` | The three spending baskets, not a personality score |
 | `What is safe for me to spend this week?` | EUR 3,288.31 under the displayed demo assumptions |
 | `How much tax did I pay?` | Explicit tax evidence unavailable, not zero tax paid |
-| `I want to save for a car.` | Guidance to enter an amount and date through the goal form |
+| `I want to save for a car.` | Exploratory guidance; keep a title-only wish, then optionally open the numeric planner |
 
-The safe-to-spend example uses the data reference date **2026-09-30**, a seven-day horizon, and a EUR 500 reserve. It does not refer to the real current week. Use the month selector before testing a different period. Switch to Kai to inspect the young-adult payday story. See [DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md) for the longer walkthrough.
+The safe-to-spend example uses the data reference date **2026-09-30**, a seven-day horizon, and a EUR 500 reserve. It does not refer to the real current week. The month selector supplies the reference clock; supported explicit month and ISO-range questions can select a different historical period. Switch to Kai to inspect the young-adult payday story. See [DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md) for the longer walkthrough.
 
 ## Known limitations
 
-- **Narrow concepts:** `taxis` currently maps to all `Transportation`. EUR 266.80 is the September transportation total, not a verified taxi total. General statistics do not yet expose MCC filtering, although the VAT lens uses MCCs.
-- **Dates in questions:** a request for August can still use September if September is selected in the UI. Choose the month explicitly in the interface; arbitrary date expressions are not reliably interpreted.
-- **Follow-up context:** a question such as `And groceries?` does not reliably inherit the previous query. Use a complete standalone question.
-- **Evidence consistency:** generic non-restaurant calculation drawers can reuse restaurant context, and a model-selected period can differ from the UI period used to fetch matching rows. Full question-to-evidence scope consistency is pending.
-- **Language and AI:** the interface supports EN/FI/SV; offline question matching recognizes a bounded set of patterns. Unconfigured Gemini means free-form Chinese and other query languages are not promised.
+- **Bounded language:** this is a defined financial-query experience, not unrestricted conversation. Supported merchant codes identify taxis, pharmacies and doctors; the data cannot reveal receipt items or specific brands. Empty merchant-code results mean no identified rows, not proof of no real-world spending.
+- **Dates and definitions:** supported months, ISO date ranges and relative months are resolved locally. Other expressions ask for clarification. Average per purchase is supported; average per calendar month is not currently calculated. Unsupported filters must not be silently dropped.
+- **Conversation scope:** follow-ups reuse a validated previous query, with customer/account checks and explicit reset. This is not long-term transcript memory or general reasoning over every earlier message.
+- **Personalization:** remembered preferences and notes are browser-local demo data, without real authentication. A shared browser can expose that profile. Only structured preferences guide current suggestions; free-form reflections are not sent as model instructions. Storage failures are disclosed, including failure to delete saved data.
+- **Data boundaries:** the source does not establish gross income tax, investment performance, individual holdings, current loan approval, or personal motivations. Forecasts and safe-to-spend remain planning estimates.
+- **Language and verification:** the interface supports EN/FI/SV and bounded offline query patterns. Free-form Chinese and additional query languages require configured Gemini and have not been validated live. Current human usability and browser verification must be recorded separately from automated tests.
 
-The next priority is a semantic acceptance set covering intended definitions, dates, follow-ups, and matching evidence, then fixes driven by those cases. Exact SQL sums alone cannot establish that the intended question was answered.
+See the [40-turn customer acceptance guide](docs/USER_TEST_JOURNEYS.md) for expected definitions, clarifications, multi-turn behavior, privacy choices and useful next actions. Exact SQL sums alone cannot establish that the intended question was answered.
 
 ## Main evidence checks
 
@@ -212,6 +226,8 @@ scripts/build_demo_db.py Streaming importer for selected personas
 web/                     Responsive dependency-free client
 tests/                   Unit, API, privacy, localization, and browser contracts
 docs/PROJECT_DESIGN.md   Product decisions and calculation rules
+docs/REDESIGN_PLAN.md    Current interaction design and research references
+docs/USER_TEST_JOURNEYS.md Customer-benefit and multi-turn acceptance cases
 docs/PIPELINE.md         Data provenance and current implementation status
 docs/API.md              Local endpoint contract
 docs/TECHNICAL_DOCUMENTATION.md

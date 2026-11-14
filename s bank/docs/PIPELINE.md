@@ -2,7 +2,7 @@
 
 ## Current state
 
-Status below distinguishes implemented calculations from unresolved question interpretation. The later semantic audit supersedes earlier claims that every official example was complete. See [README known limitations](../README.md#known-limitations) and [technical documentation](TECHNICAL_DOCUMENTATION.md).
+The experience redesign adds a bounded semantic resolver and an interactive category-led interface. Status distinguishes verified supported cases from unrestricted question coverage and fresh browser acceptance. See [README known limitations](../README.md#known-limitations), [redesign plan](REDESIGN_PLAN.md), and [customer journeys](USER_TEST_JOURNEYS.md).
 
 | Stage | Status | Evidence |
 |---|---|---|
@@ -12,9 +12,9 @@ Status below distinguishes implemented calculations from unresolved question int
 | Selected-persona import | Complete | Six customers plus linked mortgage rows in ignored demo database |
 | Financial roles | Complete | Partner-aligned regular, irregular and everyday baskets plus income, transfers and review |
 | Period analytics | Complete | Money Map, comparison, trends, unusual, salary and payday signals |
-| Deterministic statistics | Implemented; semantic selection incomplete | Exact totals/count/average/largest/net for chosen filters; correct arithmetic does not establish intended scope |
-| Official brief questions | Partial | Dining scenario, three-basket profile, safe-to-spend and restaurant total work; taxi incorrectly expands to Transportation |
-| Natural-language query scope | Pending fixes | Narrow concepts/MCC, explicit dates, relative dates, and follow-up inheritance need semantic acceptance cases |
+| Deterministic statistics | Verified supported definitions | Explicit consumption vs all outflows; exact totals/count/average/largest/net, MCC and consumption-only filters |
+| Official brief questions | Supported with source limits | Dining/profile/safe-to-spend/restaurant tools; taxi uses MCC4121 with honest identified-record limits |
+| Natural-language query scope | Bounded resolver implemented | Supported concepts, explicit/relative dates, validated follow-ups, unsupported qualifiers and missing context clarify |
 | Corrections and scenarios | Complete | Immutable actuals, user rules, scenario-only exclusions, audit and undo |
 | Goal plan | Complete | Universal goal templates, reserve, capacity and explicit scenario link |
 | Cash-flow preview | Complete | Qualified recurrence, 30-day scenario, assumptions and historical backtest |
@@ -24,10 +24,14 @@ Status below distinguishes implemented calculations from unresolved question int
 | Tax evidence/planning | Complete | Explicit-source evidence and unsaved user-declared scenario only |
 | VAT-inside-price lens | Complete | Date-aware MCC-first estimate, direct/broad/unmapped row provenance, versioned fact, period total and mapping coverage |
 | JSON API | Complete | Validated read/mutation/tool routes plus static server |
-| Adaptive localized UI | Complete | Phone/tablet/desktop, EN/FI/SV, month/range controls and evidence views |
-| Guided coach directory | Implemented; known gaps | Localized topics, tool results and tax planner; free-text scope and generic evidence consistency remain incomplete |
+| Adaptive localized UI | Redesigned; fresh browser acceptance pending | System fonts, balance hero, clear forecast, phone/tablet/desktop CSS and EN/FI/SV copy |
+| Interactive spending ring | Implemented and integration-tested | Category/group/center/list parity, keyboard selection and source rows; six persona totals reconcile |
+| Guided coach and evidence | Implemented and integration-tested | Home invitation, persistent Coach, conversation scope, same-period source rows, no visible hashes |
+| First-use navigation | Implemented and integration-tested | Welcome invitation, skip/replay, actual category/Coach/preferences actions |
+| Preferences and notebook | Implemented and integration-tested | Optional browser persistence, explicit proposals, edit/delete/revoke and session-only fallback |
+| Journal and goal milestones | Implemented | Source-backed money moments, separate personal reflections and opt-in user-declared savings progress |
 | Local device preview | Complete | Six unlinked development-only viewport presets |
-| Integrated verification | Latest: 176 passed, one browser test skipped; semantic coverage incomplete | Earlier 177-test run included real Chrome device/locale flows; subsequent audits found defects not covered by those assertions |
+| Integrated verification | Latest: 247 passed, one browser test skipped | 248 discovered; semantics/income/consent/real API-to-client evidence/HTTP/personalized handoff tests pass; rendered acceptance remains pending |
 
 ## Flow
 
@@ -37,13 +41,16 @@ Official CSVs (ignored)
   -> six selected synthetic personas
   -> normalized SQLite rows in integer cents
   -> immutable ledger + derived financial-literacy roles
-  -> comparison / trends / recurrence / unusual candidates
+  -> typed concept / metric / account / date resolution and clarification
+  -> validated statistics / comparison / recurrence / unusual candidates
   -> exact account statistics / explicit tax evidence / estimated VAT lens
   -> user correction + scenario + goal audit state
   -> deterministic facts and candidate IDs
   -> optional Gemini selection/clarification over allowlisted facts
   -> JSON API
-  -> adaptive localized Money Map, evidence, scenario and goal views
+  -> category ring, Coach, readable evidence, scenario and goal views
+  -> optional browser-local preferences + user-confirmed notes
+  -> source-only money journal and optional goal milestones
 ```
 
 ## Source inventory
@@ -90,5 +97,5 @@ For a rebuild, select an unused output filename and preserve the current databas
 
 ## Next validation stage
 
-Create semantic acceptance questions with expected concept, account, date range, metric, selected rows, and either a supported answer or a clarification/unavailable response. Prioritize narrow-category resolution, question dates, follow-up context, and consistent scope from tool result to transaction list and calculation drawer. Do not promote this stage to complete merely because arithmetic tests pass.
+The semantic acceptance set and 40-turn customer guide now exist. Automated scope, exact-row parity, no-data, stale-response and notebook tests cover supported behavior. Next, run a fresh authorized phone/tablet/desktop browser walkthrough, replace the explicitly historical screenshots, exercise a configured live Gemini key, and conduct customer comprehension tests. No winner or measured usability claim follows from source review alone.
 

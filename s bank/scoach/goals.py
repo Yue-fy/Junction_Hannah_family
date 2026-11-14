@@ -1,6 +1,6 @@
 """One reserve-aware goal engine for all user-selected templates."""
 from datetime import date
-from .analytics import money_map, latest_complete_month, _available
+from .analytics import money_map, latest_complete_month
 from .ledger import account_scope, month_bounds, shift_month, fact_id, transactions
 from .money import percentile_cents
 from .state import mutate, new_id, now
@@ -42,7 +42,9 @@ def goal_plan(conn,customer_id,goal_id,as_of=None):
     month=reference.strftime('%Y-%m')
     if reference.isoformat()<month_bounds(month)[1]: month=shift_month(month,-1)
     latest=latest_complete_month(conn,customer_id); month=min(month,latest)
-    cashflows=[money_map(conn,customer_id,shift_month(month,i)) for i in range(-5,1) if _available(conn,shift_month(month,i))]
+    scope=account_scope(conn,customer_id)
+    periods=[shift_month(month,i) for i in range(-5,1)]
+    cashflows=[money_map(conn,customer_id,period) for period in periods if scope['observed_start'][:7]<=period<=scope['observed_end'][:7]]
     capacity_available=len(cashflows)==6
     capacity=max(percentile_cents([m['free_cashflow_cents'] for m in cashflows],.25),0) if capacity_available else 0
     latest_balance=transactions(conn,customer_id,end=reference.isoformat())[-1]['balance_after_cents']
@@ -58,6 +60,8 @@ def link_scenario_to_goal(conn,customer_id,goal_id,scenario_id,as_of=None,proven
     def apply():
         if conn.execute('SELECT 1 FROM scenarios WHERE goal_id=? AND customer_id=?',(goal_id,customer_id)).fetchone():
             raise ValueError('Goal already has an active linked scenario; undo its link first')
-        conn.execute('UPDATE scenarios SET goal_id=? WHERE id=?',(goal_id,scenario_id))
+        changed=conn.execute('UPDATE scenarios SET goal_id=? WHERE id=? AND customer_id=? AND goal_id IS NULL',(goal_id,scenario_id,customer_id))
+        if changed.rowcount!=1:
+            raise ValueError('Scenario is already linked to a goal; undo its link first')
     _,audit=mutate(conn,customer_id,'link_scenario_to_goal',goal_id,apply,provenance)
     return {**goal_plan(conn,customer_id,goal_id,as_of),'audit_event':audit}

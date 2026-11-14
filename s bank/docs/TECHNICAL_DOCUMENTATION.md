@@ -13,7 +13,7 @@ The product separates four kinds of information:
 
 This repository contains no real customer data, bank credentials, production authentication, payment initiation, loan decisioning, investment recommendation, or personal income-tax liability calculation.
 
-**Current status (14 November 2026):** the responsive prototype and deterministic calculations are implemented, but general natural-language scope interpretation is not complete. Correct arithmetic over a selected set of rows does not establish that the selected rows answer the user's question. The known gaps and verification limits are recorded in sections 6 and 10.
+**Current redesign (14 November 2026):** category-led spending exploration, prominent coaching, first-use guidance, optional browser-local preferences, an editable notebook, and a facts-only journal extend the existing planning tools. A bounded local query resolver now addresses supported narrow concepts, dates and follow-ups. Correct arithmetic still depends on the intended scope; general language and data-coverage limits remain explicit in sections 6 and 10.
 
 ## 2. Runtime architecture
 
@@ -22,11 +22,13 @@ official synthetic CSV files (ignored)
     -> BOM-aware streaming importer
     -> selected-persona SQLite database (ignored)
     -> immutable ledger + derived financial roles
+    -> local question definitions / validated previous scope
     -> deterministic analytics / statistics / scenarios
     -> bounded coach candidates and fact IDs
     -> optional Gemini intent and wording adapter
     -> standard-library JSON/static HTTP server
     -> dependency-free responsive web client
+       + optional browser-local preferences and confirmed notes
 ```
 
 The implementation deliberately uses the Python standard library, SQLite, semantic HTML, CSS, JavaScript, and accessible SVG. No package installation is required to run the core prototype. Gemini is optional and called through its REST API only when `GEMINI_API_KEY` is configured.
@@ -42,6 +44,7 @@ The implementation deliberately uses the Python standard library, SQLite, semant
 | `scoach/analytics.py` | Money Map, comparisons, trends, unusual items, investment cash flows |
 | `scoach/forecast.py` | Recurrence, 30-day preview, safe-to-spend, historical backtest |
 | `scoach/statistics.py` | Exact filtered account statistics and period comparison |
+| `scoach/query_scope.py` | Local concept/metric/date resolution, clarification and customer-bound follow-up scope |
 | `scoach/state.py` | User corrections, append-only audit, undo, reset |
 | `scoach/scenarios.py` | Spending scenarios and scenario-only exclusions |
 | `scoach/goals.py` | Universal goal plan and contribution links |
@@ -51,6 +54,8 @@ The implementation deliberately uses the Python standard library, SQLite, semant
 | `scoach/coach.py` | Offline intent routing, localized bounded explanations, candidate ranking |
 | `scoach/gemini.py` | Minimized context, response schema validation, timeout/fallback |
 | `scoach/api.py` | HTTP validation, JSON envelope, static server, deterministic tool execution |
+| `web/experience.js` | Consent-controlled browser preferences, bounded memory proposals, facts-only journal and new EN/FI/SV copy |
+| `web/charts.js` | Accessible category ring and comparison, forecast, trend and goal SVGs |
 | `web/` | Responsive interface, localization, charts, dialogs, and local device preview |
 
 ## 3. Source data and reproducibility
@@ -86,7 +91,7 @@ Raw `transactions` rows have database triggers that reject update and delete ope
 
 Every statistics request validates the customer, account, ISO date range, and exact filters. It returns inflow, outflow, net flow, consumption, transfer flows, counts, averages, largest outflow, fact ID, and exact row references. Empty selections return zero totals and null averages. Such a result describes only the requested filter and available dataset; it does not prove that an unsupported real-world activity never occurred.
 
-The general statistics filters currently support category, derived role, transaction type, and merchant ID. Although the database stores MCC codes, the general statistics/coach query interface does not yet support an MCC filter. The separate VAT module uses MCC codes for tax-band estimates; that capability does not make narrow spending concepts such as taxis or pharmacies reliable coach queries.
+The general statistics filters support category, derived role, transaction type, merchant ID, and exact four-digit MCC. Supported narrow concepts use an explicit merchant-code definition; the VAT module independently uses MCC/date mappings to estimate a tax band. Neither mapping supplies receipt itemization or proof of every real-world purchase.
 
 SQL selects the scoped ledger rows and Python calculates integer-cent aggregates. Averages are per matching transaction, not per month. Consumption is gross outgoing consumption; positive inflows do not automatically offset it as refunds. These definitions must be resolved before comparing results or presenting a net-spending answer.
 
@@ -177,31 +182,60 @@ Gemini cannot receive the full ledger, customer/account identifiers, raw transac
 
 The adapter defaults to `gemini-3-flash-preview` and uses one nine-second deadline for both transport and fallback coordination, staying below the client's request timeout. It falls back on unavailable, malformed, unknown, or uncited output and returns a diagnostic reason. Financing prompts explicitly prohibit current eligibility, affordability, approval, recommended amounts/products, and offers. Tax prompts prohibit inferred rates, liabilities, and advice.
 
-The official percentage-adjustment question is intentionally routed locally because numeric and currency input is redacted before any model call. The other non-sensitive official questions may use Gemini for bounded intent selection and nonnumeric phrasing when configured, while Python still produces every amount. `GET /api/health` reports only whether Gemini is configured; it never exposes a key.
+Supported local statistics and percentage-adjustment questions resolve their definitions and numeric scope before model redaction. Other eligible questions may use Gemini for bounded intent selection and nonnumeric phrasing when configured, while Python still produces every amount. `GET /api/health` reports only whether Gemini is configured; it never exposes a key.
 
-### Known question-scope and evidence gaps
+### Resolved scope and bounded conversation
 
-| Area | Current behavior | Testing guidance / pending work |
+The local `query_scope.py` resolver runs before optional model interpretation for supported statistics. It resolves the concept, metric, start/end dates, reference date, and exact filters. Taxi, pharmacy and doctor concepts use specific merchant codes rather than silently widening to Transportation or Health. If the source has no matching code rows, the answer describes that identified-record limit rather than asserting no real-world spending.
+
+Supported named months, ISO months/ranges, and relative months are interpreted against the selected synthetic data month. The response `query_scope` carries the customer/account, concept, metric, dates, reference date and filters. The optional request `previous_query` replays this bounded object for follow-ups; the server validates its shape, account ownership and history bounds. It does not accept an unrestricted conversation transcript. The client clears context on a new question or persona switch.
+
+The returned scope drives matching transactions and the generic calculation view. An August result must open August rows even when the main UI still has September selected. The requested metric controls the answer headline: total, per-purchase average, count or largest outgoing transaction. A question with an unspecified average denominator asks for clarification.
+
+| Area | Current support | Remaining limit |
 |---|---|---|
-| Narrow spending concepts | Offline `taxi`/`taxis` maps to all `Transportation`; pharmacy/doctor terms map to all `Health`. | CUST00001 September's EUR 266.80 is transportation, not a verified taxi total. Add explicit concept-to-MCC definitions or request clarification instead of widening the question. |
-| Dates in questions | Offline statistics copies the selected interface month. An explicit August question with September selected still queries September. The coach tool accepts monthly periods, while the direct statistics API supports explicit date ranges. | Change the month selector for current manual tests. Date resolution, relative-date reference rules, and arbitrary-range coach queries remain pending. |
-| Follow-up questions | The client sends the current message, selected month, and locale; it does not pass a resolved prior query. | Ask complete standalone questions. A follow-up such as `And groceries?` is not reliable. |
-| Matching-row period | The coach's matching-row button passes filters but retrieves rows using the current UI month. | A model-selected period different from the UI month can show mismatched evidence. Bind row navigation to the returned tool-result scope. |
-| Generic calculation evidence | Non-role transaction queries can still receive restaurant-specific calculation context. | Non-restaurant source rows may be correct while their calculation explanation is not. Generalize evidence context before claiming arbitrary-category drill-down is complete. |
+| Familiar spending categories | Exact category filters, plus supported aggregate spending/outflow definitions | Categories do not reveal receipt line items or purchase motivations. |
+| Narrow concepts | Supported exact MCC definitions, including taxis, pharmacies and doctors | Brand and item questions such as coffee or a specific ride-hailing brand cannot be established. |
+| Dates | Supported historical month/ISO-range questions and relative months | Other relative phrases and incomplete ranges ask for clarification rather than being guessed. |
+| Averages | Explicit average per purchase | Average per calendar month is not currently calculated; do not substitute a per-transaction value. |
+| Follow-ups | Bounded compatible changes to the previous category/date/metric | This is not long-term memory of every conversational topic. Unsupported filters or topic changes require clarification. |
+| Affordability | Ask for the item, amount and timing; offer supported planning inputs | No current approval decision or guaranteed future affordability. |
 
-The next semantic verification layer should record the expected concept, account, period, metric, filters, matching rows, and clarification/unavailable outcome for a set of independently reviewed questions. That plan must be preserved from interpretation through SQL/statistics and evidence navigation. Valid parameters and exact arithmetic alone do not provide this guarantee.
+The [customer acceptance guide](USER_TEST_JOURNEYS.md) records 40 turns across eight journeys, including expected definitions, evidence, missing context and useful next actions. Passing isolated arithmetic or resolver assertions does not establish that a whole customer journey is easy or helpful.
 
 ## 7. Interface, localization, and accessibility
 
-The customer interface supports English, Finnish, and Swedish without Gemini. The explicit choice is persisted when browser storage is available; browser locale supplies the initial default. Navigation, controls, forms, dynamic labels, errors, empty states, accessibility names, and deterministic coaching are localized. EUR and dates use locale-aware browser formatting.
+The customer interface supports English, Finnish, and Swedish without Gemini. The explicit language choice is persisted when browser storage is available; browser locale supplies the initial default. EUR and dates use locale-aware formatting. Other-language free text is optional and requires configured Gemini; it does not localize the interface itself.
 
-Other-language free text is optional and requires configured Gemini. This does not localize the product interface itself.
+### Home and spending exploration
 
-Phone widths use one vertical coaching story and large touch targets. Tablet expands reading width. Desktop uses a centered two-column financial workspace rather than a simulated phone. A separate `device-preview.html` is local development tooling for representative viewport frames and is not linked from customer navigation.
+Today, Spending, Goals and Journal form the main navigation. Coach has both a prominent Home invitation and persistent access. Home leads with the available balance, familiar consumption categories and one useful next action. The forecast is explicitly labelled **30-day balance forecast**, with an estimated end balance and low point, rather than a vague promise about what may happen next.
 
-The interface uses semantic landmarks, labels, native dialogs, keyboard focus, visible focus rings, reduced-motion support, non-color status labels, and SVG titles/descriptions. Formulas, assumptions, and source references are disclosed on demand so the first view remains readable.
+The interactive ring includes outgoing consumption only. Income, balance and saving transfers are shown separately and are not competing slices of that ring. Categories are organized into Everyday life, Home & essentials, and Life & leisure; these navigation groups are distinct from the partner's three educational baskets, which remain a secondary explanation. A selected ring slice and its labelled category button refer to the same period-scoped rows. Keyboard-operable category controls and labelled amounts provide access beyond color and pointer gestures.
 
-The visual system is inspired by current public S-Pankki/S-mobiili cues—green and white, clear hierarchy, rounded soft surfaces, and selective bright-green highlights—but uses an original S-Coach mark and does not copy the protected official logo.
+Phone layouts use a vertical hierarchy and touch-sized controls; tablet expands the reading area and desktop uses a two-column workspace. The separate `device-preview.html` provides representative viewport frames rather than physical-device emulation. Reduced-motion support, semantic landmarks, native dialogs, visible focus and accessible chart descriptions remain part of the implementation.
+
+### First visit and personal context
+
+A first-visit invitation opens a brief, optional three-step tour. “Try now” actions take the customer to the relevant spending, coaching or preference control. It can be skipped or replayed. A risk quiz is not required to use the app, and these preferences do not establish investment suitability.
+
+Personalization asks what the customer wants to make room for, a gentle/direct coaching style, protected spending, and optional goal milestones. Preferences work for the current visit. An explicit opt-in allows them to persist on this browser for the selected demo persona. Bounded statements such as wanting to save for a car can produce a proposed preference, which requires the user's separate confirmation. Mixed or negated style statements do not generate a guessed preference.
+
+The editable notebook separates structured preferences from free-form reflections. Goals and protected categories guide current suggestions; explicit customer exploration can still ask about a protected category. Free-form notes are for the user to revisit and are not passed as model instructions or silently treated as verified financial facts. Notes can be added, edited and deleted; consent can be revoked and the profile forgotten.
+
+### Journal and optional milestones
+
+The journal shows dated income, a housing payment and the largest recorded purchase within the selected source scope. It preserves source references internally for navigation. It does not infer a holiday, job change, emotional state or life story from a payment category. Customers can add their own meaning through explicitly labelled personal reflections.
+
+Optional milestones use the saved amount entered for a goal. A scenario, link, page view or plan does not move money or increase recorded savings. The design avoids punitive streaks, spending rewards and claims of real-time deposits.
+
+### Progressive disclosure and visual references
+
+The first answer is plain and actionable. Evidence controls reveal understandable dates, filters, matching rows and calculation summaries on request. Transaction hashes and fact IDs remain internal identifiers instead of normal customer-facing text. Technical transparency is preserved through inspectable source selection, not by requiring a phone user to read raw hashes.
+
+S-mobiili's green/white hierarchy, Nordea's category-to-transaction exploration, Monzo's spending views and Apple's brief contextual onboarding inform the design. The original S-Coach mark remains distinct from protected bank assets. [REDESIGN_PLAN.md](REDESIGN_PLAN.md) records the primary sources and the reasoning. These are design references; claims about lower cognitive load, motivation or emotional comfort require human testing, not visual imitation alone.
+
+The four README images show the earlier interface before this redesign. They remain explicitly labelled historical examples; a fresh browser walkthrough and screenshots of the new experience are not claimed.
 
 ## 8. Privacy and security posture
 
@@ -214,8 +248,10 @@ The visual system is inspired by current public S-Pankki/S-mobiili cues—green 
 - Actuals, corrections, user declarations, and scenarios are distinct.
 - Optional model context is minimized and validated.
 - Secrets live only in ignored environment configuration.
+- Browser preferences default to no persistence. `experience.js` saves only allowlisted profile fields and explicitly confirmed notes under versioned, persona-specific keys; no transcript is automatically copied.
+- Storage exceptions fall back to the current visit. A failed preference deletion is reported separately from a successful in-memory reset. Free-form notes are rendered as text and are not model instructions.
 
-This prototype does not implement production authentication, authorization, consent, retention, deletion, encryption key management, bank-host callbacks, rate limiting, fraud monitoring, or regulatory review. Those remain S-Pankki integration responsibilities.
+The notebook is browser-local demo storage without real bank authentication or encryption key management. Selecting a synthetic persona is not an authorization boundary; a shared browser can expose its remembered profile. Browser opt-in/edit/delete controls are implemented, but a production bank consent lifecycle, authorization, retention/deletion service, bank-host callbacks, rate limiting, fraud monitoring and regulatory review are outside this prototype.
 
 ## 9. Local and deployable operation
 
@@ -237,12 +273,13 @@ See the [README](../README.md) for first-time dataset setup, database import, co
 
 ## 10. Verification status and limits
 
-- Latest pre-push run on 14 November 2026: **176 tests passed, one optional browser test skipped** out of 177 discovered. HTTP tests ran; the browser integration was deliberately not enabled. JavaScript syntax, Python compilation, documentation links, and README screenshot files were also checked.
-- The earlier integrated run recorded **177 passing tests**, including headless-Chrome phone/tablet/desktop and EN/FI/SV flows. This is historical verification of that implemented test set, not proof that every natural-language question is interpreted correctly.
-- Subsequent read-only scope audits reproduced the taxi, date, follow-up, and evidence-context gaps above. Some existing example assertions accept the broad transportation mapping, so a green suite does not resolve that defect.
-- The current machine's demo has no configured Gemini key. Fake-transport, privacy, timeout, response-validation, and fallback tests exist; a successful live Gemini request has not been verified.
-- The latest device-preview contract check passed its three checks. The latest preview handoff did not include a fresh browser walkthrough; the earlier browser evidence remains historical.
-- For current manual validation, select Alex (`CUST00001`), September 2026, and English. Restaurant spending is EUR 225.70 over ten purchases; groceries are EUR 379.79 over five; a 20% dining reduction is an unsaved EUR 45.14 scenario. Safe-to-spend uses the synthetic data reference date, not the real current week.
+- Before this redesign, the pre-push run recorded **176 passing tests and one skipped optional browser test** out of 177 discovered. An earlier run included 177 passing tests with headless-Chrome device/locale flows. These are historical results for the prior implementation and interface.
+- The latest redesign run discovered **248 tests: 247 passed and one optional browser test skipped**. It includes semantic-scope, multi-turn, income direction, unsupported-qualifier/motive handling, consent/storage, real API-to-client calculation evidence, category parity and personalized scenario-to-goal handoff checks. JavaScript syntax, Python compilation and whitespace checks passed.
+- Supported MCC/date/follow-up cases and returned-scope evidence replace the earlier known broad-taxi, ignored-month and restaurant-specific evidence defects. This does not establish unrestricted natural-language coverage.
+- The current machine has no configured Gemini key. Fake-transport, privacy, timeout, response-validation and fallback tests exist; successful live provider behavior remains unverified.
+- There has been no fresh authorized browser walkthrough of the redesigned screens. Existing screenshot assets are clearly labelled as the earlier interface. Perceived visual quality, ease of interaction and customer benefit need an authorized browser review and human testing.
+- For fixture validation, select Alex (`CUST00001`), September 2026 and English. Restaurant spending is EUR 225.70 over ten purchases; groceries are EUR 379.79 over five; a 20% dining reduction is an unsaved EUR 45.14 scenario. Safe-to-spend uses the synthetic data reference date rather than the real current week.
+- [USER_TEST_JOURNEYS.md](USER_TEST_JOURNEYS.md) separates acceptance expectations from observed test results and covers customer control, meaningful next actions and follow-up usefulness.
 
 Run the standard suite from the repository root:
 

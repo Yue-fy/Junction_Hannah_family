@@ -125,7 +125,7 @@ class Application:
                 raise ValueError('month is outside observed history')
             if query.get('as_of') and not scope['observed_start'] <= query['as_of'] <= scope['observed_end']:
                 raise ValueError('as_of is outside observed history')
-            filters = {key: query[key] for key in ['category', 'role', 'merchant_id', 'transaction_type'] if query.get(key)} or None
+            filters = {key: query[key] for key in ['category', 'role', 'merchant_id', 'transaction_type', 'mcc_code', 'consumption_only'] if query.get(key)} or None
             if method == 'GET':
                 if path == '/api/overview':
                     overview = money_map(conn, customer_id, month)
@@ -212,6 +212,11 @@ class Application:
                 if locale not in {'en', 'fi', 'sv'}:
                     raise ValueError('locale must be en, fi, or sv')
                 context = self._coach_context(conn, customer_id, month, locale)
+                from .query_scope import validate_previous_query
+                previous = validate_previous_query(body.get('previous_query'), context)
+                if previous:
+                    self._validated_statistics_filters(conn, customer_id, previous['filters'])
+                    context['previous_query'] = previous
                 response = interpret(body.get('message'), context, transport=self.coach_transport)
                 return self._execute_coach_tool(conn, customer_id, response, context)
             if path == '/api/tax-plan':
@@ -241,12 +246,15 @@ class Application:
             '/api/goals': {'name', 'target_cents', 'target_date', 'current_saved_cents', 'reserve_floor_cents', 'template'},
             '/api/goals/link': {'goal_id', 'scenario_id'},
             '/api/tax-plan': {'amount_cents', 'due_date', 'reference_date', 'already_set_aside_cents', 'current_balance_cents', 'reserve_floor_cents', 'set_aside_location', 'label'},
-            '/api/coach': {'message', 'locale'}, '/api/undo': set(), '/api/reset': set(),
+            '/api/coach': {'message', 'locale', 'previous_query'}, '/api/undo': set(), '/api/reset': set(),
         }
         if set(body) - common - fields.get(path, set()):
             raise ValueError('Unknown JSON body field')
         for name, value in body.items():
-            if name == 'confirmed':
+            if name == 'previous_query':
+                if value is not None and not isinstance(value, dict):
+                    raise ValueError('previous_query must be a resolved scope object')
+            elif name == 'confirmed':
                 if type(value) is not bool:
                     raise ValueError('confirmed must be a boolean')
             elif name == 'current_balance_cents':
@@ -276,8 +284,9 @@ class Application:
     def _validate_tool_query(path, query):
         common = {'customer_id', 'account_id'}
         allowed = {
-            '/api/statistics': common | {'month', 'start', 'end', 'category', 'role', 'transaction_type', 'merchant_id'},
-            '/api/statistics/compare': common | {'month', 'comparison_month', 'start', 'end', 'comparison_start', 'comparison_end', 'category', 'role', 'transaction_type', 'merchant_id'},
+            '/api/statistics': common | {'month', 'start', 'end', 'category', 'role', 'transaction_type', 'merchant_id', 'mcc_code', 'consumption_only'},
+            '/api/statistics/compare': common | {'month', 'comparison_month', 'start', 'end', 'comparison_start', 'comparison_end', 'category', 'role', 'transaction_type', 'merchant_id', 'mcc_code', 'consumption_only'},
+            '/api/transactions': common | {'month', 'start', 'end', 'category', 'role', 'transaction_type', 'merchant_id', 'mcc_code', 'transaction_ref', 'consumption_only'},
             '/api/taxes': common | {'month', 'start', 'end'},
             '/api/vat': common | {'month', 'start', 'end'},
         }
@@ -285,7 +294,7 @@ class Application:
             return
         if set(query) - allowed[path]:
             raise ValueError('Unknown query parameter')
-        for field in ('category', 'role', 'transaction_type', 'merchant_id'):
+        for field in ('category', 'role', 'transaction_type', 'merchant_id', 'mcc_code', 'consumption_only'):
             if field in query and not query[field].strip():
                 raise ValueError('Statistics filters must be nonempty')
         has_dates = any(key in query for key in ('start', 'end'))
@@ -332,6 +341,17 @@ class Application:
         catalog = cls._filter_catalog(conn, customer_id)
         mapping = {'category': 'categories', 'role': 'roles', 'transaction_type': 'transaction_types', 'merchant_id': 'merchant_ids'}
         for key, value in filters.items():
+            if key == 'consumption_only':
+                if value != 'true':
+                    raise ValueError('consumption_only must be true')
+                continue
+            if key == 'mcc_code':
+                import re
+                if not isinstance(value, str) or not re.fullmatch(r'\d{4}', value):
+                    raise ValueError('mcc_code must be four digits')
+                continue
+            if key not in mapping:
+                raise ValueError('Unknown statistics filter')
             if value not in catalog[mapping[key]]:
                 raise ValueError('Unknown statistics ' + key)
         return filters
@@ -438,14 +458,32 @@ class Application:
             },
         }
         def explanation(default_text, fact_id):
+            if (response.get('source') == 'deterministic'
+                    and response.get('clarification_code') == 'planned_purchase_preview'
+                    and response.get('intent') == 'safe_to_spend'
+                    and response.get('explanation_blocks')):
+                # The local planner derived the price comparison from this
+                # same snapshot's safe-to-spend fact. Retain its useful prose
+                # while binding evidence to the freshly executed calculation.
+                return [{'text': block['text'], 'fact_ids': [fact_id]} for block in response['explanation_blocks']]
             if response.get('source') == 'gemini' and response.get('explanation_blocks'):
                 return [{'text': block['text'], 'fact_ids': [fact_id]} for block in response['explanation_blocks']]
             return [{'text': default_text, 'fact_ids': [fact_id]}]
         if intent == 'transaction_statistics':
             from .statistics import transaction_statistics, compare_transaction_statistics
-            period = params['period']
-            start, end = _month_bounds(period)
-            filters = {key: params[key] for key in ('category', 'role', 'transaction_type', 'merchant_id') if key in params}
+            query_scope = response.get('query_scope')
+            if query_scope:
+                start, end = query_scope['start'], query_scope['end']
+                filters = query_scope['filters']
+            else:
+                start, end = _month_bounds(params['period'])
+                filters = {key: params[key] for key in ('category', 'role', 'transaction_type', 'merchant_id', 'mcc_code', 'consumption_only') if key in params}
+                credit_filter=filters.get('role')=='income' or filters.get('transaction_type') in {'salary','other_income','investment_withdrawal'}
+                query_scope = {'customer_id': customer_id, 'account_id': context['account_id'],
+                               'concept': params.get('category', params.get('role', 'Selected transactions')),
+                               'metric': 'inflow_total' if credit_filter else 'outflow_total', 'start': start, 'end': end,
+                               'reference_date': context['reference_date'], 'filters': filters}
+                response['query_scope'] = query_scope
             filters = self._validated_statistics_filters(conn, customer_id, filters)
             if 'comparison_period' in params:
                 comparison_start, comparison_end = _month_bounds(params['comparison_period'])
@@ -454,13 +492,48 @@ class Application:
             else:
                 result = transaction_statistics(conn, customer_id, start, end, filters)
                 has_transactions = result['has_transactions']
+                metric = query_scope['metric']
+                result['metric'] = metric
+                result['metric_value_cents'] = {
+                    'outflow_total': result['outflow_total_cents'],
+                    'inflow_total': result['inflow_total_cents'],
+                    'consumption_total': result['consumption_cents'],
+                    'average_outflow': result['average_outflow_cents'],
+                    'largest_outflow': (result['largest_outflow'] or {}).get('amount_cents'),
+                }.get(metric)
+                result['metric_value_count'] = result['outflow_count'] if metric == 'transaction_count' else None
+                result['definition'] = (
+                    'Consumer purchases, housing and utility payments. Saving, investment transfers and incoming amounts are separate.'
+                    if metric == 'consumption_total' else
+                    'Gross outgoing payments for this scope. Incoming amounts and refunds are shown separately.'
+                )
+                if metric == 'inflow_total':
+                    result['definition'] = (
+                        'All positive credits to the selected account, including investment withdrawals and other incoming transfers. This is not income or earnings.'
+                        if query_scope['concept'] == 'All inflows' else
+                        'Positive salary credits identified by the source transaction type. This does not establish gross pay before tax.'
+                        if filters.get('transaction_type') == 'salary' else
+                        'Positive payments classified as income: salary and other income. Investment withdrawals and saving transfers are separate.'
+                        if filters.get('role') == 'income' else
+                        'Positive credits matching the selected filter. Incoming transfers are not earnings, and credited amounts do not establish gross pay before tax.'
+                    )
+                    from .ledger import transactions
+                    result['transaction_refs'] = [row['transaction_ref'] for row in transactions(conn, customer_id, start, end, filters) if row['amount_cents'] > 0]
+                result['query_scope'] = query_scope
             response['tool_result'] = result
             response['tool_fact_id'] = result['fact_id']
             response['tool_fact_ids'] = [result['fact_id']]
             response['tool_kind'] = 'transaction_statistics_comparison' if 'comparison_period' in params else 'transaction_statistics'
             response['tool_source'] = 'deterministic_account_statistics'
             response['source_refs'] = {'transaction_refs': result['transaction_refs']}
-            response['explanation_blocks'] = explanation(copy[locale]['statistics' if has_transactions else 'statistics_empty'], result['fact_id'])
+            empty_copy = copy[locale]['statistics_empty']
+            if not has_transactions and 'mcc_code' in filters:
+                empty_copy = {
+                    'en': 'No transactions were identified by that merchant category code in this period. This does not prove that no such spending occurred; missing or different codes may hide it.',
+                    'fi': 'Tällä kauppiasluokkakoodilla ei tunnistettu tapahtumia ajanjaksolla. Tämä ei todista, ettei tällaisia menoja ollut: puuttuvat tai muut koodit voivat peittää ne.',
+                    'sv': 'Inga transaktioner identifierades med den handlarkategorikoden under perioden. Det bevisar inte att inga sådana utgifter förekom; saknade eller andra koder kan dölja dem.',
+                }[locale]
+            response['explanation_blocks'] = explanation(copy[locale]['statistics'] if has_transactions else empty_copy, result['fact_id'])
         elif intent == 'spending_adjustment':
             from .scenarios import preview_spending_adjustment
             start, end = _month_bounds(params['period'])
@@ -502,9 +575,25 @@ class Application:
                 copy[locale]['safe' if result['available'] else 'safe_unavailable'],
                 result['fact_id'],
             )
+        elif intent == 'vat_estimate':
+            from .vat import vat_lens
+            start, end = (params['start'], params['end']) if 'start' in params else _month_bounds(params['period'])
+            result = vat_lens(conn, customer_id, start, end)
+            response['tool_result'] = result
+            response['tool_fact_id'] = result['fact_id']
+            response['tool_fact_ids'] = [result['fact_id']]
+            response['tool_kind'] = 'vat_estimate'
+            response['tool_source'] = 'deterministic_vat_estimate'
+            response['source_refs'] = {'transaction_refs': result['transaction_refs']}
+            vat_text = {
+                'en': 'This estimates VAT already included in recorded purchase prices for the stated period. It is not an additional payment or a personal tax liability; mixed purchases and missing rate mappings limit the estimate.',
+                'fi': 'Tämä arvioi ilmoitetun ajanjakson kirjattuihin ostohintoihin jo sisältyvän ALV:n. Se ei ole lisämaksu tai henkilökohtainen verovelka. Sekalaiset ostokset ja puuttuvat verokantakartoitukset rajoittavat arviota.',
+                'sv': 'Detta uppskattar moms som redan ingår i registrerade inköpspriser under den angivna perioden. Det är ingen extra betalning eller personlig skatteskuld. Blandade köp och saknade momssatsmappningar begränsar uppskattningen.',
+            }[locale]
+            response['explanation_blocks'] = explanation(vat_text, result['fact_id'])
         elif intent == 'observed_tax_evidence':
             from .tax import observed_tax_evidence
-            start, end = _month_bounds(params['period'])
+            start, end = (params['start'], params['end']) if 'start' in params else _month_bounds(params['period'])
             result = observed_tax_evidence(conn, customer_id, start, end)
             response['tool_result'] = result
             response['tool_fact_id'] = result['fact_id']

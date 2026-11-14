@@ -105,20 +105,20 @@ class CoachTests(unittest.TestCase):
             'merchant_ids': [],
         }
         cases = [
-            ('en', 'How much did I spend on taxis?', 'Transportation'),
-            ('fi', 'Paljonko käytin ravintoloihin?', 'Restaurants'),
-            ('sv', 'Hur mycket spenderade jag på matvaror?', 'Groceries'),
+            ('en', 'How much did I spend on taxis?', {'mcc_code': '4121'}),
+            ('fi', 'Paljonko käytin ravintoloihin?', {'category': 'Restaurants'}),
+            ('sv', 'Hur mycket spenderade jag på matvaror?', {'category': 'Groceries'}),
         ]
-        for locale, message, category in cases:
+        for locale, message, filters in cases:
             with self.subTest(locale=locale):
                 result = interpret(message, {**CONTEXT, 'interface_locale': locale, 'filter_catalog': catalog}, api_key='')
                 self.assertEqual(result['intent'], 'transaction_statistics')
                 self.assertFalse(result['needs_clarification'])
-                self.assertEqual(result['parameters'], {'period': '2026-09', 'category': category})
+                self.assertEqual(result['parameters'], {'period': '2026-09', **filters})
 
         for locale, question_fragment in [('en', 'category'), ('fi', 'luok'), ('sv', 'kategori')]:
             with self.subTest(missing_locale=locale):
-                result = interpret('How much did I spend?', {**CONTEXT, 'interface_locale': locale, 'filter_catalog': catalog}, api_key='')
+                result = interpret('How much did I spend on food?', {**CONTEXT, 'interface_locale': locale, 'filter_catalog': catalog}, api_key='')
                 self.assertTrue(result['needs_clarification'])
                 self.assertIn(question_fragment, result['clarification_question'].lower())
 
@@ -170,5 +170,6 @@ class CoachTests(unittest.TestCase):
             api_key='',
         )
         self.assertEqual(current['intent'], 'transaction_statistics')
-        self.assertTrue(current['needs_clarification'])
+        self.assertFalse(current['needs_clarification'])
+        self.assertEqual(current['query_scope']['metric'], 'consumption_total')
         self.assertNotIn('category', current['parameters'])

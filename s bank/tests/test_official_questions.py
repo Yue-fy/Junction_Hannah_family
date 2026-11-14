@@ -12,12 +12,12 @@ class OfficialBriefQuestionTests(unittest.TestCase):
     def setUp(self):
         self.app = Application(DATABASE)
 
-    def ask(self, message, locale="en"):
+    def ask(self, message, locale="en", customer="CUST00001"):
         status, response = self.app.handle(
             "POST",
             "/api/coach",
             {
-                "customer_id": "CUST00001",
+                "customer_id": customer,
                 "month": "2026-09",
                 "locale": locale,
                 "message": message,
@@ -26,14 +26,17 @@ class OfficialBriefQuestionTests(unittest.TestCase):
         self.assertEqual(status, 200, response)
         return response["data"]
 
-    def test_taxi_question_returns_exact_transportation_rows(self):
+    def test_taxi_question_uses_narrow_mcc_in_previous_data_month(self):
         result = self.ask("How much did I spend on taxis last month?")
         self.assertEqual(result["intent"], "transaction_statistics")
         self.assertEqual(result["tool_kind"], "transaction_statistics")
-        self.assertEqual(result["tool_result"]["filters"], {"category": "Transportation"})
-        self.assertEqual(result["tool_result"]["outflow_total_cents"], 26_680)
-        self.assertEqual(result["tool_result"]["transaction_count"], 6)
-        self.assertEqual(len(result["source_refs"]["transaction_refs"]), 6)
+        self.assertEqual(result["tool_result"]["filters"], {"mcc_code": "4121"})
+        self.assertEqual(result["tool_result"]["start"], '2026-08-01')
+        self.assertEqual(result["tool_result"]["end"], '2026-08-31')
+        self.assertEqual(result["tool_result"]["outflow_total_cents"], 0)
+        self.assertEqual(result["tool_result"]["transaction_count"], 0)
+        self.assertEqual(result["source_refs"]["transaction_refs"], [])
+        self.assertIn('does not prove', result['explanation_blocks'][0]['text'])
 
     def test_dining_reduction_question_returns_read_only_twenty_percent_scenario(self):
         conn = connect(DATABASE)
@@ -65,6 +68,103 @@ class OfficialBriefQuestionTests(unittest.TestCase):
         finally:
             conn.close()
         self.assertEqual(after, before)
+
+    def test_total_spending_matches_home_consumption_and_separates_money_out(self):
+        spending = self.ask('How much did I spend this month?')
+        self.assertEqual(spending['query_scope']['metric'], 'consumption_total')
+        self.assertEqual(spending['tool_result']['metric_value_cents'], 187866)
+        money_out = self.ask('How much money left this account?')
+        self.assertEqual(money_out['tool_result']['metric_value_cents'], 211438)
+
+    def test_observed_income_received_has_exact_localized_source_total(self):
+        for locale, question in [('en', 'How much income did I receive?'),
+                                 ('fi', 'Paljonko tuloja sain tässä kuussa?'),
+                                 ('sv', 'Hur mycket inkomst fick jag den här månaden?')]:
+            with self.subTest(locale=locale):
+                result = self.ask(question, locale)
+                self.assertFalse(result['needs_clarification'])
+                self.assertEqual(result['query_scope']['metric'], 'inflow_total')
+                self.assertEqual(result['tool_result']['metric_value_cents'], 244781)
+                self.assertEqual(result['query_scope']['filters'], {'role': 'income'})
+
+    def test_localized_optional_shopping_scenarios_match_observed_rows(self):
+        cases = [
+            ('en', 'How much could I save if I reduced Shopping spending by 20%?'),
+            ('fi', 'Kuinka paljon voisin säästää, jos vähennän Ostokset 20 %?'),
+            ('sv', 'Hur mycket kan jag spara om jag minskar Shopping med 20 %?'),
+        ]
+        for locale, question in cases:
+            with self.subTest(locale=locale):
+                result = self.ask(question, locale, 'CUST00676')
+                self.assertEqual(result['intent'], 'spending_adjustment')
+                self.assertFalse(result['needs_clarification'])
+                self.assertEqual(result['tool_kind'], 'spending_adjustment_preview')
+                preview = result['tool_result']
+                self.assertEqual(preview['category'], 'Lifestyle')
+                self.assertEqual(preview['actual_total_cents'], 15384)
+                self.assertEqual(preview['modeled_monthly_contribution_cents'], 3077)
+                self.assertEqual(len(preview['transaction_refs']), 2)
+                self.assertEqual(preview['persistence'], 'not_saved')
+
+    def test_localized_entertainment_and_travel_adjustments_keep_actual_category(self):
+        cases = [
+            ('en', 'How much could I save if I reduced Entertainment spending by 20%?', 'CUST00001', 'Entertainment', 38606, 7721),
+            ('fi', 'Kuinka paljon voisin säästää, jos vähennän Viihde 20 %?', 'CUST00001', 'Entertainment', 38606, 7721),
+            ('sv', 'Hur mycket kan jag spara om jag minskar Nöjen med 20 %?', 'CUST00001', 'Entertainment', 38606, 7721),
+            ('en', 'How much could I save if I reduced Travel spending by 20%?', 'CUST00296', 'Travel', 13074, 2615),
+            ('fi', 'Kuinka paljon voisin säästää, jos vähennän Matkailu 20 %?', 'CUST00296', 'Travel', 13074, 2615),
+            ('sv', 'Hur mycket kan jag spara om jag minskar Resor med 20 %?', 'CUST00296', 'Travel', 13074, 2615),
+        ]
+        for locale, question, customer, category, actual, contribution in cases:
+            with self.subTest(locale=locale, category=category):
+                result = self.ask(question, locale, customer)
+                self.assertEqual(result['intent'], 'spending_adjustment')
+                self.assertEqual(result['tool_result']['category'], category)
+                self.assertEqual(result['tool_result']['actual_total_cents'], actual)
+                self.assertEqual(result['tool_result']['modeled_monthly_contribution_cents'], contribution)
+
+    def test_essential_category_cut_requests_clarify_instead_of_suggesting_a_cut(self):
+        for locale, question in [
+            ('en', 'How much could I save if I reduced Groceries spending by 20%?'),
+            ('fi', 'Kuinka paljon voisin säästää, jos vähennän Ruokaostokset 20 %?'),
+            ('sv', 'Hur mycket kan jag spara om jag minskar Matvaror med 20 %?'),
+        ]:
+            with self.subTest(locale=locale):
+                result = self.ask(question, locale)
+                self.assertTrue(result['needs_clarification'])
+                self.assertEqual(result['clarification_code'], 'essential_adjustment')
+                self.assertNotIn('tool_result', result)
+
+    def test_personal_motivation_emotion_and_health_questions_are_not_spending_totals(self):
+        cases = [
+            ('en', 'Did I buy those clothes because I was stressed?'),
+            ('fi', 'Ostinko nuo vaatteet, koska olin stressaantunut?'),
+            ('sv', 'Köpte jag de där kläderna för att jag var stressad?'),
+            ('en', 'Do my doctor visits mean I have cancer?'),
+            ('fi', 'Ovatko apteekkiostokseni merkki masennuksesta?'),
+            ('sv', 'Betyder mina läkarbesök att jag är sjuk?'),
+            ('en', 'Do my spending habits mean I am depressed?'),
+            ('en', 'Was that trip because I got divorced?'),
+            ('en', 'Did I buy those clothes because they were on sale?'),
+            ('fi', 'Ostinko vaatteet, koska ne olivat alennuksessa?'),
+            ('sv', 'Köpte jag kläderna för att de var på rea?'),
+        ]
+        for locale, question in cases:
+            with self.subTest(locale=locale, question=question):
+                result = self.ask(question, locale)
+                self.assertTrue(result['needs_clarification'])
+                self.assertEqual(result['clarification_code'], 'inference_unavailable')
+                self.assertIsNone(result['query_scope'])
+                self.assertFalse(result['explanation_blocks'])
+                self.assertNotIn('tool_result', result)
+                self.assertNotRegex(result['clarification_question'], r'[\d€%]')
+
+    def test_explaining_observed_financial_change_still_uses_evidence(self):
+        result = self.ask('Why did restaurant spending increase?')
+        self.assertFalse(result['needs_clarification'])
+        self.assertEqual(result['intent'], 'explain_change')
+        self.assertTrue(result['explanation_blocks'])
+        self.assertTrue(result['explanation_blocks'][0]['fact_ids'])
 
     def test_spender_question_returns_three_basket_profile_without_score_or_judgment(self):
         result = self.ask("What kind of spender am I?")
@@ -145,7 +245,10 @@ class OfficialBriefQuestionTests(unittest.TestCase):
         self.assertEqual(status, 200, response)
         result = response["data"]
         self.assertEqual(result["intent"], "explain_change")
-        self.assertEqual(result["fallback_reason"], "invalid_response")
+        # Locally unrecognized phrasing may reach the language adapter, but its
+        # redacted percentage must never be replaced by the model's invented one.
+        self.assertIn(result["fallback_reason"], {"clarification_required", "invalid_response"})
+        self.assertTrue(result['needs_clarification'])
         self.assertNotIn("tool_result", result)
 
 

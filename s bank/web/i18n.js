@@ -1131,9 +1131,9 @@ const JOURNEY_MESSAGES = {
     "En 30-dagars kassaflödesuppskattning med kvalificerade återkommande mönster från din historik."
   ],
   "safe.obligations": [
-    "Qualified recurring outflows kept aside",
-    "Sivuun jätetyt tunnistetut toistuvat menot",
-    "Kvalificerade återkommande utflöden som lagts åt sidan"
+    "Expected bills from past patterns",
+    "Aiempien tapahtumien perusteella odotetut laskut",
+    "Väntade räkningar utifrån tidigare mönster"
   ],
   "safe.everydayAllowance": [
     "Historical unscheduled-spending buffer",
@@ -1361,6 +1361,276 @@ const JOURNEY_MESSAGES = {
   ]
 };
 for (const [key, values] of Object.entries(JOURNEY_MESSAGES)) { EN[key]=values[0]; FI[key]=values[1]; SV[key]=values[2]; }
+
+const EXPERIENCE_CLARITY = {
+  'forecast.title':['30-day balance forecast','Saldon 30 päivän ennuste','Saldoprognos för 30 dagar'],
+  'forecast.subtitle':['See how your balance could change if recent patterns continue.','Katso, miten saldosi voisi muuttua, jos viimeaikaiset tavat jatkuvat.','Se hur saldot kan förändras om de senaste mönstren fortsätter.'],
+  'trends.monthByMonth':['Your spending over time','Menosi ajan mittaan','Dina utgifter över tid'],
+  'trends.whatChanged':['Eating out, a closer look','Ravintolamenot tarkemmin','Restaurangutgifter, en närmare titt'],
+  'coach.result.statistics':['Your selected spending','Valitsemasi menot','Dina valda utgifter'],
+  'chart.spendingCategories':['Spending by category','Menot luokittain','Utgifter per kategori'],
+  'chart.selectCategory':['Select a segment or category to explore its transactions.','Valitse lohko tai luokka nähdäksesi tapahtumat.','Välj en del eller kategori för att se transaktionerna.'],
+};
+for (const [key,values] of Object.entries(EXPERIENCE_CLARITY)) {EN[key]=values[0];FI[key]=values[1];SV[key]=values[2];}
+
+const EXPERIENCE_V2_MESSAGES = {
+  "nav.home": [
+    "Home",
+    "Etusivu",
+    "Hem"
+  ],
+  "nav.coach": [
+    "Coach",
+    "Valmentaja",
+    "Coach"
+  ],
+  "demo.open": [
+    "Try a story",
+    "Kokeile esimerkkiä",
+    "Prova ett exempel"
+  ],
+  "period.recorded": [
+    "Recorded activity",
+    "Kirjatut tapahtumat",
+    "Registrerade händelser"
+  ],
+  "home.eyebrow": [
+    "Your money, with a little perspective",
+    "Uusi näkökulma rahaasi",
+    "Perspektiv på dina pengar"
+  ],
+  "home.title": [
+    "Make room for what matters.",
+    "Tilaa tärkeille asioille.",
+    "Gör plats för det viktiga."
+  ],
+  "home.help": [
+    "Understand your month. Find your next small step.",
+    "Ymmärrä kuukautesi. Löydä seuraava pieni askel.",
+    "Förstå din månad. Hitta ditt nästa lilla steg."
+  ],
+  "home.ask": [
+    "Ask your own question ↗",
+    "Kysy omin sanoin ↗",
+    "Ställ en egen fråga ↗"
+  ],
+  "home.baskets": [
+    "Your month in three baskets",
+    "Kuukautesi kolmessa korissa",
+    "Din månad i tre korgar"
+  ],
+  "home.explore": [
+    "Explore spending ↗",
+    "Tutki menoja ↗",
+    "Utforska utgifter ↗"
+  ],
+  "home.basketsHelp": [
+    "A starting point for understanding your spending. You decide what can change.",
+    "Lähtökohta menojesi ymmärtämiseen. Sinä päätät, mikä voi muuttua.",
+    "En utgångspunkt för att förstå dina utgifter. Du väljer vad som kan ändras."
+  ],
+  "goal.next": [
+    "Something to look forward to",
+    "Jotain odotettavaa",
+    "Något att se fram emot"
+  ],
+  "goal.start": [
+    "A wish is enough to start.",
+    "Toive riittää alkuun.",
+    "En önskan räcker för att börja."
+  ],
+  "goal.explore": [
+    "Explore my goals ↗",
+    "Tutki tavoitteitani ↗",
+    "Utforska mina mål ↗"
+  ],
+  "spending.filter": [
+    "Filter spending",
+    "Rajaa menoja",
+    "Filtrera utgifter"
+  ],
+  "spending.eyebrow": [
+    "Follow the money",
+    "Seuraa rahaa",
+    "Följ pengarna"
+  ],
+  "spending.title": [
+    "Where did it go?",
+    "Mihin rahat menivät?",
+    "Vart tog pengarna vägen?"
+  ],
+  "spending.help": [
+    "Explore a category, see the transactions, ask what changed.",
+    "Tutki luokkaa, katso tapahtumat ja kysy muutoksista.",
+    "Utforska en kategori, se transaktionerna och fråga vad som ändrats."
+  ],
+  "spending.history": [
+    "How spending changes over time",
+    "Miten menot muuttuvat ajan myötä",
+    "Hur utgifterna ändras över tid"
+  ],
+  "spending.forecast": [
+    "Explore the coming days",
+    "Tutki tulevia päiviä",
+    "Utforska de kommande dagarna"
+  ],
+  "spending.investments": [
+    "Savings and investment transfers",
+    "Säästö- ja sijoitussiirrot",
+    "Spar- och investeringsöverföringar"
+  ],
+  "spending.vat": [
+    "Understand VAT inside purchases",
+    "Ymmärrä ostosten arvonlisävero",
+    "Förstå momsen i dina köp"
+  ],
+  "goal.calculate": [
+    "Make a detailed plan",
+    "Tee tarkempi suunnitelma",
+    "Gör en detaljerad plan"
+  ],
+  "goals.title": [
+    "Start with a wish.",
+    "Aloita toiveesta.",
+    "Börja med en önskan."
+  ],
+  "goals.help": [
+    "You do not need an amount, a deadline, or all the answers yet.",
+    "Et tarvitse vielä summaa, määräaikaa tai kaikkia vastauksia.",
+    "Du behöver inte ha ett belopp, ett datum eller alla svar än."
+  ],
+  "wish.question": [
+    "What would you like to make possible?",
+    "Mitä haluaisit mahdollistaa?",
+    "Vad skulle du vilja göra möjligt?"
+  ],
+  "wish.placeholder": [
+    "A little more breathing room",
+    "Hieman enemmän liikkumavaraa",
+    "Lite mer utrymme i vardagen"
+  ],
+  "wish.help": [
+    "A few words are enough. We can work out the numbers together.",
+    "Muutama sana riittää. Voimme pohtia summia yhdessä.",
+    "Några ord räcker. Vi kan räkna på det tillsammans."
+  ],
+  "wish.buffer": [
+    "An emergency buffer",
+    "Vararahasto",
+    "En buffert"
+  ],
+  "wish.home": [
+    "A future home",
+    "Tuleva koti",
+    "Ett framtida hem"
+  ],
+  "wish.trip": [
+    "A trip to look forward to",
+    "Matka, jota odottaa",
+    "En resa att se fram emot"
+  ],
+  "wish.remember": [
+    "Remember my wishes and preferences on this browser",
+    "Muista toiveeni ja mieltymykseni tässä selaimessa",
+    "Kom ihåg mina önskemål i den här webbläsaren"
+  ],
+  "wish.save": [
+    "Keep this wish",
+    "Säilytä toive",
+    "Spara önskan"
+  ],
+  "goal.ready": [
+    "I have an amount and a date in mind",
+    "Minulla on summa ja päivämäärä mielessä",
+    "Jag har ett belopp och ett datum i åtanke"
+  ],
+  "coach.title": [
+    "Let's figure it out.",
+    "Selvitetään yhdessä.",
+    "Vi tar reda på det tillsammans."
+  ],
+  "coach.help": [
+    "A question, a what-if, or a goal you haven't quite figured out.",
+    "Kysymys, mitä jos -tilanne tai tavoite, joka on vielä avoin.",
+    "En fråga, ett tänk om eller ett mål som ännu är oklart."
+  ],
+  "coach.empty": [
+    "What is on your mind?",
+    "Mitä mielessäsi on?",
+    "Vad funderar du på?"
+  ],
+  "coach.emptyHelp": [
+    "Start with your own question, or try one of these.",
+    "Aloita omalla kysymykselläsi tai kokeile näitä.",
+    "Börja med din egen fråga eller prova en av dessa."
+  ],
+  "coach.vague": [
+    "I want to save, but I don't know how much.",
+    "Haluan säästää, mutta en tiedä kuinka paljon.",
+    "Jag vill spara, men vet inte hur mycket."
+  ],
+  "coach.context": [
+    "The picture we're using",
+    "Käyttämämme tiedot",
+    "Underlaget vi använder"
+  ],
+  "coach.evidence": [
+    "Every answer uses the account and dates shown. Open its evidence to see the transactions.",
+    "Vastaukset koskevat näytettyä tiliä ja päivämääriä. Avaa perusteet nähdäksesi tapahtumat.",
+    "Svaren gäller kontot och datumen som visas. Öppna underlaget för att se transaktionerna."
+  ],
+  "coach.preferences": [
+    "Tell me what matters to you ↗",
+    "Kerro, mikä on sinulle tärkeää ↗",
+    "Berätta vad som är viktigt för dig ↗"
+  ],
+  "coach.more": [
+    "More ways to explore",
+    "Lisää tutkittavaa",
+    "Fler sätt att utforska"
+  ],
+  "demo.title": [
+    "Three lives. Different questions.",
+    "Kolme elämää. Erilaisia kysymyksiä.",
+    "Tre liv. Olika frågor."
+  ],
+  "demo.help": [
+    "Explore recorded synthetic accounts. Wishes are examples, never inferred personal facts.",
+    "Tutki synteettisiä tilitietoja. Toiveet ovat esimerkkejä, eivät pääteltyjä henkilötietoja.",
+    "Utforska syntetiska konton. Önskemålen är exempel, aldrig härledda personliga fakta."
+  ],
+  "demo.kai": [
+    "Make it through the week",
+    "Selviä viikosta",
+    "Få veckan att gå ihop"
+  ],
+  "demo.kaiHelp": [
+    "See how expected bills and a buffer change the picture.",
+    "Katso, miten odotetut laskut ja vararaha vaikuttavat.",
+    "Se hur väntade räkningar och en buffert påverkar bilden."
+  ],
+  "demo.alex": [
+    "Turn a small change into a possibility",
+    "Pieni muutos, uusi mahdollisuus",
+    "En liten förändring, en ny möjlighet"
+  ],
+  "demo.alexHelp": [
+    "Explore spending, change a percentage, and keep a wish.",
+    "Tutki menoja, muuta prosenttia ja säilytä toive.",
+    "Utforska utgifter, ändra procenten och spara en önskan."
+  ],
+  "demo.taylor": [
+    "Understand a home-financing history",
+    "Ymmärrä asuntorahoituksen historiaa",
+    "Förstå en bostadsfinansieringshistorik"
+  ],
+  "demo.taylorHelp": [
+    "Review historical records, then explore a future home wish.",
+    "Tutki historiatietoja ja pohdi sitten tulevaa kotitoivetta.",
+    "Granska historiska uppgifter och utforska sedan en önskan om ett hem."
+  ]
+};
+for (const [key, values] of Object.entries(EXPERIENCE_V2_MESSAGES)) { EN["v2."+key]=values[0]; FI["v2."+key]=values[1]; SV["v2."+key]=values[2]; }
 
 export const MESSAGES = Object.freeze({
   en: Object.freeze(EN),

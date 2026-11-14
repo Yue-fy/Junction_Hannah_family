@@ -29,9 +29,14 @@ class WebContractTests(unittest.TestCase):
         ids = {attrs['id']: (tag, attrs) for tag, attrs in doc.elements if 'id' in attrs}
         self.assertIn('main', [tag for tag, _ in doc.elements])
         self.assertTrue(any(tag == 'nav' and attrs.get('aria-label') for tag, attrs in doc.elements))
-        for identifier in ('home-view', 'trends-view', 'goals-view', 'ask-coach', 'persona', 'reset-demo', 'undo-action'):
+        for identifier in ('home-view', 'trends-view', 'coach-view', 'goals-view', 'ask-coach', 'persona', 'reset-demo', 'undo-action'):
             self.assertIn(identifier, ids)
-        for identifier in ('coach-dialog', 'calculation-dialog', 'transactions-dialog'):
+        coach_tag, coach_attrs = ids['coach-view']
+        self.assertEqual(coach_tag, 'section')
+        self.assertIn(coach_attrs.get('aria-labelledby'), ids)
+        self.assertNotIn('aria-modal', coach_attrs)
+        self.assertNotIn('coach-dialog', ids)
+        for identifier in ('calculation-dialog', 'transactions-dialog'):
             tag, attrs = ids[identifier]
             self.assertEqual(tag, 'dialog')
             self.assertIn(attrs.get('aria-labelledby'), ids)
@@ -90,19 +95,23 @@ class WebContractTests(unittest.TestCase):
 
     def node_app(self, body):
         """Execute the real app with a small DOM boundary and scoped API fixtures."""
-        sources = {name: self.read(name) for name in ('app.js', 'api.js', 'state.js', 'charts.js', 'i18n.js')}
+        sources = {name: self.read(name) for name in ('app.js', 'api.js', 'state.js', 'charts.js', 'i18n.js', 'experience.js', 'presentation.js', 'coach-narrative.js')}
         harness = r'''
 import assert from 'node:assert/strict';
 const elements = new Map(), documentListeners = {}, calls=[];
 class Element {
  constructor(id=''){this.id=id;this.textContent='';this.innerHTML='';this.value='';this.hidden=false;this.disabled=false;this.open=false;this.dataset={};this.listeners={};this.attributes={};this.children=[];this.classList={remove(){}};}
+ get textContent(){return this._textContent;}
+ set textContent(value){this._textContent=String(value??'');this._innerHTML=this._textContent;this.children=[];}
+ get innerHTML(){return this._innerHTML;}
+ set innerHTML(value){this._innerHTML=String(value??'');this._textContent=this._innerHTML.replace(/<[^>]*>/g,'');this.children=[];}
  addEventListener(name,callback){this.listeners[name]=callback;}
  setAttribute(name,value){this.attributes[name]=value;}
  removeAttribute(name){delete this.attributes[name];}
  hasAttribute(name){return name in this.attributes;}
- replaceChildren(...children){this.children=[...children];this.textContent=children.map(x=>typeof x==='string'?x:x.textContent||'').join('');this.innerHTML='';}
- append(child){this.children.push(child);this.textContent+=typeof child==='string'?child:child.textContent||'';}
- prepend(){} focus(){this.focused=true;} scrollIntoView(){this.scrolled=true;} insertAdjacentHTML(_position,html){this.innerHTML+=html;} remove(){}
+ replaceChildren(...children){this._innerHTML='';this._textContent=children.map(x=>typeof x==='string'?x:x.textContent||'').join('');this.children=[...children];}
+ append(child){this.children.push(child);this._textContent+=typeof child==='string'?child:child.textContent||'';}
+ prepend(){} focus(){this.focused=true;} scrollIntoView(){this.scrolled=true;} insertAdjacentHTML(_position,html){this._innerHTML+=html;this._textContent+=html.replace(/<[^>]*>/g,'');} remove(){}
  querySelector(selector){if(selector==='.dialog-notice')return null;return this;}
  showModal(){this.open=true;} close(){this.open=false;}
  closest(){return this;}
@@ -130,7 +139,7 @@ function fixture(path,customer){
 }
 globalThis.fetch=async(url,options)=>{
  const parsed=new URL(url,'http://local'), body=options.body?JSON.parse(options.body):{};
- const customer=body.customer_id||parsed.searchParams.get('customer_id');calls.push({path:parsed.pathname,customer,body,query:Object.fromEntries(parsed.searchParams)});
+ const customer=body.customer_id||parsed.searchParams.get('customer_id');calls.push({path:parsed.pathname,method:options.method,customer,body,query:Object.fromEntries(parsed.searchParams)});
  let data=fixture(parsed.pathname,customer);
  if(parsed.pathname==='/api/goals'&&options.method==='POST')data={goal:{id:'goal-a',name:body.name}};
  if(pending&&pending.path===parsed.pathname&&!pending.used){const held=pending;held.used=true;held.startedResolve();await held.gate;}
@@ -147,7 +156,7 @@ function goalInputs(){get('goal-name').value='Old customer goal';get('goal-targe
 await select('CUST00001');
 '''
         script = 'const sources=' + json.dumps(sources) + ';\n' + harness + '\n' + body
-        result = subprocess.run(['node', '--input-type=module', '-e', script], capture_output=True, text=True, timeout=30)
+        result = subprocess.run(['node', '--input-type=module'], input=script, capture_output=True, text=True, timeout=30)
         self.assertEqual(result.returncode, 0, result.stderr[-6500:])
 
     def test_delayed_customer_responses_cannot_write_into_another_persona(self):
@@ -185,10 +194,10 @@ for(const [path,run] of operations){
 app.state.comparison={...comparison,before:comparison.previous,after:comparison.current};app.state.scenario=scenario;
 app.state.filter='fixed_obligation';app.state.overview.flows=[{role:'fixed_obligation',amount_cents:-62031,transaction_refs:['housing-row'],fact_id:'housing-fact'}];
 const mapContext={kind:'money_map',customerId:'CUST00001',accountId:'ACC000001',month:'2026-09',start:'2026-09-01',end:'2026-09-30',label:'Regular essentials',amount_cents:62031,fact_ids:['housing-fact'],transaction_refs:['housing-row']};
-const map=app.calculationHTML(mapContext);assert.ok(map.includes('housing-row'));assert.ok(map.includes('housing-fact'));
+const map=app.calculationHTML(mapContext);assert.ok(map.includes('data-evidence-rows'));assert.ok(!map.includes('housing-row'));assert.ok(!map.includes('housing-fact'));
 assert.ok(!map.includes('restaurant-fact'),'Map evidence must not contain restaurant fact IDs');assert.ok(!map.includes('restaurant-current'));assert.ok(!map.includes('€225.70'));assert.ok(!map.includes('€37.85'));
 const restaurant=app.calculationHTML({kind:'restaurant',customerId:'CUST00001',accountId:'ACC000001',comparison:app.state.comparison,scenario,exclusion:'restaurant-one-off'});
-assert.ok(restaurant.includes('restaurant-current'));assert.ok(restaurant.includes('restaurant-fact'));assert.ok(!restaurant.includes('housing-row'));assert.ok(!restaurant.includes('housing-fact'));assert.ok(restaurant.includes('€37.85'));
+assert.ok(restaurant.includes('data-evidence-rows'));assert.ok(!restaurant.includes('restaurant-current'));assert.ok(!restaurant.includes('restaurant-fact'));assert.ok(!restaurant.includes('housing-row'));assert.ok(!restaurant.includes('housing-fact'));assert.ok(restaurant.includes('€37.85'));
 await app.showStory();assert.equal(app.state.filter,null,'Restaurant transition must clear the Money Map filter');
 ''')
 
@@ -253,7 +262,8 @@ assert.equal(document.documentElement.lang,'fi');assert.ok(get('scenario-amount'
 assert.ok(get('selected-month').innerHTML.includes('syyskuu 2026'),'Month choices must follow product locale, independent of the OS');
 await app.ensureScenario();assert.ok(get('scenario-amount').innerHTML.includes('37,85'));assert.ok(get('scenario-detail').textContent.includes('20'));
 await app.askCoach('Mikä muuttui?');assert.equal(calls.filter(c=>c.path==='/api/coach').at(-1).body.locale,'fi');
-assert.ok(get('coach-response').textContent.includes('RESPONSE\n'),'Coach explanation and action need a text boundary');
+assert.match(get('coach-response').innerHTML,/<div class="coach-prose"><p>[^<]+<\/p>/,'The factual response needs a readable paragraph boundary');
+assert.ok(get('coach-response').innerHTML.includes('225,70'),'Factual prose must use the selected locale');
 get('language').value='sv';get('language').listeners.change();await settle();assert.equal(document.documentElement.lang,'sv');
 assert.ok(get('goal-submit').textContent.includes('Skapa'));
 ''')
@@ -270,13 +280,13 @@ await app.load();assert.ok(get('safe-content').innerHTML.includes('history'));as
     def test_coach_tool_results_render_exact_server_values_without_generic_action(self):
         self.node_app(r'''
 const stats=app.toolResultHTML({tool_kind:'transaction_statistics',tool_fact_id:'taxi-fact',parameters:{period:'2026-09',category:'Transportation'},tool_result:{start:'2026-09-01',end:'2026-09-30',filters:{category:'Transportation'},outflow_total_cents:26680,transaction_count:6,average_outflow_cents:4447,largest_outflow:{amount_cents:6216,date:'2026-09-20'},transaction_refs:['a','b']}});
-assert.ok(stats.includes('€266.80'));assert.ok(stats.includes('6'));assert.ok(stats.includes('€44.47'));assert.ok(stats.includes('taxi-fact'));
+assert.ok(stats.includes('€266.80'));assert.ok(stats.includes('6'));assert.ok(stats.includes('€44.47'));assert.ok(!stats.includes('taxi-fact'));
 const adjustment=app.toolResultHTML({tool_kind:'spending_adjustment_preview',tool_fact_id:'scenario-fact',tool_result:{category:'Restaurants',percent:'20',actual_total_cents:22570,adjustable_base_cents:22570,modeled_monthly_contribution_cents:4514,persistence:'not_saved',transaction_refs:['r1']}});
 assert.ok(adjustment.includes('€45.14'));assert.ok(adjustment.includes('€225.70'));assert.ok(adjustment.includes('20'));
 const profile=app.toolResultHTML({tool_kind:'three_basket_profile',tool_fact_id:'profile-fact',tool_result:{period:'2026-09',total_consumption_cents:187866,baskets:[{role:'fixed_obligation',amount_cents:126690},{role:'flexible_essential',amount_cents:0},{role:'discretionary',amount_cents:61176}],transaction_refs:['p1']}});
-assert.ok(profile.includes('€1,266.90'));assert.ok(profile.includes('€0.00'));assert.ok(profile.includes('€611.76'));assert.ok(profile.includes('profile-fact'));
+assert.ok(profile.includes('€1,266.90'));assert.ok(profile.includes('€0.00'));assert.ok(profile.includes('€611.76'));assert.ok(!profile.includes('profile-fact'));
 const safe=app.toolResultHTML({tool_kind:'safe_to_spend',tool_fact_id:'safe-fact',tool_result:{available:true,horizon_days:7,horizon_end:'2026-10-07',safe_to_spend_cents:328831,reserve_floor_cents:50000,scheduled_outflows_cents:52838,historical_flexible_buffer_cents:40689,assumptions:['server assumptions remain auditable'],transaction_refs:['s1'],comparison_transaction_refs:['h1']}});
-assert.ok(safe.includes('€3,288.31'));assert.ok(safe.includes('€500.00'));assert.ok(safe.includes('€528.38'));assert.ok(safe.includes('€406.89'));assert.ok(safe.includes('safe-fact'));
+assert.ok(safe.includes('€3,288.31'));assert.ok(safe.includes('€500.00'));assert.ok(safe.includes('€528.38'));assert.ok(safe.includes('€406.89'));assert.ok(!safe.includes('safe-fact'));
 const noTax=app.toolResultHTML({tool_kind:'observed_tax_evidence',tool_fact_id:'tax-fact',tool_result:{available:false,observed_tax_paid_cents:null,records:[],transaction_refs:[],limitations:[]}});
 assert.ok(noTax.toLowerCase().includes('no explicit tax'));
 assert.equal(app.toolResultHTML({intent:'explain_change'}),'');
@@ -309,8 +319,9 @@ const tax=get('directory-tax');tax.dataset.coachQuestion='coach.question.taxReco
 assert.equal(calls.filter(item=>item.path==='/api/coach').at(-1).body.message,'Kontrollera uttryckliga skatteuppgifter den här månaden');
 const vehicle=get('directory-vehicle');vehicle.dataset.goalTemplate='vehicle';documentListeners.click({target:vehicle});
 assert.equal(app.state.view,'goals');assert.equal(get('goal-template').value,'vehicle');assert.ok(get('goal-name').value);assert.equal(get('goal-name').focused,true);
-const vat=get('directory-vat');vat.setAttribute('data-open-vat','');documentListeners.click({target:vat});
-assert.equal(app.state.view,'trends');assert.equal(get('vat-card').scrolled,true);
+const vat=get('directory-vat');vat.setAttribute('data-open-vat','');await documentListeners.click({target:vat});await settle();
+assert.equal(app.state.view,'coach');assert.equal(get('coach-view').hidden,false);
+assert.equal(calls.filter(item=>item.path==='/api/coach').at(-1).body.message,'Hur mycket moms ingår i mina köp?');
 ''')
 
     def test_persona_and_language_changes_clear_scoped_coach_evidence(self):
@@ -331,15 +342,15 @@ globalThis.fetch=async(url,options)=>{
   const body=JSON.parse(options.body);
   if(body.message==='transport')return {ok:true,json:async()=>({ok:true,data:{intent:'spending_adjustment',source:'deterministic',tool_kind:'spending_adjustment_preview',explanation_blocks:[{text:'Transport preview.'}],tool_result:{category:'Transportation',percent:'20',actual_total_cents:20000,adjustable_base_cents:15000,modeled_monthly_contribution_cents:3000,transaction_refs:['transport-row']}}})};
   if(body.message==='tax')return {ok:true,json:async()=>({ok:true,data:{intent:'observed_tax_evidence',source:'deterministic',tool_kind:'observed_tax_evidence',explanation_blocks:[{text:'No explicit tax rows.'}],tool_result:{available:false,transaction_refs:[]}}})};
-  return {ok:true,json:async()=>({ok:true,data:{intent:'transaction_statistics',source:'deterministic',fallback_reason:'gemini_unavailable',tool_source:'local_statistics',tool_kind:'transaction_statistics',tool_fact_id:'taxi-fact',parameters:{period:'2026-09'},explanation_blocks:[{text:'Verified taxi activity.'}],tool_result:{start:'2026-09-01',end:'2026-09-30',filters:{category:'Transportation'},outflow_total_cents:26680,transaction_count:6,average_outflow_cents:4447,largest_outflow:{amount_cents:6216,date:'2026-09-20'},transaction_refs:['taxi-row']}}})};
+  return {ok:true,json:async()=>({ok:true,data:{intent:'transaction_statistics',source:'deterministic',fallback_reason:'gemini_unavailable',tool_source:'local_statistics',tool_kind:'transaction_statistics',tool_fact_id:'taxi-fact',parameters:{period:'2026-09'},explanation_blocks:[{text:'Verified transport activity.'}],tool_result:{start:'2026-09-01',end:'2026-09-30',filters:{category:'Transportation'},outflow_total_cents:26680,transaction_count:6,average_outflow_cents:4447,largest_outflow:{amount_cents:6216,date:'2026-09-20'},transaction_refs:['taxi-row']}}})};
  }
  return originalFetch(url,options);
 };
 await app.askCoach('How much did I spend on taxis last month?');
-assert.ok(get('coach-response').innerHTML.includes('€266.80'));assert.ok(get('coach-response').innerHTML.includes('€44.47'));assert.ok(get('coach-response').innerHTML.includes('taxi-fact'));
-assert.equal(get('coach-debug').hidden,false);assert.ok(get('coach-debug-content').textContent.includes('gemini_unavailable'));assert.ok(get('coach-debug-content').textContent.includes('local_statistics'));
-await app.askCoach('transport');let action=get('coach-response').children.filter(child=>child?.onclick).at(-1);assert.ok(action.textContent.includes('Create a goal'));action.onclick();assert.equal(app.state.view,'goals');assert.equal(get('story-dialog').open,false);
-await app.askCoach('tax');action=get('coach-response').children.filter(child=>child?.onclick).at(-1);assert.ok(action.textContent.includes('Plan a user-declared tax amount'));action.onclick();assert.equal(get('coach-tax').open,true);assert.equal(get('tax-plan-amount').focused,true);
+assert.ok(get('coach-response').innerHTML.includes('€266.80'));assert.ok(get('coach-response').innerHTML.includes('€44.47'));assert.ok(!get('coach-response').innerHTML.includes('taxi-fact'));
+assert.equal(get('coach-debug').hidden,true);assert.ok(get('coach-debug-content').textContent.includes('gemini_unavailable'));assert.ok(get('coach-debug-content').textContent.includes('local_statistics'));
+await app.askCoach('transport');let action=get('coach-response').children.filter(child=>child?.onclick).at(-1);assert.ok(action.textContent.includes('Plan a goal with'));await action.onclick();await settle();assert.equal(app.state.view,'goals');assert.equal(get('story-dialog').open,false);
+await app.askCoach('tax');action=get('coach-response').children.filter(child=>child?.onclick).at(-1);assert.ok(action.textContent.includes('Plan a user-declared tax amount'));action.onclick();assert.equal(get('coach-more').open,true);assert.equal(get('coach-tax').open,true);assert.equal(get('tax-plan-amount').focused,true);
 ''')
 
     def test_handoff_retries_link_failure_without_creating_a_second_goal(self):
@@ -495,7 +506,7 @@ const {chromium} = require(process.env.SCOACH_PLAYWRIGHT_PATH);
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.request.post(base+'/api/reset',{data:{customer_id:'CUST00001',confirmed:true}});
  await page.goto(base);await page.waitForFunction(()=>!document.querySelector('#open-story').disabled);
- const bounds=await page.locator('#open-story').boundingBox();assert.ok(bounds.y+bounds.height<710,'Primary action must appear above the dock');
+ const bounds=await page.locator('#ask-coach').boundingBox();assert.ok(bounds.y>=0&&bounds.y+bounds.height<=844,'Coach must remain visible on the phone');
  if(process.env.SCOACH_SCREENSHOT_DIR)await page.screenshot({path:process.env.SCOACH_SCREENSHOT_DIR+'/scoach-home.png',fullPage:true});
  await page.locator('#open-story').click();await page.waitForFunction(()=>document.querySelector('#scenario-amount').textContent.includes('45.14'));
  await page.locator('#mark-one-off').click();await page.waitForFunction(()=>document.querySelector('#scenario-amount').textContent.includes('37.85'));
@@ -513,9 +524,9 @@ const {chromium} = require(process.env.SCOACH_PLAYWRIGHT_PATH);
  await page.getByRole('button',{name:'Create plan & link €37.85 / month'}).click();await page.waitForFunction(()=>document.querySelector('#goals-list').textContent.includes('A summer in Italy'));
  assert.match(await page.locator('#goals-list').innerText(),/€37.85 modeled monthly contribution linked/);
  if(process.env.SCOACH_SCREENSHOT_DIR)await page.screenshot({path:process.env.SCOACH_SCREENSHOT_DIR+'/scoach-goal.png',fullPage:true});
- await page.getByRole('button',{name:'Trends',exact:true}).click();assert.ok(await page.getByRole('heading',{name:'Same month, last year'}).isVisible());
+ await page.locator('[data-view=trends]').click();assert.ok(await page.getByRole('heading',{name:'Same month, last year'}).isVisible());
  assert.ok(await page.getByRole('heading',{name:'Salary, on its own'}).isVisible());
- await page.getByRole('button',{name:'Home',exact:true}).click();
+ await page.locator('[data-view=home]').click();
  await page.locator('#ask-coach').click();await page.locator('#coach-spending>summary').click();await page.getByRole('button',{name:'What changed in restaurants?'}).click();
  await page.waitForFunction(()=>document.querySelector('#coach-response').textContent.includes('average'));await page.keyboard.press('Escape');
  await page.locator('#forecast-details').click();assert.ok(await page.locator('[data-assumption]').count()>0);
@@ -523,18 +534,18 @@ const {chromium} = require(process.env.SCOACH_PLAYWRIGHT_PATH);
  const dayField=page.locator('[data-field=day]').first();await dayField.fill('17');await page.locator('#apply-preview').click();await page.waitForFunction(()=>!document.querySelector('#apply-preview').disabled);
  assert.equal(await dayField.inputValue(),'17','Edited preview assumptions remain visible');
  for(const width of [320,390,768,1280,1440]){
-  await page.setViewportSize({width,height:900});await page.reload();await page.waitForFunction(()=>!document.querySelector('#open-story').disabled);await page.getByRole('button',{name:'Home',exact:true}).click();assert.equal(await page.locator('#status-message').innerText(),'','A fresh load must not announce an edit');assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'No horizontal overflow at '+width);
+  await page.setViewportSize({width,height:900});await page.reload();await page.waitForFunction(()=>!document.querySelector('#open-story').disabled);await page.locator('[data-view=home]').click();assert.equal(await page.locator('#status-message').innerText(),'','A fresh load must not announce an edit');assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'No horizontal overflow at '+width);
   const workspace=await page.locator('.phone-shell').boundingBox();if(width===768)assert.ok(workspace.width>=650,'Tablet must use the available width');
   if(width>=920){assert.ok(workspace.width>=1000,'Desktop must be a real workspace');const money=await page.locator('.money-card').boundingBox(),priority=await page.locator('.priority-section').boundingBox();assert.notEqual(Math.round(money.x),Math.round(priority.x),'Desktop Home must use two columns');assert.ok((await page.locator('nav').boundingBox()).y<160,'Desktop navigation must be visible near the top');assert.equal(await page.locator('.desktop-intro').count(),0);}
   if(process.env.SCOACH_SCREENSHOT_DIR)await page.screenshot({path:process.env.SCOACH_SCREENSHOT_DIR+'/scoach-7a-en-'+width+'.png'});
   if(width>=920){await page.locator('.skip-link').focus();await page.keyboard.press('Enter');const nav=await page.locator('nav').boundingBox(),main=await page.locator('#main-content').boundingBox();assert.ok(main.y>=nav.y+nav.height-1,'Sticky navigation must not cover the focused main target');}
   if(width===1280){
-   await page.getByRole('button',{name:'Trends',exact:true}).click();const cards=page.locator('#trends-view>.white-card');assert.notEqual((await cards.nth(0).boundingBox()).x,(await cards.nth(1).boundingBox()).x);
+   await page.locator('[data-view=trends]').click();const cards=page.locator('#trends-view>.white-card');assert.notEqual((await cards.nth(0).boundingBox()).x,(await cards.nth(1).boundingBox()).x);
    if(process.env.SCOACH_SCREENSHOT_DIR)await page.screenshot({path:process.env.SCOACH_SCREENSHOT_DIR+'/scoach-7a-trends-desktop.png'});
    await page.getByRole('button',{name:'Goals',exact:true}).click();assert.notEqual((await page.locator('#goals-list').boundingBox()).x,(await page.locator('#goal-form').boundingBox()).x);
    if(process.env.SCOACH_SCREENSHOT_DIR)await page.screenshot({path:process.env.SCOACH_SCREENSHOT_DIR+'/scoach-7a-goals-desktop.png'});
   }
-  if(width===320){await page.getByRole('button',{name:'Goals',exact:true}).click();assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Goal form overflow on a small phone');await page.getByRole('button',{name:'Home',exact:true}).click();}
+  if(width===320){await page.getByRole('button',{name:'Goals',exact:true}).click();assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Goal form overflow on a small phone');await page.locator('[data-view=home]').click();}
  }
  await page.locator('#persona-button').click();await page.locator('#persona').selectOption('CUST00676');await page.waitForFunction(()=>document.querySelector('#account-caption').textContent.includes('ACC000676'));
  assert.ok(!(await page.locator('#insight-headline').innerText()).includes('€110.27'));
@@ -555,7 +566,7 @@ const {chromium} = require(process.env.SCOACH_PLAYWRIGHT_PATH);
   if(locale==='sv'){await localized.locator('#language').selectOption('sv');await localized.reload();await localized.waitForFunction(()=>!document.querySelector('#open-story').disabled);}
   assert.equal(await localized.locator('html').getAttribute('lang'),locale);assert.ok((await localized.locator('#current-balance').innerText()).includes(',58'));
   assert.ok((await localized.locator('#selected-month option:checked').innerText()).includes(locale==='fi'?'syyskuu':'september'));
-  assert.equal(await localized.locator('#home-title').innerText(),locale==='fi'?'Tuore näkymä raha-asioihisi':'En ny bild av din ekonomi');
+  assert.equal(await localized.locator('#home-title').innerText(),locale==='fi'?'Enemmän tilaa elämällesi.':'Mer utrymme för ditt liv.');
   assert.ok(!(await localized.locator('#flow-legend').innerText()).includes('Regular essentials'));assert.ok(!(await localized.locator('body').innerText()).match(/\{[a-z]+\}/));
   if(process.env.SCOACH_SCREENSHOT_DIR)await localized.screenshot({path:process.env.SCOACH_SCREENSHOT_DIR+'/scoach-7a-'+locale+'-home.png'});
   for(const width of [320,768,1280]){await localized.setViewportSize({width,height:900});assert.ok(await localized.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),locale+' overflow at '+width);if(process.env.SCOACH_SCREENSHOT_DIR)await localized.screenshot({path:process.env.SCOACH_SCREENSHOT_DIR+'/scoach-7a-'+locale+'-'+width+'.png'});}

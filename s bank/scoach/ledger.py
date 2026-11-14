@@ -2,6 +2,7 @@
 import calendar
 import hashlib
 import json
+import re
 from datetime import date, datetime
 from .classification import classify
 
@@ -31,8 +32,12 @@ def account_scope(conn, customer_id):
 
 def transactions(conn, customer_id, start=None, end=None, filters=None):
     scope=account_scope(conn,customer_id); filters=filters or {}
-    allowed={'category','role','merchant_id','transaction_type','account_id','transaction_ref'}
+    allowed={'category','role','merchant_id','transaction_type','account_id','transaction_ref','mcc_code','consumption_only'}
     if set(filters)-allowed: raise ValueError('Unsupported transaction filter')
+    if 'mcc_code' in filters and (not isinstance(filters['mcc_code'], str) or not re.fullmatch(r'\d{4}', filters['mcc_code'])):
+        raise ValueError('mcc_code must be four digits')
+    if 'consumption_only' in filters and filters['consumption_only'] != 'true':
+        raise ValueError('consumption_only must be true')
     if filters.get('account_id',scope['account_id'])!=scope['account_id']: raise ValueError('Account outside customer scope')
     for value in (start,end):
         if value: date.fromisoformat(value)
@@ -51,5 +56,8 @@ def transactions(conn, customer_id, start=None, end=None, filters=None):
         override=(specific or matching)[-1] if matching else None
         row.update(classify(row,override)); row['source_category']=row['category']; row['observed']=True
         row['fact_id']=fact_id('row',row['transaction_ref'],override)
-        if all(row.get(k)==v for k,v in filters.items()): result.append(row)
+        consumption = row['amount_cents'] < 0 and row['transaction_type'] in {'purchase','utilities_payment','housing_payment'}
+        if filters.get('consumption_only') == 'true' and not consumption:
+            continue
+        if all(row.get(k)==v for k,v in filters.items() if k != 'consumption_only'): result.append(row)
     return result

@@ -99,15 +99,59 @@ This log records implementation progress, decisions, verification evidence, and 
 - Fresh pre-push verification discovered 177 tests: 176 passed and the optional browser integration was skipped. HTTP tests ran successfully; no browser workaround or new live Gemini claim was used. JavaScript syntax, Python compilation, whitespace, local README links, and image integrity checks passed.
 - An independent read-only review found no new publication blocker. Known question-scope and evidence limitations remain documented; raw CSVs, databases, and real environment values remain ignored.
 
+### Experience redesign and customer-scope validation
+
+- The user requested a substantial product/interaction redesign and explicitly authorized multi-agent work and iterative judge-style review. Added `REDESIGN_PLAN.md`, primary S-mobiili/Nordea/Monzo/Apple references and disjoint implementation ownership.
+- Replaced the primary teaching-basket wall with a selectable consumption ring and familiar category icons, grouped exploration, selected-scope labels and source transaction navigation. Income, saving transfers and balance remain separate. Tested exact reconciliation for all six demo personas.
+- Reworked typography, spacing, cards and adaptive layouts; added a prominent Home Coach invitation, persistent access, a first-use invitation and skippable/replayable tour with real actions. Replaced ambiguous forecast naming with a 30-day balance forecast and explicit ending/low estimates.
+- Added session preferences and optional consented browser persistence, user-confirmed memory proposals, editable/deletable notes, revocation and storage-failure handling. Applied structured preferences to goal starters and protected-spending suggestions. Freeform notes remain personal reflections rather than model instructions.
+- Added a source-backed money journal and opt-in goal milestones based on user-entered saved amounts. No inferred biography, investment risk score, spending reward or punitive streak is claimed.
+- Removed visible transaction/fact hashes from customer evidence. Explanations show human-readable records and formulas on demand; internal references remain available for exact navigation and audit.
+- Added local query scope before optional Gemini: concepts, metrics, dates, MCCs, consumption-only selection and validated follow-ups. Red-team tests caught and fixed stale restaurant scope on new-topic follow-ups, ignored qualifiers, `accounts` matching `count`, and mismatch between consumption totals and source rows.
+- Added `USER_TEST_JOURNEYS.md` with eight customer journeys and 40 turns/actions, including expected clarification, scope, row evidence, consent and practical benefit. This is a validation guide, not a claim of measured customer success.
+- Fresh integrated verification: 226 tests discovered, 225 passed, one optional browser test skipped. JavaScript syntax, Python compilation and whitespace checks passed. Earlier screenshots are now collapsed and explicitly marked as the previous interface.
+- A final judge review asked for a stronger coherent personalization story. Added a Home Coach plan that protects the chosen category, previews an alternative discretionary change, and explicitly saves/links that scenario to the chosen goal template. EN/FI/SV scenario parsing and a trip-handoff regression now cover this path. Follow-up verification discovered 230 tests: 229 passed and one optional browser test skipped.
+- Restarted the existing local demo at port 8088 using the existing database. No dependency, raw data, saved source database replacement, commit or push occurred during this redesign.
+- Fresh rendered browser acceptance remains pending because saved browser-origin permissions still prevent automation. No alternate browser surface was used. Live Gemini remains unconfigured and unverified.
+
+### Completion audit and conversation refinements
+
+- Audited the original experience requirements against current source, tests, runtime and artifacts in `ACCEPTANCE_STATUS.md`. Rendered acceptance remains an open gate; historical screenshots and minimal-DOM assertions are not substituted for it.
+- Found and fixed a journal/conversation mismatch: a purchase-motive question could select Lifestyle statistics. Emotional, medical and biographical inference now returns a source-limit explanation and a user-reflection path without an unrelated amount.
+- Added observed salary/income/all-credit distinctions and `inflow_total`, including positive-only evidence references. Gross-pay/tax-rate and unsupported income metrics ask for a supported definition rather than silently changing the question.
+- Added supported next actions for missing purchase context and executable clarification choices. Monetary thresholds and merchant-name qualifiers now clarify rather than disappearing from a broader category sum.
+- Explicit preference declarations can create local, unconfirmed proposals without an irrelevant bank query or model call. Opening a goal form does not grant memory consent. Direct/gentle styles change presentation order while preserving amounts and uncertainty.
+- Preserved the requested metric through matching transactions and calculation drawers. A real API-to-client bridge test checks August restaurant average and salary credits against source evidence; average explanations use the verified denominator and never display division by zero.
+- Restored optional language-adapter routing for locally unrecognized phrasing while keeping known data limitations local. Controlled model tests verify correct credited-income direction and exclude investment withdrawals from earned-income claims. No live Gemini call is claimed.
+- Latest full verification: 248 tests discovered, 247 passed and one browser test skipped; final output had no warnings. Client syntax, Python compilation and whitespace checks passed. Restarted the existing local service with the same database.
+- No browser bypass, dependency installation, database replacement, commit or push occurred. Fresh browser/device acceptance and current screenshots still require restored tool access or human-rendered evidence.
+
+### Harness portability patch integration
+
+- After the user confirmed the parallel redesign work had finished, applied the independently prepared harness patch against the latest working tree. The large module script now reaches Node through stdin instead of a single command-line argument.
+- Added `test_harness_portability.py`. Its regression executes the real Node harness with a simulated 128 KiB per-argument boundary; it failed before the fix and passed afterward. This is not a fresh Linux-host run.
+- Fresh full verification discovered 249 tests: 248 passed, one optional browser integration skipped. HTTP tests passed with permission to bind local test ports. JavaScript syntax, Python parsing and whitespace checks passed.
+- Checked the running loopback service: health, all six persona overviews, trends, forecast, safe-to-spend, investments, VAT and goals returned successful JSON. An offline three-turn restaurant-to-groceries/month follow-up returned EUR 115.43, EUR 442.26 and EUR 379.79 with the expected periods.
+- Separately reconfirmed three existing semantic gaps that the current suite does not catch: a 12.5% adjustment is interpreted as 5%; a spelled-out percentage routes to statistics; and a VAT chat question does not reach the estimate. These gaps were not changed by this test-harness patch.
+- Fresh rendered browser acceptance and live Gemini remain unverified. The existing demo database and running service were reused; no dependency installation was needed.
+
+### Complete percentage parsing and VAT chat fixes
+
+- Added failing public-API regressions before implementation for decimal/word percentages, invalid and ambiguous expressions, localized VAT questions, exact date scope, tax-liability limits and optional model tool selection. Added client regressions before rendering the new VAT answer card.
+- Replaced integer-only suffix matching with complete percentage parsing. Supported numeric values and common EN/FI/SV number words retain their exact value; missing, negative, out-of-range, malformed, ranged or multiple proportions ask for clarification instead of becoming another statistic. Financial adjustment parsing stays local.
+- Connected VAT questions to the existing VAT lens through the existing coach envelope. Localized terms and the optional adapter select the bounded tool; Python supplies every amount and source. The answer labels the estimate, exact dates, mapping coverage and uncovered spending, and keeps formulas and readable evidence collapsed. No new public endpoint or request field was introduced.
+- Confirmed Alex / September: 12.5% dining reduction is EUR 28.21, twenty percent is EUR 45.14, and estimated VAT is EUR 212.38. Explicit tax evidence remains separate; no liability, additional payment or refund is inferred.
+- Full verification discovered 261 tests: 260 passed and one optional browser integration skipped. HTTP tests, JavaScript syntax, Python syntax and whitespace checks passed. Fresh browser-device acceptance and a real Gemini call remain outside this verification.
+
 ## Current status
 
 - Product design: frozen for implementation.
 - Raw data: downloaded, ignored, verified.
-- P0 code: implemented; earlier integration suite passed, but semantic acceptance is incomplete.
+- P0 code: redesigned; supported semantic scopes and integrated interaction checks pass.
 - P1 code: safe-to-spend, observed investment-cash-flow, goals, forecast, VAT, and selected financing context are implemented and verified.
-- Adaptive/localized UI: earlier real-browser phone/tablet/desktop and EN/FI/SV walkthrough passed; generic evidence scope gaps remain.
+- Adaptive/localized UI: new responsive structure and interaction tests pass; fresh rendered phone/tablet/desktop acceptance pending.
 - Optional live Gemini call: pending a configured Junction key; deterministic fallback supports bounded questions with the documented limitations.
-- Runbook and technical reference: reconciled with current startup commands and known defects.
+- Runbook and technical reference: reconciled with redesigned behavior, supported definitions and remaining bounds.
 - Dependencies added: none.
 - Publication scope: user-authorized commit and push to `Erin-lab-design/s-bank`; no PR or main-branch update requested.
 

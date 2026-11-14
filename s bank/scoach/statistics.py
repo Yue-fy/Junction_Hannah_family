@@ -6,13 +6,14 @@ choose a validated filter, but it must never calculate or invent these values.
 
 from datetime import date
 from decimal import Decimal
+import re
 
 from .classification import ROLES, TRANSFER_TYPES
 from .ledger import account_scope, fact_id, transactions
 from .money import rounded
 
 
-_FILTERS = {"category", "role", "transaction_type", "merchant_id"}
+_FILTERS = {"category", "role", "transaction_type", "merchant_id", "mcc_code", "consumption_only"}
 _CONSUMPTION_TYPES = {"purchase", "utilities_payment", "housing_payment"}
 
 
@@ -44,6 +45,10 @@ def _filters(filters):
         cleaned[key] = value
     if "role" in cleaned and cleaned["role"] not in ROLES:
         raise ValueError("Unknown role")
+    if 'mcc_code' in cleaned and not re.fullmatch(r'\d{4}', cleaned['mcc_code']):
+        raise ValueError('mcc_code must be four digits')
+    if 'consumption_only' in cleaned and cleaned['consumption_only'] != 'true':
+        raise ValueError('consumption_only must be true')
     return cleaned
 
 
@@ -116,6 +121,7 @@ def transaction_statistics(conn, customer_id, start, end, filters=None):
         "transaction_refs": refs,
         "limitations": [
             "Totals use only the selected account rows, dates, and exact filters",
+            "Spending totals are gross outflows; positive inflows and refunds are reported separately, not silently netted",
             "Investment deposits, withdrawals, and salary sweeps remain transfers and never count as consumption",
         ],
     }

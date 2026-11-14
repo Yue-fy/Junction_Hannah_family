@@ -168,7 +168,7 @@ class GeminiTests(unittest.TestCase):
         def fake(payload, timeout):
             captured.append(payload)
             return valid()
-        interpret('Review this purchase', context, transport=fake, api_key='test')
+        interpret('Explain my spending change', context, transport=fake, api_key='test')
         minimized = captured[0]['context']
         self.assertEqual(minimized['filter_catalog']['categories'], ['Restaurants', 'Transportation'])
         for forbidden in ['transaction_refs', 'scenario_ids', 'goal_ids']:
@@ -218,10 +218,10 @@ class GeminiTests(unittest.TestCase):
         captured=[]
         response=valid()
         messages=[
-            'Säästän kaksikymmentä kuussa',
-            'Jag sparar etthundra varje månad',
-            'Ich spare neunhundert monatlich',
-            'I saved 900 CHF and ¥',
+            'Explain my finances. Säästän kaksikymmentä kuussa',
+            'Explain my finances. Jag sparar etthundra varje månad',
+            'Explain my finances. Ich spare neunhundert monatlich',
+            'Explain my finances. I saved 900 CHF and ¥',
         ]
         for message in messages:
             result=interpret(message, CONTEXT, transport=lambda payload,timeout: captured.append(payload) or response, api_key='test')
