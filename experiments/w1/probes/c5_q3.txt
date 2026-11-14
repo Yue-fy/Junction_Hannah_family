@@ -1,0 +1,20 @@
+# c5 round 3 (W1-written 05:07, before any run): element superlatives, distinct types, storey heights, derived per-storey
+PATH ../ifc_bench/hitos_arc.ifc
+How many different door types are used in the building?
+What is the height of the storey '1.etg'?
+How high is the building from the lowest to the highest storey?
+Which storey has the largest total room area?
+How many rooms on '2.etg' are larger than 20 m²?
+What is the total window area on '1.etg'?
+How many columns are there in total on all storeys above 'kjeller'?
+How many windows does each storey have on average?
+Which room is the largest in the whole building?
+What share of all rooms is on 'u.etg'?
+How many storeys are below ground?
+PATH ../ifc_bench/fantasy_hotel_1_arc.ifc
+How many windows are on the FIRST FLOOR?
+How many rooms are on the GROUND FLOOR?
+What is the floor-to-floor height between GROUND FLOOR and FIRST FLOOR?
+Which storey has the fewest windows?
+What is the total area of all rooms in the hotel?
+How many light fixtures are on the ground floor?
