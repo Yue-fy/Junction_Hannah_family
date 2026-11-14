@@ -96,3 +96,16 @@ Our swiss DXFs don't need these, because their layers are clean.
 | CADSpotting (arXiv 2412.07377) | 88.9 | not found | – |
 | DPSS (ArchCAD, NeurIPS 2025) | 89.5 | released | unclear |
 | VecFormer (NeurIPS 2025, WesKwong/VecFormer) [S] | 91.1 | Apache-2.0 | not listed |
+
+## 7. Calibrated uncertainty: confidence, ranges, and when to trust two models
+
+Background methods behind our confidence and range outputs (methods.md §6, §8d). These are textbook methods,
+cited from memory, not checked tonight.
+
+| Work | What it is | How we use it |
+|---|---|---|
+| Vovk, Gammerman & Shafer, *Algorithmic Learning in a Random World* (Springer 2005) | Conformal prediction: with exchangeable data, the ⌈(n+1)(1−α)⌉/n quantile of calibration errors gives prediction sets with ≥ 1−α coverage, for any model | `crosscheck.interval()`: integer count ranges from LoRA + CC5K margins fitted on train_gate; 90% nominal → 93% dev, 97% leak-free |
+| Angelopoulos & Bates, "A Gentle Introduction to Conformal Prediction and Distribution-Free Uncertainty Quantification" (arXiv 2107.07511, 2021) | Practical split-conformal recipes, incl. conditional (per-group) coverage | per group × agree/disagree margins (Mondrian-style conditioning) |
+| Guo et al., "On Calibration of Modern Neural Networks" (ICML 2017) | ECE, reliability diagrams; modern nets are over-confident | ECE in every eval line; why the LoRA's own p is replaced by measured hit rates |
+| Geifman & El-Yaniv, "Selective Classification for Deep Neural Networks" (NeurIPS 2017) | Risk–coverage curves and AURC: answer only above a confidence threshold | compare.py risk–coverage table; "conf ≥ 0.8 → x% right" in reports |
+| Dawid & Skene (1979), "Maximum likelihood estimation of observer error-rates" | Combining several noisy annotators via per-annotator confusion | why agreement of two counters is a confidence signal only conditional on what the confidence already knows (KNOWLEDGE 01:56) |

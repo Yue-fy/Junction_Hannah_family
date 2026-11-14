@@ -345,5 +345,129 @@
     ]
    }
   }
+ },
+ "detector_intervals": {
+  "rule": "[C - lo, C + hi] for the CC5K detector's own count, margins per class x count bucket, split-conformal on original CC5K val, coverage checked on original CC5K test (leak-safe, D8)",
+  "buckets": {
+   "windows": [
+    4,
+    8
+   ],
+   "doors": [
+    4,
+    8
+   ],
+   "wc_seats": [
+    1
+   ],
+   "sinks": [
+    2
+   ]
+  },
+  "90": {
+   "doors|<=4": [
+    1,
+    9
+   ],
+   "doors|<=8": [
+    2,
+    9
+   ],
+   "doors|>8": [
+    3,
+    5
+   ],
+   "sinks|<=2": [
+    0,
+    2
+   ],
+   "sinks|>2": [
+    2,
+    1
+   ],
+   "wc_seats|<=1": [
+    0,
+    1
+   ],
+   "wc_seats|>1": [
+    1,
+    0
+   ],
+   "windows|<=4": [
+    1,
+    3
+   ],
+   "windows|<=8": [
+    3,
+    5
+   ],
+   "windows|>8": [
+    3,
+    13
+   ]
+  },
+  "80": {
+   "doors|<=4": [
+    1,
+    2
+   ],
+   "doors|<=8": [
+    2,
+    3
+   ],
+   "doors|>8": [
+    1,
+    3
+   ],
+   "sinks|<=2": [
+    0,
+    1
+   ],
+   "sinks|>2": [
+    1,
+    1
+   ],
+   "wc_seats|<=1": [
+    0,
+    0
+   ],
+   "wc_seats|>1": [
+    1,
+    0
+   ],
+   "windows|<=4": [
+    0,
+    3
+   ],
+   "windows|<=8": [
+    3,
+    2
+   ],
+   "windows|>8": [
+    3,
+    8
+   ]
+  }
+ },
+ "threshold_side": {
+  "rule": "P(LoRA's yes/no to 'count >= N?' is right | CC5K count on the same side of N or not), pooled over N = 1..10 per group, (k+1)/(n+2) capped 0.97, fitted on train_gate",
+  "groups": {
+   "window": "openings",
+   "door": "openings",
+   "wc": "fixtures",
+   "sink": "fixtures",
+   "bedroom": "rooms",
+   "balcony": "rooms",
+   "bathroom": "rooms",
+   "kitchen": "rooms"
+  },
+  "table": {
+   "fixtures|same": 0.969,
+   "fixtures|straddle": 0.683,
+   "openings|same": 0.945,
+   "openings|straddle": 0.533,
+   "rooms|same": 0.97,
+   "rooms|straddle": 0.8
+  }
  }
 }
