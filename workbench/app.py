@@ -363,8 +363,20 @@ def post_question(q: QuestionIn):
 @app.get("/api/questions")
 def get_questions():
     keys = ("time", "qid", "path", "page", "question", "answer", "unit", "type", "method", "sureness", "marks", "system")
+    from stoa.eval.scoring import score
+
     rows = sorted(_live_questions().values(), key=lambda r: r.get("time", ""), reverse=True)
-    return {"questions": [{k: r.get(k) for k in keys} for r in rows]}
+    out = []
+    for r in rows:
+        d = {k: r.get(k) for k in keys}
+        s = r.get("system") or {}
+        try:
+            d["agree"] = score(r.get("type") or "other", r.get("answer") or None, r.get("unit") or None,
+                               s.get("value"), s.get("unit")) if s else None
+        except Exception:  # noqa: BLE001
+            d["agree"] = None
+        out.append(d)
+    return {"questions": out}
 
 
 class DeleteIn(BaseModel):

@@ -467,7 +467,7 @@ const asker = {
     this.mine = r.questions;
     $("#q-count").textContent = r.questions.length;
     $("#q-list").innerHTML = r.questions.map((q, i) => `<li><b>${esc(q.question)}</b> → ${esc(q.answer || "?")} ${esc(q.unit || "")}
-      ${q.system ? `<small>(ours: ${esc(q.system.value)} ${esc(q.system.unit || "")})</small>` : ""}
+      ${q.system ? `<small>(ours: ${esc(q.system.value)} ${esc(q.system.unit || "")}${q.agree === true ? " ✓ same" : q.agree === false ? " — <b>we disagree: a hard one!</b>" : ""})</small>` : ""}
       <button class="mini" data-edit="${i}">Edit</button><button class="mini" data-del="${i}">Delete</button></li>`).join("");
     $$("#q-list [data-edit]").forEach((b) => b.addEventListener("click", async () => {
       const q = this.mine[+b.dataset.edit];
@@ -478,6 +478,7 @@ const asker = {
       const s = $(`input[name=sure][value="${q.sureness}"]`); if (s) s.checked = true;
       this.viewer.marks = (q.marks || []).slice(); this.viewer.drawMarks();
       this.edit(q);
+      this.system = q.system ? { ok: true, ...q.system } : null;  // keep our earlier answer unless she asks again
       $("#q-text").focus();
     }));
     $$("#q-list [data-del]").forEach((b) => b.addEventListener("click", async () => {
