@@ -91,6 +91,23 @@ export function crossChecks(a: Answer, asks: string[] = []): { text: string; ok:
   return [...uniq.filter((x) => !x.ok), ...uniq.filter((x) => x.ok)].slice(0, Math.max(2, parts.size));
 }
 
+/** Ranked answers ("which storey has the most doors?"): the solver logs one value per candidate and "argmax over …";
+ * show them as bars with the chosen one marked, so the answer can be checked against the alternatives at a glance. */
+function compareHtml(a: Answer) {
+  const tr = a.trace ?? [];
+  const arg = tr.map((l) => l.match(/\barg(max|min) over (\w+)/)).find((x) => x);
+  if (!arg || typeof a.value !== "string") return "";
+  const rows = tr.map((l) => l.match(/^\[\w+\]\s*([^:\[\]]{1,60}?):\s*(-?\d+(?:\.\d+)?)\s*(count|m2|m²|m3|m³|m|%|EUR)\b/))
+    .filter((m): m is RegExpMatchArray => !!m).map((m) => ({ name: m[1].trim(), v: Number(m[2]), unit: m[3] === "count" ? "" : (UNIT_LABEL[m[3]] ?? m[3]) }));
+  const pick = String(a.value).trim();
+  if (rows.length < 2 || !rows.some((r) => r.name === pick)) return "";
+  const max = Math.max(...rows.map((r) => Math.abs(r.v)), 1e-9);
+  return `<div class="compare" title="Value per candidate from the solver's trace; the answer is the ${arg[1] === "max" ? "largest" : "smallest"}">
+    <div class="compare-h">Compared ${rows.length} ${esc(arg[2])} · ${arg[1] === "max" ? "largest" : "smallest"} wins</div>
+    ${rows.slice(0, 12).map((r) => `<div class="crow${r.name === pick ? " win" : ""}"><span>${esc(r.name)}</span><span class="bar"><i style="width:${Math.max(2, (Math.abs(r.v) / max) * 100).toFixed(1)}%"></i></span><b>${esc(r.v.toLocaleString("en", { maximumFractionDigits: 2 }))}${r.unit ? ` ${esc(r.unit)}` : ""}</b></div>`).join("")}
+  </div>`;
+}
+
 /** R1's calibrated 90% range for counts ("interval90: [lo, hi]" in the trace): shown under the value when lo < hi. */
 function rangeHtml(a: Answer) {
   const m = (a.trace ?? []).map((l) => l.match(/interval90:\s*\[\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*\]/)).find((x) => x);
@@ -388,6 +405,7 @@ export function renderCard(el: HTMLElement, a: Answer, opts: CardOpts) {
       </div>
     </div>
     ${intentHtml(a, run)}
+    ${compareHtml(a)}
     ${checks.map((x) => `<div class="xcheck ${x.ok ? "ok" : "bad"}"><b>${x.ok ? "✓ Cross-checked" : "✗ Sources disagree"}</b> ${esc(x.text)}</div>`).join("")}
     ${cascadeHtml(tier)}
     ${opts.onLocate && loc ? `<div class="locate-slot"><button class="locate-btn" title="${esc(loc.title)}">${esc(loc.button)}</button></div>` : ""}

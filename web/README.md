@@ -83,6 +83,9 @@ counts (windows, doors, WC seats, sinks) ask the CubiCasa5K detector (`raster_cc
 adds "✓/✗ <reader> finds N …" next to the pipeline's own cross-check; on ✗ the boxes show the reader's count, and an
 assumption says so. Hidden when the pipeline already asked the label reader and it found none.
 
+**Compared candidates** (ranked answers such as "which storey has the most doors?"): when the trace has one value
+per candidate and an "argmax/argmin over …" line, the card shows a bar per candidate with the chosen one highlighted.
+
 **Named elements** (free-text answers on an .ifc with no element evidence): element types the text names are
 matched in the model by family/type name, highlighted, and their counts checked against the numbers the text gives;
 for fixture kinds (sanitary, furniture, lighting) other families of the same kind that the text leaves out are listed
