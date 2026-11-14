@@ -28,7 +28,7 @@ from stoa.solvers import register
 from stoa.solvers.base import BaseSolver
 from stoa.solvers.ifc.index import Element, IfcIndex, Storey, load_index
 from stoa.solvers.ifc.index import strip_id, type_key_fn as _type_key_fn
-from stoa.solvers.ifc.parse import (_MATERIAL_Q, FALLBACK_CLASSES, KIND_CLASSES, NAME_FALLBACK, Intent, fold,
+from stoa.solvers.ifc.parse import (_MATERIAL_Q, _QUOTED as _QUOTED_RX, FALLBACK_CLASSES, KIND_CLASSES, NAME_FALLBACK, Intent, fold,
                                    material_family, material_match, parse, storey_mention, wants_list)
 from stoa.solvers.ifc.resolve import match_model, match_space, match_storey, norm
 
@@ -208,9 +208,12 @@ class IfcSolver(BaseSolver):
         it.question = question
         trace.append(f"parsed: metric={it.metric} kind={it.kind} scope={it.scope} names={it.names}"
                      + (" side-area" if it.side_area else "") + (" gross" if it.gross else ""))
+        self._repair_intent(path, idx, it, question, trace)
         ctx: dict = {"question": question}
         try:
-            ans = self._answer(path, model, idx, it, trace, ctx)
+            ans = self._outer(path, model, idx, it, question, trace, ctx)
+            if ans is None:
+                ans = self._answer(path, model, idx, it, trace, ctx)
         except Exception as ex:  # noqa: BLE001 - report as a refusal with the reason, never crash the eval
             ans = Answer.abstain(self.name, f"error: {type(ex).__name__}: {ex}", trace=trace)
         if ans.value is not None and it.kind == "space" and it.metric == "area" and isinstance(ans.value, (int, float)):
@@ -220,13 +223,24 @@ class IfcSolver(BaseSolver):
                 ans.confidence = min(ans.confidence, 0.15)
                 ans.missing.append("real room areas: this model's IfcSpaces are ~1 m² placeholders (geometry and "
                                    "quantity sets), so the value is not a floor area")
-        if ans.value is not None and not it.mod and not it.which and it.op is None:
+        if ans.value is not None and not it.mod and not it.which and it.op is None and not ctx.get("outer"):
             # an operator word the parse did not turn into an operator: the atomic value may not be what was asked
             w = _OPERATOR_WORD.search(fold(question))
             if w and ans.confidence > 0.5:
                 ans.confidence = 0.5
                 ans.missing.append(f"the question has an operator word ('{w.group(0)}') the rules did not apply")
                 ans.trace.append(f"guard: operator word '{w.group(0)}' not modelled -> confidence capped at 0.5")
+        if ans.value is not None:
+            # a number in the question that no rule used ("if each door costs 450 EUR", "minus 5"): the answer
+            # ignores part of the question, so it is not what was asked (W5's probes, 01:49)
+            from stoa.solvers.ifc.arith import leftover_numbers
+
+            left = leftover_numbers(question, ctx.get("outer_spans", []), it.threshold[1] if it.threshold else None,
+                                    dims=bool(ctx.get("dims_used")))
+            if left and ans.confidence > 0.3:
+                ans.confidence = 0.3
+                ans.missing.append(f"the question gives the number(s) {', '.join(left[:3])}, which the rules did not use")
+                ans.trace.append(f"guard: number(s) {', '.join(left[:3])} in the question not used -> confidence 0.3")
         for note in it.notes:
             if note.startswith("exclusion"):
                 ans.trace.append(note)
@@ -346,6 +360,7 @@ class IfcSolver(BaseSolver):
         if ctx.get("compose", True) and not it.names:
             dim = self._dims_answer(model, idx, it, trace, ctx)
             if dim is not None:
+                ctx["dims_used"] = True
                 return dim
         if it.metric == "text":
             if it.kind is not None and it.names:
@@ -403,6 +418,18 @@ class IfcSolver(BaseSolver):
                 groups = [(lab, grp)]
                 it.kind = "space"
                 trace.append(f"room type '{lab}' from the model's room labels: {len(grp)} spaces {where_s}")
+        if not groups and not rooms and it.kind == "space" and it.metric in ("count", "area"):
+            # unquoted room labels: "rooms named KORIDOR", "spaces called Bathroom"
+            mq = re.search(r"\b(?:named|called|labell?ed|titled)\s+([^\s,?.;:'\"‘’“”]+(?:\s+[^\s,?.;:'\"‘’“”]+)?)",
+                           ctx.get("question", ""))
+            if mq:
+                sg = storey.guid if (storey is not None and it.scope != "model") else None
+                for cand in dict.fromkeys((mq.group(1), mq.group(1).split()[0])):
+                    grp = label_group(idx, cand, sg)
+                    if grp:
+                        groups = [(cand, grp)]
+                        trace.append(f"rooms labelled '{cand}' (unquoted): {len(grp)} spaces {where_s}")
+                        break
         if groups and it.kind in ("space", None) and it.metric in ("count", "area"):
             els = [e for _, g in groups for e in g]
             it.kind = "space"
@@ -458,6 +485,26 @@ class IfcSolver(BaseSolver):
                 if len(vals) > 1:
                     trace.append("sum of " + " + ".join(f"{v:.2f}" for _, v, _ in vals))
             return self._final(val, "m2", it, conf * 0.97, ev, trace, assumptions, missing)
+
+        # ---- the largest / smallest room of a storey or the model (no room names given) ------------------
+        if (it.kind == "space" and not rooms and not groups and not it.top_n and not it.group_by
+                and it.op in ("max", "min", "argmax", "argmin") and it.metric in ("area", "text")
+                and idx.by_class("IfcSpace")):
+            sp_els = (idx.in_storey(storey.guid, "IfcSpace") if storey is not None and it.scope != "model"
+                      else idx.by_class("IfcSpace"))
+            vals = [(v, e) for e in sp_els for v in [self._floor_area(e, it, [])[0]] if v]
+            if vals:
+                big = it.op in ("max", "argmax")
+                v0, e0 = (max if big else min)(vals, key=lambda x: x[0])
+                lab = (f"{e0.long_name} ({e0.name})" if e0.long_name and e0.name and e0.long_name != e0.name
+                       else (e0.long_name or e0.name or e0.guid))
+                trace.append(f"{'largest' if big else 'smallest'} of {len(vals)} rooms {where_s}: {lab} {v0:.2f} m²")
+                ev = [self._ev(model, e0, f"{lab} {v0:.2f} m²")]
+                assumptions.append("room size = net floor area (IfcSpace footprint)")
+                if it.op.startswith("arg") or it.which:
+                    return Answer(value=f"{lab} ({v0:.2f} m²)", unit=None, confidence=conf * 0.9, evidence=ev,
+                                  trace=trace, solver=self.name, assumptions=assumptions, missing=missing)
+                return self._final(v0, "m2", it, conf * 0.95, ev, trace, assumptions, missing)
 
         if it.kind is None:
             return Answer.abstain(self.name, "no element kind recognised in the question", trace=trace,
@@ -644,6 +691,155 @@ class IfcSolver(BaseSolver):
         return self._final(tot, unit, it, conf * 0.95, ev, trace, assumptions, missing)
 
     # ------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------
+    _BUILDING = re.compile(r"\b(whole|entire|complete) (building|house|model|project)\b|\b(in|of|for) the (building|house)\b|"
+                           r"\b(all|every) (floors|storeys|stories|levels|floor|storey|level)\b|\bbuilding[- ]wide\b|"
+                           r"\bacross (all|the) (floors|storeys|levels|building)\b|\b(ganzen|gesamten) (gebaude|haus)\b|"
+                           r"\bim gebaude\b|\bhele gebouw\b|\bin het gebouw\b|\btodo el edificio\b|\bdans le batiment\b")
+
+    def _repair_intent(self, path: str, idx: IfcIndex, it: Intent, question: str, trace: list[str]) -> None:
+        """Small parse repairs for wordings the templates never use (W1 probes, cycle 4)."""
+        qf = fold(_QUOTED_RX.sub(" ", question))
+        # "in the whole building" asked on a plan sheet, no storey named: the whole model, not the sheet's storey
+        # (asked on the .ifc itself, the scope is already the whole model)
+        if (Path(path).suffix.lower() != ".ifc" and it.scope != "model" and not it.names and it.mod != "share" and it.kind != "storey"
+                and self._BUILDING.search(qf) and storey_mention(question, [s.name for s in idx.storeys])[0] is None):
+            it.scope = "model"
+            trace.append(f"scope: '{self._BUILDING.search(qf).group(0)}' -> whole model")
+        # "Which floor has the fewest windows?": a superlative over elements other than rooms is a count unless an
+        # area word says otherwise
+        if (it.op in ("argmax", "argmin") and it.metric == "area" and it.kind not in (None, "space")
+                and not re.search(r"\b(area|areas|m2|square|surface|sq|flache|flaeche|oppervlak\w*|superficie|pind)\b", qf)):
+            it.metric = "count"
+            trace.append("superlative without an area word: compared by count")
+        # "the name of the largest room" asks for a name, not a count
+        if it.op in ("max", "min") and it.kind in ("space", None) and re.search(
+                r"\bname of\b|\bwhich\b|\bwhat (room|space)\b|\bcalled\b", qf):
+            it.op, it.which = "arg" + it.op, True
+            it.kind = "space"
+            if it.metric in ("text", "count"):
+                it.metric = "area"
+
+    def _outer(self, path: str, model: str, idx: IfcIndex, it: Intent, question: str, trace: list[str],
+               ctx: dict) -> Answer | None:
+        """Arithmetic around one or two atomic quantities (arith.detect): a factor or rate given in the question,
+        add/remove N, a ratio, or a numeric yes/no. The atomic parts come from `_answer` (same rules, same
+        evidence); the arithmetic is done here, in code. None = no outer operation (or a part failed)."""
+        import dataclasses
+
+        from stoa.solvers.ifc.arith import detect
+
+        o = detect(question)
+        if o is None:
+            return None
+        base = dict(op=None, mod=None, threshold=None, which=False, yes_no=False, top_n=False, group_by=None,
+                    notes=[])
+
+        def run(it2: Intent, q2: str | None = None) -> tuple[Answer, list[str]]:
+            st: list[str] = []
+            a = self._answer(path, model, idx, it2, st, {"question": q2 or question})
+            return a, st
+
+        def num(a: Answer) -> bool:
+            return a.value is not None and isinstance(a.value, (int, float)) and not isinstance(a.value, bool)
+
+        def out(val, unit, parts: list[tuple[Answer, list[str]]], steps: list[str], how: str, k: float = 0.95) -> Answer:
+            conf = k
+            ev, asm, miss = [], [how], []
+            for a, st in parts:
+                conf *= a.confidence
+                ev += a.evidence
+                asm += [x for x in a.assumptions if x not in asm]
+                miss += [x for x in a.missing if x not in miss]
+                trace.extend(st[-3:])
+            trace.extend(steps)
+            if isinstance(val, float):
+                val = int(round(val)) if unit == "count" and abs(val - round(val)) < 1e-9 else round(val, 3)
+            ctx["outer"], ctx["outer_spans"] = True, o.spans
+            return Answer(value=val, unit=unit, confidence=max(0.0, min(1.0, conf)), evidence=ev[:MAX_EVIDENCE],
+                          trace=trace, solver=self.name, assumptions=asm, missing=miss)
+
+        trace.append(f"outer operation: {o.why}")
+        if o.op == "mul":
+            if o.basis == "count":
+                k = o.basis_kind or it.kind
+                if k in (None, "storey"):
+                    return None
+                it2 = dataclasses.replace(it, metric="count", kind=k, kinds=[k], asked_unit=None, **base)
+            else:
+                k = it.kind if it.kind not in (None, "storey") else ("space" if o.basis == "area" else None)
+                if k is None:
+                    return None
+                it2 = dataclasses.replace(it, metric=o.basis, kind=k, kinds=[k], asked_unit=o.basis_unit,
+                                          side_area=o.basis == "area" and (it.side_area or k == "wall"), **base)
+            a, st = run(it2)
+            if not num(a):
+                return None
+            val = float(a.value) * o.n
+            unit = o.unit or a.unit
+            return out(val, unit, [(a, st)], [f"{a.value} {a.unit} x {o.n:g} = {val:.2f} {unit or ''}"],
+                       f"{o.why}: model quantity x the factor given in the question")
+        if o.op in ("add", "sub"):
+            it2 = dataclasses.replace(it, **base)
+            if it2.metric == "text" and it2.kind:
+                it2.metric = "count"
+            if it2.kind is None:
+                return None
+            a, st = run(it2)
+            if not num(a):
+                return None
+            val = float(a.value) + (o.n if o.op == "add" else -o.n)
+            if val < 0:
+                return None
+            return out(val, a.unit, [(a, st)], [f"{a.value} {'+' if o.op == 'add' else '-'} {o.n:g} = {val:g}"],
+                       f"model quantity {'plus' if o.op == 'add' else 'minus'} the {o.n:g} given in the question")
+        if o.op == "div":
+            ka, kb = o.kinds
+            if ka is not None:
+                ita = dataclasses.replace(it, metric="count", kind=ka, kinds=[ka], **base)
+                a, sa = run(ita)
+            else:
+                from stoa.solvers.ifc.parse import parse as _parse
+
+                ita = _parse(o.num_text)
+                ita.question = o.num_text
+                ita = dataclasses.replace(ita, **base)
+                if ita.metric == "text" and ita.kind:
+                    ita.metric = "count"
+                if ita.kind is None or ita.kind == kb:
+                    return None
+                a, sa = run(ita, o.num_text)
+            itb = dataclasses.replace(it, metric="count", kind=kb, kinds=[kb], filters={}, material=None,
+                                      asked_unit=None, **base)
+            b, sb = run(itb)
+            if not (num(a) and num(b)) or float(b.value) == 0:
+                return None
+            val = float(a.value) / float(b.value)
+            unit = None if a.unit == "count" else a.unit
+            return out(val, unit, [(a, sa), (b, sb)],
+                       [f"{a.value} {a.unit} / {b.value} {kb}s = {val:.4f}"], f"ratio: {o.why}")
+        if o.op == "cmp":
+            it2 = dataclasses.replace(it, **base)
+            if it2.metric == "text" and it2.kind:
+                it2.metric = "count"
+            if it2.kind is None and not it2.names:
+                return None
+            a, st = run(it2)
+            if not num(a):
+                return None
+            v, n = float(a.value), o.n
+            res = {"gt": v > n, "ge": v >= n, "lt": v < n, "le": v <= n,
+                   "eq": abs(v - n) < (1e-9 if a.unit == "count" else 0.005 * max(abs(n), 1e-9))}[o.cmp]
+            sym = {"gt": ">", "ge": ">=", "lt": "<", "le": "<=", "eq": "="}[o.cmp]
+            ans = out("yes" if res else "no", None, [(a, st)],
+                      [f"{v:g} {a.unit or ''} {sym} {n:g}? -> {'yes' if res else 'no'}"],
+                      f"yes/no: is the model quantity ({v:g} {a.unit or ''}) {sym} {n:g}")
+            if a.unit != "count" and abs(v - n) <= 0.02 * max(abs(n), 1e-9):
+                ans.confidence *= 0.6
+                ans.missing.append(f"the value {v:g} is within 2% of {n:g}; the yes/no depends on the definition")
+            return ans
+        return None
+
     def _storey_names(self, idx: IfcIndex, it: Intent) -> tuple[list[tuple[str, Storey]], list[str]]:
         """Split the quoted names into storeys (exact/normalised match that no room matches better) and others."""
         st, other = [], []
@@ -664,6 +860,18 @@ class IfcSolver(BaseSolver):
         import dataclasses
 
         storeys, others = self._storey_names(idx, it)
+        qf_ = fold(ctx.get("question", ""))
+        if (not it.names and not it.mod and it.kind not in (None, "storey", "space") and it.op in ("argmax", "argmin")
+                and re.search(r"\b(which|what|welche[smr]?|welk[e]?|quel(le)?|cual|qual[e]?|mika|vilken)\s+(storey|story|"
+                              r"floor|level|geschoss|stockwerk|etage|verdieping|korrus|niveau|planta|piano|kerros|vaning)",
+                              qf_)
+                and re.search(r"\b(most|fewest|least|largest|smallest|highest|lowest|meisten|wenigsten|meeste|minste|"
+                              r"more|fewer|less)\b", qf_)
+                and storey_mention(ctx.get("question", ""), [s_.name for s_ in idx.storeys])[0] is None):
+            # "Which storey has the most doors?": every storey of the model is a candidate
+            storeys = [(s_.name, s_) for s_ in idx.storeys if s_.name]
+            it = dataclasses.replace(it, names=[n for n, _ in storeys])
+            trace.append(f"which-storey over all {len(storeys)} storeys")
         multi = len(storeys) >= 2 and not others and (it.op in ("sum", "argmax", "argmin", "diff", "max", "min")
                                                      or it.which)
         if not (multi or it.mod):
@@ -683,8 +891,11 @@ class IfcSolver(BaseSolver):
         def done(val, unit, parts: list[Answer], steps: list[str], how: str, conf_k: float = 0.95) -> Answer:
             conf = conf_k
             ev, asm, miss = [], [how], []
+            if len(parts) > 3:  # one rule applied to many rooms: their confidences are not independent
+                conf *= min((a.confidence if a.value is not None else 0.0) for a in parts)
             for a in parts:
-                conf *= a.confidence if a.value is not None else 0.0
+                if len(parts) <= 3:
+                    conf *= a.confidence if a.value is not None else 0.0
                 ev += a.evidence
                 asm += [x for x in a.assumptions if x not in asm]
                 miss += [x for x in a.missing if x not in miss]
@@ -709,9 +920,22 @@ class IfcSolver(BaseSolver):
                     r"\b(fewer|less|least|fewest|smaller|smallest|lower|weniger|kleiner|minder|kleiner|menos|menor|moins|"
                     r"meno|mniej|vahem|mindre)\b", fold(getattr(it, "question", ""))))
                 pick = (min if low else max)(vals, key=lambda x: x[1])
-                tie = sum(1 for _, v in vals if v == pick[1]) > 1
-                return done(pick[0] if not tie else "equal (" + ", ".join(f"{n} {v:g}" for n, v in vals) + ")",
-                            None, [a for _, a, _ in parts], steps + [f"{it.op} over storeys -> {pick[0]}"],
+                tied = [n for n, v in vals if v == pick[1]]
+                tie = len(tied) > 1
+                if tie and len(vals) > 2:
+                    tie_txt = " and ".join(tied) + f" (tie, {pick[1]:g} {unit or ''} each)"
+                else:
+                    tie_txt = "equal (" + ", ".join(f"{n} {v:g}" for n, v in vals) + ")"
+                pparts = [a for _, a, _ in parts]
+                if "which-storey over all" in " ".join(trace):
+                    # every storey is a candidate: empty ones are legitimate, and only the winner and the runner-up
+                    # decide the answer
+                    for a in pparts:
+                        a.missing = [x for x in a.missing if not x.startswith("no ")]
+                    order = sorted(range(len(vals)), key=lambda i: vals[i][1], reverse=not low)
+                    pparts = [parts[i][1] for i in order[:2]]
+                return done(pick[0] if not tie else tie_txt,
+                            None, pparts, steps + [f"{it.op} over storeys -> {pick[0]}"],
                             f"compared {it.metric} per storey", 0.95 if not tie else 0.6)
             if it.op == "diff" and len(vals) == 2:
                 return done(abs(vals[0][1] - vals[1][1]), unit, [a for _, a, _ in parts],
@@ -723,6 +947,19 @@ class IfcSolver(BaseSolver):
             return done(int(tot) if unit == "count" else tot, unit, [a for _, a, _ in parts],
                         steps + ["sum = " + " + ".join(f"{v:g}" for _, v in vals)], "sum over the named storeys")
 
+        if it.mod == "avg" and it.metric == "count":
+            # an average of a COUNT needs a denominator other than the elements themselves ("per storey")
+            if not re.search(r"\bper (storey|story|floor|level|etage|geschoss|verdieping)\b", fold(ctx.get("question", ""))):
+                return None
+            tot, t1 = sub(it.names, scope="model" if not it.names else it.scope)
+            if tot.value is None or isinstance(tot.value, str):
+                return None
+            n_st = len(idx.storeys)
+            return done(float(tot.value) / n_st, None, [tot],
+                        [f"total {tot.value} ({t1[-1] if t1 else ''})", f"{n_st} storeys",
+                         f"average = {tot.value} / {n_st}"],
+                        f"average per storey = total / number of IfcBuildingStoreys ({n_st}, incl. any foundation/roof levels)",
+                        0.8)
         if it.mod == "avg":
             tot, t1 = sub(it.names)
             cnt, t2 = sub(it.names, metric="count")
@@ -904,6 +1141,27 @@ class IfcSolver(BaseSolver):
         op = ("max" if re.search(r"\b(largest|widest|biggest|maximum|max|tallest|highest|thickest|greatest|largest)\b", q)
               else "min" if re.search(r"\b(smallest|narrowest|minimum|min|lowest|shortest|thinnest|least)\b", q)
               else None)
+        nm_ = re.search(r"\b(top|largest|biggest|widest|tallest|highest|thickest|smallest|narrowest|thinnest|lowest|first)"
+                        r"\s+(\d+|two|three|four|five|six|seven|eight|nine|ten)\b|\b(\d+|two|three|four|five|six|seven|"
+                        r"eight|nine|ten)\s+(largest|biggest|widest|tallest|highest|thickest|smallest|narrowest|thinnest|"
+                        r"lowest)\b", q)
+        top_k = 1
+        if nm_:
+            w = nm_.group(2) or nm_.group(3)
+            top_k = int(w) if w.isdigit() else ["two", "three", "four", "five", "six", "seven", "eight", "nine",
+                                                 "ten"].index(w) + 2
+        if op and top_k > 1:
+            distinct = sorted({round(v, 4) for v, _ in vals}, reverse=(op == "max"))[:top_k]
+            lines = [f"{'Largest' if op == 'max' else 'Smallest'} {top_k} {noun} {whats} {where} ({src}):"]
+            ev = []
+            for r_, v0 in enumerate(distinct, 1):
+                hit = [e for v, e in vals if abs(v - v0) < 5e-4]
+                types = Counter(label(e) for e in hit)
+                lines.append(f"{r_}. {mm(v0)}: " + "; ".join(f"{t} ({n})" for t, n in types.most_common(3)))
+                ev += [self._ev(model, e, f"{label(e)} {what} {mm(v0)}") for e in hit][:20]
+            trace.append(f"top {top_k} distinct {whats} ({op})")
+            return Answer(value="\n".join(lines), unit=None, confidence=conf * 0.9, evidence=ev, trace=trace,
+                          solver=self.name, assumptions=assumptions, missing=missing)
         if op:
             v0 = (max if op == "max" else min)(v for v, _ in vals)
             hit = [e for v, e in vals if abs(v - v0) < 5e-4]
@@ -918,15 +1176,20 @@ class IfcSolver(BaseSolver):
                      + "; ".join(f"{t} ({n} {noun}{'s' if n > 1 else ''})" for t, n in types.most_common(5))]
             return Answer(value="\n".join(lines), unit=None, confidence=conf, evidence=ev, trace=trace,
                           solver=self.name, assumptions=assumptions, missing=missing)
-        if re.search(r"\btypes?\b", q):  # "wall types and their thicknesses": one line per type
-            per: dict[str, list[float]] = {}
-            for v, e in vals:
-                per.setdefault(label(e), []).append(v)
-            lines = [f"{noun.capitalize()} types {where} with their {what} ({len(per)} types, {len(vals)} {noun}s; {src}):"]
-            for t, vs in sorted(per.items(), key=lambda x: (-max(x[1]), x[0]))[:60]:
-                lo, hi = min(vs), max(vs)
-                rng = mm(lo) if abs(hi - lo) < 5e-4 else f"{lo * 1000:.0f}-{hi * 1000:.0f} mm"
-                lines.append(f"- {t}: {rng} ({len(vs)} {noun}{'s' if len(vs) > 1 else ''})")
+        if re.search(r"\btypes?\b", q):  # "wall types and their thicknesses": one line per type (all elements)
+            per: dict[str, list[float | None]] = {}
+            for e in els:
+                per.setdefault(label(e), []).append(value(e))
+            lines = [f"{noun.capitalize()} types {where} with their {what} ({len(per)} types, {len(els)} {noun}s; "
+                     f"{what} from {src}):"]
+            for t, vs in sorted(per.items(), key=lambda x: (-len(x[1]), x[0]))[:60]:
+                got = [v for v in vs if v]
+                if got:
+                    lo, hi = min(got), max(got)
+                    rng = mm(lo) if abs(hi - lo) < 5e-4 else f"{lo * 1000:.0f}-{hi * 1000:.0f} mm"
+                else:
+                    rng = f"{what} not in the model"
+                lines.append(f"- {t}: {len(vs)} {noun}{'s' if len(vs) > 1 else ''} ({len(vs) / len(els) * 100:.1f}%), {rng}")
             if len(per) > 60:
                 lines.append(f"- ... {len(per) - 60} more types")
             return Answer(value="\n".join(lines), unit=None, confidence=conf * 0.85, evidence=ev_all, trace=trace,
@@ -994,6 +1257,9 @@ class IfcSolver(BaseSolver):
     def _breakdown(self, idx: IfcIndex, it: Intent, els: list[Element], value_of, ev, trace, assumptions, missing,
                    conf: float, where: str, unit: str | None = None) -> Answer:
         """Text answer: total + breakdown by type name or by storey (IFC-Bench style)."""
+        if not els:  # nothing matched (a filter the elements lack, a broad question): let the fact card answer
+            return Answer.abstain(self.name, f"breakdown of {it.kind} in {where}: no matching elements", trace=trace,
+                                  missing=missing or [f"{it.kind} elements matching the question"])
         groups: dict[str, list[float]] = {}
         members: dict[str, list[Element]] = {}
         type_key = _type_key_fn(els)
@@ -1029,17 +1295,25 @@ class IfcSolver(BaseSolver):
         want_mat = bool(re.search(r"\bmaterials?\b|made of|composition|composed|layers?\b|build[- ]?up|materia\w*|"
                                   r"werkstoff|baustoff", q))
         list_rooms = (it.kind == "space" and value_of is not None and len(els) <= 60)
+        want_size = bool(re.search(r"\b(sizes?|dimensions?|widths?|heights?|grosse|abmessung\w*|afmeting\w*|maat)\b", q)
+                         and it.kind in ("door", "window"))
         for k in order[:25]:
             sub = sum(groups[k])
             share = f" ({sub / total * 100:.1f}%)" if total else ""
             cnt = f", {len(groups[k])} elements" if value_of is not None else ""
-            lines.append(f"- {k}: {fmt(sub)}{share}{cnt}")
+            shown = f"'{k}'" if k != k.strip() else k  # trailing spaces: a different name in the model
+            lines.append(f"- {shown}: {fmt(sub)}{share}{cnt}")
             if want_mat:
                 combos = Counter(tuple(m for m in (e.materials or []) if m and m.strip() and "<unnamed>" not in m.lower())
                                  for e in members[k])
                 best = next((c for c, _ in combos.most_common() if c), None)
                 if best:
                     lines.append("    materials: " + ", ".join(best))
+            if want_size:
+                sizes = Counter(f"{e.dims['OverallWidth']:.2f} m x {e.dims['OverallHeight']:.2f} m" for e in members[k]
+                                if e.dims and "OverallWidth" in e.dims and "OverallHeight" in e.dims)
+                for sz, c in sizes.most_common(12):
+                    lines.append(f"    {sz} (W x H): {c} ({c / len(members[k]) * 100:.0f}%)")
             if list_rooms:
                 for e in sorted(members[k], key=lambda e: -(value_of(e) or 0.0)):
                     nm = e.long_name or e.name or "(unnamed)"
@@ -1196,6 +1470,12 @@ class IfcSolver(BaseSolver):
             elif it.asked_unit == "ft" and unit == "m":
                 val, unit = val * FT_PER_M, "ft"
                 trace.append("converted m -> ft as asked")
+            elif it.asked_unit == "ft3" and unit == "m3":
+                val, unit = val * FT_PER_M ** 3, "ft3"
+                trace.append("converted m³ -> ft³ as asked")
+            elif it.asked_unit == "l" and unit == "m3":
+                val, unit = val * 1000.0, "l"
+                trace.append("converted m³ -> litres as asked")
             val = round(val, 3)
         return Answer(value=val, unit=unit, confidence=max(0.0, min(1.0, conf)), evidence=ev, trace=trace,
                       solver=self.name, assumptions=assumptions, missing=missing)
