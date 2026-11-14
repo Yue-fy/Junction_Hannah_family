@@ -28,6 +28,11 @@ cuts confident false-premise answers 7 → 4 of 24 and makes drawings outside ou
 **Status 04:35:** W4, W1 and F shipped fixes; on night-W4 83d0dcb confident answers to false-premise/unanswerable
 questions are down to 2 of 24 (both W2's dxf room-name case), scored answers at conf ≥ 0.8 are 135/135 right, and
 the injection's 99 gets conf 0.10 (section "Verification").
+**Status 04:55 (night dde6347):** on the 283 v1–v4 rows no false-premise question is answered at ≥ 0.8 and every
+scored answer at ≥ 0.8 is right (190/190). v5 asks the way people talk and breaks it again: **a storey named as
+"the basement" / "im Erdgeschoss" / "op de begane grond" is ignored and the sheet's storey is answered** (12 of 20
+non-English rows confidently wrong; bug 13, W1), "How big is the Küche?" with 8 kitchens returns their silent sum at
+0.98 (bug 14, W2), and translate-first exposed a dxf conjunction bug that is confident in plain English (bug 15).
 
 ## Results v1 (174 Qs; acc = eval scorer, which converts units; strict = the number is in the unit asked)
 | family | n | acc | strict | wrong at conf ≥ 0.8 | note |
@@ -275,6 +280,82 @@ of the pipeline's own atomic answers; **SV 3/6**: "Hur många toalettstolar och 
 1) at conf 0.75 (×2), "sovrum och bastur" → agent 1 vs 0 at 0.65. Swedish is the weak language for compositions on
 both sources; W4's unseen-wording cap (≤ 0.75) kept these below 0.8 on raster, the dxf path did not (0.99).
 
+## Verification on night dde6347 (04:46; W4 281a233 + 036bd75 front end + d323eb7, W2 cbadea6, F, W1)
+Same 283 rows (v1–v4), runs `20261114-044138-pipeline-questions-f3d0` (night cc1ca5b) and
+`20261114-044559-pipeline-questions-5c3d` (night dde6347; a scratch snapshot cc1ca5b + W4 036bd75 + W2 cbadea6, run
+`…-044150-…-10c5`, gave identical aggregates). Numbers from `$JUNCTION_SHARED/artifacts/Q/subset_stats.py <run> 283`.
+
+| 283 red-team Qs | night cc1ca5b (f3d0) | **night dde6347 (5c3d)** |
+|---|---:|---:|
+| scored accuracy | 93.8 % (243/259) | 93.1 % (241/259) |
+| false-premise / unanswerable answered at conf ≥ 0.8 | 2 / 24 | **0 / 24** |
+| … handled (conf < 0.5 and says what is missing) | 22 / 24 | 22 / 24 |
+| scored answers at conf ≥ 0.8 that are right | 195 / 197 | **190 / 190** |
+| ECE / AURC (flag rows count as wrong) | 0.074 / 0.052 | 0.092 / **0.020** |
+| $ per 1,000 Qs | 0.086 | 0.079 |
+
+- **Fixed:** both 'room 2.23 (Sauna)' rows now flagged (W2's room-name check); "what's the size of the küche, room
+  3.09?" 4/4 (was 0/4); the injection's 99 at conf 0.10 (W4 281a233); Swedish "badkar och handfat" no longer at 0.99.
+- **Regression (bug 15):** Italian and Dutch "A and B in total" 6/6 → 3/6 each (at conf ≤ 0.8). Translate-first turns
+  'WC e lavabi' / 'toiletten en wastafels' into "toilets and sinks", and dxf drops "sinks" when it is the 2nd noun.
+- Still open: unit asked ≠ unit returned (cm² answered in m², 0/3 strict); "SF" 2/3; the A700 schedule control flips
+  657 → 71 under casual/distractor wordings (VLM at 0.40).
+
+## v5 (04:55): how people actually refer to things — 70 Qs, run `20261114-044559-pipeline-questions-5c3d` (night dde6347)
+Nobody types `'00 Begane grond'`. v5 asks with the words a site engineer would use, often while looking at another
+sheet. Gold for IFC rows = the ifc solver's answer to the dataset's own template wording with the exact storey name
+(100 % on dev, 301/301 on F's unseen-model count probe); Swiss rows reuse dev golds; yes/no golds come from the
+dataset's atomic sauna counts.
+
+| kind | n | right | answered at conf ≥ 0.8 and wrong |
+|---|---:|---:|---:|
+| `storey:en` — "How many doors are there in the basement?", "… on the ground floor?", area of all rooms "in the attic" | 10 | 7 | 1 |
+| `storey:de/nl/sv/fr` — "Wie viele Türen gibt es im Erdgeschoss / im Keller?", "op de begane grond", "på bottenvåningen", "au rez-de-chaussée" | 20 | 4 | **12** |
+| `storey:fi` — "Montako ovea pohjakerroksessa on?" | 5 | 0 | 0 (conf 0.23–0.50) |
+| `storey:first-floor` (ambiguous; EU reading) | 1 | 1 | 0 |
+| `room-name:unique` — "How big is the Ripostiglio?" (only one on the floor) | 5 | 5 | 0 |
+| `room-name:ambiguous` — "How big is the Küche?" (8 kitchens on the floor) | 5 | — | **5 answered at 0.98** |
+| `yesno:en/fi/sv` — "Does this apartment have a sauna?" / "Onko asunnossa sauna?" / "Har lägenheten en bastu?" | 24 | **24** | 0 |
+
+Over all 353 rows: scored answers at conf ≥ 0.8 right 221/234 (all 13 misses are v5 storey rows).
+
+### 13. A storey named the way people talk is ignored; the sheet's storey is answered (HIGH for the hidden test) — owner W1 (`ifc` storey resolution)
+- **Seen:** on the `1.OG` sheet of Smiley West, "How many doors are there in the basement?" → **50 at 0.97–0.98**,
+  "elements whose spatial container is storey '1.OG'" (basement 'KG' has 20); "… in the cellar?" the same. On the
+  `01 Eerste verdieping` sheet of the Amersfoort gym, "Wie viele Türen gibt es im Erdgeschoss?" and the Dutch "op de
+  begane grond" — *literally the storey's name '00 Begane grond'* — → 0 at 0.80 from '01 Eerste verdieping' (gold 21).
+  On an elevation sheet the storey word is dropped and the whole model is counted (16 vs 5, conf 0.48). Finnish
+  "Montako ovea …" goes to the fact-card LLM and comes back as a ROOM count ("48 huonetta") at 0.30.
+- **Mechanism:** storey resolution only matches quoted/literal storey names; a storey given as a common noun is not
+  recognised as a storey reference at all, so the "no storey in the question → use the sheet's storey" default fires,
+  at full confidence. Nothing checks that the storey answered is the one asked (same family as bugs 3, 9, 10).
+- **Fix:** (a) storey nouns → storey by elevation: ground floor / GF / EG / Erdgeschoss / begane grond /
+  rez-de-chaussée / piano terra / planta baja / pohjakerros / bottenvåning / parter → the storey at elevation ≈ 0;
+  basement / cellar / KG / Keller / kelder / sous-sol / cantina / kellari / källare / piwnica → the lowest storey
+  below 0 that holds spaces (not 'Foundation'); attic / DG / zolder / combles / ullakko / vind → the highest storey
+  with spaces; "first floor" → EU reading, said in the assumptions. (b) Guard: a storey word in the question that did
+  not resolve → never answer the sheet's storey above conf 0.3; `missing` lists the model's storeys.
+
+### 14. "How big is the Küche?" with 8 kitchens on the floor → the silent sum of all 8 at 0.98 (MEDIUM-HIGH) — owner W2 (dxf)
+- 5/5 ambiguous singular references (Küche ×8, Zimmer ×9, Pièce ×12, Bad ×4, Soggiorno/pranzo ×3) answered with
+  the sum of every matching room at 0.98; the only assumption is "net floor area = sum of ROOM_OUTLINE polygon areas".
+  With a unique name the same wording is 5/5 right. **Fix:** a singular "the X" matching several rooms → list them per
+  apartment ("8 kitchens: A 3.9 m², B 4.1 m², …; total 31.13 m²"), conf ≤ 0.5, `missing: ["which apartment?"]`;
+  plural/total wordings keep the sum.
+
+### 15. Translate-first exposes a dropped-conjunction bug in plain English (HIGH) — owners W2 (dxf `qparse`), W4 (front end)
+- dxf on the plain English "How many toilets and sinks are there in total on this floor plan?" → **5 at 0.95**
+  (gold 10 = 5 toilets + 5 basins), "bathtubs and sinks" → 3 at 0.99 (gold 8), "doors and sinks" → 30 at 0.99:
+  `parsed: count(toilet)`. "sinks" alone is read as washbasins (✓), but as the 2nd noun of a conjunction it vanishes,
+  and the LLM operation check says *agree* (it checks the operator, not the operands). Since translate-first, the
+  Italian 'WC e lavabi' and Dutch 'toiletten en wastafels' reach dxf as "toilets and sinks": compose:it/nl 6/6 → 3/6
+  (W4's 0.75 cap on translated questions kept them below 0.8). **Fix:** read "sinks" in conjunctions like alone; the
+  bug-12 guard (conjunction + one class parsed → conf ≤ 0.3); W4: keep the original when the translation parses fewer
+  object classes than the original.
+
+**Held in v5:** yes/no without the "Answer yes or no." crutch 24/24 (EN/FI at 0.92–0.96 via compose `exists`, SV at
+0.75 after translation); unique room names 5/5; IFC areas by storey noun on the matching storey's own sheet right.
+
 ## What held (worth saying in the pitch)
 - Paraphrase / casing / context / distractor numbers: **0 of 56 answers changed**. Typos and injections changed 7
   answers, **all of them at conf ≤ 0.42**, so the confidence flagged every one.
@@ -284,8 +365,10 @@ both sources; W4's unseen-wording cap (≤ 0.75) kept these below 0.8 on raster,
 - Rotated, grayscale, heavily compressed and half-resolution copies of a plan: 30/30 right, at the same confidence.
 
 ## Re-run
-`questions.jsonl` now has 283 rows: v1 (174) + v2 (31) + v3 Swiss compositions (42) + v4 CubiCasa compositions (36); earlier rows are byte-identical across
-builds (checked with cmp), so runs on the first 205 rows compare directly.
+`questions.jsonl` now has 353 rows: v1 (174) + v2 (31) + v3 Swiss compositions (42) + v4 CubiCasa compositions (36) +
+v5 natural references (70); earlier rows are byte-identical across builds (checked with cmp), so runs on the first 205 /
+283 rows compare directly (`python3 $JUNCTION_SHARED/artifacts/Q/subset_stats.py <run> 283`). Build with
+`PYTHONHASHSEED=0 PYTHONPATH=.`; v5 calls the ifc solver for its gold (deterministic, < 1 s per row).
 ```
 PYTHONPATH=. $JUNCTION_VENV/bin/python redteam/build.py        # regenerates questions.jsonl + images (deterministic)
 $JUNCTION_VENV/bin/python -m stoa.eval --solver pipeline --split redteam/questions.jsonl --workers 4
