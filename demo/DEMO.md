@@ -37,10 +37,12 @@ Type: **How many doors are shown on the floor plan of '1.korrus'?** → **46** (
 - Point at: one box per door on the sheet; click "3D": the same 46 doors highlighted in the IFC model by GlobalId; the
   cross-check line "drawing 46 = model 46 ✓".
 - Follow-up (shows reasoning, not lookup): **If each door costs 450 euros, what do all the doors on '1.korrus' cost in
-  total?** → **20,700 €**. The card shows the agent's three steps: ask "doors on '1.korrus'" → 46 (from the model),
-  calc 46 × 450, answer; and the IFC rules computed the same 20,700 independently (cross-check ✓). Say: "The language
-  model plans; the numbers come from the model and from code." ⚠ Takes 5–18 s (7.5 s at 04:51 on dde6347; 18 s at
-  04:09 on a busy GPU) — keep talking while it runs, or use the tour's recorded answer.
+  total?** → **20,700 €**. ⚠ What the card shows depends on the build: on night 753eccb (05:01) the IFC rules read
+  "450 EUR per door" themselves — 46 doors × 450 in code, 0 model calls, 0.03 s, conf 0.92, 46 doors boxed. Say:
+  "a question no template covers: the price comes from the question, the 46 from the model, the multiplication from
+  code — no language model needed." On dde6347 (04:51) the agent answered instead (ask "doors on '1.korrus'" → 46,
+  calc 46 × 450, IFC rules agree ✓, 7.5 s): then say "the language model plans; the numbers come from the model and
+  from code." Check the frozen build's pre-flight row `ifc-derived` (solver column) before the pitch.
 - Backup if asked for an area (step 1): **What is the net floor area of the room 'KORIDOR (119)' on '1.korrus', in m²?**
   → **63.84 m²** (gold 63.84), the room outline highlighted in 2D and 3D. ⚠ Type this wording; the unquoted "how big is
   the corridor KORIDOR (119) on 1.korrus?" returns 142.24 m² at conf 0.30 (flagged, but wrong).
