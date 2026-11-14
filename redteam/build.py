@@ -644,6 +644,79 @@ def main():
         ]:
             out.append(row(dst, q, g, unit, typ, f"lone:{ext}", "same", note="Swiss demo plan without its DXF"))
 
+    # ===== v14 (08:30): questions with more than one answer, comparisons, storey heights, 'which' ==================
+    # Stoa: the hidden set is "harder, answers not so simple". The root cause behind every confident miss so far is a
+    # check that verifies the computed number, never that it answers what was asked; a two-part question answered with
+    # one number is the same failure. Gold is independent of our solvers: storey elevations and per-storey door /
+    # window / space containment from plain ifcopenshell (esplanades mm, smiley-west m), room areas from the Swiss
+    # plan's printed areas (= dataset gold for 2.09/2.10), CubiCasa counts from the plan's dataset answers.
+    # Scoring (analyze.py): meta.parts = every listed number must be in the answer (counts exact, else 2 %);
+    # yes/no by the first word; meta.accept_re = a regex the answer must match.
+    def multi(path, q, parts, kind, note):
+        r_ = row(path, q, " ; ".join(str(p_) for p_ in parts), None, "text", kind, "same", note=note)
+        r_["meta"]["parts"] = parts
+        return r_
+
+    SM = "data/ifc_models/kit-smiley-west_ac-20-smiley-west-10-bldg_plan-03-1-og.pdf"
+    for path, q, parts, note in [
+        (E, "How many doors and how many windows are on '1.korrus'?", [46, 55], "containment 46 / 55"),
+        (E, "How many doors are on the ground floor, and how many on the top floor?", [46, 39],
+         "1.korrus 46 (elev 0), 5.korrus 39"),
+        (E, "Montako ovea ja montako ikkunaa kerroksessa '2.korrus' on?", [42, 60], "containment 42 / 60"),
+        (E, "Wie viele Türen hat '3.korrus' und wie viele Fenster?", [42, 60], "containment 42 / 60"),
+        (SW, "How many doors and how many windows are drawn on this floor plan?", [36, 28], "dataset 36 / 28"),
+        (SW, "How many rooms labelled 'Zimmer' does apartment C have, and what is their total area?", [3, 43.82],
+         "2.17 14.70 + 2.21 18.21 + 2.22 10.91 (printed)"),
+        (SW, "What are the net areas of apartment A and of apartment B?", [80.34, 80.83], "dataset A / B"),
+        (SW, "Wie viele Küchen gibt es auf diesem Grundriss und wie gross ist die grösste?", [4, 12.05],
+         "Küche x4; 2.02 (Whg. A) 12.05"),
+        (CC, "How many bedrooms and how many bathrooms does this apartment have?", [3, 1], "dataset bedrooms 3 / bath 1"),
+        (CC, "Montako makuuhuonetta ja montako WC-istuinta asunnossa on?", [3, 2], "dataset bedrooms 3 / WC seats 2"),
+    ]:
+        out.append(multi(path, q, parts, "multi:" + path.split("/")[1].split("_")[0], note))
+
+    for path, q, g, note in [
+        (SW, "Is apartment A's kitchen bigger than apartment B's kitchen?", "yes", "2.02 12.05 vs 2.15 7.59"),
+        (SW, "Is the kitchen of apartment C larger than the kitchen of apartment B?", "no", "2.20 7.54 vs 2.15 7.59"),
+        (SW, "Is room 2.27 larger than 20 m²?", "yes", "2.27 Zimmer 22.38"),
+        (SW, "Ist das Zimmer 2.21 grösser als 18,5 m²?", "no", "2.21 Zimmer 18.21 (decimal comma)"),
+        (SW, "Is apartment A larger than apartment B?", "no", "80.34 < 80.83 (dataset)"),
+        (E, "Are there more doors on '2.korrus' than on '5.korrus'?", "yes", "42 > 39"),
+        (E, "Does '1.korrus' have more windows than doors?", "yes", "55 > 46"),
+        (E, "Is the floor-to-floor height between '1.korrus' and '2.korrus' more than 3 metres?", "yes", "3.35 m"),
+    ]:
+        out.append(row(path, q, g, None, "text", "yesno:compare", "same", note=note))
+
+    for path, q, g, note in [
+        (E, "What is the vertical distance between '1.korrus' and '5.korrus', in metres?", 13.4, "elev 0 / 13400 mm"),
+        (E, "How high above the ground floor is the top floor, in metres?", 13.4, "1.korrus 0 → 5.korrus 13400 mm"),
+        (E, "What is the height difference between the 2nd and the 4th floor in metres?", 6.7,
+         "2.korrus 3350 → 4.korrus 10050 mm (unquoted ordinals)"),
+        (E, "Mikä on kerrosten '3.korrus' ja '4.korrus' välinen korkeusero metreinä?", 3.35, "6700 → 10050 mm"),
+        (E, "Wie gross ist der Höhenunterschied zwischen '1.korrus' und 'Katus' in Metern?", 17.0, "0 → 17000 mm"),
+        (SM, "What is the floor-to-floor height between 'EG' and '1.OG', in metres?", 2.78, "elev -0.25 → 2.53 m"),
+        (SM, "How far is '2.OG' above 'KG', in metres?", 8.04, "elev -2.81 → 5.23 m"),
+    ]:
+        out.append(row(path, q, g, "m", "length", "height:ifc", "same", note=note))
+    for path, q, note in [
+        (E, "What is the vertical distance between '1.korrus' and '8.korrus', in metres?", "no '8.korrus' (top 5.korrus)"),
+        (SM, "What is the floor-to-floor height between '1.OG' and '3.OG'?", "no '3.OG' (top 2.OG, then Dach)"),
+    ]:
+        out.append(row(path, q, None, None, "other", "height:premise", "flag", note=note))
+
+    for path, q, rx, g, note in [
+        (SW, "Which apartment has the largest kitchen?", r"(apartment|whg\.?|wohnung|unit)\s*a\b|^\W*a\b", "A",
+         "2.02 12.05 (A) vs 7.59 / 7.54 / 7.41"),
+        (SW, "Which apartment has the smallest kitchen?", r"(apartment|whg\.?|wohnung|unit)\s*d\b|^\W*d\b", "D",
+         "2.24 7.41 (D)"),
+        (SW, "Which is the largest room in apartment D?", r"2\.27|22[.,]38", "2.27", "2.27 Zimmer 22.38"),
+        (E, "Which floor has the most doors?", r"1\.?\s*korrus|ground floor|first floor", "1.korrus",
+         "46 / 42 / 42 / 42 / 39"),
+    ]:
+        r_ = row(path, q, g, None, "text", "which", "same", note=note)
+        r_["meta"]["accept_re"] = rx
+        out.append(r_)
+
     with open(OUT, "w", encoding="utf-8") as f:
         for r in out:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
