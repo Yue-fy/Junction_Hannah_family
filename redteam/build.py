@@ -785,7 +785,7 @@ def main():
                 out.append(row(dst, d["question"], d["answer"], d.get("unit"), d.get("type") or "count",
                                f"lone16:{ext}", "same", note=f"{Path(p).name}: dataset gold"))
 
-    # ===== v17 (08:50): linking documents (Stoa: "different data don't talk to each other; linking earns points") ===
+    # ===== v17 (08:48): linking documents (Stoa: "different data don't talk to each other; linking earns points") ===
     # Questions that need the plan AND the model (or the set of sheets). Gold: esplanades plan sheets in the dataset
     # (plan-01..05), ifcopenshell containment (doors 46 / windows 55 on '1.korrus', SERVER / PESUKODA spaces only on
     # '1.korrus'), the plan's drawn symbols (46 doors; 52 windows: 3 lie wholly above/below the 1.2 m cut plane —
@@ -815,7 +815,7 @@ def main():
             r_["meta"]["accept_re"] = rx
         out.append(r_)
 
-    # ===== v18 (08:58): historical scans asked naturally, in other languages, rotated (Stoa: scans matter) =========
+    # ===== v18 (08:50): historical scans asked naturally, in other languages, rotated (Stoa: scans matter) =========
     # Base = W4's scan probe (artifacts/W4/scans.jsonl: 20 HABS sheets, gold from the Library of Congress catalogue
     # title "(sheet N of M)" + state = what the title block prints), which asks with a format hint ("Answer like '2 of
     # 5'", "Give the two-letter state code"). Here: the first 6 sheets asked the way a person would, in DE/FI, and on a

@@ -637,7 +637,7 @@ single-floor Swiss plan → the floor's 36 / 4 at 0.99 (×3, dxf, W2).** Side ef
 not errors): two prompt-injection rows 0.99 / 0.95 → 0.25 / 0.30; IFC two-number questions via compose at 0.39 (ifc's own
 split gave 0.80; the list op multiplies part confidences).
 
-## v17 (08:50): linking the plan, the model and the sheet set — 9 Qs (Stoa: "linking earns extra points")
+## v17 (08:48): linking the plan, the model and the sheet set — 9 Qs (Stoa: "linking earns extra points")
 Run `20261114-084703-pipeline-v17-dd7a` on night 62754aa. Gold: the dataset's plan sheets (plan-01 … plan-05),
 ifcopenshell containment, the plan's drawn symbols (46 doors; 52 of 55 windows: 3 lie wholly above/below the 1.2 m cut
 plane — tour step 3). **2 of 9 really answered**: "How many more doors are on '1.korrus' than on '5.korrus'?" 7 at
@@ -654,7 +654,7 @@ knowledge graph (sheets ↔ storeys ↔ spaces ↔ GUIDs, plan-vs-model checks) 
 *answer* a question about the links themselves ("do they agree?", "which sheet?", "how many sheets?"). Those are the
 questions a judge asks right after the demo shows "drawing 46 = model 46 ✓".
 
-## v18 (08:58): historical scans asked naturally, in German / Finnish, and rotated by 90° — 36 Qs (held)
+## v18 (08:50): historical scans asked naturally, in German / Finnish, and rotated by 90° — 36 Qs (held)
 The first 6 HABS sheets of W4's scan probe (gold = the Library of Congress catalogue title "(sheet N of M)" + state,
 which the title block prints), asked without W4's format hints: "How many sheets are in this drawing set?", "Which
 sheet number is this?", "Wie viele Blätter hat dieser Plansatz?", the same on a copy rotated by 90°, "Where is this
