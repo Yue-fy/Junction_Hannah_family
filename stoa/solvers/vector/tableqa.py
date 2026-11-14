@@ -164,6 +164,27 @@ def _run(code: str, tables: dict[str, pd.DataFrame]) -> dict:
     return {"value": ans, "unit": env.get("unit"), "used": [int(u) for u in list(used)[:200] if str(u).lstrip("-").isdigit()]}
 
 
+LITERAL_RE = re.compile(r"""(?:contains|startswith|endswith|==|match)\(?\s*r?(["'])(.{2,40}?)\1""")
+
+
+def _where(code: str, tables: dict[str, pd.DataFrame]) -> str:
+    """For an empty selection: where do the strings the code searched for actually occur? ("'Casement' is in
+    t2.Family (4 rows)"), so the retry can pick the right column."""
+    hints = []
+    for _, lit in LITERAL_RE.findall(code)[:4]:
+        words = [w for w in re.split(r"[^A-Za-z0-9]+", lit) if len(w) >= 3] or [lit]
+        pat = "|".join(re.escape(w) for w in words[:3])
+        found = []
+        for name, df in tables.items():
+            for c in df.columns:
+                if df[c].dtype == object or pd.api.types.is_string_dtype(df[c]):
+                    n = int(df[c].astype(str).str.contains(pat, case=False, regex=True, na=False).sum())
+                    if n:
+                        found.append(f"{name}[{c!r}] ({n} rows)")
+        hints.append(f"{lit!r}: " + (", ".join(found[:4]) if found else "not found in any table"))
+    return ("; where those words occur (case-insensitive): " + "; ".join(hints)) if hints else ""
+
+
 def ask(question: str, tables: dict[str, pd.DataFrame], backend: str = "local", tries: int = 3, doc: str = DOC,
         id_col: str = "room_id", units: str = '"count", "m2"', lookup_text: bool = False) -> dict:
     """lookup_text: a typed-in string that is a table cell is sent back once ("look it up"); if the lookup fails,
@@ -187,9 +208,13 @@ def ask(question: str, tables: dict[str, pd.DataFrame], backend: str = "local", 
                                  "(e.g. df.loc[df[\"<id column>\"] == \"<id>\", \"<column>\"].iloc[0]) so it comes "
                                  "from the right row, and set `used` to that row's id")
             v = res["value"]
+            if isinstance(v, float) and v != v:
+                raise ValueError("the query returned NaN (an empty selection or a non-numeric column); check the "
+                                 "filter against the cell values shown above")
             if v is None or (isinstance(v, str) and not v.strip()) or (v == 0 and not res["used"] and attempt < tries - 1):
                 raise ValueError(f"the query returned {v!r} (no matching rows). Look at the actual cell values and "
-                                 "column contents shown above (headers may be misaligned) and fix the filter")
+                                 "column contents shown above (headers may be misaligned) and fix the filter"
+                                 + _where(code, tables))
             if WHICH.search(question) and not isinstance(res["value"], str):
                 raise ValueError(f"the question asks WHICH one, but answer = {res['value']!r}; set answer to the "
                                  "identifier string (apartment letter / room number / name)")

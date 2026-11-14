@@ -53,6 +53,8 @@ class Table:
     xs: list[float] = field(default_factory=list)  # column x-centres (visual space)
     y0: float = 0.0
     y1: float = 0.0
+    cell_boxes: list[list] = field(default_factory=list)  # per data row, per column: box or None
+    totals: list[tuple[str, tuple]] = field(default_factory=list)  # printed total rows ("BASEMENT: 8 | 1091 SF"), box
 
 
 def _union(boxes):
@@ -151,6 +153,9 @@ def find_tables(rows: list[Row], h: float, min_rows: int = 3) -> list[Table]:
                 tables.append(t)
                 used.update(run)
     tables = _merge(rows, tables, h)
+    tables = [p for t in tables for p in _split_stacked(t)]
+    for t in tables:
+        _pull_totals(t)
     tables.sort(key=lambda t: (t.y0, t.bbox[0]))
     return tables
 
@@ -190,19 +195,22 @@ def _build(rows: list[Row], run: list[int], h: float, _depth: int = 0) -> Table 
             return None
         return min(range(len(xs)), key=lambda k: abs(xs[k] - c.xc))
 
-    data, boxes = [], []
+    data, boxes, cboxes = [], [], []
     for i in run:
         vals = [""] * len(xs)
         bs = []
+        cb: list = [None] * len(xs)
         for c in rows[i].cells:
             k = col_of(c)
             if k is not None:
                 vals[k] = (vals[k] + " " + c.text).strip()
                 bs.append(c.box)
+                cb[k] = c.box if cb[k] is None else _union([cb[k], c.box])
         if not bs or (len(xs) >= 4 and sum(bool(v) for v in vals) <= 1):
             continue  # stray word / blank row inside the table, not a record
         data.append(vals)
         boxes.append(_union(bs))
+        cboxes.append(cb)
     # header: rows just above the first data row, within the table's x-range
     first = run[0]
     head = [""] * len(xs)
@@ -242,7 +250,7 @@ def _build(rows: list[Row], run: list[int], h: float, _depth: int = 0) -> Table 
                 title = cap[0].text
                 break
     head = _group_headers(head, xs, head_cells)
-    xs, head, data = _merge_split_columns(xs, head, data)
+    xs, head, data = _merge_split_columns(xs, head, data, cboxes)
     names, seen = [], {}
     for k, hname in enumerate(head):
         nm = re.sub(r"\s+", " ", hname).strip() or f"col{k}"
@@ -251,6 +259,7 @@ def _build(rows: list[Row], run: list[int], h: float, _depth: int = 0) -> Table 
     df = pd.DataFrame(data, columns=names)
     bbox = _union(boxes)
     return Table(title=title, columns=names, df=df, row_boxes=boxes, bbox=bbox, run=list(run), xs=list(xs),
+                 cell_boxes=cboxes,
                  y0=rows[run[0]].y, y1=rows[run[-1]].y)
 
 
@@ -278,7 +287,7 @@ def _group_headers(head: list[str], xs: list[float], head_cells: list[tuple[int,
     return head
 
 
-def _merge_split_columns(xs: list[float], head: list[str], data: list[list[str]]):
+def _merge_split_columns(xs: list[float], head: list[str], data: list[list[str]], cboxes: list[list] | None = None):
     """One printed column can be split in two when its cells are aligned differently (left vs centred): an unnamed
     column whose filled cells never share a row with a named neighbour's filled cells is that neighbour."""
     k = 0
@@ -299,9 +308,119 @@ def _merge_split_columns(xs: list[float], head: list[str], data: list[list[str]]
             r[nb] = r[nb] or r[k]
         for r in data:
             del r[k]
+        for cb in cboxes or []:
+            cb[nb] = cb[nb] or cb[k]
+            del cb[k]
         del xs[k]
         del head[k]
     return xs, head, data
+
+
+TITLE_IN_HEAD = re.compile(r"^(?P<t>.*?\b(?:SCHEDULE|TAKEOFF|LEGEND)\b(?:\s*-\s*[A-Z]+)?)\s+(?P<n>\S.*)$", re.I)
+TOTAL_RE = re.compile(r"^(?:grand\s+)?totals?\b|^[^:]{1,40}:\s*\d+\s*$", re.I)
+
+
+def _norm(s: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "", s.lower())
+
+
+def _sub_table(t: Table, rows_idx: list[int], cols: list[int], title: str, names: list[str] | None = None) -> Table | None:
+    """Columns `cols` of rows `rows_idx` of t as a table of its own (rows/columns that are empty there are dropped)."""
+    df = t.df
+    name_of = dict(zip(cols, names or [df.columns[c] for c in cols]))
+    keep = [i for i in rows_idx if any(str(df.iat[i, c]).strip() for c in cols)]
+    cols = [c for c in cols if any(str(df.iat[i, c]).strip() for i in keep)]
+    if len(keep) < 2 or len(cols) < 2:
+        return None
+    names = [name_of[c] for c in cols]
+    seen, uniq = {}, []
+    for nm in names:
+        seen[nm] = seen.get(nm, 0) + 1
+        uniq.append(nm if seen[nm] == 1 else f"{nm}_{seen[nm]}")
+    sub = pd.DataFrame([[df.iat[i, c] for c in cols] for i in keep], columns=uniq)
+    cb = [[t.cell_boxes[i][c] for c in cols] if t.cell_boxes else [] for i in keep]
+    boxes = [_union([b for b in r if b is not None]) if any(b is not None for b in r) else t.row_boxes[i]
+             for r, i in zip(cb, keep)]
+    return Table(title=title, columns=uniq, df=sub, row_boxes=boxes, bbox=_union(boxes), run=[t.run[0]] if t.run else [],
+                 xs=[t.xs[c] for c in cols] if t.xs else [], y0=t.y0, y1=t.y1, cell_boxes=cb)
+
+
+def _split_stacked(t: Table) -> list[Table]:
+    """Revit sheets put schedules side by side and stack them: rows of the left schedule share their y with rows of
+    the right one, and a second schedule below the right one repeats header words ("Mark | Family | Type | Count")
+    inside the data. Split at such a repeated header: left columns = one table; right columns above the header =
+    a second table; below it = a third. Schedule titles merged into column names ("WINDOW SCHEDULE - SIMPLIFIED
+    Count") become the tables' titles."""
+    df = t.df
+    if df.shape[0] < 4 or df.shape[1] < 4:
+        return [t]
+    titles: dict[int, str] = {}
+    names = list(df.columns)
+    for c, nm in enumerate(names):
+        m = TITLE_IN_HEAD.match(str(nm))
+        if m:
+            titles[c] = m.group("t").strip()
+            names[c] = m.group("n").strip()
+    hdr_words = {_norm(w) for nm in names for w in [nm, *str(nm).split()] if len(_norm(w)) >= 3}
+    split_row, j0 = None, None
+    for i in range(1, df.shape[0]):
+        hits = [c for c in range(df.shape[1]) if str(df.iat[i, c]).strip() and _norm(str(df.iat[i, c])) in hdr_words]
+        if len(hits) >= 3 and not any(ch.isdigit() for c in hits for ch in str(df.iat[i, c])):
+            split_row, j0 = i, min(hits)
+            break
+    if split_row is None:
+        if len(titles) >= 2:  # side by side, nothing stacked: split between the two titled column groups
+            cs = sorted(titles)
+            gap = max(range(cs[0] + 1, cs[1] + 1), key=lambda c: (t.xs[c] - t.xs[c - 1]) if t.xs else 0)
+            t.df.columns = names
+            left = _sub_table(t, list(range(df.shape[0])), list(range(gap)), titles[cs[0]])
+            right = _sub_table(t, list(range(df.shape[0])), list(range(gap, df.shape[1])), titles[cs[1]])
+            return [x for x in (left, right) if x is not None] or [t]
+        if titles and not re.search(r"schedule|takeoff|legend", t.title or "", re.I):
+            t.title = next(iter(titles.values()))
+        t.df.columns = names
+        t.columns = names
+        return [t]
+    # header block of the lower table: the split row plus rows just above it with only text in the right columns
+    top = split_row
+    while top - 1 >= 0 and all(not str(df.iat[top - 1, c]).strip() or not any(ch.isdigit() for ch in str(df.iat[top - 1, c]))
+                               for c in range(j0, df.shape[1])) and any(str(df.iat[top - 1, c]).strip()
+                                                                        for c in range(j0, df.shape[1])):
+        top -= 1
+    lower_names = [" ".join(str(df.iat[i, c]).strip() for i in range(top, split_row + 1) if str(df.iat[i, c]).strip())
+                   or names[c] for c in range(j0, df.shape[1])]
+    left_title = next((titles[c] for c in sorted(titles) if c < j0), t.title if j0 > 0 else "")
+    right_title = next((titles[c] for c in sorted(titles) if c >= j0), "" if j0 > 0 else t.title)
+    t.df.columns = names
+    out = []
+    if j0 > 0:
+        out.append(_sub_table(t, list(range(df.shape[0])), list(range(j0)), left_title, names[:j0]))
+    out.append(_sub_table(t, list(range(top)), list(range(j0, df.shape[1])), right_title, names[j0:]))
+    out.append(_sub_table(t, list(range(split_row + 1, df.shape[0])), list(range(j0, df.shape[1])), "", lower_names))
+    out = [x for x in out if x is not None]
+    return out or [t]
+
+
+def _pull_totals(t: Table) -> None:
+    """Printed subtotal/total rows ("BASEMENT: 8 | 1091 SF", "Grand total: 39") are not records: move them out of
+    the table (t.totals keeps their text and box, for the notes and as a cross-check)."""
+    df = t.df
+    if df.empty:
+        return
+    drop = []
+    for i in range(len(df)):
+        vals = [str(v).strip() for v in df.iloc[i] if str(v).strip()]
+        if vals and TOTAL_RE.match(vals[0]) and len(vals) <= max(2, 0.5 * df.shape[1]):
+            drop.append(i)
+            t.totals.append((" | ".join(vals), t.row_boxes[i]))
+    if drop and len(drop) < len(df):
+        keep = [i for i in range(len(df)) if i not in drop]
+        t.df = df.iloc[keep].reset_index(drop=True)
+        t.row_boxes = [t.row_boxes[i] for i in keep]
+        if t.cell_boxes:
+            t.cell_boxes = [t.cell_boxes[i] for i in keep]
+    elif drop:
+        t.totals.clear()
 
 
 def _merge(rows: list[Row], tables: list[Table], h: float) -> list[Table]:

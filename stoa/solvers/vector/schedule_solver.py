@@ -28,6 +28,7 @@ Count/quantity/area columns are numbers; for values like "108 SF" a parsed twin 
 other columns (ids, room numbers, types) are strings: compare them with strings ("118", not 118).
 Use double quotes for strings that contain an apostrophe ("WOMEN'S LOCKER").
 Counting rows: one row = one item unless a Count/Qty column says otherwise (then sum that column over the rows).
+Printed subtotal/total rows ("BASEMENT: 8 | 1091 SF", "Grand total: 39") are not table rows; they are in `notes`.
 A cell may hold several codes ("A, B"): match a code as a whole token, not inside "A-620" or "AL-1", e.g.
 df["Notes"].str.contains(r"(?<![\\w-])A(?![\\w-])").
 Dimensions are strings as printed (3' - 0"): never convert them to numbers; for "width and height" answer
@@ -197,6 +198,12 @@ class ScheduleSolver(BaseSolver):
         # legends and notes are short rows (long rows are table rows): a `notes` table, so the code can look up
         # what a code means ("F4") and the lines it used become evidence too
         notes, nid = [], 900000
+        for k, t in enumerate(tabs):  # printed subtotal/total rows taken out of the tables: a cross-check
+            for txt, box in t.totals:
+                name = f"t{k + 1}_{_clean(t.title)}" if t.title else f"t{k + 1}"
+                notes.append({"row_id": nid, "text": f"{name} printed total row: {txt}"})
+                boxes[nid] = box
+                nid += 1
         for r in rows:
             if len(r.cells) <= 3:
                 txt = " | ".join(c.text for c in r.cells)[:160]
@@ -223,8 +230,8 @@ class ScheduleSolver(BaseSolver):
         if res.get("typed"):
             trace.append("the model typed the answer from the table text; asked to look it up, the lookup failed, "
                          "so the typed value is kept")
-        if res.get("value") is None:
-            return Answer.abstain(self.name, f"table QA gave no answer ({res.get('error')})", trace)
+        if res.get("value") is None or (isinstance(res["value"], float) and res["value"] != res["value"]):
+            return Answer.abstain(self.name, f"table QA gave no answer ({res.get('error') or 'NaN'})", trace)
         value, unit = res["value"], res.get("unit")
         unit = UNIT_MAP.get(str(unit).lower().replace(".", "").strip(), unit) if unit else unit
         if isinstance(value, bool):
