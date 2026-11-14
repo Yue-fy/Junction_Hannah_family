@@ -89,7 +89,7 @@ def judge_rows(rows: list[dict], backend: str = "local", workers: int = 8) -> No
     """Add `text_judge` (True/False/None) to every text/other row in place."""
     import concurrent.futures as cf
 
-    todo = [r for r in rows if r["type"] in ("text", "other")]
+    todo = [r for r in rows if r["type"] in ("text", "other") and r.get("gold") is not None]  # no answer: nothing to judge
     with cf.ThreadPoolExecutor(max_workers=max(1, workers)) as ex:
         futs = {ex.submit(judge_one, r["question"], r["gold"], r["value"], backend): r for r in todo}
         for f in cf.as_completed(futs):
@@ -123,7 +123,7 @@ def main(argv: list[str] | None = None) -> int:
     if not p.exists():
         p = shared_root() / "artifacts" / "eval" / (a.run if a.run.endswith(".jsonl") else f"{a.run}.jsonl")
     rows = [json.loads(line) for line in open(p, encoding="utf-8") if line.strip()]
-    todo = [r for r in rows if r["type"] in ("text", "other")]
+    todo = [r for r in rows if r["type"] in ("text", "other") and r.get("gold") is not None]  # no answer: nothing to judge
     if not todo:
         print("no text/other questions in this run", file=sys.stderr)
         return 1

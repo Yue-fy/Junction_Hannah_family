@@ -49,11 +49,36 @@ Cost $0.035/1k (780 tok in, 2 out). Confidence: own map (CONF_MAPS["cc-v2"], fit
 Licence: CubiCasa5K images are CC BY-NC-SA 4.0 → the adapter is non-commercial (same as the CC5K weights).
 Scripts: `experiments/r2/lora/{build_data,train_lora,eval_lora.sh}`. Training env: `/data/User/fangy4/envs/junction-train`
 (= coder390-vllm packages via a read-only .pth + peft/accelerate).
-v3 ideas: 2 epochs (v2 saw each drawing once), rank 32, add swiss PNG-twin counts for style diversity
-(`build_data.py --sources swiss_dwellings --png-twins` → artifacts/R2/lora/train_swiss_png.jsonl, 547 drawings, 7.9k turns).
+**LoRA cc-v3 (trained 01:50–02:24) — cubicasa tie, better on unseen raster styles.** cc-v2 continued for 33 min
+(lr 5e-5) on `train_v3_mix.jsonl` = TRAIN cubicasa (no train_gate) + swiss PNG twins of TRAIN drawings (4,452 drawings,
+2,671 sampled). Adapter: `$JUNCTION_SHARED/artifacts/R2/lora/cc-v3`.
+| set | cc-v3 | cc-v2 | base 8B |
+|---|---|---|---|
+| dev cubicasa (800) | 74.6 | 73.9 | 50.4 |
+| train_gate cubicasa (480) | 76.2 | 76.7 | 45.6 |
+| hard cubicasa (283: translations, paraphrases, compositions) | 52.6 | 52.7 | |
+| cc5k_heldout_notLoRA (200) | 79.5 | 79.0 | 51.5 |
+| swiss dev counts on PNG twins (200, EN/DE/FR/IT) | **56.5** | 46.0 | 40.5 |
+Paired cc-v3 − cc-v2: dev +0.8 [−1.0, +2.5], train_gate −0.4 [−2.3, +1.5], swiss PNG **+10.5 [+4.4, +16.8]**.
+Verdict: more passes over the same cubicasa labels saturate; mixing a second drawing style transfers (+16 over the
+base on swiss PNGs, DE windows 0 → 33, WC 62 → 88). cc-v2 stays the cubicasa model (every gate is fitted on it);
+cc-v3 is the candidate for count questions on raster plans that are NOT cubicasa (the hidden set's "different" data).
 
 Cost accounting: local calls record `gpu_seconds = tokens_in/25k + tokens_out/1k` (amortised throughput measured
 at saturation), not HTTP wall time (which includes queueing behind other agents).
+
+**Gemma 4 E4B-it bake-off (03:41, base model, no fine-tuning).** Ungated on HF (Gemma 3 is gated; we have no token),
+16 GB bf16, vLLM 0.31 `Gemma4ForConditionalGeneration`, preset `serving/start.sh gemma4-e4b` (image budget
+`max_soft_tokens` 1120 = the maximum; the default 280 is too coarse for plans). Same vlm_direct code, raw answer-digit p.
+| set | Gemma 4 E4B | Qwen3-VL-8B base |
+|---|---|---|
+| train_gate cubicasa (480) | 31.7 | 46.2 |
+| swiss dev counts on PNG twins (200) | 39.5 | 40.5 |
+| smoke micro / weighted (206) | 28.3 / 31.2 | 37.0 / 42.4 |
+| tokens in per cubicasa Q | 1,169 (1,100 image) | 770 |
+Gemma loses on Finnish room-label reading (kitchens 35 vs 85, saunas 15 vs 50, WC seats 5–15 vs 45–65) and ties on
+swiss plans. Not a replacement base. A Gemma counting LoRA (`experiments/r2/lora/gemma_lora.sh`, `train_lora.py
+--arch gemma4`, same TRAIN mix as cc-v3) tests whether fine-tuning closes the gap (Gemma prize, small fine-tuned model).
 
 ## Candidates surveyed (23:35–23:50, HF hub listing; vLLM 0.31 registry checked)
 | model | size | vLLM | why interesting | verdict |
@@ -113,5 +138,11 @@ pretrained CC5K net never saw them) minus drawings in the LoRA's training data m
 4. Hosted Nemotron (thinking on, ~30 s, ~5k tokens, 1–2 API calls): only for escalated / demo questions. It is
    not more accurate than the local 8B in direct mode, so it should be used as a reasoning verifier
    (e.g. "here is the count and the points; check it"), not as a first-pass counter.
-5. If the counting LoRA wins on dev cc and on train_gate per concept, it replaces step 2 for those concepts
-   (same server with LoRA enabled, `model="cc-v2"`).
+5. Counting LoRAs (status 03:50): cc-v2 replaced step 2 for atomic cubicasa counts (W4's per-concept gate fitted on
+   train_gate; pipeline dev weighted 74.0 → 82.1, $0.03/1k, 1 call, 2 output tokens). For raster plans of any other
+   style `vlm_lora` uses cc-v3 (+16 over the base 8B on swiss PNGs). Both on :8001 (start.sh loads them by default).
+6. Cheap cross-check before any escalation: R1's CC5K detector boxes (cache read, 0 tokens) agree/disagree with the
+   LoRA count → confidence + located evidence. Agreement adds little beyond the LoRA's own p (R1 01:56), so use it
+   for evidence and for the 'missing' note, not for a second model call.
+7. Nemotron (hosted) stays a visible second opinion on low-confidence image answers (W5's button), not a bulk tier.
+8. Gemma 4 E4B base is weaker than the 8B (cubicasa 31.7 vs 46.2); its role depends on the Gemma LoRA result.

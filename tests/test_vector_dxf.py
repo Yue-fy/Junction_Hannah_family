@@ -131,3 +131,115 @@ def test_dxf_unknown_undotted_room_abstains():
     a = s.solve(P2, "What is the net floor area of room 1 in m²?")
     assert a.value is None and a.missing
     assert abs(s.solve(P2, "What is the net floor area of room 2.05 ('Cuisine') in m²?").value - 9.84) < 0.02
+
+
+def test_schedule_legend_explains_bare_codes():
+    """A bare code answer gets its meaning from the sheet's own legend, matched to the question's topic."""
+    from stoa.solvers.vector.pdftables import Cell, Row
+    from stoa.solvers.vector.schedule_solver import _explain_codes, _legend
+
+    def row(y, *texts):
+        return Row(y=y, cells=[Cell(t, 10.0 * i, 10.0 * i + 8, y, (10.0 * i, y, 10.0 * i + 8, y + 2))
+                               for i, t in enumerate(texts)])
+    rows = [row(0, "FLOOR FINISH LEGEND"), row(1, "F2", "ARTIFICIAL TURF"), row(2, "F4", "RESILIENT FLOORING"),
+            row(3, "BASE LEGEND"), row(4, "B2", "CERAMIC TILE")]
+    leg = _legend(rows)
+    value, found = _explain_codes("F4", "What floor finish is specified for room 101?", rows, leg)
+    assert value == "F4 - RESILIENT FLOORING" and found[0][2] == (0.0, 2, 18.0, 4)  # code + meaning cells
+    value, _ = _explain_codes("F2 & F4", "Which floor finishes are used in the gym?", rows, leg)
+    assert value == "F2 (ARTIFICIAL TURF) & F4 (RESILIENT FLOORING)"
+    # a door type "B2" must not be explained by the base legend
+    assert _explain_codes("B2", "What door type is door 104?", rows, leg) is None
+    assert _explain_codes("3 rooms, 4541 SF", "How many rooms are offices?", rows, leg) is None
+
+
+def _cells(y, *spec):
+    """spec: (text, x0) pairs -> cells with one word each (word boxes = visual boxes)."""
+    from stoa.solvers.vector.pdftables import Cell, Row
+    cells = []
+    for text, x0 in spec:
+        x1 = x0 + 6 * len(text)
+        words, x = [], x0
+        for w in text.split():
+            words.append((x, x + 6 * len(w), w, (x, y, x + 6 * len(w), y + 8)))
+            x += 6 * len(w) + 6
+        cells.append(Cell(text, x0, x1, y, (x0, y, x1, y + 8), tuple(words)))
+    return Row(y=y, cells=cells)
+
+
+def test_pdftables_grouped_headers_and_glued_cells():
+    """Group labels over duplicated sub-headers become prefixes; a dimension glued to the next column's word is split."""
+    from stoa.solvers.vector.pdftables import find_tables
+    rows = [_cells(0, ("Door", 230), ("Frame", 330)),
+            _cells(12, ("No", 100), ("Width", 160), ("Matl", 230), ("Matl", 300), ("Type", 360)),
+            _cells(24, ("101", 100), ("3' - 0\"", 160), ("WD", 230), ("HM", 300), ("A", 360)),
+            _cells(36, ("102", 100), ("3' - 0\"", 160), ("AL", 230), ("AL", 300), ("B", 360)),
+            _cells(48, ("103", 100), ("2' - 6\" SLIDER", 160), ("WD", 230), ("HM", 300), ("A", 360)),
+            _cells(60, ("104", 100), ("3' - 0\"", 160), ("WD", 230), ("STL", 300), ("A", 360))]
+    # the glued row: "SLIDER" sits under no column of its own here, so it must stay (no empty column to its right)
+    t = find_tables(rows, h=8.0)[0]
+    assert t.columns == ["No", "Width", "Door Matl", "Frame Matl", "Frame Type"], t.columns
+    assert list(t.df["Frame Matl"]) == ["HM", "AL", "HM", "STL"]
+
+
+def test_pdftables_split_glued_dimension_into_empty_column():
+    from stoa.solvers.vector.pdftables import _split_glued
+    from stoa.solvers.vector.pdftables import Cell
+    words = ((100, 130, "6'", (0, 0, 1, 1)), (136, 142, "-", (0, 0, 1, 1)), (148, 154, "5", (0, 0, 1, 1)),
+             (160, 178, "3/8\"", (0, 0, 1, 1)), (215, 251, "SLIDER", (2, 0, 3, 1)))
+    c = Cell("6' - 5 3/8\" SLIDER", 100, 251, 0, (0, 0, 3, 1), words)
+    xs, vals, cb = [130.0, 240.0, 320.0], ["6' - 5 3/8\" SLIDER", "", "T.B.D."], [None, None, None]
+    _split_glued([c], xs, vals, cb, lambda cell: 0)
+    assert vals == ["6' - 5 3/8\"", "SLIDER", "T.B.D."]
+    # the right-hand column is already filled: keep the cell as it is
+    vals2 = ["6' - 5 3/8\" SLIDER", "SWING", ""]
+    _split_glued([c], xs, vals2, [None] * 3, lambda cell: 0)
+    assert vals2[0] == "6' - 5 3/8\" SLIDER"
+
+
+def test_pdftables_stacked_schedules_and_totals():
+    """Two schedules side by side, a third stacked under the right one (repeated header words), printed totals."""
+    import pandas as pd
+    from stoa.solvers.vector.pdftables import Table, _pull_totals, _split_stacked
+    data = [["BASEMENT", "BATH", "57 SF", "01", "Window-Casement", "7"],
+            ["BASEMENT", "STORAGE", "46 SF", "02", "Window-Picture", "4"],
+            ["BASEMENT: 2", "", "103 SF", "Grand total: 11", "", ""],
+            ["GARAGE", "GARAGE", "486 SF", "Mark", "Family", "Count"],
+            ["GARAGE", "KITCHEN", "247 SF", "01", "Door-Inswing", "1"],
+            ["GARAGE", "CLOSET", "15 SF", "02", "Door-Sidelight", "2"]]
+    cols = ["Level", "ROOM SCHEDULE - SIMPLIFIED Name", "Area", "Type Mark", "Family", "WINDOW SCHEDULE Count"]
+    t = Table(title="", columns=cols, df=pd.DataFrame(data, columns=cols), row_boxes=[(0, i, 1, i + 1) for i in range(6)],
+              bbox=(0, 0, 1, 6), run=[0], xs=[10, 20, 30, 40, 50, 60],
+              cell_boxes=[[(c, i, c + 1, i + 1) for c in range(6)] for i in range(6)])
+    parts = _split_stacked(t)
+    for p in parts:
+        _pull_totals(p)
+    by_title = {p.title: p for p in parts}
+    rooms, windows, doors = by_title["ROOM SCHEDULE - SIMPLIFIED"], by_title["WINDOW SCHEDULE"], by_title[""]
+    assert list(rooms.df.columns) == ["Level", "Name", "Area"] and len(rooms.df) == 5
+    assert [x[0] for x in rooms.totals] == ["BASEMENT: 2 | 103 SF"]
+    assert list(windows.df["Count"]) == ["7", "4"] and [x[0] for x in windows.totals] == ["Grand total: 11"]
+    assert list(doors.df.columns) == ["Type Mark Mark", "Family Family", "Count"] or list(doors.df["Family"]) == [
+        "Door-Inswing", "Door-Sidelight"]
+
+
+def test_schedule_count_sums_quantity_column():
+    import pandas as pd
+    from stoa.solvers.vector.schedule_solver import _qty_sum
+    t = {"t1": pd.DataFrame({"row_id": [0, 1, 2], "Count": [118, 4, 4]}), "notes": pd.DataFrame({"row_id": [900000]})}
+    assert _qty_sum(3, [0, 1, 2], t, "How many 2-wide window assemblies (types SS, TT and UU) are scheduled?") == 126
+    assert _qty_sum(3, [0, 1, 2], t, "How many window types are scheduled?") is None
+    assert _qty_sum(2, [0, 1], t, "How many doors use hardware set 18?") == 122
+    assert _qty_sum(3, [0, 1], t, "How many doors?") is None  # value is not a row count
+
+
+def test_tableqa_guards():
+    import pandas as pd
+    from stoa.solvers.vector.tableqa import _extract_code, _render, _typed_cell, _where
+    t = {"t2": pd.DataFrame({"row_id": [1, 2], "Family": ["Window-Casement-A", "Window-Picture"],
+                             "Size": ['14"x6"', '24"x6"']})}
+    assert _typed_cell('answer = "Window-Picture"\nused = [2]', t) == "Window-Picture"
+    assert _typed_cell('answer = "2 rooms, 40 SF"', t) is None
+    assert "t2['Family'] (1 rows)" in _where("x = t2[t2['Size'].str.contains('Casement')]", t)
+    assert _extract_code("```python\nanswer = 1") == "answer = 1"
+    assert '14"x6"' in _render(t, sep="|") and '""' not in _render(t, sep="|")

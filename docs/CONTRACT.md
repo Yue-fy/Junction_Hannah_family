@@ -138,6 +138,11 @@ $JUNCTION_VENV/bin/python -m stoa.eval --list        # registered solvers + impo
   `python -m stoa.eval.calibration RUN [RUN ...] [--by-source]` (calibration side by side).
   Extra splits: `train_gate` (960 train Qs for choosing gates/thresholds), `cc5k_heldout` (CC5K-pretrained
   models only), `hard` (generality), or any split file path.
+- **Ad-hoc question files** (e.g. the example questions Stoa shows on Saturday): `--split path/to/file.jsonl`, one
+  JSON object per line with `path` (relative to the dataset root, e.g. `data/cubicasa5k/x.png`) and `question`;
+  optional `answer`, `type` (count|area|length|volume|ratio|text; default `other` = not scored), `unit`, `qid`
+  (default: hash of path + question). Rows without `answer` are predicted (value, evidence, trace, cost in the
+  predictions file) but never scored or judged; the report prints how many. Add `--no-leaderboard` for quick looks.
 
 ## HTTP API (W4 implements `stoa/api.py`, port 8100)
 
