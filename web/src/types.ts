@@ -24,7 +24,10 @@ export interface Cost {
 }
 
 export interface Answer {
-  value: number | string | null;
+  /** set by the web middleware when a hosted call timed out and its recorded answer is shown instead */
+  replayed?: string;
+  recorded_at?: string;
+  value: number | string | boolean | null; // boolean: a Python bool from a solver (shown yes/no)
   unit: string | null;
   confidence: number;
   evidence: Evidence[];

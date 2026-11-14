@@ -77,6 +77,13 @@ def predict(path):
         out[t] = {"count": len(bx), "confidence": confidence(t, len(bx)), "boxes": bx}
     room_counts = {t: {"count": len(b), "boxes": orig(b)} for t, (c, mf) in ROOMS_FROZEN.items()
                    for b in [boxes(rooms == c, mf * H * W, 0)]}
+    save = os.environ.get("CC5K_SAVE_MAPS")  # optional: room map at ORIGINAL size for raster_scale/scale.py
+    if save:
+        os.makedirs(save, exist_ok=True)
+        size = Image.open(path).size
+        r = rooms if sc == 1.0 else cv2.resize(rooms, size, interpolation=cv2.INTER_NEAREST)
+        i = icons if sc == 1.0 else cv2.resize(icons, size, interpolation=cv2.INTER_NEAREST)  # room_graph needs both
+        np.savez_compressed(os.path.join(save, os.path.splitext(os.path.basename(path))[0] + ".npz"), rooms=r, icons=i)
     return {"path": path, "cpu_seconds": round(time.process_time() - t0, 2),
             "model": "CubiCasa5K multi-task (Kalervo et al. 2019), CC BY-NC 4.0 weights",
             "work_scale": round(sc, 4), "counts": out, "rooms": room_counts}

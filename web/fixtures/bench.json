@@ -1,24 +1,24 @@
 {
  "from": "snapshot",
- "generated": "2026-11-14T01:54:22.293Z",
+ "generated": "2026-11-14T01:58:23.774Z",
  "runs": {
   "dev": {
    "pipeline": {
-    "run_id": "20261114-015159-pipeline-dev-272e",
+    "run_id": "20261114-031320-pipeline-dev-bb98",
     "solver": "pipeline",
     "split": "dev",
-    "time": "2026-11-14T01:57:48",
-    "commit": "609e41c",
-    "agent": "S0",
-    "note": "S0 cycle7 merge2 @ 609e41c",
+    "time": "2026-11-14T03:17:43",
+    "commit": "d764334",
+    "agent": "F",
+    "note": "F gate night+W4+R1 d764334 dev",
     "n": 2215,
     "weighted_acc": 0.8172,
     "accuracy": 0.885,
     "macro_accuracy": 0.9466,
-    "usd_per_1k_q": 0.184,
-    "latency_p50_s": 0.211,
-    "latency_p95_s": 4.382,
-    "evidence_rate": 0.7043,
+    "usd_per_1k_q": 0.182,
+    "latency_p50_s": 0.17,
+    "latency_p95_s": 4.005,
+    "evidence_rate": 0.7047,
     "refusal_rate": 0,
     "by_tier": {
      "deterministic": {
@@ -40,25 +40,25 @@
      "n_missing_conf": 0,
      "accuracy": 0.885,
      "mean_conf": 0.8708,
-     "ece": 0.0197,
-     "brier": 0.0553,
-     "auroc": 0.9243,
-     "aurc": 0.0193,
+     "ece": 0.0195,
+     "brier": 0.055,
+     "auroc": 0.9246,
+     "aurc": 0.0192,
      "e_aurc": 0.0123,
-     "hi_conf_share": 0.779,
+     "hi_conf_share": 0.7795,
      "hi_conf_acc": 0.9801
     },
     "cost_mean": {
-     "llm_tokens_in": 1401.737246,
-     "llm_tokens_out": 225.193679,
+     "llm_tokens_in": 1417.899323,
+     "llm_tokens_out": 225.973815,
      "api_tokens_in": 0,
      "api_tokens_out": 0,
-     "llm_calls": 0.878104,
+     "llm_calls": 0.880361,
      "api_calls": 0,
-     "gpu_seconds": 6.813967,
-     "wall_seconds": 1.066738,
-     "usd": 0.000184,
-     "gpu_seconds_billed": 0.28126
+     "gpu_seconds": 6.815393,
+     "wall_seconds": 0.853353,
+     "usd": 0.000182,
+     "gpu_seconds_billed": 0.282687
     },
     "by_source": {
      "cubicasa5k": {
@@ -226,20 +226,20 @@
   },
   "hard": {
    "pipeline": {
-    "run_id": "20261114-015749-pipeline-hard-10e4",
+    "run_id": "20261114-031744-pipeline-hard-bb4a",
     "solver": "pipeline",
     "split": "hard",
-    "time": "2026-11-14T01:58:45",
-    "commit": "609e41c",
-    "agent": "S0",
-    "note": "S0 cycle7 merge2 @ 609e41c",
+    "time": "2026-11-14T03:18:35",
+    "commit": "d764334",
+    "agent": "F",
+    "note": "F gate night+W4+R1 d764334 hard",
     "n": 711,
-    "weighted_acc": 0.7517,
-    "accuracy": 0.8474,
-    "macro_accuracy": 0.9456,
+    "weighted_acc": 0.7469,
+    "accuracy": 0.8445,
+    "macro_accuracy": 0.9446,
     "usd_per_1k_q": 0.206,
-    "latency_p50_s": 0.51,
-    "latency_p95_s": 1.66,
+    "latency_p50_s": 0.429,
+    "latency_p95_s": 1.412,
     "evidence_rate": 0.6835,
     "refusal_rate": 0,
     "by_tier": {
@@ -252,7 +252,7 @@
      "local": {
       "share": 0.5218,
       "n": 371,
-      "accuracy": 0.7147,
+      "accuracy": 0.709,
       "coverage": 1
      }
     },
@@ -260,10 +260,10 @@
      "composition": {
       "n": 211,
       "scored_n": 188,
-      "correct": 137,
-      "accuracy": 0.7287,
+      "correct": 136,
+      "accuracy": 0.7234,
       "coverage": 1,
-      "acc_when_answered": 0.7287,
+      "acc_when_answered": 0.7234,
       "evidence_rate": 0.6256,
       "evidence_2d_rate": 0.6256,
       "evidence_count_match": 0.4493,
@@ -276,10 +276,10 @@
      "paraphrase": {
       "n": 250,
       "scored_n": 250,
-      "correct": 221,
-      "accuracy": 0.884,
+      "correct": 220,
+      "accuracy": 0.88,
       "coverage": 1,
-      "acc_when_answered": 0.884,
+      "acc_when_answered": 0.88,
       "evidence_rate": 0.724,
       "evidence_2d_rate": 0.704,
       "evidence_count_match": 0.945,
@@ -299,39 +299,39 @@
       "evidence_count_match": 0.9091,
       "evidence_count_n": 77,
       "refusal_rate": 0,
-      "usd_per_q": 0.000252
+      "usd_per_q": 0.00025
      }
     },
     "calibration": {
      "n": 688,
      "n_missing_conf": 0,
-     "accuracy": 0.8474,
-     "mean_conf": 0.8116,
-     "ece": 0.0358,
-     "brier": 0.0681,
-     "auroc": 0.9366,
-     "aurc": 0.0231,
-     "e_aurc": 0.0107,
-     "hi_conf_share": 0.7035,
-     "hi_conf_acc": 0.9814
+     "accuracy": 0.8445,
+     "mean_conf": 0.771,
+     "ece": 0.0753,
+     "brier": 0.0785,
+     "auroc": 0.9338,
+     "aurc": 0.0242,
+     "e_aurc": 0.0113,
+     "hi_conf_share": 0.6206,
+     "hi_conf_acc": 0.993
     },
     "cost_mean": {
      "llm_tokens_in": 1352.139241,
-     "llm_tokens_out": 275.30661,
+     "llm_tokens_out": 275.309423,
      "api_tokens_in": 0,
      "api_tokens_out": 0,
      "llm_calls": 1.296765,
      "api_calls": 0,
-     "gpu_seconds": 8.283205,
-     "wall_seconds": 0.626008,
+     "gpu_seconds": 8.283208,
+     "wall_seconds": 0.571747,
      "usd": 0.000206,
-     "gpu_seconds_billed": 0.329388
+     "gpu_seconds_billed": 0.329391
     },
     "by_source": {
      "cubicasa5k": {
       "n": 283,
-      "correct": 180,
-      "accuracy": 0.6360424028268551
+      "correct": 178,
+      "accuracy": 0.6289752650176679
      },
      "ifc_models": {
       "n": 135,
@@ -620,24 +620,99 @@
       "accuracy": 0.99
      }
     }
+   },
+   "no_lora": {
+    "run_id": "20261114-035220-pipeline-test-e96f",
+    "solver": "pipeline",
+    "split": "test",
+    "time": "2026-11-14T03:54:48",
+    "commit": "95f2277",
+    "agent": "S0",
+    "note": "S0 sealed test 1 @ 95f2277: test-lora0",
+    "n": 2199,
+    "weighted_acc": 0.7377,
+    "accuracy": 0.8385,
+    "macro_accuracy": 0.9356,
+    "usd_per_1k_q": 0.191,
+    "latency_p50_s": 0.14,
+    "latency_p95_s": 2.62,
+    "evidence_rate": 0.7181,
+    "refusal_rate": 0,
+    "by_tier": {
+     "deterministic": {
+      "share": 0.7822,
+      "n": 1720,
+      "accuracy": 0.889,
+      "coverage": 1
+     },
+     "local": {
+      "share": 0.2178,
+      "n": 479,
+      "accuracy": 0.6094,
+      "coverage": 1
+     }
+    },
+    "by_kind": null,
+    "calibration": {
+     "n": 2000,
+     "n_missing_conf": 0,
+     "accuracy": 0.8385,
+     "mean_conf": 0.8469,
+     "ece": 0.0161,
+     "brier": 0.0702,
+     "auroc": 0.9234,
+     "aurc": 0.0292,
+     "e_aurc": 0.0153,
+     "hi_conf_share": 0.735,
+     "hi_conf_acc": 0.9667
+    },
+    "cost_mean": {
+     "llm_tokens_in": 970.033652,
+     "llm_tokens_out": 267.552524,
+     "api_tokens_in": 0,
+     "api_tokens_out": 0,
+     "llm_calls": 0.631196,
+     "api_calls": 0,
+     "gpu_seconds": 4.766152,
+     "wall_seconds": 0.537851,
+     "usd": 0.000191,
+     "gpu_seconds_billed": 0.306353
+    },
+    "by_source": {
+     "cubicasa5k": {
+      "n": 803,
+      "correct": 495,
+      "accuracy": 0.6164383561643836
+     },
+     "ifc_models": {
+      "n": 397,
+      "correct": 390,
+      "accuracy": 0.982367758186398
+     },
+     "swiss_dwellings": {
+      "n": 800,
+      "correct": 792,
+      "accuracy": 0.99
+     }
+    }
    }
   },
   "hard2": {
    "pipeline": {
-    "run_id": "20261114-015846-pipeline-hard2-8363",
+    "run_id": "20261114-031836-pipeline-hard2-1156",
     "solver": "pipeline",
     "split": "hard2",
-    "time": "2026-11-14T01:59:18",
-    "commit": "609e41c",
-    "agent": "S0",
-    "note": "S0 cycle7 merge2 @ 609e41c",
+    "time": "2026-11-14T03:19:14",
+    "commit": "d764334",
+    "agent": "F",
+    "note": "F gate night+W4+R1 d764334 hard2",
     "n": 256,
     "weighted_acc": 0.8329,
     "accuracy": 0.9206,
     "macro_accuracy": 0.9617,
-    "usd_per_1k_q": 0.479,
-    "latency_p50_s": 0.488,
-    "latency_p95_s": 2.061,
+    "usd_per_1k_q": 0.484,
+    "latency_p50_s": 0.553,
+    "latency_p95_s": 3.23,
     "evidence_rate": 0.7852,
     "refusal_rate": 0,
     "by_tier": {
@@ -669,7 +744,7 @@
       "refusal_rate": 0,
       "text_n": 67,
       "text_fuzzy": 0.9254,
-      "usd_per_q": 0.000479
+      "usd_per_q": 0.000484
      }
     },
     "calibration": {
@@ -693,8 +768,8 @@
      "llm_calls": 2.089844,
      "api_calls": 0,
      "gpu_seconds": 19.755597,
-     "wall_seconds": 0.89025,
-     "usd": 0.000479,
+     "wall_seconds": 1.190382,
+     "usd": 0.000484,
      "gpu_seconds_billed": 0.778281
     },
     "by_source": {
@@ -718,21 +793,21 @@
   },
   "hard2q": {
    "pipeline": {
-    "run_id": "20261114-031242-pipeline-hard2q-1363",
+    "run_id": "20261114-031242-pipeline-hard2q-e2c4",
     "solver": "pipeline",
     "split": "hard2q",
-    "time": "2026-11-14T03:13:19",
-    "commit": "609e41c",
+    "time": "2026-11-14T03:13:14",
+    "commit": "d764334",
     "agent": "F",
-    "note": "F gate base 609e41c hard2q",
+    "note": "F gate night+W4+R1 d764334 hard2q",
     "n": 256,
-    "weighted_acc": 0.5725,
-    "accuracy": 0.7566,
-    "macro_accuracy": 0.8803,
-    "usd_per_1k_q": 0.45,
-    "latency_p50_s": 0.171,
-    "latency_p95_s": 5.196,
-    "evidence_rate": 0.6992,
+    "weighted_acc": 0.5895,
+    "accuracy": 0.7989,
+    "macro_accuracy": 0.9025,
+    "usd_per_1k_q": 0.439,
+    "latency_p50_s": 0.223,
+    "latency_p95_s": 4.23,
+    "evidence_rate": 0.7461,
     "refusal_rate": 0,
     "by_tier": {
      "deterministic": {
@@ -744,7 +819,7 @@
      "local": {
       "share": 0.5742,
       "n": 147,
-      "accuracy": 0.4945,
+      "accuracy": 0.5824,
       "coverage": 1
      }
     },
@@ -752,46 +827,46 @@
      "reasoning-reworded-q": {
       "n": 256,
       "scored_n": 189,
-      "correct": 143,
-      "accuracy": 0.7566,
+      "correct": 151,
+      "accuracy": 0.7989,
       "coverage": 1,
-      "acc_when_answered": 0.7566,
-      "evidence_rate": 0.6992,
-      "evidence_2d_rate": 0.6992,
-      "evidence_count_match": 0.4167,
-      "evidence_count_n": 36,
+      "acc_when_answered": 0.7989,
+      "evidence_rate": 0.7461,
+      "evidence_2d_rate": 0.7461,
+      "evidence_count_match": 0.4054,
+      "evidence_count_n": 37,
       "refusal_rate": 0,
       "text_n": 67,
       "text_fuzzy": 0.5821,
       "text_judge": 0.6866,
       "text_judged_n": 67,
-      "usd_per_q": 0.00045
+      "usd_per_q": 0.000439
      }
     },
     "calibration": {
      "n": 189,
      "n_missing_conf": 0,
-     "accuracy": 0.7566,
-     "mean_conf": 0.7039,
-     "ece": 0.1282,
-     "brier": 0.1346,
-     "auroc": 0.8206,
-     "aurc": 0.0889,
-     "e_aurc": 0.0559,
-     "hi_conf_share": 0.4868,
-     "hi_conf_acc": 0.8804
+     "accuracy": 0.7989,
+     "mean_conf": 0.7329,
+     "ece": 0.1211,
+     "brier": 0.1305,
+     "auroc": 0.7899,
+     "aurc": 0.087,
+     "e_aurc": 0.0648,
+     "hi_conf_share": 0.5079,
+     "hi_conf_acc": 0.9271
     },
     "cost_mean": {
-     "llm_tokens_in": 2409.316406,
-     "llm_tokens_out": 634.226562,
+     "llm_tokens_in": 2177.175781,
+     "llm_tokens_out": 629.9375,
      "api_tokens_in": 0,
      "api_tokens_out": 0,
-     "llm_calls": 2.164062,
+     "llm_calls": 1.972656,
      "api_calls": 0,
-     "gpu_seconds": 18.514952,
-     "wall_seconds": 0.798377,
-     "usd": 0.00045,
-     "gpu_seconds_billed": 0.730596
+     "gpu_seconds": 18.366583,
+     "wall_seconds": 0.645716,
+     "usd": 0.000439,
+     "gpu_seconds_billed": 0.717022
     },
     "by_source": {
      "cubicasa5k": {
@@ -806,8 +881,8 @@
      },
      "swiss_dwellings": {
       "n": 105,
-      "correct": 88,
-      "accuracy": 0.8380952380952381
+      "correct": 96,
+      "accuracy": 0.9142857142857143
      }
     }
    }
@@ -815,6 +890,5 @@
   "hard2r": {
    "pipeline": null
   }
- },
- "note": "snapshot of /api/bench at 03:55: sealed test 1 (cc5k0, 95f2277) + latest S0 dev/hard/hard2 (609e41c) + F hard2q; refresh when test 1 dev/hard land"
+ }
 }

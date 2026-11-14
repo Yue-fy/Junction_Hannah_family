@@ -789,6 +789,246 @@ def nms_boxes(boxes: list[Box], iou_thr: float = 0.5) -> list[Box]:
     return kept
 
 
+# ---------------------------------------------------------------------------------------------------------------
+# Question translation: a language-agnostic front end (F 04:01: sealed hard2r collapses on languages no rule
+# covers: Polish cubicasa 21%, Estonian ifc 20%). Rules and templates understand en/fi/de/fr/it; anything else is
+# translated to English by the local model, with quoted names, IDs and numbers swapped for placeholders first so
+# they come back byte-identical (a storey called '1.korrus' must not become '1st floor').
+# ---------------------------------------------------------------------------------------------------------------
+
+# function words / question words per language (lower case, accents kept); scored, not first-match
+_LANG_WORDS: dict[str, set[str]] = {
+    "en": set("how many what which is are the of in on this does do there total area floor plan room rooms "
+              "and with by for than larger smaller".split()),
+    "fi": set("kuinka monta montako mikä mitkä onko on ja kerroksessa pohjapiirustuksessa pohjapiirustukseen "
+              "yhteensä paljonko pinta-ala huonetta tässä".split()),
+    "de": set("wie viele welche welcher ist sind der die das im auf dem den gibt es und wohnung fläche geschoss "
+              "grundriss gross groß als".split()),
+    "fr": set("combien quelle quel quels est sont de la le les du des sur dans et une un ce cette plan surface "
+              "pièces appartement étage".split()),
+    "it": set("quanti quante quale qual è di il lo la del della nel sul questo questa e una superficie stanze "
+              "appartamento piano pianta".split()),
+    "es": set("cuántos cuántas cuál cuáles qué el los las es son del en y una superficie habitaciones planta "
+              "piso hay".split()),
+    "pt": set("quantos quantas qual quais o os as é são do da em e uma área quartos planta andar há".split()),
+    "nl": set("hoeveel welke wat het van is zijn op en een oppervlakte verdieping kamers".split()),
+    "sv": set("hur många vilka vilken är och på det den finns rum ytan våning".split()),
+    "da": set("hvor mange hvilke hvad er og på det den findes rum etage".split()),
+    "no": set("hvor mange hvilke hva er og på det den finnes rom etasje".split()),
+    "pl": set("ile jaka jaki jakie który która jest są na w i czy pomieszczeń pokoi powierzchnia tym tego "
+              "kondygnacji piętrze".split()),
+    "cs": set("kolik jaká jaký jaké který která je jsou na v a se místností plocha tomto podlaží patře".split()),
+    "sk": set("koľko aká aký ktorý je sú na v a miestností plocha tomto podlaží".split()),
+    "hu": set("hány hány mennyi van vannak a az és milyen melyik alaprajzon terület szint szinten helyiség "
+              "teljes".split()),
+    "tr": set("kaç ne nedir bu ve bir mi mı alanı katta oda odası toplam kattaki planda".split()),
+    "ro": set("câte câți cât care este sunt și pe în din suprafața camere etaj planul acest".split()),
+    "et": set("mitu kui palju on ja kas korrusel ruumi pindala mis".split()),
+    "lv": set("cik kāda ir un uz stāvā telpu platība".split()),
+    "lt": set("kiek koks yra ir ant aukšte patalpų plotas".split()),
+}
+_LANG_CHARS: dict[str, str] = {  # letters that (almost) only one language family uses
+    "pl": "ąęłńśźż", "cs": "ěřůť", "sk": "ľĺŕô", "hu": "őű", "tr": "ğşı", "ro": "ășțâî", "et": "õ",
+    "es": "ñ¿¡", "pt": "ãõ", "fi": "", "lv": "āēīūķļņģ", "lt": "ąčęėįšųūž", "da": "æø", "no": "æø", "sv": "å",
+}
+COVERED_LANGS = ("en", "fi", "de", "fr", "it")  # languages the dataset (and therefore our rules) use
+_QUOTED = re.compile(r"(?<![^\W\d_])'[^']{1,80}'(?![^\W\d_])|\"[^\"]{1,80}\"|‘[^’]{1,80}’|“[^”]{1,80}”|„[^“”]{1,80}[“”]|«[^»]{1,80}»")
+# IDs and numbers: anything with a digit (1.korrus, A-101, 2,40, 1 200, 25 CHF stays: only the number part)
+_IDNUM = re.compile(r"(?<![\w])(?:\w*\d[\w.,/\-]*\w|\d)(?![\w])")
+
+
+def _strip_quoted(q: str) -> str:
+    return _QUOTED.sub(" ", q)
+
+
+def lang_guess(question: str) -> str:
+    """Best-guess ISO 639-1 code of a question (no model call; quoted names ignored). '?' when nothing matches.
+    Meant for routing ("is this a language our rules cover?"), not for linguistics: close pairs (da/no, cs/sk)
+    can be confused, which does not matter because both get translated."""
+    t = _strip_quoted(question).lower()
+    words = re.findall(r"[^\W\d_]+(?:-[^\W\d_]+)?", t)
+    if not words:
+        return "?"
+    best, best_s = "?", 0.0
+    for code, vocab in _LANG_WORDS.items():
+        s = sum(1.0 for w in words if w in vocab)
+        chars = _LANG_CHARS.get(code, "")
+        if chars:
+            s += 1.5 * sum(1 for ch in t if ch in chars)
+        if s > best_s:
+            best, best_s = code, s
+    return best if best_s >= 1.0 else "?"
+
+
+@dataclass
+class Translation:
+    text: str                 # the English question (== the original when nothing was translated)
+    lang: str                 # source language (model's answer when it translated, else lang_guess)
+    translated: bool          # a model call rewrote the question
+    ok: bool = True           # every protected span came back verbatim (False -> text is the original)
+    original: str = ""
+    note: str = ""            # for Answer.assumptions: "translated from Polish: '...'"
+
+
+_TR_SYSTEM_BASE = (
+    "You translate questions about construction drawings and building models into English. Rules: keep every "
+    "placeholder such as [[1]] exactly as written, once each (a placeholder in quotes is a name or label: keep it "
+    "in quotes); keep apartment, room and grid letters or codes; do not answer the question; do not add, drop or "
+    "change any condition, comparison, unit or name; use standard English building terms (storey/floor, apartment, room, "
+    "toilet, sink, door, window, net floor area, wall, slab). Reply as JSON {\"lang\": \"<ISO 639-1 code of the "
+    "source>\", \"english\": \"<the English question>\"}."
+)
+# + a fixed domain glossary and "never add / drop qualifiers" (F 04:36/04:38: the remaining losses were concept-noun
+# slips, e.g. Polish 'belek' (beams) -> balconies, and one ADDED 'external'). experiments/r2/probes/concept_match.py:
+# translation parses to the same (task, target) as its English base on hardL_open 139/158 vs 129/158 without it,
+# lang4 47 vs 46/48, 'belek' fixed, 0 vs 2 lost placeholders. (Two noun hints, washbasin vs kitchen sink and bathtub
+# vs bathroom, were added after seeing hardL_open misses: F's held-out hardL is the honest check.)
+_TR_SYSTEM = _TR_SYSTEM_BASE + (
+    " Never add a qualifier or condition the source does not state (e.g. external, internal, load-bearing, net, "
+    "gross) and never drop one it states; translate every noun. Translate building nouns with these English terms: "
+    "toilet bowl / WC seat (a fixture), separate WC room (a room), washbasin (a bathroom wash basin, lavabo), kitchen "
+    "sink, shower, bathtub (the tub itself, not the room), sauna, bedroom, bathroom / washroom (a room), kitchen, "
+    "living room, balcony, terrace, storey / floor (a level of the building), apartment, room / space, door, window, "
+    "wall, slab, beam, column, stair, roof, railing.")
+# Source-language hints for building nouns the 8B does not know (S0 04:51: pl 'belek' -> balconies). General domain
+# vocabulary (pl, et, cs, hu, ro, es, sv, fi, de, nl, da/no), not taken from any probe or sealed split. Used by
+# to_english since 05:00: concept match hardL_open 141/158 (v2 without it 139, none 129), lang4 47/48, F's 11
+# pl/ro ifc trigger questions 11/11 in the pipeline (v2: 10/11, 'belek' -> balconies).
+_TR_GLOSSARY = (
+    " Source-language hints: beam = belka/belki/belek (pl), tala (et), trám (cs), gerenda (hu), grindă/grinzi (ro), "
+    "viga (es), balk/balkar (sv), palkki (fi), Balken (de), balk (nl), bjælke/bjelke (da/no); column = słup (pl), "
+    "post/sammas (et), sloup (cs), oszlop (hu), stâlp/stâlpi (ro), columna/pilar (es), pelare (sv), pilari (fi), "
+    "Stütze/Säule (de), kolom (nl), søjle/søyle (da/no); slab = płyta/strop (pl), plaat/vahelagi (et), deska/strop "
+    "(cs), födém/lemez (hu), placă/plăci/planșeu (ro), losa/forjado (es), bjälklag/platta (sv), laatta (fi), "
+    "Decke/Platte (de), vloerplaat (nl), dæk (da); stair = schody (pl), trepp (et), schodiště (cs), lépcső (hu), "
+    "scară/scări (ro), escalera (es), trappa (sv), porras (fi); wall = ściana (pl), sein (et), stěna (cs), fal (hu), "
+    "perete (ro), muro/pared (es), vägg (sv), seinä (fi); balcony = balkon (pl, cs), rõdu (et), erkély (hu), balcon "
+    "(ro), balcón (es), balkong (sv), parveke (fi); washbasin = umywalka (pl), kraanikauss (et), umyvadlo (cs), mosdó "
+    "(hu), lavoar (ro), lavabo (es), handfat (sv); kitchen sink = zlew (pl), valamu (et), dřez (cs), mosogató (hu), "
+    "chiuvetă (ro), fregadero (es), diskbänk (sv); toilet bowl = sedes/miska WC (pl), WC-pott (et), mísa (cs), "
+    "WC-csésze (hu), vas WC (ro), inodoro (es), toalettstol (sv); bathtub = wanna (pl), vann (et), vana (cs), kád "
+    "(hu), cadă/căzi (ro), bañera (es), badkar (sv), kylpyamme (fi); shower = prysznic (pl), dušš (et), sprcha (cs), "
+    "zuhany (hu), duș (ro), ducha (es), dusch (sv); sauna = bastu (sv), szauna (hu); bathroom = łazienka (pl), "
+    "vannituba (et), koupelna (cs), fürdőszoba (hu), baie (ro), baño (es), badrum (sv); bedroom = sypialnia (pl), "
+    "magamistuba (et), ložnice (cs), hálószoba (hu), dormitor (ro), dormitorio (es), sovrum (sv); storey = kondygnacja/"
+    "piętro (pl), korrus (et), podlaží/patro (cs), szint/emelet (hu), nivel/etaj (ro), planta (es), våning (sv).")
+_TR_SCHEMA = {"type": "object", "properties": {"lang": {"type": "string"}, "english": {"type": "string"}},
+              "required": ["lang", "english"]}
+_LANG_NAMES = {"pl": "Polish", "et": "Estonian", "es": "Spanish", "cs": "Czech", "hu": "Hungarian", "tr": "Turkish",
+               "ro": "Romanian", "pt": "Portuguese", "nl": "Dutch", "sv": "Swedish", "da": "Danish", "no": "Norwegian",
+               "sk": "Slovak", "lv": "Latvian", "lt": "Lithuanian", "fi": "Finnish", "de": "German", "fr": "French",
+               "it": "Italian", "en": "English"}
+_tr_memo: dict[tuple, Translation] = {}
+_tr_lock = threading.Lock()
+
+
+_NUM_SUFFIX = re.compile(r"(\d+(?:[.,]\d+)*)(-[^\W\d_]+)")  # Hungarian/Turkish case endings: 1.11-es, 12-ben
+_LETTER = re.compile(r"(?:(?<=\s)|^)[A-Z](?=[\s,.;:?!)]|$)")  # apartment/unit letters (A, B)
+_QCHARS = "'\"‘’“”„«»"
+
+
+def _protect(q: str) -> tuple[str, list[str]]:
+    """Mask quoted names (quote marks stay visible, so the model knows a label is there), numbers/IDs and
+    unit letters as [[n]]; return the masked text and the spans (quoted ones WITH their quote marks)."""
+    spans: list[str] = []
+    hu = lang_guess(q) == "hu"  # Hungarian sentence-initial "A" is the article, not a unit letter
+
+    def keep(text: str) -> str:
+        spans.append(text)
+        return f"[[{len(spans)}]]"
+
+    def quoted(m: re.Match) -> str:
+        t = m.group(0)
+        return t[0] + keep(t) + t[-1]
+
+    def idnum(m: re.Match) -> str:
+        t = m.group(0)
+        ns = _NUM_SUFFIX.fullmatch(t)
+        return keep(ns.group(1)) + ns.group(2) if ns else keep(t)
+
+    def letter(m: re.Match) -> str:
+        return m.group(0) if (hu and m.start() == 0) else keep(m.group(0))
+
+    masked = _QUOTED.sub(quoted, q)
+    parts = re.split(r"(\[\[\d+\]\])", masked)  # outside the masked names only
+    masked = "".join(p if re.fullmatch(r"\[\[\d+\]\]", p) else _LETTER.sub(letter, _IDNUM.sub(idnum, p))
+                     for p in parts)
+    return masked, spans
+
+
+def _restore(text: str, spans: list[str]) -> tuple[str, bool]:
+    """Put the spans back; a quoted name always comes back with its own quote marks, whether or not the model
+    kept the quotes around the placeholder. ok = every placeholder appeared exactly once."""
+    ok = all(len(re.findall(rf"\[\[{i}\]\]", text)) == 1 for i in range(1, len(spans) + 1))
+    for i in range(len(spans), 0, -1):  # [[12]] before [[1]]
+        sp = spans[i - 1]
+        ph = f"[[{i}]]"
+        if len(sp) >= 2 and sp[0] in _QCHARS and sp[-1] in _QCHARS:
+            text = re.sub(rf"[{_QCHARS}]?{re.escape(ph)}[{_QCHARS}]?", lambda _m: sp, text)
+        else:
+            text = text.replace(ph, sp)
+    return text, ok and not re.search(r"\[\[\d+\]\]", text)
+
+
+def should_translate(question: str, intent: Any = None) -> bool:
+    """The measured trigger for to_english(question, force=True): a non-English question the rule-based intent
+    parser could not read (unknown language, no target, or fell back to a free-text task). R2 04:20: on the CS/HU/TR/RO
+    probe this fires on 46/48 and lifts the pipeline 38 -> 48/48; on hard's 175 non-English questions (fi/de/fr/it
+    templates + new sv/nl/pl/de wordings the rules already read) it fires on 0 and changes nothing, whereas
+    translating every non-English question there LOSES 7 answers to translation slips ("vasche da bagno" -> bathrooms,
+    "bastur" -> bathrooms, "vloeren" -> floors). After translating, re-parse; keep the translation only if the
+    re-parse finds a target. `intent` = stoa.router.intent.parse(question) (parsed here when None)."""
+    if lang_guess(question) == "en":
+        return False
+    if intent is None:
+        from stoa.router.intent import parse
+
+        intent = parse(question)
+    return (getattr(intent, "lang", "?") == "?" or getattr(intent, "target", None) in (None, "unknown")
+            or getattr(intent, "task", None) == "text")
+
+
+def to_english(question: str, *, keep: Sequence[str] = COVERED_LANGS, force: bool = False,
+               backend: str = "local", model: str | None = None) -> Translation:
+    """Translate a question into English unless its language is in `keep` (default: the languages our rules cover).
+
+    One local-LLM call (~150 tokens in / ~40 out, cost recorded like any chat) for an uncovered language; none
+    otherwise. Quoted names, IDs and numbers are masked as [[n]] before the call and restored after, so they are
+    byte-identical; if the model loses one, the original question is returned with ok=False (caller: keep the
+    original route and lower the confidence). Memoised in-process; disk-cached with STOA_LLM_CACHE=1.
+    `force=True` translates any non-English question. Recommended use (measured, see should_translate):
+        if should_translate(q, intent): tr = to_english(q, force=True); re-parse tr.text; use it if that finds a target
+    Translating questions the rules already read loses answers (hard: 7 losses / 1 win on 175)."""
+    guess = lang_guess(question)
+    if guess == "en" or (not force and guess in keep):
+        return Translation(question, guess, False, True, question)
+    key = (question, backend, model)
+    with _tr_lock:
+        if key in _tr_memo:
+            return _tr_memo[key]
+    masked, spans = _protect(question)
+    try:
+        r = chat(masked, system=_TR_SYSTEM + _TR_GLOSSARY, backend=backend, model=model, max_tokens=300, temperature=0.0,
+                 json_schema=_TR_SCHEMA)
+        d = extract_json(r.text) or {}
+        eng = str(d.get("english", "")).strip()
+        lang = str(d.get("lang", guess) or guess).strip().lower()[:5] or guess
+    except Exception as e:  # noqa: BLE001  (server down: answer on the original rather than fail)
+        return Translation(question, guess, False, False, question, f"translation failed ({type(e).__name__})")
+    text, ok = _restore(eng, spans) if eng else (question, False)
+    if lang == "en":
+        res = Translation(question, "en", False, True, question)
+    elif not ok:
+        res = Translation(question, lang, False, False, question,
+                          f"translation from {_LANG_NAMES.get(lang, lang)} lost a name or number; used the original")
+    else:
+        res = Translation(text, lang, True, True, question,
+                          f"question translated from {_LANG_NAMES.get(lang, lang)} by the local model: \"{text}\"")
+    with _tr_lock:
+        _tr_memo[key] = res
+    return res
+
+
 if __name__ == "__main__":  # smoke test: python -m stoa.llm [backend]
     import sys
 

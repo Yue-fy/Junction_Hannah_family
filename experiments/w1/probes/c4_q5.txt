@@ -1,0 +1,21 @@
+PATH bsc-esplanades_1807-ep-ar-v18_plan-02-2-korrus.pdf
+Which rooms on '2.korrus' are larger than 40 m²?
+List the rooms on '2.korrus' smaller than 4 m².
+What is the volume of the room 'KORIDOR (219)' on '2.korrus'?
+What is the ceiling height of the rooms on '2.korrus'?
+How many doors does the room 'KORIDOR (219)' have?
+How many windows and what total window area are there on '2.korrus'?
+What is the average window area on '2.korrus'?
+How many rooms on '2.korrus' have an area between 10 and 20 m²?
+How many doors are there on '2.korrus' compared to '3.korrus'?
+What is the total wall volume on '2.korrus' rounded to the nearest cubic metre?
+How many square metres is the second largest room on '2.korrus'?
+What is the median room area on '2.korrus'?
+How many rooms on '2.korrus' are toilets?
+What is the total area of the toilets on '2.korrus'?
+How many slabs are there in the building?
+What fraction of the walls on '2.korrus' are load-bearing?
+How many walls on '2.korrus' are thicker than 200 mm?
+Is the building taller than 15 m?
+How many storeys does the building have above ground level?
+What is the elevation of the top storey?

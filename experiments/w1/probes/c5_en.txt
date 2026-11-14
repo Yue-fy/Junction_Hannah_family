@@ -1,0 +1,21 @@
+# c5 base English operator questions (W1-written 04:35); reference answers for the multilingual probe c5_ml.txt
+PATH bsc-duplex_duplex-a-20110907.ifc
+How many doors are on 'Level 1'?
+How many windows does the whole model have?
+What is the total net floor area of all rooms on 'Level 2'?
+What is the average room area on 'Level 1'?
+Which storey has more doors, 'Level 1' or 'Level 2'?
+How many more windows does 'Level 2' have than 'Level 1'?
+What percentage of all doors are on 'Level 2'?
+How many rooms on 'Level 1' are larger than 10 m²?
+What is the total length of the walls on 'Level 1' in metres?
+What is the total wall length on 'Level 1' in feet?
+If each door costs 450 euros, what do all doors on 'Level 1' cost?
+What is the area of the largest room on 'Level 2'?
+How many columns are on 'Level 1'?
+What is the total volume of the slabs in the model?
+PATH kit-fzk-haus_ac20-fzk-haus.ifc
+How many windows are on 'Erdgeschoss'?
+What is the total room area of 'Dachgeschoss'?
+How many times larger is the room area of 'Erdgeschoss' than that of 'Dachgeschoss'?
+How many rooms are there on 'Erdgeschoss' and 'Dachgeschoss' together?

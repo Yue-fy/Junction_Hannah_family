@@ -58,7 +58,7 @@ CONCEPTS: dict[str, tuple[list[str], list[str]]] = {
                ["Treppenhaus", "Cage d'escalier", "Vano scala"]),
     "lift": ([r"lifts?", r"elevators?", r"aufz[üu]ge?", r"ascenseurs?", r"ascensor[ei]"], ["Lift", "Ascenseur", "Ascensore"]),
     "cellar": ([r"cellars?", r"basement\s+compartments?", r"kellerabteile?", r"compartiments?\s+caves?"],
-               ["Compartiment cave"]),
+               ["Compartiment cave", "Vano cantina", "Kellerabteil", "Keller", "Cave", "Cantina"]),
     "room": ([r"zimmer", r"pi[èe]ces?", r"stanz[ae]"], ["Zimmer", "Pièce", "Stanza", "Raum"]),
 }
 
@@ -78,6 +78,14 @@ TIMES_W = (r"how\s+many\s+times|times\s+(?:larger|bigger|greater|as\s+(?:large|b
            r"hur\s+m[åa]nga\s+g[åa]nger|g[åa]nger\s+(?:st[öo]rre|s[åa]\s+stor)|f[öo]rh[åa]llande|\bkvot\b|"
            r"cu[áa]ntas\s+veces|veces\s+(?:m[áa]s\s+grande|mayor)|\braz[óo]n\b|kuinka\s+monta\s+kertaa|kertaa\s+suurempi|"
            r"\bsuhde\b|ile\s+razy|razy\s+wi[ęe]ksz\w*|\bstosunek\b|\bmultiple\s+of\b|relative\s+to")
+# "by what percentage is B larger than A" = relative difference 100·(B−A)/A, not B's share (W4 04:04)
+PCTDIFF_W = (r"(?:what|how\s+(?:many|much))\s+(?:percent(?:age)?|%)(?:\s+points?)?\b.{0,60}?\b(?:larger|bigger|greater|more|"
+             r"smaller|less|lower|higher)\b|\b(?:percent(?:age)?|%)\s+(?:larger|bigger|greater|more|smaller|less)\s+than\b|"
+             r"um\s+wie\s*viel(?:e)?\s+prozent.{0,60}?(?:gr[öo]ss|gr[öo]ß|klein|mehr|weniger)|"
+             r"prozent\s+(?:gr[öo]sser|größer|kleiner|mehr|weniger)\s+als|"
+             r"de\s+combien\s+de\s+pour\s*-?\s*cent.{0,60}?\b(?:plus|moins)\b|pour\s*-?\s*cent\s+(?:plus|moins)\s+(?:grand|petit)|"
+             r"di\s+(?:quanto|che)\s+percent\w*.{0,60}?\b(?:più|meno)\b|per\s*cento\s+(?:più|meno)\s+(?:grande|piccol)")
+PCTLESS_W = r"\b(?:smaller|less|lower|kleiner|weniger|moins|plus\s+petit|meno|più\s+piccol)"
 SHARE_W = (r"\bshare\b|\bpercent(?:age)?\b|in\s+%|\bproportion\b|\banteil\b|prozent|pourcentage|\bpart\s+de\b|"
            r"percentuale|\bquota\b|\btake\s+up\b|\bnimmt\b.*\bein\b|\boccupe\b|\boccupa\b|\baandeel\b|\bprocent\w*|"
            r"\bandel(?:en)?\b|\bporcentaje\b|\bproporci[óo]n\b|\bosuus\b|prosent\w*|\budzia[łl]\b|\btakes\s+up\b|"
@@ -108,7 +116,9 @@ NEG_APT_W = (r"(?:do(?:es)?\s+not|don't|doesn't|not)\s+(?:belong|lie|part|in|ins
 WHICH_CMP = (r"^\s*(?:which|welche[rs]?|quel(?:le)?|lequel|laquelle|quale|welk[e]?|vilk(?:en|et)|cu[áa]l|kumpi|kt[óo]r[ey])\b.*"
              r"\b(smaller|larger|bigger|greater|kleiner|gr[öo]sser|größer|plus\s+petit|plus\s+grand|più\s+piccol|più\s+grand|"
              r"groter|mindre|st[öo]rre|m[áa]s\s+peque[ñn]|m[áa]s\s+grande|pienempi|suurempi|mniejsz|wi[ęe]ksz)")
-COUNT_WORDS = r"how\s+many|count|number\s+of|wie\s+viele|anzahl|combien|nombre\s+de|quant[ie]|quante|numero\s+di|hoeveel|hur\s+m[åa]nga"
+COUNT_WORDS = (r"how\s+many|count|number\s+of|wie\s+viele|anzahl|combien|nombre\s+de|quant[ie]|quante|numero\s+di|hoeveel|"
+               r"hur\s+m[åa]nga|cu[áa]nt[oa]s|quant[oa]s|n[úu]mero\s+de|kuinka\s+monta|montako|\bile\b|kolik|h[áa]ny\b|\bmitu\b|\bka[çc]\b|"
+               r"\bhvor\s+mange|\bhur\s+m[åa]nga")
 AREA_WORDS = (r"arean?\b|vloeroppervl|ytan\b|fl[äa]che|surface|superficie|oppervlak|yta\b|m²|m2\b|square\s+met|sq\.?\s*m\b|square\s+f(?:ee|oo)t|"
               r"sq\.?\s*ft|ft²|ft2\b|how\s+(?:large|big)|wie\s+gross|wie\s+groß")
 FT2 = r"square\s+f(?:ee|oo)t|sq\.?\s*ft|ft²|ft2\b|\bsf\b"
@@ -135,6 +145,16 @@ ROOM_NOUN = (r"\brooms?\b|\bzimmer\b|\br[äa]ume?\b|\bpi[èe]ces?\b|\blocaux\b|\
 APT_NOUN = r"\b(?:apartments?|flats?|units?|dwellings?|wohnung(?:en)?|wohneinheit(?:en)?|appartements?|logements?|appartament[oi]|lägenhet(?:er)?|woning(?:en)?)\b"
 SIZE_W = (r"\barea\b|fl[äa]che|surface|superficie|oppervlak|\bsize\b|gr[öo](?:ss|ß)e\b|taille|dimensione|m²|m2\b|"
           r"square|sq\.?\s*(?:m|ft)|how\s+(?:large|big)|wie\s+gro|quanto\s+[èe]\s+grande|hoe\s+groot")
+DIFF_BETWEEN = (r"difference\s+(?:\w+\s+){0,4}?between|unterschied\s+(?:\w+\s+){0,4}?zwischen|diff[ée]rence\s+"
+                r"(?:\w+\s+){0,4}?entre|differenza\s+(?:\w+\s+){0,4}?(?:tra|fra)|verschil\s+(?:\w+\s+){0,4}?tussen|"
+                r"skillnad\w*\s+(?:\w+\s+){0,4}?mellan|diferencia\s+(?:\w+\s+){0,4}?entre")
+COMMON_W = (r"common\s+(?:areas?|parts?|spaces?|rooms?)|shared\s+(?:areas?|spaces?|rooms?)|circulation\s+areas?|"
+            r"(?:belong|belongs|belonging)\s+to\s+no\s+(?:apartment|unit|flat)|not\s+(?:in|part\s+of|assigned\s+to)\s+any\s+"
+            r"(?:apartment|unit|flat)|outside\s+(?:all|any|the)\s+(?:apartments|units|flats)|allgemein(?:fl[äa]che|r[äa]ume|e\s+"
+            r"fl[äa]che)\w*|gemeinschaft\w*|parties?\s+communes?|espaces?\s+communs?|parti\s+comuni|spazi\s+comuni|"
+            r"keiner\s+wohnung|aucun\s+appartement|nessun\s+appartamento")
+SIZE_ONLY = (r"\bsize\b|\bfloor\s*space\b|\bfloor\s*area\b|how\s+much\s+(?:floor\s+)?space|\bspace\s+(?:does|do|is)\b|"
+             r"gr[öo](?:ss|ß)e\b|wie\s+gro|taille|dimensione|quanto\s+[èe]\s+grande|hoe\s+groot|storlek|hur\s+stor")
 TEXT_Q = (r"^\s*(?:which|welche[rs]?|lequel|laquelle|quale|in\s+which|welk[e]?|vilk(?:en|et))\b|"
           r"^\s*quel(?:le)?s?\s+(?:pi[èe]ce|appartement|logement|local)|^\s*qual\s+[èe]\s+(?:la\s+stanza|l'appartamento|il\s+locale)|"
           r"^\s*what\s+(?:is\s+)?the\s+(?:largest|biggest|smallest)\s+(?:room|apartment|flat|unit)\b(?!.*\b(?:area|size)\b)")
@@ -171,6 +191,7 @@ class Query:
     gross: bool = False  # "gross floor area"
     threshold: float | None = None  # for op count_gt / count_lt / count_ge
     consumed: list[str] = field(default_factory=list)  # regexes of question parts the parse handled (for covered())
+    absolute: bool = False  # "the difference between A and B": |A - B| (symmetric wording)
 
     def describe(self) -> str:
         parts = []
@@ -220,6 +241,8 @@ def parse(question: str, vocab: list[str] | None = None, room_numbers: set[str] 
     vocab = vocab or []
     is_count = bool(re.search(COUNT_WORDS, ql))
     is_area = bool(re.search(AREA_WORDS, ql))
+    if not is_count and not is_area and re.search(SIZE_ONLY, ql):
+        is_area = True  # "what's the size of the Küche, room 3.09" is an area, not a count of Küche rooms (Q red team)
     unit = "ft2" if re.search(FT2, ql) else "m2"
     notes: list[str] = []
 
@@ -281,7 +304,7 @@ def parse(question: str, vocab: list[str] | None = None, room_numbers: set[str] 
         if nums or (apts and not re.search(ROOM_NOUN, ql) and not labels):
             pass  # "largest of room 2.04" / "the largest apartment B" -> ordinary paths below
         else:
-            labs: list[str] | None = [lab for lab, _ in labels] or None
+            labs: list[str] | None = [lab for lab, _ in labels] or [lab for lab, _ in bare_labels(q, vocab)] or None
             note = "any numbered indoor room"
             if labs is None:
                 for c, (words, clabs) in CONCEPTS.items():
@@ -293,6 +316,11 @@ def parse(question: str, vocab: list[str] | None = None, room_numbers: set[str] 
             t = Term("rooms", labs, sup.start(), note=note, scope=[a for a, _ in apts] or None)
             return Query("area" if asks_size else "text", sop, [t], (unit if asks_size else None), notes,
                          include_outdoor=inc0, consumed=cons)
+    # common areas: numbered indoor rooms in NO apartment ("belong to no apartment", "common areas", "shared")
+    if (is_area or re.search(SIZE_W, ql)) and not apts and not nums and not is_count and re.search(COMMON_W, ql):
+        return Query("area", "sum", [Term("area_room", "<all>", 0, note="numbered indoor rooms in no apartment",
+                                          scope=[None])], unit, notes, include_outdoor=inc0,
+                     consumed=[COMMON_W, NEG_APT_W, APT_NOUN])
     # averages / thresholds over ALL apartments ("average apartment size", "apartments larger than 60 m²")
     if re.search(APT_NOUN, ql) and not apts and not nums and not labels:
         if re.search(MEAN_W, ql) and (is_area or re.search(SIZE_W, ql)) and not re.search(PER_W, ql):
@@ -329,10 +357,17 @@ def parse(question: str, vocab: list[str] | None = None, room_numbers: set[str] 
     # area questions -------------------------------------------------------------------------------
     if is_area and not (is_count and not re.search(r"m²|m2\b|square|ft|area|fl[äa]che|surface|superficie|yta\b|ytan\b|arean\b|oppervl", ql)):
         qtype = "area"
+        if not labels and not nums:
+            labels = bare_labels(q, vocab) or labels
         scoped_label = apts and (labels or concept_terms) and not re.search(NEG_APT_W, ql) and \
             not re.search(SHARE_W, ql) and not re.search(TIMES_W, ql) and len(apts) == 1
+        two_apt_label = len(apts) == 2 and (labels or concept_terms) and len(labels or concept_terms) == 1 and \
+            not re.search(NEG_APT_W, ql) and not re.search(SHARE_W, ql)
         if nums:
             terms = [Term("area_room", n, p) for n, p in nums]
+        elif two_apt_label:
+            l0 = (labels or [(t.arg, t.pos) for t in concept_terms])[0][0]
+            terms = [Term("area_label", l0, p, note="per apartment", scope=[a]) for a, p in apts]
         elif scoped_label:
             # "the kitchen in apartment A": the label's rooms inside that apartment, not the whole apartment
             terms = [Term("area_label", lab, p, scope=[a for a, _ in apts]) for lab, p in labels] or \
@@ -361,6 +396,15 @@ def parse(question: str, vocab: list[str] | None = None, room_numbers: set[str] 
             terms = [Term("area_total", None, -1)] + [Term("area_apartment", a, p) for a, p in apts]
             op, rev = "diff", False
             consumed.append(NEG_APT_W)
+        elif len(terms) == 2 and re.search(PCTDIFF_W, ql):
+            op = "pctdiff_less" if re.search(PCTLESS_W, ql) else "pctdiff"
+            consumed += [PCTDIFF_W, SHARE_W]
+        elif len(apts) == 1 and re.search(SHARE_W, ql) and (labels or concept_terms):
+            lab = [Term("area_label", l, p, scope=[apts[0][0]]) for l, p in labels] or \
+                  [Term("area_label", t.arg, t.pos, note=t.note, scope=[apts[0][0]]) for t in concept_terms]
+            terms = lab[:1] + [Term("area_apartment", apts[0][0], 10**6)]
+            op = "pct"
+            consumed.append(SHARE_W)
         elif apts and re.search(SHARE_W, ql):
             terms = [Term("area_apartment", a, p) for a, p in apts[:1]] + [Term("area_total", None, 10**6)]
             op = "pct"
@@ -368,6 +412,8 @@ def parse(question: str, vocab: list[str] | None = None, room_numbers: set[str] 
         elif len(terms) == 2 and re.search(TIMES_W, ql):
             op, rev = "ratio", False
             consumed.append(TIMES_W)
+        elif len(terms) == 2 and op == "diff" and re.search(DIFF_BETWEEN, ql):
+            consumed.append(r"\bbetween\b|\bzwischen\b|\bentre\b|\btra\b|\bfra\b|\btussen\b|\bmellan\b")
         elif re.search(MEAN_W, ql):
             op = "mean"
             consumed.append(MEAN_W)
@@ -390,10 +436,11 @@ def parse(question: str, vocab: list[str] | None = None, room_numbers: set[str] 
         unit_out = unit if qtype != "text" else None
         if op == "ratio":
             unit_out = None
-        elif op == "pct":
+        elif op in ("pct", "pctdiff", "pctdiff_less"):
             unit_out = "%"
-        qr = Query(qtype, op, terms, unit_out, notes, include_outdoor=inc, gross=gross, consumed=consumed)
-        if op in ("pct",) or (op == "diff" and consumed):
+        qr = Query(qtype, op, terms, unit_out, notes, include_outdoor=inc, gross=gross, consumed=consumed,
+                   absolute=op == "diff" and len(terms) == 2 and bool(re.search(DIFF_BETWEEN, ql)))
+        if op in ("pct", "pctdiff", "pctdiff_less") or (op == "diff" and consumed):
             qr.terms.sort(key=lambda t: t.pos)
             return qr
         return _finish(qr, rev)
@@ -419,6 +466,8 @@ def parse(question: str, vocab: list[str] | None = None, room_numbers: set[str] 
                     break
         # "bath" inside "bathtub" is the same object; "apartment" in "apartment A" is not a count of apartments
         terms = [Term("count", k, p) for k, p in sorted(found.items(), key=lambda kv: kv[1])]
+        if not terms:
+            terms = [Term("count_label", lab, p) for lab, p in bare_labels(q, vocab)]
         if not terms:
             for c, (words, labs) in CONCEPTS.items():
                 for p in _find_words(words, ql)[:1]:
@@ -464,8 +513,55 @@ UNCOVERED = re.compile(
     r"\b(which|welche[rs]?|lequel|laquelle|quale\s+(?:dei|delle)|average|mean|median|durchschnitt|moyenne|media|per\s+(?:apartment|unit|flat|room|dwelling|floor|storey|wohnung|logement|appartement)|each|jede[rs]?|"
     r"chaque|ogni|ratio|percent|percentage|proportion|share|anteil|with\s+(?:a|an|no|more|at)|without\s+(?:a|an|any|windows?|doors?)|that\s+ha(?:ve|s)|"
     r"ha(?:ve|s)\s+(?:a|an|no|any|more|at\s+least|\d+)\b|contain\w*|adjacent|next\s+to|neighbo\w+|between|at\s+least|at\s+most|is\s+there|are\s+there\s+any|do\s+any|"
-    r"mit\s+(?:einem|einer|mehr)|ohne\s+(?:fenster|t[üu]r)|avec\s+(?:un|une|plus)|sans\s+(?:fen|porte)|senza)\b|%|(?:more|less|larger|smaller)\s+than\s+\d",
+    r"mit\s+(?:einem|einer|mehr)|ohne\s+(?:fenster|t[üu]r)|avec\s+(?:un|une|plus)|sans\s+(?:fen|porte)|senza|"
+    r"perimeters?|umfang|p[ée]rim[èe]tre|perimetro|lengths?|l[äa]nge|longueur|lunghezza|long(?:er|est)?\s+side|"
+    r"width|breite|largeur|larghezza|wide|dimensions?|abmessung\w*|how\s+long)\b|%|(?:more|less|larger|smaller)\s+than\s+\d",
     re.I)
+
+
+def bare_labels(q: str, vocab: list[str]) -> list[tuple[str, int]]:
+    """Drawing labels written WITHOUT quotes, capitalised as on the plan ("the Bad in apartment C"); not at the start
+    of the sentence, at least 3 letters, generic 'Raum'/'Lift' left to the concept words. Used for area questions only."""
+    out: list[tuple[str, int]] = []
+    for name in sorted({v for v in vocab if len(v) >= 3 and v[:1].isupper() and v not in ("Raum", "Lift")},
+                       key=len, reverse=True):
+        for m in re.finditer(r"(?<![\w'])" + re.escape(name) + r"(?![\w])", q):
+            if m.start() > 0 and q[:m.start()].strip() and not any(m.start() < e and s < m.end() for _, s, e in out):
+                out.append((name, m.start(), m.end()))
+    return [(n, s) for n, s, _ in sorted(out, key=lambda t: t[1])]
+
+
+NUM_TOKEN = re.compile(r"(?<![\w.])\d+(?:[.,]\d+)*(?![\w])")
+
+
+def unused_numbers(question: str, qr: "Query") -> list[str]:
+    """Numbers stated in the question that the parse did not use: a price, rate, constant or percentage ("450 euros
+    per door", "add 15 %"). A rule answer then answers the base quantity without the arithmetic (F, hard3: 30% of
+    derived-quantity questions). Room numbers, apartment ids, thresholds, quoted labels, unit exponents, ordinals and
+    "N decimal places" are not counted."""
+    q = re.sub(r"[%s][^%s]{0,60}[%s]" % (QUOTES, QUOTES, QUOTES), " ", question)  # quoted labels
+    q = re.sub(r"\b(?:m|ft|sq\.?\s*ft|qm|mq)\s*[2²³3]\b", " ", q, flags=re.I)  # m2, ft2
+    q = re.sub(r"\b\d+\s*(?:st|nd|rd|th|er|e|ème|eme|te|ten|ter|°|º|ª|o|a)\b", " ", q, flags=re.I)  # ordinals
+    q = re.sub(r"\b\d+\s+(?:decimal|decimals|dezimal\w*|décimal\w*|decimal\w*|nachkomma\w*|significant)\b", " ", q,
+               flags=re.I)
+    used = set()
+    for t in qr.terms:
+        for a in ([t.arg] if isinstance(t.arg, str) else list(t.arg or [])):
+            used.add(str(a).strip().lower())
+    if qr.threshold is not None:
+        th = qr.threshold
+        used |= {f"{th:g}", f"{th:g}".replace(".", ","), f"{th:.1f}", f"{th:.2f}", f"{th:.1f}".replace(".", ","),
+                 f"{th:.2f}".replace(".", ",")}
+    out = []
+    for m in NUM_TOKEN.finditer(q):
+        n = m.group(0)
+        if n.lower() in used or n.rstrip(".,") in used:
+            continue
+        # a room number like 2.05 written with a label (room 2.05) that the parse resolved under another spelling
+        if any(u.endswith(n) or n.endswith(u) for u in used if u and u[0].isdigit() and len(u) >= 3):
+            continue
+        out.append(n)
+    return out
 
 
 def covered(question: str, qr: Query) -> bool:
@@ -503,3 +599,105 @@ def operator_unapplied(question: str, qr: Query) -> bool:
     if qr.op in ("sum", "diff") and (re.search(SUPER_MAX, q, re.I) or re.search(SUPER_MIN, q, re.I)):
         return True  # "largest"/"smallest" over something the rules did not pick
     return qr.op in ("sum", "diff") and bool(OPERATOR_HINT.search(q))
+
+
+# --- what the question CALLS a numbered room ("room 2.23 ('Sauna')", "the küche, room 3.09") -------------------
+# Q red team: a real room number with the wrong name was answered at 0.99 (the checks verified the number, never
+# that it is the room the user means). The name is compared with the drawing's label; a mismatch lowers confidence.
+_ROOM_LEAD = r"(?:rooms?|raum|zimmer|pi[èe]ces?|local[ei]?|stanza|vano|kamer|ruimte|rum(?:met)?|no\.?|nr\.?|n°|number|nummer)"
+_GENERIC_NAME = re.compile(r"^(?:the|a|an|this|that|der|die|das|le|la|les|l'|il|lo|i|gli|de|het|of|room|rooms|space|"
+                           r"area|floor|net|in|m²|m2|sq\.?\s*m|square\s+met(?:re|er)s?|ft²|ft2|sq\.?\s*ft|square\s+f(?:ee|oo)t)$", re.I)
+# a bedroom in the Swiss drawings is usually just "Zimmer"/"Pièce"/"Stanza"; a hall is a corridor or a "Halle"
+_NAME_ALIASES = {"bedroom": ["room"], "room": ["bedroom"], "corridor": ["Halle", "Entrée", "Eingang", "Vorplatz"],
+                 "living": ["dining"], "dining": ["living"]}
+
+
+def _concepts_of(text: str) -> set[str]:
+    return {c for c, (words, _) in CONCEPTS.items() if _find_words(words, text)}
+
+
+def _label_concepts(label: str) -> set[str]:
+    parts = [p.strip().lower() for p in re.split(r"[/,]", label) if p.strip()] + [label.strip().lower()]
+    out = {c for c, (_, labs) in CONCEPTS.items() if any(l.lower() in parts for l in labs)}
+    out |= {c for c, (words, _) in CONCEPTS.items() if any(_find_words(words, p) for p in parts)}
+    return out
+
+
+def asked_room_names(question: str, qr: Query, vocab: list[str]) -> dict[str, str]:
+    """{room number: the name the question gives it}, only for names that are quoted, in parentheses right after the
+    number, or a known room word right before it ("the kitchen, room 3.16"). Unknown unquoted words are ignored."""
+    q = _norm(question)
+    ql = q.lower()
+    known_names = sorted({v.lower() for v in vocab if v}, key=len, reverse=True)
+    out: dict[str, str] = {}
+    for t in qr.terms:
+        if t.kind != "area_room" or not isinstance(t.arg, str):
+            continue
+        n = t.arg
+        i = q.find(n, max(t.pos - 1, 0))
+        if i < 0:
+            i = q.find(n)
+        if i < 0:
+            continue
+        after = q[i + len(n):i + len(n) + 60]
+        m = re.match(r"\s*[(\[]\s*([^)\]]{1,50}?)\s*[)\]]", after) or \
+            re.match(r"\s*[,:\-–]?\s*[%s]([^%s]{1,50})[%s]" % (QUOTES, QUOTES, QUOTES), after)
+        cand = None
+        if m:
+            c = m.group(1).strip().strip(QUOTES).strip()
+            quoted = bool(re.match(r"\s*[(\[]?\s*[%s]" % QUOTES, after)) or not m.group(0).lstrip().startswith(("(", "["))
+            if c and not re.fullmatch(r"[\d.,\s%²]+|(?:in\s+)?(?:m²|m2|sq\.?\s*m|ft²|ft2|sq\.?\s*ft|square\s+\w+)", c, re.I) \
+                    and not _GENERIC_NAME.match(c) and (quoted or c.lower() in known_names or _concepts_of(c)):
+                cand = c
+        if cand is None:
+            before = ql[max(0, i - 50):i]
+            before = re.sub(r"[\s,:(\-–]*(?:(?<![\w])" + _ROOM_LEAD + r")?[\s.:#]*$", "", before)
+            for name in known_names:
+                if re.search(r"(?<![\w])" + re.escape(name) + r"$", before):
+                    cand = name
+                    break
+            if cand is None:
+                for c, (words, _) in CONCEPTS.items():
+                    for w in words:
+                        mm = re.search(r"(?<![\w])(" + w + r")$", before, re.I)
+                        if mm:
+                            cand = mm.group(1)
+                            break
+                    if cand:
+                        break
+        if cand:
+            out[n] = cand
+    return out
+
+
+def name_fits(label: str | None, asked: str) -> bool:
+    """Does the drawing's label fit the name the question uses (same word, a translation, or a known alias)?"""
+    if not label:
+        return False
+    a, l = asked.strip().lower(), label.strip().lower()
+    fold = lambda s: unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode()  # noqa: E731
+    if a == l or fold(a) == fold(l):
+        return True
+    parts = [p.strip() for p in re.split(r"[/,]", l) if p.strip()]
+    if any(fold(a) == fold(p) or (len(a) >= 4 and (fold(a) in fold(p) or fold(p) in fold(a))) for p in parts):
+        return True
+    ca, cl = _concepts_of(asked) | _label_concepts(asked), _label_concepts(label)
+    if ca & cl:
+        return True
+    for c in ca:
+        for alias in _NAME_ALIASES.get(c, []):
+            if alias in cl or alias.lower() in parts:
+                return True
+    return False
+
+
+# properties a DXF floor plan does not carry: answering them from room/door geometry is a false answer
+ATTR_W = re.compile(r"\bfire\b|feuer|\bincendi|\bbrand(?:schutz|widerstand)|u-?value|u-?wert|valeur\s+u|\bmaterial|"
+                    r"mat[ée]ria[lu]|werkstoff|\bheight\b|\bh[öo]he\b|hauteur|altezza|ceiling|decke|plafond|soffitto|"
+                    r"thickness|\bdicke\b|[ée]paisseur|spessore|\bowner|\bowns?\b|eigent[üu]mer|propri[ée]taire|"
+                    r"\bwho\b|\bwer\b|\bqui\b|\bchi\b|\bbuilt\b|\byear\b|\bbaujahr|\bcolou?r|\bfarbe|couleur|colore|"
+                    r"\bbrand\b|manufactur|hersteller|fabricant|\brent\b|\bmiete\b|\bloyer\b|insulation|d[äa]mmung|"
+                    r"isolation|temperature|acoustic|schall|\bvolume\b|\bvolumen\b|\bweight\b|gewicht|\bpoids\b|"
+                    r"\bwidth\s+of\s+(?:the\s+)?(?:door|window)|\bopening\s+direction|\bswing\b|\bhinge|"
+                    r"how\s+(?:tall|high)\b|\btall\b|\bfinish(?:es|ing)?\b|flooring|floor\s+covering|bodenbelag|"
+                    r"rev[êe]tement|rivestimento", re.I)

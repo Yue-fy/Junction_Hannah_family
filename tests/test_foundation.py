@@ -146,7 +146,38 @@ def test_source_of_absolute_paths(tmp_path):
     assert source_of(rel) == "cubicasa5k"
     assert source_of(str(data_root() / rel)) == "cubicasa5k"
     assert dataset_rel(str(data_root() / rel)) == rel
-    assert source_of("/mnt/copy/junction-dataset/data/swiss_dwellings/x.png") == "swiss_dwellings"
-    assert dataset_rel("/mnt/copy/junction-dataset/data/swiss_dwellings/x.png") == "data/swiss_dwellings/x.png"
     assert source_of(str(tmp_path / "plan.png")) == "unknown"
     assert dataset_rel(rel) == rel
+
+
+def test_dataset_rel_foreign_file_in_dataset_layout(tmp_path):
+    """Q 04:13: a NEW drawing in a folder laid out like ours (.../data/cubicasa5k/<file>) must keep its absolute path
+    (it used to be cut and looked up under $STOA_DATA: FileNotFoundError -> prior answer at conf 0.8), but still get
+    its source from the folder name. A true copy of a dataset file (same relative path, same size) is still cut."""
+    import shutil
+    from stoa.data import data_root, dataset_rel, ifc_model_for, source_of
+    rel = "data/cubicasa5k/high_quality_architectural-6652.png"
+    foreign = tmp_path / "stoa" / "data" / "cubicasa5k" / "high_quality_architectural-6652.png"
+    foreign.parent.mkdir(parents=True)
+    foreign.write_bytes(b"not the dataset image")
+    assert dataset_rel(str(foreign)) == str(foreign)
+    assert source_of(str(foreign)) == "cubicasa5k"
+    new = foreign.parent / "brand-new-plan.png"
+    new.write_bytes(b"x")
+    assert dataset_rel(str(new)) == str(new) and source_of(str(new)) == "cubicasa5k"
+    if (data_root() / rel).is_file():
+        copy = tmp_path / "copy" / rel
+        copy.parent.mkdir(parents=True)
+        shutil.copyfile(data_root() / rel, copy)
+        assert dataset_rel(str(copy)) == rel
+    other = tmp_path / "x" / "data" / "not_a_source" / "a.png"
+    other.parent.mkdir(parents=True)
+    other.write_bytes(b"x")
+    assert source_of(str(other)) == "unknown"
+    # ifc_models outside the dataset: the plan's model is looked up next to it, never in $STOA_DATA
+    ifc_dir = tmp_path / "stoa" / "data" / "ifc_models"
+    ifc_dir.mkdir(parents=True)
+    (ifc_dir / "house.ifc").write_text("ISO-10303-21;")
+    (ifc_dir / "house_plan-01-EG.pdf").write_bytes(b"%PDF")
+    assert ifc_model_for(str(ifc_dir / "house_plan-01-EG.pdf")) == str(ifc_dir / "house.ifc")
+    assert ifc_model_for(str(ifc_dir / "other_plan-01.pdf")) is None

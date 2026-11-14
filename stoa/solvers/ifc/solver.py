@@ -88,6 +88,18 @@ def model_for(path: str) -> str | None:
     return None
 
 
+# languages the parser has (template) vocabulary for, besides English: the dataset's ifc question languages
+PARSER_LANGS = ("de", "nl", "pl", "et", "it", "ro", "fi", "fr")
+
+
+def _same_value(a: Answer, b: Answer) -> bool:
+    """Two rule answers say the same thing (numbers within 0.5% in the same unit, or the same text)."""
+    if isinstance(a.value, (int, float)) and isinstance(b.value, (int, float)):
+        x, y = float(a.value), float(b.value)
+        return (a.unit or "") == (b.unit or "") and abs(x - y) <= 0.005 * max(abs(x), abs(y), 1e-9)
+    return str(a.value).strip().lower() == str(b.value).strip().lower()
+
+
 def _ascii_drop(s: str) -> str:
     return re.sub(r"[^a-z0-9]+", "", (s or "").lower().encode("ascii", "ignore").decode())
 
@@ -237,6 +249,48 @@ def external_by_outline(idx: IfcIndex, walls: list[Element]) -> list[Element]:
     return out
 
 
+_PARTS: dict[str, dict[str, str]] = {}
+
+
+def _parts_of(model: str) -> dict[str, str]:
+    if model not in _PARTS:
+        from stoa.solvers.ifc.index import nested_parts
+
+        try:
+            _PARTS[model] = nested_parts(model)
+        except Exception:  # noqa: BLE001 - no parts info is the old behaviour
+            _PARTS[model] = {}
+    return _PARTS[model]
+
+
+def _poly(e: Element):
+    from shapely.geometry import Polygon
+
+    if not (e.geo and e.geo.footprint and len(e.geo.footprint[0]) >= 3):
+        return None
+    p = Polygon(e.geo.footprint[0])
+    return p if p.is_valid else p.buffer(0)
+
+
+def adjacent(idx: IfcIndex, space: Element, classes: tuple[str, ...], reach: float = 0.35) -> list[Element]:
+    """Doors/windows (or any elements) of `classes` that touch a room: their plan footprint is within `reach` m of the
+    room's footprint and their heights overlap. A door in a wall touches both rooms it connects; a window touches the
+    room behind its wall. Geometric, so it works without IfcRelSpaceBoundary."""
+    sp = _poly(space)
+    if sp is None or not (space.geo and space.geo.bbox):
+        return []
+    z0, z1 = space.geo.bbox[2], space.geo.bbox[5]
+    zone = sp.buffer(reach)
+    out = []
+    for e in idx.by_class(*classes):
+        p = _poly(e)
+        if p is None or not e.geo.bbox or e.geo.bbox[5] < z0 + 0.1 or e.geo.bbox[2] > z1 - 0.1:
+            continue
+        if zone.intersects(p):
+            out.append(e)
+    return out
+
+
 @register("ifc")
 class IfcSolver(BaseSolver):
     sources = ("ifc_models", "ifc_bench", "opening_design")
@@ -250,13 +304,114 @@ class IfcSolver(BaseSolver):
     # ------------------------------------------------------------------------------------------------
     def solve(self, path: str, question: str) -> Answer:
         t0 = time.perf_counter()
-        trace: list[str] = []
         model = model_for(path)
         if model is None:
             return Answer.abstain(self.name, "no IFC model for this drawing", missing=["an IFC model of the building"])
+        idx = load_index(model)
+        llm_on = str(self.options.get("llm", "1")) != "0"
+        ans, it, ctx = self._core(path, model, idx, question)
+        if llm_on and str(self.options.get("translate", "1")) != "0":
+            ans, it, ctx = self._cross_language(path, model, idx, question, ans, it, ctx)
+        if llm_on:
+            ans = self._llm_stage(model, idx, question, it, ans, ctx)
+        if ans.value is not None and self.options.get("plan2d", "1") != "0":
+            try:
+                self._add_2d(path, model, it, ans, ctx.get("storey"))
+            except Exception as ex:  # noqa: BLE001 - 2D evidence is a bonus; never lose the answer over it
+                ans.trace.append(f"2D link failed: {type(ex).__name__}: {ex}")
+        ans.solver = self.name
+        ans.cost.wall_seconds = time.perf_counter() - t0
+        return ans
+
+    # ------------------------------------------------------------------------------------------------
+    def _cross_language(self, path: str, model: str, idx: IfcIndex, question: str, ans: Answer, it: Intent,
+                        ctx: dict) -> tuple[Answer, Intent, dict]:
+        """A non-English question in a wording the dataset does not use: read it twice, as is and translated to
+        English (stoa.llm.to_english, one local-LLM call), and compare the two rule answers (W1 c5, 04:50).
+
+        Why: the parser has operator words for English and only template words for de/nl/pl/et/it/ro, so a fresh
+        wording in another language loses its operator ("in feet", "what percent", "how many more", "which ... or")
+        and the base template answers at train confidence (W1 c5 probe: 11 of 108 confident-wrong in pl/et/es/
+        cs/hu/sv; S0/F 04:01 hard2r: Estonian ifc 20%). Translating alone is not safe either: on the dataset's own
+        non-English questions it changed 7 of 364 answers, all for the worse ('vloeren' -> floors, 'belek' ->
+        balconies). Rule, measured on both sets: agree -> keep; disagree on the operator/unit with the same element
+        kind -> the English reading (the raw parse missed a word); disagree on the element kind -> the parser's
+        own reading for a language it has vocabulary for, else the English one; both low confidence."""
+        from stoa import llm
+        from stoa.router.prior import known_template
+
+        lang = llm.lang_guess(question)
+        if lang == "en" or not fold(_QUOTED_RX.sub(" ", question)).strip():
+            return ans, it, ctx
+        try:
+            if known_template(question):
+                ans.trace.append(f"language: {lang}, a wording seen in train; parsed as is (no translation)")
+                return ans, it, ctx
+        except Exception:  # noqa: BLE001 - no train split on this machine: treat as unseen
+            pass
+        tr = llm.to_english(question, force=True)
+        own = lang in PARSER_LANGS
+        if not tr.translated or not tr.ok:
+            if tr.lang == "en":
+                return ans, it, ctx
+            if ans.value is not None and ans.confidence > (0.75 if own else 0.5):
+                ans.confidence = 0.75 if own else 0.5
+                ans.missing.append(f"an English reading of this {lang} question to cross-check the parse "
+                                   f"({tr.note or 'translation unavailable'})")
+                ans.trace.append(f"language: {lang} wording not seen in train and not translated -> confidence "
+                                 f"{ans.confidence}")
+            return ans, it, ctx
+        eng, it2, ctx2 = self._core(path, model, idx, tr.text)
+        eng.assumptions.append(tr.note)
+        if ans.value is None and eng.value is None:
+            return ans, it, ctx
+        if ans.value is not None and eng.value is not None and _same_value(ans, eng):
+            if eng.confidence < ans.confidence:  # a guard fired on the English reading (operator, number, relation)
+                ans.confidence = eng.confidence
+                ans.missing += [m for m in eng.missing if m not in ans.missing]
+            ans.trace.append(f"language check: the English reading \"{tr.text}\" gives the same answer ✓")
+            return ans, it, ctx
+        if ans.value is None:
+            eng.confidence = min(eng.confidence, 0.75)
+            eng.trace.insert(0, f"the {lang} question was not understood by the rules; answered its English "
+                                f"translation \"{tr.text}\" (confidence <= 0.75: the translation is a model's)")
+            return eng, it2, ctx2
+        if eng.value is None:
+            cap = 0.75 if own else 0.5
+            if ans.confidence > cap:
+                ans.confidence = cap
+                ans.missing.append(f"the English translation (\"{tr.text}\") could not be read by the rules; the "
+                                   f"{lang} wording is not one seen in train")
+            ans.trace.append(f"language check: English reading not parsed -> confidence <= {cap}")
+            return ans, it, ctx
+        # element kinds of the two readings ('storey' is what a floor word alone parses to: no element kind)
+        rk = {k for k in ([it.kind] + list(it.kinds or [])) if k not in (None, "storey")}
+        ek = {k for k in ([it2.kind] + list(it2.kinds or [])) if k not in (None, "storey")}
+        rv = f"{ans.value} {ans.unit or ''}".strip()
+        ev_ = f"{eng.value} {eng.unit or ''}".strip()
+        use_eng = rk == ek or (ek and not rk) or (not own and bool(ek))
+        if use_eng:
+            why = ("same element kind, so the raw parse missed an operator/unit word" if rk == ek else
+                   "the raw parse found no element kind" if not rk else "the parser has no vocabulary for this language")
+            eng.confidence = min(eng.confidence, 0.75 if (rk == ek or not rk) else 0.5)
+            eng.trace.insert(0, f"language check: the {lang} wording read as is gives {rv[:60]}, its English "
+                                f"translation \"{tr.text}\" gives {ev_[:60]}; {why}: using the English reading")
+            eng.missing.append(f"the {lang} wording read without translation gives {rv[:60]}")
+            return eng, it2, ctx2
+        cap = (0.75 if not ek else 0.6) if own else 0.5
+        ans.confidence = min(ans.confidence, cap)
+        ans.trace.append(f"language check: the English translation \"{tr.text}\" reads "
+                         + (f"a different element kind ({', '.join(sorted(ek))} vs {', '.join(sorted(rk))})" if ek else
+                            "no element kind") + f" and gives {ev_[:60]}; kept the {lang} reading (confidence <= {cap})")
+        ans.missing.append(f"a reading both ways agree on: the English translation gives {ev_[:60]}")
+        return ans, it, ctx
+
+    # ------------------------------------------------------------------------------------------------
+    def _core(self, path: str, model: str, idx: IfcIndex, question: str) -> tuple[Answer, Intent, dict]:
+        """Rules + guards for one wording of the question (no LLM call)."""
+        trace: list[str] = []
         if model != path:
             trace.append(f"asked on {Path(path).name}; answering from its source model {Path(model).name}")
-        idx = load_index(model)
         trace.append(f"model {Path(model).name}: {idx.schema}, {len(idx.storeys)} storeys, {len(idx.elements)} elements"
                      f" (index {idx.build_seconds:.1f}s, cached)")
         it = parse(question)
@@ -268,7 +423,9 @@ class IfcSolver(BaseSolver):
                      "threshold_list": "threshold_list" in it.notes, "rank": next((int(n[5:]) for n in it.notes
                                                                                     if n.startswith("rank:")), 1)}
         try:
-            ans = self._outer(path, model, idx, it, question, trace, ctx)
+            ans = self._relation(path, model, idx, it, question, trace, ctx)
+            if ans is None:
+                ans = self._outer(path, model, idx, it, question, trace, ctx)
             if ans is None:
                 ans = self._answer(path, model, idx, it, trace, ctx)
         except Exception as ex:  # noqa: BLE001 - report as a refusal with the reason, never crash the eval
@@ -287,6 +444,22 @@ class IfcSolver(BaseSolver):
                 ans.confidence = 0.5
                 ans.missing.append(f"the question has an operator word ('{w.group(0)}') the rules did not apply")
                 ans.trace.append(f"guard: operator word '{w.group(0)}' not modelled -> confidence capped at 0.5")
+        n_bad = 0
+        if ans.value is not None and it.metric == "area" and it.kind == "space":
+            for ev_ in ans.evidence:
+                e_ = idx.elements.get(ev_.ifc_guid) if ev_.ifc_guid else None
+                if e_ is not None and e_.cls == "IfcSpace":
+                    q_ = _qto(e_, QTO_KEYS[("floor", "net")])
+                    g_ = e_.geo.footprint_area if e_.geo else None
+                    if q_ and g_ and abs(q_ - g_) > 0.02 * g_:
+                        n_bad += 1
+            if n_bad:
+                ans.trace.append(f"cross-check: {n_bad} room(s) with explicit NetFloorArea ≠ shape area (> 2%) ✗")
+        if ans.value is not None and n_bad and ans.confidence > 0.7:
+            # explicit quantity and shape disagree for some rooms: the model is unusual; say so and be less sure
+            ans.confidence = 0.7
+            ans.missing.append(f"{n_bad} room(s): explicit NetFloorArea and the room shape differ by > 2%; "
+                               "used the explicit quantity")
         if ans.value is not None:
             # a number in the question that no rule used ("if each door costs 450 EUR", "minus 5"): the answer
             # ignores part of the question, so it is not what was asked (W5's probes, 01:49)
@@ -301,6 +474,9 @@ class IfcSolver(BaseSolver):
                 ans.confidence = 0.3
                 ans.missing.append(f"the question gives the number(s) {', '.join(left[:3])}, which the rules did not use")
                 ans.trace.append(f"guard: number(s) {', '.join(left[:3])} in the question not used -> confidence 0.3")
+        if ans.value is not None and ctx.get("assumed_count") and ans.unit == "count" and ans.confidence > 0.3:
+            ans.confidence = 0.3
+            ans.missing.append("the question has no counting word; a count was assumed")
         if ans.value is not None and ctx.get("room_type_missing") and it.kind in (None, "space") \
                 and ans.confidence > 0.3:
             ans.confidence = 0.3
@@ -335,6 +511,14 @@ class IfcSolver(BaseSolver):
                 ans.missing.append(f"the relation '{rel[0]} {rel[1]}' between element kinds is not modelled; the "
                                    "value counts one kind only")
                 ans.trace.append(f"guard: relation '{rel[0]} {rel[1]}' not modelled -> confidence 0.3")
+        m2q = re.search(r"\b(how many|how much|what|which|wie viele|hoeveel)\b[^?]{3,80}?\band\s+(how many|how much|what|which|"
+                        r"wie viel\w*|hoeveel)\b", fold(_QUOTED_RX.sub(" ", question)))
+        if ans.value is not None and m2q and not isinstance(ans.value, str) and ans.confidence > 0.5:
+            # "How many windows and what total window area ...": two questions, one number
+            ans.confidence = 0.5
+            ans.missing.append("the question asks two things; the value answers only one of them "
+                               f"({ans.unit or 'value'})")
+            ans.trace.append("guard: two questions in one -> confidence 0.5")
         mo = re.search(r"\b(north|south|east|west|northern|southern|eastern|western|nord|sud|sued|ost|noord|zuid|oost|"
                        r"norte|oeste|este|pohjois|etela|ita|lansi)\w*[- ]?(facing|facade|side|elevation|wall|fassade|"
                        r"gevel|fachada|julkisivu)?\b", fold(_QUOTED_RX.sub(" ", question)))
@@ -346,7 +530,7 @@ class IfcSolver(BaseSolver):
         for note in it.notes:
             if note.startswith("exclusion"):
                 ans.trace.append(note)
-                if note.startswith("exclusion NOT") and ans.value is not None:
+                if note.startswith("exclusion NOT") and ans.value is not None and not ctx.get("rest_applied"):
                     ans.confidence = min(ans.confidence, 0.3)
                     ans.missing.append(f"the question excludes something the rules can't apply ({note[23:]}); "
                                        "the value ignores the exclusion")
@@ -356,10 +540,13 @@ class IfcSolver(BaseSolver):
             ans.confidence = min(ans.confidence, 0.3)
         if ans.value is not None and any("proxy/generic elements named like" in x for x in ans.trace):
             ans.confidence = min(ans.confidence, 0.6)  # counted by name, not by class: names can over/under-match
-        llm_on = str(self.options.get("llm", "1")) != "0"
-        if ans.value is None and llm_on and not any("error:" in t for t in ans.trace):
+        return ans, it, ctx
+
+    def _llm_stage(self, model: str, idx: IfcIndex, question: str, it: Intent, ans: Answer, ctx: dict) -> Answer:
+        """At most one local-LLM call: free text when the rules found nothing, or a listing that was asked for."""
+        if ans.value is None and not any("error:" in t for t in ans.trace):
             ans = self._llm_fallback(model, idx, question, it, ans, storey=ctx.get("storey"))
-        elif llm_on and isinstance(ans.value, (int, float)) and wants_list(question):
+        elif isinstance(ans.value, (int, float)) and (wants_list(question) or wants_list(ctx.get("question", question))):
             # a listing/description was asked; one number is not an answer. Give the LLM the rule's value as a
             # verified fact (with its scope) plus the fact card, and keep the rule's evidence.
             rule = ans
@@ -372,13 +559,6 @@ class IfcSolver(BaseSolver):
                 ans.evidence = rule.evidence or ans.evidence
                 ans.confidence = 0.4
                 ans.trace.insert(0, f"list request: rule value {rule.value} {rule.unit or ''} passed to the LLM as a fact")
-        if ans.value is not None and self.options.get("plan2d", "1") != "0":
-            try:
-                self._add_2d(path, model, it, ans, ctx.get("storey"))
-            except Exception as ex:  # noqa: BLE001 - 2D evidence is a bonus; never lose the answer over it
-                ans.trace.append(f"2D link failed: {type(ex).__name__}: {ex}")
-        ans.solver = self.name
-        ans.cost.wall_seconds = time.perf_counter() - t0
         return ans
 
     # ------------------------------------------------------------------------------------------------
@@ -389,9 +569,17 @@ class IfcSolver(BaseSolver):
         storey, storey_name, rooms, model_named = None, None, [], False
         groups: list[tuple[str, list[Element]]] = []
         cands = []
+        def digits_ok(asked: str, label: str | None) -> bool:
+            # '7. Level' is not '1. Level', 'KORIDOR (219)' is not 'KORIDOR (119)' (Q red team 04:13)
+            return re.findall(r"\d+", asked) == re.findall(r"\d+", label or "") or not re.findall(r"\d+", asked)
+
         for n in it.names:
             ms = match_storey(idx, n)
+            if ms is not None and ms.method == "fuzzy" and not digits_ok(n, ms.label):
+                trace.append(f"'{n}': fuzzy storey match '{ms.label}' rejected (numbers differ)")
+                ms = None
             sp = match_space(idx, n) if it.kind == "space" or it.metric == "area" or it.attr == "room_height" else []
+            sp = [m_ for m_ in sp if m_.method != "fuzzy" or digits_ok(n, m_.label)]
             mm = match_model(idx, n)
             cands.append((n, ms, sp, mm))
         # storey: the best exact/normalised storey match, else the best fuzzy one that isn't a better room match
@@ -428,9 +616,19 @@ class IfcSolver(BaseSolver):
                 model_named = True
                 trace.append(f"'{n}' taken as the model's name" + (f" (~'{mm.label}')" if mm else
                              " (not in IfcProject/IfcBuilding names; the file is the model)"))
+                stem_words = set(re.findall(r"[a-z]{3,}", fold(" ".join([idx.path, path, idx.project_name or "",
+                                                                          idx.project_long_name or "",
+                                                                          *(idx.building_names or [])]))))
+                asked_words = set(re.findall(r"[a-z]{3,}", fold(n))) - {"the", "model", "building", "house", "project"}
+                if not (mm and mm.score >= 60) and asked_words and not (asked_words & stem_words):
+                    # 'Empire State Building' asked on smiley-west: a false premise, not a nickname (Q 04:13)
+                    conf = min(conf, 0.3)
+                    assumptions.append(f"the question names the model '{n}', which matches no project/building name; "
+                                       "answered for this file")
             else:
                 trace.append(f"'{n}': no storey, room or model of that name")
-                assumptions.append(f"could not resolve '{n}'")
+                assumptions.append(f"could not resolve '{n}'; the model's storeys are: "
+                                   + ", ".join(st_.name for st_ in idx.storeys[:12]))
                 conf = min(conf * 0.6, 0.3)
         if storey is None and not it.names and it.scope != "model" and getattr(it, "question", ""):
             i, why = storey_mention(it.question, [s.name for s in idx.storeys])
@@ -475,6 +673,7 @@ class IfcSolver(BaseSolver):
             if it.kind is not None and it.names:
                 it.metric = "count"  # "Count the walls on storey X." style imperatives without a count word
                 trace.append("no metric word; assuming a count")
+                ctx["assumed_count"] = True
             else:
                 return Answer.abstain(self.name, "free-text question: no deterministic rule", trace=trace,
                                       missing=["a quantity question (count/area/volume/length)"])
@@ -503,6 +702,13 @@ class IfcSolver(BaseSolver):
                 trace.append("storeys: " + ", ".join(f"{st.name} ({st.elevation:.2f} m)" if st.elevation is not None
                                                       else st.name for st in idx.storeys))
                 assumptions.append("storeys = IfcBuildingStorey entities (incl. foundation/roof levels if modelled)")
+                if storey is not None and any(t.startswith("storey '") and f"-> '{storey.name}'" in t for t in trace):
+                    # "How many <unread word> are on 'Level 1'?" -> the counted kind was not recognised and fell back
+                    # to storeys; storeys ON a named storey is not a question anyone asks (W1 c5: 'sammast' = columns)
+                    conf = min(conf, 0.3 / 0.85)
+                    missing.append(f"what to count on '{storey.name}': the counted element kind was not recognised "
+                                   "(the value is the model's storey count)")
+                    trace.append("guard: storeys counted although the question names one storey -> confidence 0.3")
                 return self._final(len(sts), "count", it, conf * 0.85, ev, trace, assumptions, missing)
             if storey is None:
                 return Answer.abstain(self.name, "storey not found", trace=trace, missing=["a storey name"])
@@ -704,6 +910,17 @@ class IfcSolver(BaseSolver):
             trace.append(f"{len(els)} elements of {'/'.join(classes)} in {where}")
             if not els and not idx.by_class(*classes):  # the model has none of this class at all
                 els = self._kind_fallback(idx, kind, storey if where != "whole model" else None, trace, assumptions)
+            if it.metric == "count" and els:
+                # parts of an assembly of the same kind (stair parts exported as IfcStair under a parent IfcStair):
+                # a person counts the assembly once (S0 D15 mechanism A)
+                parts = _parts_of(model)
+                same = set(classes)
+                drop = {e.guid for e in els if parts.get(e.guid) in same}
+                if drop:
+                    els = [e for e in els if e.guid not in drop]
+                    trace.append(f"{len(drop)} {kind} elements are parts of another {kind} (IfcRelAggregates): "
+                                 f"counted once per assembly, {len(els)} left")
+                    assumptions.append(f"{kind}s nested inside another {kind} are parts of it, not separate {kind}s")
             if kind == "slab" and re.search(r"\bfloor[- ]?slabs?\b|\bfloors? (slab|plate)", fold(ctx.get("question", ""))):
                 keep = [e for e in els if (e.predefined_type or "").upper() not in ("ROOF", "LANDING", "BASESLAB")
                         and not _FOUNDATION_NAME.search(fold(f"{e.name or ''} {e.type_name or ''} {e.object_type or ''}"))]
@@ -939,6 +1156,120 @@ class IfcSolver(BaseSolver):
 
         return bool(room_type_in_question(question) or vocabulary_group(idx, _QUOTED_RX.sub(" ", question), [])[0])
 
+    def _relation(self, path: str, model: str, idx: IfcIndex, it: Intent, question: str, trace: list[str],
+                  ctx: dict) -> Answer | None:
+        """Room <-> door/window relations by plan geometry (`adjacent`): "How many doors does room 'X' have?",
+        "How many rooms on S have no window?", "Which rooms have a door to the corridor?" (not the last one)."""
+        import dataclasses
+
+        from stoa.solvers.ifc.arith import text_of
+        from stoa.solvers.ifc.parse import _kind_hits
+
+        tq = text_of(question)
+        kinds = {"door": KIND_CLASSES["door"], "window": KIND_CLASSES["window"]}
+        m = re.search(r"\b(rooms?|spaces?)\b[^?]{0,40}?\b(have|has|having|with|without|contain\w*|lack\w*)\s+"
+                      r"(no|not any|any|a|an|at least one|one or more|more than one|two or more)?\s*"
+                      r"(?P<k>doors?|windows?|deur\w*|tur\w*|tuer\w*|fenster\w*|ramen|raam)\b", tq)
+        if m and it.kind in ("space", None, "door", "window"):
+            kb = "door" if re.match(r"door|deur|tur|tuer", m.group("k")) else "window"
+            q = m.group(3) or ""
+            none_ = m.group(2).startswith(("without", "lack")) or q in ("no", "not any")
+            many = q in ("more than one", "two or more")
+            it2 = dataclasses.replace(it, metric="count", kind="space", kinds=["space"], op=None, mod=None,
+                                      threshold=None, which=False, yes_no=False, top_n=False, group_by=None)
+            asm: list[str] = []
+            storey, rooms, conf, _g = self._roles(path, idx, it2, trace, asm)
+            sp_els = (idx.in_storey(storey.guid, "IfcSpace") if storey is not None and it2.scope != "model"
+                      else idx.by_class("IfcSpace"))
+            if not sp_els:
+                return None
+            res = [(e, adjacent(idx, e, kinds[kb])) for e in sp_els]
+            hit = [(e, a) for e, a in res if (len(a) == 0 if none_ else len(a) >= (2 if many else 1))]
+            where_s = f"on '{storey.name}'" if storey is not None and it2.scope != "model" else "in the model"
+            cond = f"{'no' if none_ else 'more than one' if many else 'at least one'} {kb}"
+            trace.append(f"relation by geometry: {len(hit)} of {len(sp_els)} rooms {where_s} have {cond} "
+                         f"(a {kb} footprint within 0.35 m of the room)")
+            lab = lambda e: (f"{e.long_name} ({e.name})" if e.long_name and e.name and e.long_name != e.name
+                             else (e.long_name or e.name or e.guid))
+            ev = [self._ev(model, e, f"{lab(e)}: {len(a)} {kb}(s)") for e, a in hit][:MAX_EVIDENCE]
+            asm += [f"a room has a {kb} when the {kb}'s plan footprint is within 0.35 m of the room's (geometry; "
+                    "no IfcRelSpaceBoundary used)"]
+            ctx["outer"] = True
+            if re.match(r"\s*(which|list|name|what rooms|show)\b", tq):
+                txt = f"{len(hit)} rooms {where_s} with {cond}: " + "; ".join(lab(e) for e, _ in hit[:40])
+                return Answer(value=txt, unit=None, confidence=conf * 0.6, evidence=ev, trace=trace, solver=self.name,
+                              assumptions=asm, missing=[])
+            return self._final(len(hit), "count", it2, conf * 0.65, ev, trace, asm, [])
+        # "How many doors does the room 'X' have?" / "windows in room 'X'"
+        hits = [h[2] for h in _kind_hits(tq) if h[2] in kinds]
+        if hits and it.names and re.search(r"\b(room|space|raum|ruimte|kamer|piece|huone)\b", tq) and \
+                re.search(r"\b(how many|number of|count)\b", tq):
+            sts, others = self._storey_names(idx, it)
+            sg = sts[0][1].guid if sts else None
+            if len(others) == 1:
+                ms = match_space(idx, others[0], sg)
+                if ms and ms[0].score >= 90 and ms[0].method != "fuzzy":
+                    e0 = ms[0].obj
+                    adj = adjacent(idx, e0, kinds[hits[0]])
+                    trace.append(f"room '{others[0]}' -> {ms[0].label}; {len(adj)} {hits[0]}s within 0.35 m of its "
+                                 "footprint (geometry)")
+                    ctx["outer"] = True
+                    return self._final(len(adj), "count", it, 0.65 * (1.0 if len(ms) == 1 else 0.6),
+                                       [self._ev(model, x, f"{x.eff_cls} {x.name or ''}") for x in adj] +
+                                       [self._ev(model, e0, f"room {ms[0].label}")], trace,
+                                       [f"{hits[0]}s of a room = {hits[0]}s whose plan footprint is within 0.35 m of "
+                                        "the room's (doors count for both rooms they connect)"], [])
+        return None
+
+    def _rest(self, path: str, model: str, idx: IfcIndex, it: Intent, question: str, trace: list[str],
+              ctx: dict) -> Answer | None:
+        """"All the other rooms on 'A', leaving out 'B'" / "rooms on 'A' except 'B' and 'C'": the storey's total
+        minus the excluded rooms (W4 03:53: without this the excluded room's own area came back at 0.97)."""
+        import dataclasses
+
+        from stoa.solvers.ifc.parse import _EXCL
+
+        if not it.names or it.metric not in ("area", "count") or it.kind not in ("space", None):
+            return None
+        qf = fold(question)
+        m = _EXCL.search(qf)
+        if not m:
+            return None
+        after = [n for n in it.names if fold(n) in qf[m.start():]]
+        before = [n for n in it.names if n not in after]
+        st_b, oth_b = self._storey_names(idx, dataclasses.replace(it, names=before))
+        if not after or oth_b:
+            return None
+        sg = st_b[0][1].guid if st_b else None
+        ex = []
+        for n in after:
+            ms = match_space(idx, n, sg)
+            if not ms or ms[0].score < 90:
+                return None
+            ex.append((n, ms[0].obj))
+        base = dict(op=None, mod=None, threshold=None, which=False, yes_no=False, top_n=False, group_by=None, notes=[])
+        st: list[str] = []
+        whole = self._answer(path, model, idx, dataclasses.replace(it, names=before, kind="space", kinds=["space"],
+                                                                   **base), st, {"question": "", "compose": False})
+        if whole.value is None or isinstance(whole.value, str):
+            return None
+        if it.metric == "count":
+            val = float(whole.value) - len(ex)
+            exs = [f"{n}" for n, _ in ex]
+        else:
+            areas = [(n, self._floor_area(e, it, [])[0]) for n, e in ex]
+            if any(a is None for _, a in areas):
+                return None
+            val = float(whole.value) - sum(a for _, a in areas)
+            exs = [f"{n} {a:.2f} m²" for n, a in areas]
+        trace.extend(st[-2:])
+        trace.append(f"rest: {whole.value} {whole.unit} minus excluded {', '.join(exs)} = {val:.3f}")
+        ctx["outer"] = ctx["rest_applied"] = True
+        keep = {e.guid for _, e in ex}
+        ev = [x for x in whole.evidence if x.ifc_guid not in keep]
+        return self._final(int(val) if it.metric == "count" else val, whole.unit, it, whole.confidence * 0.95, ev,
+                           trace, whole.assumptions + [f"excluded: {', '.join(n for n, _ in ex)}"], whole.missing)
+
     def _superlative(self, model: str, it: Intent, vals: list, conf: float, trace: list[str], assumptions: list[str],
                      missing: list[str], where_s: str, rank: int = 1) -> Answer:
         """Largest / smallest room (its area, or its name for 'which'/'name of'), or largest minus smallest."""
@@ -992,6 +1323,40 @@ class IfcSolver(BaseSolver):
                 it.kind == "space" and re.search(r"\b(height|high|tall)\b", qf) and
                 not re.search(r"\b(how many|number of|count)\b", qf)):
             it.attr, it.kind, it.metric, it.mod, it.op = "room_height", "space", "length", None, None
+        # two named storeys compared: "Does A or B contain more doors?", "By how many doors does A exceed B?",
+        # "How many times larger is the room area on A than on B?", "ratio between A and B"
+        st2 = [n for n in it.names if (ms_ := match_storey(idx, n)) is not None and ms_.score >= 90]
+        if len(st2) == 2 and len(it.names) == 2 and not it.mod:
+            if re.search(r"\b(ratio|times (larger|bigger|more|as \w+|greater|smaller)|divided by)\b", qf):
+                it.op, it.which = "ratio", False
+            elif re.search(r"\b(by how (many|much)|how (many|much) (more|fewer|less)|difference|exceed\w*|"
+                           r"(\w+ )?more \w+ than|than)\b", qf) and not re.search(r"\bwhich\b", qf):
+                it.op, it.which, it.yes_no = "diff", False, False
+            elif re.search(r"\b(more|fewer|less|bigger|larger|greater|smaller|higher|lower)\b", qf) and \
+                    re.search(r"\b(or|which|what)\b", qf):
+                it.which = True
+                it.op = "argmin" if re.search(r"\b(fewer|less|smaller|lower)\b", qf) else "argmax"
+            if it.metric == "text" and it.kind not in (None, "storey", "space"):
+                it.metric = "count"
+        # "Divide the total room area of S by its number of rooms"
+        if not it.mod and re.search(r"\bdivid\w* .{0,60}\bby (its|the|their) (number|count) of\b", qf):
+            it.mod, it.op = "avg", None
+        # "Count the rooms among 'A', 'B' whose area is above 4 m²" (no 'how many')
+        if not it.mod and re.search(r"\b(count|number of|how many)\b", qf) and re.search(r"\b(rooms?|spaces?)\b", qf):
+            from stoa.solvers.ifc.parse import _LOWER as _LOW1, _THRESH as _TH1
+
+            mt1 = _TH1.search(qf)
+            if mt1 and re.search(r"\b(area|m2|square|size)\b", qf):
+                w = mt1.group(1)
+                it.threshold = ("lt" if w in _LOW1 else "gt", float(mt1.group(2).replace(",", ".")))
+                it.mod, it.op, it.kind, it.metric, it.yes_no = "threshold", None, "space", "area", False
+        # "How big is the room 'X'?", "what size is …": an area, not a count (Q 04:18)
+        if it.metric in ("text", "count") and not re.search(r"\b(how many|number of|count)\b", qf) and re.search(
+                r"\bhow (big|large)\b|\bwhat size\b|\bsize of\b|\bwie gross\b|\bhoe groot\b|\bkui suur\b|"
+                r"\bjak duz\w*\b|\bque tamano\b|\bquanto (e )?grande\b|\bquelle (est la )?taille\b|\bkuinka iso\b", qf):
+            it.metric = "area"
+            if it.kind in (None, "storey"):
+                it.kind = "space"
         # "How much bigger is the largest room than the smallest?" -> largest minus smallest
         if re.search(r"\b(largest|biggest)\b.{0,60}\b(than|and|vs|minus)\b.{0,30}\b(smallest|tiniest)\b|"
                      r"\b(difference|range)\b.{0,30}\b(largest|biggest)\b.{0,30}\b(smallest)\b", qf):
@@ -1078,6 +1443,9 @@ class IfcSolver(BaseSolver):
 
         from stoa.solvers.ifc.arith import detect
 
+        rest = self._rest(path, model, idx, it, question, trace, ctx)
+        if rest is not None:
+            return rest
         o = detect(question)
         if o is None:
             return None
@@ -1287,7 +1655,8 @@ class IfcSolver(BaseSolver):
             storeys = [(s_.name, s_) for s_ in idx.storeys if s_.name]
             it = dataclasses.replace(it, names=[n for n, _ in storeys], top_n=False)
             trace.append(f"which-storey over all {len(storeys)} storeys")
-        multi = len(storeys) >= 2 and not others and (it.op in ("sum", "argmax", "argmin", "diff", "max", "min", "compare")
+        multi = len(storeys) >= 2 and not others and (it.op in ("sum", "argmax", "argmin", "diff", "max", "min", "compare",
+                                                                "ratio")
                                                      or it.which or (it.op is None and not it.mod
                                                                      and it.metric in ("count", "area", "volume", "length")))
         if not (multi or it.mod):
@@ -1321,7 +1690,7 @@ class IfcSolver(BaseSolver):
                 return Answer(value=val, unit=None, confidence=max(0.0, min(1.0, conf)), evidence=ev[:MAX_EVIDENCE],
                               trace=trace, solver=self.name, assumptions=asm, missing=miss)
             if isinstance(val, float):
-                val = round(val, 3)
+                val = int(round(val)) if unit == "count" and abs(val - round(val)) < 1e-9 else round(val, 3)
             return Answer(value=val, unit=unit, confidence=max(0.0, min(1.0, conf)), evidence=ev[:MAX_EVIDENCE],
                           trace=trace, solver=self.name, assumptions=asm, missing=miss)
 
@@ -1354,6 +1723,10 @@ class IfcSolver(BaseSolver):
                 return done(pick[0] if not tie else tie_txt,
                             None, pparts, steps + [f"{it.op} over storeys -> {pick[0]}"],
                             f"compared {it.metric} per storey", 0.95 if not tie else 0.6)
+            if it.op == "ratio" and len(vals) == 2 and vals[1][1]:
+                r_ = vals[0][1] / vals[1][1]
+                return done(r_, None, [a for _, a, _ in parts], steps + [f"{vals[0][1]:g} / {vals[1][1]:g} = {r_:.4f}"],
+                            f"ratio of {it.metric} {vals[0][0]} / {vals[1][0]}")
             if it.op == "compare":
                 txt = ", ".join(f"{n}: {v:g} {unit if unit != 'count' else ''}".strip() for n, v in vals)
                 if len(vals) == 2:
@@ -1408,7 +1781,7 @@ class IfcSolver(BaseSolver):
                 whole, t2 = sub([n for n, _ in storeys], ctx_extra={"no_room_type": True}, kind="space")
                 wdesc = f"all rooms on '{storeys[0][0]}'"
             elif storeys:  # "share of the model's doors on storey S"
-                part, t1 = sub([n for n, _ in storeys])
+                part, t1 = sub([n for n, _ in storeys], scope="storey")
                 whole, t2 = sub([], scope="model")
                 wdesc = f"the whole model"
             else:
@@ -1854,6 +2227,11 @@ class IfcSolver(BaseSolver):
                 mark = "✓" if len(drawn) == ans.value else f"(differs by {len(drawn) - ans.value:+d})"
                 ans.trace.append(f"cross-check: the plan drawing shows {len(drawn)} "
                                  f"{'/'.join(sorted({i.cls for i in drawn}))} symbols; model count {ans.value} {mark}")
+                if len(drawn) != ans.value and ans.confidence > 0.75:
+                    # two derivations disagree (S0 D15 C): on train/dev/hard this happens on 2 of 407 correct counts
+                    ans.confidence = 0.75
+                    ans.missing.append(f"the plan drawing shows {len(drawn)} symbols where the model counts "
+                                       f"{ans.value}")
         ans.evidence = (ev2d + ans.evidence) if asked_plan else (ans.evidence + ev2d)
 
     @staticmethod
@@ -1864,10 +2242,15 @@ class IfcSolver(BaseSolver):
             q = _qto(e, QTO_KEYS[("floor", "gross")])
             if q is not None:
                 return q, "gross floor area = Qto GrossFloorArea"
-        if geo is not None and geo > 0:
-            if q_net is not None:
+        if q_net is not None and q_net > 0:
+            # an explicit quantity wins (S0 D15 mechanism B: a test model's gold follows Qto where it differs from the
+            # shape by 5-15%; on every train/dev room asked, Qto and geometry agree, so this changes nothing there)
+            if geo is not None and geo > 0:
+                ok = abs(q_net - geo) <= 0.02 * geo
                 trace.append(f"cross-check: Qto NetFloorArea {q_net:.2f} vs geometry {geo:.2f}"
-                             + (" ✓" if abs(q_net - geo) <= 0.02 * geo else f" ({(q_net - geo) / geo * 100:+.1f}%)"))
+                             + (" ✓" if ok else f" ✗ ({(q_net - geo) / geo * 100:+.1f}%)"))
+            return q_net, "net floor area = the space's explicit Qto NetFloorArea (geometry as cross-check)"
+        if geo is not None and geo > 0:
             return geo, "net floor area = footprint of the IfcSpace geometry"
         if q_net is not None:
             return q_net, "net floor area = Qto NetFloorArea (no geometry)"
@@ -1930,6 +2313,9 @@ class IfcSolver(BaseSolver):
             elif it.asked_unit == "ft3" and unit == "m3":
                 val, unit = val * FT_PER_M ** 3, "ft3"
                 trace.append("converted m³ -> ft³ as asked")
+            elif it.asked_unit in ("mm", "cm") and unit == "m":
+                val, unit = val * (1000.0 if it.asked_unit == "mm" else 100.0), it.asked_unit
+                trace.append(f"converted m -> {unit} as asked")
             elif it.asked_unit == "l" and unit == "m3":
                 val, unit = val * 1000.0, "l"
                 trace.append("converted m³ -> litres as asked")

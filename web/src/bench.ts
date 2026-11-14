@@ -61,7 +61,11 @@ export function renderBench(el: HTMLElement, b: Bench) {
   const h2r = b.runs.hard2r?.pipeline;
   const h2q = h2r ?? b.runs.hard2q?.pipeline;
   const h2qLabel = h2r ? "a fresh draw of these kinds in a new wording, sealed (never seen while building)" : "same kinds reworded, never seen while building";
-  const runs = [t, ...Object.values(dev), ...Object.values(hard), h2, h2q].filter((r): r is Run => !!r);
+  const runs = [t, t0, ...Object.values(dev), ...Object.values(hard), h2, h2q].filter((r): r is Run => !!r);
+  // cost, cascade share and calibration: from the sealed test when it is in (unseen drawings, same pipeline), dev otherwise
+  const c = t ?? p;
+  const cWhere = t ? "sealed test" : "dev";
+  const cDet = c.by_tier?.deterministic;
 
   el.innerHTML = `
     <div class="bn-head"><h2>How well it works</h2>
@@ -77,12 +81,12 @@ export function renderBench(el: HTMLElement, b: Bench) {
       <div class="bn-tile"><div class="k">Generality · hard split${hp ? `, ${hp.n} questions` : ""}</div>
         <div class="v">${pct(hp?.accuracy)}</div>
         <div class="s">${kinds.length ? kinds.map(([k, v]) => `${esc(k)}s ${pct(v.accuracy, 0)}`).join(" · ") : "translations, paraphrases, compositions"}${h2 ? `<br><b>New question kinds</b> (average, share, threshold, which-is-larger…) ${pct(h2.accuracy, 0)}${h2q ? ` · ${h2qLabel}: ${pct(h2q.accuracy, 0)}` : ""}` : ""}</div></div>
-      <div class="bn-tile"><div class="k">Cost per 1,000 questions</div>
-        <div class="v">${eur(p.usd_per_1k_q)}</div>
-        <div class="s">median ${p.latency_p50_s !== null ? `${(p.latency_p50_s * 1000).toFixed(0)} ms` : "–"} per question · GPU time + tokens at the eval's rates</div></div>
-      <div class="bn-tile"><div class="k">Answered by rules / geometry</div>
-        <div class="v">${pct(det?.share, 0)}</div>
-        <div class="s">of questions, ${pct(det?.accuracy)} correct, no model call · ${pct(p.evidence_rate, 0)} of answers carry located evidence</div></div>
+      <div class="bn-tile"><div class="k">Cost per 1,000 questions · ${cWhere}</div>
+        <div class="v">${eur(c.usd_per_1k_q)}</div>
+        <div class="s">median ${c.latency_p50_s !== null ? `${(c.latency_p50_s * 1000).toFixed(0)} ms` : "–"} per question · GPU time + tokens at the eval's rates${t ? ` · dev ${eur(p.usd_per_1k_q)}${t0 ? ` · without the LoRA ${eur(t0.usd_per_1k_q)}` : ""}` : ""}</div></div>
+      <div class="bn-tile"><div class="k">Answered by rules / geometry · ${cWhere}</div>
+        <div class="v">${pct(cDet?.share, 0)}</div>
+        <div class="s">of questions, ${pct(cDet?.accuracy)} correct, no model call · ${pct(c.evidence_rate, 0)} of answers carry located evidence${t ? ` · dev ${pct(det?.share, 0)}` : ""}</div></div>
     </div>
     <div class="bn-chart">
       <div class="bn-chart-head"><h3>Accuracy by source · dev</h3>
@@ -95,6 +99,7 @@ export function renderBench(el: HTMLElement, b: Bench) {
     </div>
     <div class="bn-foot">
       ${p.by_tier ? `<div><b>Cascade on dev:</b> ${Object.entries(p.by_tier).map(([t, v]) => `${esc(TIER_LABEL[t] ?? t)} answers ${pct(v.share, 0)} of questions (${pct(v.accuracy, 0)} correct)`).join(" · ")}.</div>` : ""}
+      ${t?.calibration?.hi_conf_share ? `<div><b>Calibration (sealed test):</b> ${pct(t.calibration.hi_conf_share, 0)} of answers have confidence ≥ 0.8, and ${pct(t.calibration.hi_conf_acc, 0)} of those are right.</div>` : ""}
       ${hp?.calibration?.hi_conf_share ? `<div><b>Calibration (hard):</b> ${pct(hp.calibration.hi_conf_share, 0)} of answers have confidence ≥ 0.8, and ${pct(hp.calibration.hi_conf_acc, 0)} of those are right.</div>` : ""}
       <details><summary>Runs</summary><ul>${runs.map((r) => `<li><code>${esc(r.run_id)}</code> ${esc(r.split)} · ${esc(r.solver)} · n=${r.n} · ${esc(r.commit ?? "")} · ${esc(r.agent ?? "")} · ${esc((r.note ?? "").slice(0, 90))}</li>`).join("")}</ul></details>
     </div>`;

@@ -1,0 +1,27 @@
+If each door costs 450 euros, how much do the doors on '1.korrus' cost in total, in euros?
+How many square metres of floor per door are there on '1.korrus'?
+How many doors are there on '1.korrus'?
+What is the total net floor area of all spaces on '1.korrus'?
+At 35 EUR per square metre, what would it cost to clean all rooms on '1.korrus'?
+How many windows per room are there on '1.korrus' on average?
+If every window needs 2 curtains, how many curtains are needed on '1.korrus'?
+What is the wall volume on '1.korrus' in litres?
+What is the total wall length on '1.korrus' in feet?
+How many doors would remain on '1.korrus' if 5 were removed?
+How many more doors than windows are there on '1.korrus'?
+What is the ratio of doors to windows on '1.korrus'?
+Is the total room area on '1.korrus' larger than 800 m²?
+Are there more than 40 doors on '1.korrus'?
+How many rooms on '1.korrus' are larger than 20 m²?
+What is the area of the largest room on '1.korrus'?
+What is the name of the largest room on '1.korrus'?
+Which room on '1.korrus' is the smallest?
+What is the average room area on '1.korrus'?
+How many storeys does the building have?
+What is the total floor area of the building?
+How many doors are there in the whole building?
+Which storey has the most doors?
+What fraction of all doors in the building are on '1.korrus'?
+What is the combined area of rooms named KORIDOR on '1.korrus'?
+How much would it cost to paint all walls on '1.korrus' at 12 euros per square metre of wall side area?
+How many doors and windows are there in total on '1.korrus'?

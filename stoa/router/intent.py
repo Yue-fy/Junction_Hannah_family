@@ -24,7 +24,11 @@ _COUNT = re.compile(
     r"n[uú]mero de|numero di|num[aă]rul de|quant[ie]|hvor mange|hur m[aå]nga|hoeveel|ile|mitu|antal|aantal)\b", re.I)
 _VOLUME = re.compile(r"(m³|\bm3\b|cubic|volume|volumen|tilavuus|\bmaht|rumfang|volym)", re.I)
 _AREA = re.compile(r"(m²|\bm2\b|ft²|\bft2\b|sq\.? ?ft|square (?:feet|foot|met)|\barea\b|fl[aä]che|pinta-ala|"
-                   r"surface|superficie|\bareal|oppervlakte|p[oõ]randapind|\bpind\b|powierzchnia|yta\b)", re.I)
+                   r"surface|superficie|\bareal|oppervlakte|p[oõ]randapind|\bpind\b|powierzchnia|yta\b|"
+                   # Q 04:13/04:18: "how big is the room 'Hall (0.1)'" was a text question -> ifc's count at 0.97
+                   r"\bhow (?:big|large)\b|\bwhat(?:'s| is)? (?:the )?size\b|\bsize of\b|\bwie gro(?:ß|ss)\b|"
+                   r"\bquelle (?:est la )?taille\b|\bkuinka (?:suuri|iso)\b|\bhur stor\b|\bhoe groot\b|"
+                   r"\bquanto [eè] grande\b|\bqu[eé] tan grande\b)", re.I)
 _LENGTH = re.compile(r"(\blength\b|\blong\b|\blang\b|l[aä]nge|l[æe]ngde|pituus|lengte|longueur|lunghezza|"
                      r"longitud|pikkus|\bin met(?:re|er)s?\b|in metern|\bmeters?\b|\bmetres?\b|\bmeter\b)", re.I)
 _YESNO = re.compile(r"^\s*(is|are|does|do|has|have|can|onko|gibt es|ist|sind|y a-t-il|est-ce|c'è|ci sono|er|har)\b",
@@ -50,7 +54,7 @@ _T = [
     ("apartment", r"apartments?|residential units?|wohnungen|appartements?|logements?|appartament[io]|unit[àa] abitativ|"
                   r"asuntoj|asunto"),
     ("window", r"windows?|ikkun|fenster|fen[eê]tres?|finestr[ae]|ramen\b|vinduer|f[öo]nster|aken|akn|ventanas?|ferestre|okien|okna"),
-    ("door", r"doors?|doorways?|\bov(?:i|ea|et)\b|ovi|\bt[üu]r(?:en)?\b|portes?\b|port[ae]\b|deuren|d[øo]re|d[öo]rr|uks|ust\b|puertas?"),
+    ("door", r"doors?|doorways?|\bov(?:i|ea|et)\b|\bovi\w*|\bt[üu]r(?:en)?\b|portes?\b|port[ae]\b|deuren|d[øo]re|d[öo]rr|\buks\b|\bukse\w*|\bust\b|puertas?"),
     ("stair", r"stairs?|staircases?|treppen?|escaliers?|scale\b|escaleras?|trappen?|trapper|portaat|trepp|sc[ăa]ri\b|schod"),
     ("column", r"columns?|st[üu]tzen|s[øo]jler|colonnes?|pilares?|pilastri|kolommen|pylv|\bposti|\bpost\b|st[âa]lpi|słup"),
     ("beam", r"beams?|tr[äa]ger|bjælker|poutres?|vigas?|travi\b|balken|palk|\btala|grinzi|belk"),
@@ -103,7 +107,14 @@ _OPS = [
     ("rest", r"\b(other than|leaving out|apart from|besides|all the other|the other rooms|remaining|übrigen|autres que|"
              r"lukuun ottamatta <q>|do(?:es)? not belong|don't belong|not (?:part of|belonging to|in|within) "
              r"(?:the )?(?:apartment|unit|storey|floor|level|room)|outside (?:of )?(?:the )?(?:apartment|unit)|"
-             r"nicht zu|n'appartiennent pas|ne font pas partie)"),
+             r"nicht zu|n'appartiennent pas|ne font pas partie|"
+             # c73: exclusion word + a named apartment/room/storey (NOT "excluding balconies": template wording)
+             r"(?:except|excluding|without|minus|but|ohne|ausser|au(?:ss|ß)er|abz[uü]glich|sans|sauf|hors|escluso|esclusa|"
+             r"esclusi|senza|tranne|eccetto|ilman|paitsi|utan|f[oö]rutom|zonder|behalve|uden|bortset fra)\s+(?:for\s+|of\s+)?"
+             r"(?:the\s+|those\s+(?:of|in)\s+|die\s+|der\s+|den\s+|dem\s+|la\s+|le\s+|l'|il\s+|lo\s+|l')?"
+             r"(?:apartment|flat|unit|wohnung|appartement|appartamento|asunto|lagenhet|room|zimmer|raum|pi[eè]ce|locale|"
+             r"storey|floor|level|geschoss|etage|<q>)|"
+             r"\b(?:leave|leaving|left|take|taking|taken)\s+(?:\w+\s+){0,3}(?:out|aside|away)\b|\brest of (?:the|this)\b)"),
     ("ratio", r"\b(how many times|times (?:larger|bigger|smaller|greater|as (?:large|big|many))|divided by|"
               r"per (?:apartment|unit|storey|floor|level|room|bedroom|person)|mal so (?:gro(?:ß|ss)|viel)|fois plus)\b"),
     ("threshold", r"\b(?:gr[öo](?:ß|ss)er|kleiner|mehr|weniger)\s+als\s+\d|\bplus (?:grande?s?|petite?s?|de)\s+(?:que\s+)?\d|"
@@ -175,7 +186,10 @@ def extra_structure(question: str) -> bool:
     """Does an unseen wording carry more than one plain concept? (F 03:23: on held-out, confident answers to such
     questions read as one atomic count were right 33% of the time; plain paraphrases in `hard` 79%.)"""
     t = re.sub(r"\([^)]*\)", " ", _QUOTED.sub(" ", _fold(question)))
-    return bool(_STRUCT.search(t))
+    if _STRUCT.search(t):
+        return True
+    # two object classes outside definitions = a compound read as one (F 04:05)
+    return len({x for x in targets_mentioned(t) if x not in _GENERIC}) >= 2
 
 
 def modifiers(question: str) -> list[str]:
@@ -330,6 +344,13 @@ def parse(question: str) -> Intent:
         if _MODEL.search(q_noquote) and task == "count":
             filters["model"] = quoted[-1]
             scope = "model"
+        elif len(quoted) == 1 and re.search(r"\b(?:room|space|raum|zimmer|pi[eè]ce|stanza|locale|huone|tila|ruimte|rum|"
+                                            r"ruum|kambar\w*|pom[ií]stnost|miestnos\w*|sala|habitaci[oó]n)\s*<q>",
+                                            q_noquote, re.I):
+            # W5 04:12: "How many doors does the room 'KORIDOR (119)' have?" read 'KORIDOR (119)' as a storey; the
+            # canonical storey question then took ifc's 46 (all doors of the storey) at 0.97
+            filters["room"] = quoted[0]
+            scope = "room"
         elif _STOREY_PLAN.search(q_noquote) or len(quoted) >= 2 or task in ("count", "area", "volume", "length") or re.search(r"\b(on|op|på|auf|im|en|de)\s+<q>", q_noquote, re.I):
             filters["storey"] = quoted[-1]
             scope = "storey"

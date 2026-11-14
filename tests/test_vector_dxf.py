@@ -243,3 +243,62 @@ def test_tableqa_guards():
     assert "t2['Family'] (1 rows)" in _where("x = t2[t2['Size'].str.contains('Casement')]", t)
     assert _extract_code("```python\nanswer = 1") == "answer = 1"
     assert '14"x6"' in _render(t, sep="|") and '""' not in _render(t, sep="|")
+
+
+def test_qparse_pctdiff_and_unused_numbers():
+    from stoa.solvers.vector import qparse
+    q = "By what percentage is apartment B larger than apartment A (net floor area)?"
+    qr = qparse.parse(q, ["Bad"], room_numbers=set())
+    assert qr.op == "pctdiff" and [t.arg for t in qr.terms] == ["B", "A"] and qr.unit == "%"
+    qr = qparse.parse("What share of the floor's net area does apartment C take up, in %?", ["Bad"], room_numbers=set())
+    assert qr.op == "pct"
+    q = "If each door costs 450 euros, how much do the doors on this floor cost in total?"
+    assert qparse.unused_numbers(q, qparse.parse(q, ["Bad"], room_numbers=set())) == ["450"]
+    for q in ["What is the net floor area of room 2.05 ('Bad') in m²?", "How many rooms are larger than 20 m²?",
+              "What is the total net floor area of apartment A in m2, rounded to 2 decimal places?",
+              "How many rooms are labelled 'Zimmer 1'?"]:
+        assert qparse.unused_numbers(q, qparse.parse(q, ["Bad", "Zimmer"], room_numbers={"2.05"})) == [], q
+
+
+def test_qparse_size_wording_names_and_attributes():
+    from stoa.solvers.vector import qparse
+    vocab = ["Küche", "Bad", "Korridor", "Zimmer", "Séjour/repas", "Vano cantina", "Treppenhaus"]
+    rn = {"3.09", "3.12", "3.45", "2.23"}
+    # "size" / "floor space" without an area word is an area, not a count of Küche rooms (Q red team 9)
+    qr = qparse.parse("what's the size of the küche, room 3.09?", vocab, room_numbers=rn)
+    assert qr.qtype == "area" and qr.terms[0].kind == "area_room" and qr.terms[0].arg == "3.09"
+    qr = qparse.parse("Give me the floor space of the Bad in apartment C.", vocab, room_numbers=rn)
+    assert qr.terms[0].kind == "area_label" and qr.terms[0].scope == ["C"]
+    qr = qparse.parse("Floor area of the Séjour/repas in apartment B?", vocab, room_numbers=rn)
+    assert [t.arg for t in qr.terms] == ["Séjour/repas"]
+    qr = qparse.parse("How many cellar compartments (Vano cantina) are there?", vocab, room_numbers=rn)
+    assert qr.terms[0].kind == "count_label" and qr.terms[0].arg == "Vano cantina"
+    # what the question calls a numbered room, and whether the drawing's label fits (Q red team 10)
+    for q, n, asked in [("What is the net floor area of room 2.23 ('Sauna') in m²?", "2.23", "Sauna"),
+                        ("What's the area of the bedroom 3.45?", "3.45", "bedroom"),
+                        ("what's the size of the küche, room 3.09?", "3.09", "küche")]:
+        qr = qparse.parse(q, vocab, room_numbers=rn)
+        assert qparse.asked_room_names(q, qr, vocab) == {n: asked}, q
+    q = "What is the net floor area of room 3.12 in m²?"
+    assert qparse.asked_room_names(q, qparse.parse(q, vocab, room_numbers=rn), vocab) == {}
+    assert qparse.name_fits("Küche", "kitchen") and qparse.name_fits("Wohnen/Essen", "living room")
+    assert qparse.name_fits("Zimmer", "bedroom") and qparse.name_fits("Cuisine", "Küche")
+    assert not qparse.name_fits("Korridor", "Sauna") and not qparse.name_fits("Treppenhaus", "bedroom")
+    assert not qparse.name_fits("Bad", "Küche")
+    assert qparse.ATTR_W.search("What is the fire rating of the entrance door of apartment A?")
+    assert qparse.ATTR_W.search("How tall is the stair core?")
+    assert not qparse.ATTR_W.search("What is the net floor area of apartment A in m²?")
+    assert not qparse.ATTR_W.search("Which apartment has the larger net floor area, A or B?")
+
+
+@needs_data
+def test_dxf_false_premise_and_guards():
+    from stoa.solvers import get_solver
+
+    s = get_solver("dxf", llm=0)
+    a = s.solve(P, "What is the net floor area of room 2.10 ('Sauna') in m²?")  # 2.10 is a Zimmer
+    assert a.confidence <= 0.3 and any("labelled 'Zimmer'" in m for m in a.missing)
+    a = s.solve(P, "What is the net floor area of room 2.10 ('Zimmer') in m²?")
+    assert a.confidence >= 0.9
+    a = s.solve(P, "What is the fire rating of the doors?")
+    assert a.value is None or a.confidence <= 0.2
