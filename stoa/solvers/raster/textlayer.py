@@ -378,6 +378,13 @@ def summary(path: str, max_lines: int = 80, **kw) -> str:
         lines.append("scale notes: " + "; ".join(f"'{s['line'][:50]}' -> 1:{s['ratio']:g}" for s in sc[:3]))
     else:
         lines.append("scale notes: none found (lengths/areas need a scale bar, a dimension string or an assumption)")
+    try:  # graphic scale bars (CPU only here: labels from this layer, snapped to the drawn bar)
+        from stoa.solvers.raster import scalebar
+
+        for b in scalebar.bars(path, reread=False, layer=tl)[:2]:
+            lines.append(b.describe())
+    except Exception:  # noqa: BLE001 - optional fact
+        pass
     ds = dimensions(tl)
     if ds:
         lines.append(f"dimension strings ({len(ds)}): " + ", ".join(f"{d['text']}={d['feet']:g} ft" for d in ds[:12]))

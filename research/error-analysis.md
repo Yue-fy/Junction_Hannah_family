@@ -1,6 +1,6 @@
 # Error analysis (E = agent F)
 
-Updated 04:45, 14 Nov 2026 (sections newest first). Regenerate the tables with
+Updated 04:55, 14 Nov 2026 (sections newest first). Regenerate the tables with
 `/data/User/fangy4/envs/junction/bin/python -m stoa.eval.analyze <run_id> --baseline <dummy run_id> --top 20`.
 For paired significance use `python3 experiments/r1/stats/compare.py RUN_A RUN_B --by template` (cluster CI).
 
@@ -13,7 +13,7 @@ answer) vs `20261113-234812-dummy-dev` (template prior), both on dev v2 (hash f4
 | dummy (prior) | 26.1% | 40.4% | 0 | 0% |
 | vlm_direct | 32.0% (28.0–36.5) | 44.1% | 200 (all IFC) | 0% |
 
-## LATEST (04:45, cycle 62): language is the biggest held-out gap, and a translate-first front end closes most of it
+## LATEST (04:55, cycle 62): language is the biggest held-out gap, and a translate-first front end closes most of it
 
 ### 1. hardL: the same known-gold questions in 8 languages nobody tuned on (stoa/eval/hardl.py)
 Base = dev questions with gold (v0: 20 atomic; cubicasa 7, ifc 9, swiss 4; the 20 hard2 compositions are still
@@ -35,7 +35,28 @@ model added an 'external' the source did not say → ifc filtered walls at ≥0.
 (original kept; ifc answered a count with a non-integer at ≥0.8). Guards suggested to W4. Runs:
 20261114-042948-…-hardL_open-80c7, -043124-…-hardL_open_fe-e0f4, -043021-…-hardL-dbd0, -043140-…-hardL_fe-df5f.
 
+**v1 (04:50, current night cc1ca5b; 40 bases = 33 dev atomic + 7 hard2 compositions; 13 compositions still untranslated
+because of hosted-API 429s):**
+
+| run | English (same items) | as is | translate-first (simulated) | paired vs as is | conf≥0.8 right | confident-wrong |
+|---|---:|---:|---:|---:|---:|---:|
+| open cs/hu/tr/ro (n 158) | 89.9 | 48.7 | **82.9** | +34.2 [+21.5, +46.8], 56 W / 2 L | 65.3 → 97.1% | 17 → 3 |
+| held-out nb/hr/el/lt (n 160) | 90.0 | 50.0 | **80.6** | +30.6 [+20.0, +41.2], 52 W / 3 L | 66.0 → 96.9% | 16 → 3 |
+| held-out compositions only (n 28) | 71.4 | 35.7 | 64.3 | | | |
+
+(CI = bootstrap over base questions.) As is, swiss gives 10 of the 16 held-out confident-wrong answers (dxf reads a
+foreign operator wrongly at high confidence), ifc 5. After translation: el 90, hr 82.5, nb 80, lt 70. Cubicasa's
+remaining gap vs English is mostly concept-noun slips in the 8B translation (4 of 5 v0 losses changed the intent
+target) → R2: a domain glossary in the to_english prompt.
+
+**Side effect on our own data:** the trigger fires on 11 dataset questions (Polish/Romanian ifc_models questions on
+the BIM-Speed Gdynia/Barlad models; the ifc solver reads them already, dev 4/4 @ 0.97) and on 0 of hard's 175
+non-English questions. Translating them lost 1 ('belek' = beams → 'balconies'). A 'solve both, on disagreement take
+the more confident at ≤ 0.5' rule recovers it but shrinks the held-out ≥0.8 bin 46 → 28 at equal accuracy (v0), so
+plain translate-first + glossary is the recommendation.
+
 ### 2. Held-out hard2q on night 15c0b04 (aggregates)
+Round 2 (night cc1ca5b, lora_conf=own default): 80.4%, ≥0.8 50.8% @ 92.7% = neutral (run 0103).
 W4's 0.75 cap: ≥0.8 bin 50.8% @ 92.7% (0980: 55.6% @ 86.7%), accuracy 79.9 (=). `lora_conf=own` vs `gate`:
 cubicasa ECE 0.107 vs 0.162, AUROC 0.669 vs 0.632 → default own. Last confident-wrong bucket: swiss
 floor-minus-apartment 7/15 wrong, all at 0.90–0.96: dxf returns the excluded apartment's area when the exclusion is a

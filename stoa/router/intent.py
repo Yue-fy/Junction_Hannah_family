@@ -24,7 +24,11 @@ _COUNT = re.compile(
     r"n[uú]mero de|numero di|num[aă]rul de|quant[ie]|hvor mange|hur m[aå]nga|hoeveel|ile|mitu|antal|aantal)\b", re.I)
 _VOLUME = re.compile(r"(m³|\bm3\b|cubic|volume|volumen|tilavuus|\bmaht|rumfang|volym)", re.I)
 _AREA = re.compile(r"(m²|\bm2\b|ft²|\bft2\b|sq\.? ?ft|square (?:feet|foot|met)|\barea\b|fl[aä]che|pinta-ala|"
-                   r"surface|superficie|\bareal|oppervlakte|p[oõ]randapind|\bpind\b|powierzchnia|yta\b)", re.I)
+                   r"surface|superficie|\bareal|oppervlakte|p[oõ]randapind|\bpind\b|powierzchnia|yta\b|"
+                   # Q 04:13/04:18: "how big is the room 'Hall (0.1)'" was a text question -> ifc's count at 0.97
+                   r"\bhow (?:big|large)\b|\bwhat(?:'s| is)? (?:the )?size\b|\bsize of\b|\bwie gro(?:ß|ss)\b|"
+                   r"\bquelle (?:est la )?taille\b|\bkuinka (?:suuri|iso)\b|\bhur stor\b|\bhoe groot\b|"
+                   r"\bquanto [eè] grande\b|\bqu[eé] tan grande\b)", re.I)
 _LENGTH = re.compile(r"(\blength\b|\blong\b|\blang\b|l[aä]nge|l[æe]ngde|pituus|lengte|longueur|lunghezza|"
                      r"longitud|pikkus|\bin met(?:re|er)s?\b|in metern|\bmeters?\b|\bmetres?\b|\bmeter\b)", re.I)
 _YESNO = re.compile(r"^\s*(is|are|does|do|has|have|can|onko|gibt es|ist|sind|y a-t-il|est-ce|c'è|ci sono|er|har)\b",
@@ -340,6 +344,13 @@ def parse(question: str) -> Intent:
         if _MODEL.search(q_noquote) and task == "count":
             filters["model"] = quoted[-1]
             scope = "model"
+        elif len(quoted) == 1 and re.search(r"\b(?:room|space|raum|zimmer|pi[eè]ce|stanza|locale|huone|tila|ruimte|rum|"
+                                            r"ruum|kambar\w*|pom[ií]stnost|miestnos\w*|sala|habitaci[oó]n)\s*<q>",
+                                            q_noquote, re.I):
+            # W5 04:12: "How many doors does the room 'KORIDOR (119)' have?" read 'KORIDOR (119)' as a storey; the
+            # canonical storey question then took ifc's 46 (all doors of the storey) at 0.97
+            filters["room"] = quoted[0]
+            scope = "room"
         elif _STOREY_PLAN.search(q_noquote) or len(quoted) >= 2 or task in ("count", "area", "volume", "length") or re.search(r"\b(on|op|på|auf|im|en|de)\s+<q>", q_noquote, re.I):
             filters["storey"] = quoted[-1]
             scope = "storey"

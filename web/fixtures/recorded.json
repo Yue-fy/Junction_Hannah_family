@@ -5,7 +5,7 @@
   "answer": {
    "value": 63.841,
    "unit": "m2",
-   "confidence": 0.988,
+   "confidence": 0.985,
    "evidence": [
     {
      "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
@@ -32,7 +32,7 @@
    "trace": [
     "intent: area room [room] (storey=1.korrus, room=KORIDOR (119)) (lang en)",
     "gate (train n=40): prior 2%, ifc 100%, vlm_direct 2%; skip vlm_direct",
-    "ifc: 63.841 m2 (conf 0.98, train hit rate)",
+    "ifc: 63.841 m2 (conf 0.97, train hit rate)",
     "cross-check: answer 63.84 m² vs IFC geometry 63.84 m² ✓; room polygon on the plan (1:100, scale fitted on all rooms) 63.84 m² ✓",
     "[ifc] asked on bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf; answering from its source model bsc-esplanades_1807-ep-ar-v18.ifc",
     "[ifc] model bsc-esplanades_1807-ep-ar-v18.ifc: IFC2X3, 7 storeys, 2249 elements (index 14.7s, cached)",
@@ -54,7 +54,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 0.0539
+    "wall_seconds": 0.207
    },
    "intent": {
     "task": "area",
@@ -69,7 +69,7 @@
     "key": "area:room:room"
    }
   },
-  "recorded_at": "2026-11-14 04:29",
+  "recorded_at": "2026-11-14 04:37",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -78,7 +78,7 @@
   "answer": {
    "value": 46,
    "unit": "count",
-   "confidence": 0.987,
+   "confidence": 0.985,
    "evidence": [
     {
      "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
@@ -1073,7 +1073,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 0.02
+    "wall_seconds": 0.0204
    },
    "intent": {
     "task": "count",
@@ -1087,7 +1087,7 @@
     "key": "count:door:storey"
    }
   },
-  "recorded_at": "2026-11-14 04:29",
+  "recorded_at": "2026-11-14 04:37",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -1096,7 +1096,7 @@
   "answer": {
    "value": 55,
    "unit": "count",
-   "confidence": 0.976,
+   "confidence": 0.875,
    "evidence": [
     {
      "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
@@ -2257,7 +2257,7 @@
    "trace": [
     "intent: count window [storey] (storey=1.korrus) (lang en)",
     "gate (train n=19): prior 0%, ifc 100%, vlm_direct 0%; skip vlm_direct",
-    "ifc: 55 count (conf 0.95, train hit rate)",
+    "ifc: 55 count (conf 0.75, train hit rate)",
     "cross-check: answer 55 vs IFC model: 55 IfcWindow on storey '1.korrus' ✓; plan drawing: 52 symbols = the 52 the cut plane at floor +1.2 m crosses ✓ (3 lie entirely above/below it, so they are not drawn)",
     "[ifc] asked on bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf; answering from its source model bsc-esplanades_1807-ep-ar-v18.ifc",
     "[ifc] model bsc-esplanades_1807-ep-ar-v18.ifc: IFC2X3, 7 storeys, 2249 elements (index 14.7s, cached)",
@@ -2272,7 +2272,9 @@
    "assumptions": [
     "elements whose spatial container is storey '1.korrus'"
    ],
-   "missing": [],
+   "missing": [
+    "the plan drawing shows 52 symbols where the model counts 55"
+   ],
    "cost": {
     "llm_tokens_in": 0,
     "llm_tokens_out": 0,
@@ -2281,7 +2283,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 0.0223
+    "wall_seconds": 0.0246
    },
    "intent": {
     "task": "count",
@@ -2295,7 +2297,7 @@
     "key": "count:window:storey"
    }
   },
-  "recorded_at": "2026-11-14 04:29",
+  "recorded_at": "2026-11-14 04:37",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -6761,7 +6763,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 0.0228
+    "wall_seconds": 0.1238
    },
    "intent": {
     "task": "count",
@@ -6775,7 +6777,7 @@
     "key": "count:door:model"
    }
   },
-  "recorded_at": "2026-11-14 04:29",
+  "recorded_at": "2026-11-14 04:37",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -6784,7 +6786,7 @@
   "answer": {
    "value": 20700.0,
    "unit": "EUR",
-   "confidence": 0.888,
+   "confidence": 0.886,
    "evidence": [
     {
      "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
@@ -6871,7 +6873,7 @@
     "ifc (question as asked): 20700.0 EUR by rules, but the question asks a derived quantity (cost+given): kept as a second opinion at conf 0.40",
     "general agent first: modifier cost+given (comparison/operator over named things); not a known template",
     "agent: general tool-using path (3 steps, 3 LLM calls)",
-    "think: Find number of doors on '1.korrus', multiply by 450. → ask(How many doors are shown on the floor plan of '1.korrus'?): 46 count (confidence 0.99, by pipeline/ifc)",
+    "think: Find number of doors on '1.korrus', multiply by 450. → ask(How many doors are shown on the floor plan of '1.korrus'?): 46 count (confidence 0.98, by pipeline/ifc)",
     "think: Multiply 46 doors by 450 euros per door. → calc(46 * 450): 20700",
     "think: Total cost of all doors on '1.korrus' is 20700 euros. → answer 20700 EUR",
     "cross-check: agent 20700.0 = ifc 20700.0 ✓"
@@ -6884,12 +6886,12 @@
    "cost": {
     "llm_tokens_in": 2464,
     "llm_tokens_out": 146,
-    "gpu_seconds": 8.97,
+    "gpu_seconds": 3.53,
     "api_calls": 0,
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 3,
-    "wall_seconds": 10.503
+    "wall_seconds": 3.5933
    },
    "intent": {
     "task": "text",
@@ -6903,14 +6905,14 @@
     "key": "text:door:storey"
    }
   },
-  "recorded_at": "2026-11-14 04:29",
+  "recorded_at": "2026-11-14 04:37",
   "api": "http://127.0.0.1:8102"
  },
  {
   "path": "data/ifc_bench/4351_arc.ifc",
   "question": "What plumbing fixtures are in this building and their respective counts?",
   "answer": {
-   "value": "Plumbing fixtures in this building include:\n- Toilet-Domestic-3D: 9 units\n- Urinal-Wall-3D: 4 units\n\nNo other plumbing fixtures are listed in the model facts.",
+   "value": "Plumbing fixtures are not listed in the model facts.\n\nMissing: explicit list of plumbing fixtures (e.g., sinks, toilets, urinals) and their counts.\n\nEstimate:  \n- Toilet-Domestic-3D: 9 (from IfcBuildingElementProxy)  \n- Urinal-Wall-3D: 4 (from IfcBuildingElementProxy)  \n- Sink Vanity-Round:19\" (6)  \n- Sink Kitchen-Double:42\" (2)  \n→ Total estimated plumbing fixtures: 21 (toilets + urinals + sinks)  \nNote: This is an estimate based on proxy types; actual plumbing fixtures may differ.",
    "unit": null,
    "confidence": 0.3,
    "evidence": [
@@ -6925,13 +6927,13 @@
    ],
    "trace": [
     "intent: text unknown [drawing] (lang en)",
-    "ifc (question as asked): Plumbing fixtures in this building include:\n- Toilet-Domestic-3D: 9 units\n- Urinal-Wall-3D: 4 units\n\nNo other plumbing fixtures are listed in the model facts.  at conf 0.30, unsure",
+    "ifc (question as asked): Plumbing fixtures are not listed in the model facts.\n\nMissing: explicit list of plumbing fixtures (e.g., sinks, toilets, urinals) and their counts.\n\nEstimate:  \n- Toilet-Domestic-3D: 9 (from IfcBuildingElementProxy)  \n- Urinal-Wall-3D: 4 (from IfcBuildingElementProxy)  \n- Sink Vanity-Round:19\" (6)  \n- Sink Kitchen-Double:42\" (2)  \n→ Total estimated plumbing fixtures: 21 (toilets + urinals + sinks)  \nNote: This is an estimate based on proxy types; actual plumbing fixtures may differ.  at conf 0.30, unsure",
     "no train gate for this kind of question: general path by file type",
-    "ifc: Plumbing fixtures in this building include:\n- Toilet-Domestic-3D: 9 units\n- Urinal-Wall-3D: 4 units\n\nNo other plumbing fixtures are listed in the model facts.  (conf 0.30)",
+    "ifc: Plumbing fixtures are not listed in the model facts.\n\nMissing: explicit list of plumbing fixtures (e.g., sinks, toilets, urinals) and their counts.\n\nEstimate:  \n- Toilet-Domestic-3D: 9 (from IfcBuildingElementProxy)  \n- Urinal-Wall-3D: 4 (from IfcBuildingElementProxy)  \n- Sink Vanity-Round:19\" (6)  \n- Sink Kitchen-Double:42\" (2)  \n→ Total estimated plumbing fixtures: 21 (toilets + urinals + sinks)  \nNote: This is an estimate based on proxy types; actual plumbing fixtures may differ.  (conf 0.30)",
     "[ifc] model 4351_arc.ifc: IFC2X3, 5 storeys, 401 elements (index 1.0s, cached)",
     "[ifc] parsed: metric=text kind=None scope=auto names=[]",
     "[ifc] abstain: free-text question: no deterministic rule",
-    "[ifc] rules could not answer; asking the local LLM with a fact card of the model (45 lines, 4546 chars)",
+    "[ifc] rules could not answer; asking the local LLM with a fact card of the model (52 lines, 5681 chars)",
     "[ifc] fact card (first lines): Model: 4351_arc.ifc | schema IFC2X3 | project 'Project Number' | Authoring application: Autodesk Revit Architecture 2011 2011 (Autodesk Revit Architecture 2011) | Element totals: IfcBuildingElementProxy 122, IfcLightFixture 119, IfcWallStandardCase 41, IfcAirTerminal 36, IfcDoor 17, IfcCovering 14, IfcFurnishingElement 13, IfcRailing 11, IfcSlab 6, IfcSpace 6, IfcMember 4, IfcStair 4, IfcStairFlig"
    ],
    "solver": "pipeline/ifc",
@@ -6942,14 +6944,14 @@
     "a quantity question (count/area/volume/length)"
    ],
    "cost": {
-    "llm_tokens_in": 2041,
-    "llm_tokens_out": 46,
-    "gpu_seconds": 0.1276,
+    "llm_tokens_in": 2463,
+    "llm_tokens_out": 141,
+    "gpu_seconds": 0.2395,
     "api_calls": 0,
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 1,
-    "wall_seconds": 9.9841
+    "wall_seconds": 3.8516
    },
    "intent": {
     "task": "text",
@@ -6961,10 +6963,8 @@
     "key": "text:unknown:drawing"
    }
   },
-  "recorded_at": "2026-11-14 03:29",
-  "api": "http://127.0.0.1:8102",
-  "note": "pinned 04:05: the 03:29 answer (night 609e41c code) named the fixture types; since night-W1 e78a093 the IFC fact card prints bare type names and the live answer is 'No plumbing fixtures are listed' (conf 0.3), which the card flags ✗ against the model (told W1). Unpin when W1's fix is on night.",
-  "pinned": true
+  "recorded_at": "2026-11-14 04:37",
+  "api": "http://127.0.0.1:8102"
  },
  {
   "path": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
@@ -7465,7 +7465,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 0.18
+    "wall_seconds": 0.0994
    },
    "intent": {
     "task": "count",
@@ -7477,7 +7477,7 @@
     "key": "count:door:drawing"
    }
   },
-  "recorded_at": "2026-11-14 04:29",
+  "recorded_at": "2026-11-14 04:37",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -8341,7 +8341,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 0.8721
+    "wall_seconds": 0.9175
    },
    "intent": {
     "task": "count",
@@ -8364,7 +8364,7 @@
     ]
    }
   },
-  "recorded_at": "2026-11-14 04:29",
+  "recorded_at": "2026-11-14 04:37",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -8373,71 +8373,33 @@
   "answer": {
    "value": 3,
    "unit": "count",
-   "confidence": 0.857,
-   "evidence": [
-    {
-     "file": "data/cubicasa5k/colorful-4539.png",
-     "page": null,
-     "bbox": [
-      276.0,
-      322.9,
-      334.5,
-      356.0
-     ],
-     "bbox_space": "image_px",
-     "ifc_guid": null,
-     "note": "label 'MH' = bedroom 1; cross-check: vlm_lora 3 = raster 3 ✓"
-    },
-    {
-     "file": "data/cubicasa5k/colorful-4539.png",
-     "page": null,
-     "bbox": [
-      990.0,
-      322.9,
-      1048.5,
-      356.0
-     ],
-     "bbox_space": "image_px",
-     "ifc_guid": null,
-     "note": "label 'MH' = bedroom 2; cross-check: vlm_lora 3 = raster 3 ✓"
-    },
-    {
-     "file": "data/cubicasa5k/colorful-4539.png",
-     "page": null,
-     "bbox": [
-      580.5,
-      861.1,
-      637.5,
-      894.2
-     ],
-     "bbox_space": "image_px",
-     "ifc_guid": null,
-     "note": "label 'MH' = bedroom 3; cross-check: vlm_lora 3 = raster 3 ✓"
-    }
-   ],
+   "confidence": 0.915,
+   "evidence": [],
    "trace": [
     "intent: count bedroom [drawing] (lang fi)",
     "gate (train n=40): prior 28%, raster 72%, vlm_lora 85%, vlm_direct 70%",
     "vlm_lora: 3 count (conf 0.83, train hit rate)",
-    "cross-check: vlm_lora 3 = raster 3 ✓ → conf 0.86 (LoRA right 29/33 on train_gate when raster agreed)",
+    "vlm_lora: its own calibrated confidence 0.92 used",
     "[vlm_lora] kind=count unit=count",
-    "[vlm_lora] local:cc-v2 0.6s tok 2104->2",
+    "[vlm_lora] local:cc-v2 0.5s tok 2104->2",
     "[vlm_lora] raw: 3",
-    "[vlm_lora] p(answer digits) = 0.91795 -> confidence 0.92",
+    "[vlm_lora] p(answer digits) = 0.92578 -> confidence 0.92",
     "[vlm_lora] cost: calls=1 tok_in=2104 tok_out=2 gpu_s=0.09 api_calls=0"
    ],
    "solver": "pipeline/vlm_lora",
    "assumptions": [],
-   "missing": [],
+   "missing": [
+    "no located evidence from this solver"
+   ],
    "cost": {
-    "llm_tokens_in": 7364,
-    "llm_tokens_out": 442,
-    "gpu_seconds": 11.012198449325561,
+    "llm_tokens_in": 2104,
+    "llm_tokens_out": 2,
+    "gpu_seconds": 0.0862,
     "api_calls": 0,
     "api_tokens_in": 0,
     "api_tokens_out": 0,
-    "llm_calls": 2,
-    "wall_seconds": 2.4835
+    "llm_calls": 1,
+    "wall_seconds": 1.8841
    },
    "intent": {
     "task": "count",
@@ -8449,7 +8411,7 @@
     "key": "count:bedroom:drawing"
    }
   },
-  "recorded_at": "2026-11-14 04:29",
+  "recorded_at": "2026-11-14 04:37",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -8458,34 +8420,33 @@
   "answer": {
    "value": 0,
    "unit": "count",
-   "confidence": 0.778,
+   "confidence": 0.817,
    "evidence": [],
    "trace": [
     "intent: count sauna [drawing] (lang en)",
     "gate (train n=40): prior 42%, raster 85%, vlm_lora 98%, vlm_direct 52%",
     "vlm_lora: 0 count (conf 0.95, train hit rate)",
-    "cross-check: vlm_lora 0 ≠ raster 1 → conf 0.78 (LoRA right 6/7 on train_gate when raster disagreed)",
+    "vlm_lora: its own calibrated confidence 0.82 used",
     "[vlm_lora] kind=count unit=count",
     "[vlm_lora] local:cc-v2 0.2s tok 288->2",
     "[vlm_lora] raw: 0",
-    "[vlm_lora] p(answer digits) = 0.72984 -> confidence 0.82",
+    "[vlm_lora] p(answer digits) = 0.72983 -> confidence 0.82",
     "[vlm_lora] cost: calls=1 tok_in=288 tok_out=2 gpu_s=0.01 api_calls=0"
    ],
    "solver": "pipeline/vlm_lora",
    "assumptions": [],
    "missing": [
-    "raster counted 1, the LoRA 0",
     "no located evidence from this solver"
    ],
    "cost": {
-    "llm_tokens_in": 3039,
-    "llm_tokens_out": 3697,
-    "gpu_seconds": 36.1088154964447,
+    "llm_tokens_in": 288,
+    "llm_tokens_out": 2,
+    "gpu_seconds": 0.0135,
     "api_calls": 0,
     "api_tokens_in": 0,
     "api_tokens_out": 0,
-    "llm_calls": 7,
-    "wall_seconds": 0.2627
+    "llm_calls": 1,
+    "wall_seconds": 0.1827
    },
    "intent": {
     "task": "count",
@@ -8497,7 +8458,7 @@
     "key": "count:sauna:drawing"
    }
   },
-  "recorded_at": "2026-11-14 04:29",
+  "recorded_at": "2026-11-14 04:37",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -8553,7 +8514,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 7,
-    "wall_seconds": 2.0698
+    "wall_seconds": 0.2009
    },
    "intent": {
     "task": "text",
@@ -8565,7 +8526,7 @@
     "key": "text:unknown:drawing"
    }
   },
-  "recorded_at": "2026-11-14 04:29",
+  "recorded_at": "2026-11-14 04:37",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -8591,7 +8552,7 @@
     }
    ],
    "trace": [
-    "intent: text door [drawing] (lang fi)",
+    "intent: text unknown [drawing] (lang fi)",
     "no train gate for this kind of question: general path by file type",
     "raster: 1/500  (conf 0.75)",
     "[raster] text layer: 49 texts in 6 tile(s); No scale note was found in the texts.",
@@ -8608,19 +8569,19 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 7,
-    "wall_seconds": 6.0996
+    "wall_seconds": 0.7122
    },
    "intent": {
     "task": "text",
-    "target": "door",
+    "target": "unknown",
     "scope": "drawing",
     "unit": null,
     "filters": {},
     "lang": "fi",
-    "key": "text:door:drawing"
+    "key": "text:unknown:drawing"
    }
   },
-  "recorded_at": "2026-11-14 04:29",
+  "recorded_at": "2026-11-14 04:37",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -9717,7 +9678,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 0.0903
+    "wall_seconds": 0.117
    },
    "intent": {
     "task": "area",
@@ -9732,7 +9693,7 @@
     "key": "area:room:room"
    }
   },
-  "recorded_at": "2026-11-14 04:29",
+  "recorded_at": "2026-11-14 04:37",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -9920,7 +9881,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 0.0198
+    "wall_seconds": 0.0312
    },
    "intent": {
     "task": "count",
@@ -9934,7 +9895,7 @@
     "key": "count:room:label"
    }
   },
-  "recorded_at": "2026-11-14 04:29",
+  "recorded_at": "2026-11-14 04:37",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -9990,7 +9951,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 1,
-    "wall_seconds": 2.0312
+    "wall_seconds": 0.1826
    },
    "intent": {
     "task": "text",
@@ -10002,7 +9963,7 @@
     "key": "text:unknown:drawing"
    }
   },
-  "recorded_at": "2026-11-14 04:29",
+  "recorded_at": "2026-11-14 04:37",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -10045,7 +10006,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 1,
-    "wall_seconds": 0.1995
+    "wall_seconds": 0.1876
    },
    "intent": {
     "task": "text",
@@ -10057,7 +10018,7 @@
     "key": "text:stair:drawing"
    }
   },
-  "recorded_at": "2026-11-14 04:29",
+  "recorded_at": "2026-11-14 04:37",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -10100,7 +10061,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 1,
-    "wall_seconds": 1.181
+    "wall_seconds": 0.218
    },
    "intent": {
     "task": "text",
@@ -10112,7 +10073,7 @@
     "key": "text:unknown:drawing"
    }
   },
-  "recorded_at": "2026-11-14 04:29",
+  "recorded_at": "2026-11-14 04:37",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -10169,7 +10130,7 @@
    "evidence": [],
    "trace": [
     "kind=text unit=None",
-    "nvidia:private/nvidia/nemotron-3.5-super-120b-a12b 12.9s tok 3249->3",
+    "nvidia:private/nvidia/nemotron-3.5-super-120b-a12b 10.9s tok 3249->3",
     "raw: Elevation",
     "cost: calls=1 tok_in=3249 tok_out=3 gpu_s=0.00 api_calls=1"
    ],
@@ -10184,7 +10145,7 @@
     "api_tokens_in": 3249,
     "api_tokens_out": 3,
     "llm_calls": 1,
-    "wall_seconds": 13.1435
+    "wall_seconds": 102.4755
    },
    "intent": {
     "task": "text",
@@ -10196,7 +10157,7 @@
     "key": "text:unknown:drawing"
    }
   },
-  "recorded_at": "2026-11-14 04:29",
+  "recorded_at": "2026-11-14 04:42",
   "api": "http://127.0.0.1:8102",
   "solver": "vlm_direct",
   "solver_args": {
@@ -10255,7 +10216,7 @@
     "class=bedroom",
     "prior (train mode for bedroom) = 1 (hit rate 31%, n=5410)",
     "gate[bedroom] = labels (train acc {'prior': 0.26, 'labels': 0.64, 'labels_code': 0.64, 'max1': 0.54})",
-    "labels (shared with another question): 13 read in 10.9s: MH->bedroom, MH->bedroom, OH->-, VAR->-, VAR->-, MH->bedroom, VH->-, TK->-, K->kitchen, ET->-, PH->bathroom, WC->wc_room, AUTOTALLI->-",
+    "labels: 13 read in 10.9s: MH->bedroom, MH->bedroom, OH->-, VAR->-, VAR->-, MH->bedroom, VH->-, TK->-, K->kitchen, ET->-, PH->bathroom, WC->wc_room, AUTOTALLI->-",
     "reused R1 v2 label output",
     "cross-check vs prior 1: differs"
    ],
@@ -10265,14 +10226,14 @@
    ],
    "missing": [],
    "cost": {
-    "llm_tokens_in": 0,
-    "llm_tokens_out": 0,
-    "gpu_seconds": 0.0,
+    "llm_tokens_in": 5260,
+    "llm_tokens_out": 440,
+    "gpu_seconds": 10.925998449325562,
     "api_calls": 0,
     "api_tokens_in": 0,
     "api_tokens_out": 0,
-    "llm_calls": 0,
-    "wall_seconds": 0.0284
+    "llm_calls": 1,
+    "wall_seconds": 1.5235
    },
    "intent": {
     "task": "count",
@@ -10284,7 +10245,7 @@
     "key": "count:bedroom:drawing"
    }
   },
-  "recorded_at": "2026-11-14 04:29",
+  "recorded_at": "2026-11-14 04:42",
   "api": "http://127.0.0.1:8102",
   "solver": "raster"
  },
@@ -10314,7 +10275,7 @@
     "class=sauna",
     "prior (train mode for sauna) = 1 (hit rate 57%, n=6056)",
     "gate[sauna] = labels_code (train acc {'prior': 0.53, 'labels': 0.7, 'labels_code': 0.72})",
-    "labels (shared with another question): 29 read in 61.1s: RYÖK.->-, OH 14,8->-, KEITTIÖ->kitchen, BH 3,5->-, ET->-, HM 10,0->-, TK->-, VAR.->-, 2,7->-, COL->-, WC->wc_room, VH->-, 03->-, LH 2,7->sauna, D->-, 4->-, 20,1->-, BK->-, 2A->-, 10,3->-, 10,1 3-5->-, LT 15+15->-, IKYK->-, OPU 3->-, 18+14->-, 15+14 LT->-, 20->-, 80->-, MH->bedroom",
+    "labels: 29 read in 61.1s: RYÖK.->-, OH 14,8->-, KEITTIÖ->kitchen, BH 3,5->-, ET->-, HM 10,0->-, TK->-, VAR.->-, 2,7->-, COL->-, WC->wc_room, VH->-, 03->-, LH 2,7->sauna, D->-, 4->-, 20,1->-, BK->-, 2A->-, 10,3->-, 10,1 3-5->-, LT 15+15->-, IKYK->-, OPU 3->-, 18+14->-, 15+14 LT->-, 20->-, 80->-, MH->bedroom",
     "reused R1 v2 label output",
     "tiled re-read (one-shot list truncated): bedroom/balcony labels from the 18 tiled items",
     "cross-check vs prior 1: agrees ✓"
@@ -10325,14 +10286,14 @@
    ],
    "missing": [],
    "cost": {
-    "llm_tokens_in": 0,
-    "llm_tokens_out": 0,
-    "gpu_seconds": 0.0,
+    "llm_tokens_in": 2751,
+    "llm_tokens_out": 3695,
+    "gpu_seconds": 36.0953154964447,
     "api_calls": 0,
     "api_tokens_in": 0,
     "api_tokens_out": 0,
-    "llm_calls": 0,
-    "wall_seconds": 0.0027
+    "llm_calls": 6,
+    "wall_seconds": 0.0736
    },
    "intent": {
     "task": "count",
@@ -10344,7 +10305,7 @@
     "key": "count:sauna:drawing"
    }
   },
-  "recorded_at": "2026-11-14 04:29",
+  "recorded_at": "2026-11-14 04:42",
   "api": "http://127.0.0.1:8102",
   "solver": "raster"
  },
@@ -10495,7 +10456,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 0.2982
+    "wall_seconds": 0.2896
    },
    "intent": {
     "task": "count",
@@ -10507,7 +10468,7 @@
     "key": "count:door:drawing"
    }
   },
-  "recorded_at": "2026-11-14 04:29",
+  "recorded_at": "2026-11-14 04:42",
   "api": "http://127.0.0.1:8102",
   "solver": "raster_cc5k"
  }

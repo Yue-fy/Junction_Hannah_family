@@ -82,6 +82,12 @@ def main() -> None:
     key = lambda r: (r["path"], r["question"], r.get("solver"))  # noqa: E731
     pinned = {key(r): r for r in old if r.get("pinned")}
     out = [pinned.pop(key(r), r) for r in out] + list(pinned.values())
+    # an empty fresh answer (a hosted model rate-limited, a timeout) never replaces an earlier recording that had a value
+    prev = {key(r): r for r in old if r.get("answer", {}).get("value") is not None}
+    for i, r in enumerate(out):
+        if r["answer"].get("value") is None and key(r) in prev:
+            print(f"kept previous (fresh answer empty): {r['path'].split('/')[-1][:40]} {r.get('solver') or ''}")
+            out[i] = prev[key(r)]
     for r in out:
         if r.get("pinned"):
             print(f"kept pinned: {r['path'].split('/')[-1][:40]} {r['question'][:50]} ({r.get('recorded_at')})")

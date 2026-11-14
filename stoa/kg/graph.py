@@ -525,7 +525,9 @@ def _crosscheck(path: str, intent, answer) -> str | None:
         plan = str(Path(path).with_suffix(".pdf")) if "_plan-" in Path(path).stem else None
         st = plan_storey(plan, idx)[0] if plan else None
         guids = _evidence_guids(answer)
-        if task == "count" and target in _TARGET_CLASSES and scope != "model":
+        # only a count over the whole storey/plan compares with the storey's model/plan totals (W5 04:12: "doors of the
+        # room 'KORIDOR (119)'" = 12 got a false ✗ against the storey's 46)
+        if task == "count" and target in _TARGET_CLASSES and scope in (None, "drawing", "storey"):
             classes = _TARGET_CLASSES[target]
             model_classes = ("IfcStair",) if target == "stair" else classes
             if st is None and guids:  # .ifc question: take the storey of the answer's own elements
@@ -591,7 +593,8 @@ def _crosscheck(path: str, intent, answer) -> str | None:
         if ".dxf" not in sib or ".pdf" not in sib:
             return None
         f = _swiss_floor(sib[".pdf"], sib[".dxf"])
-        if task == "count" and target in ("door", "window", "wc", "washbasin", "bathtub", "shower"):
+        if task == "count" and target in ("door", "window", "wc", "washbasin", "bathtub", "shower") and \
+                scope in (None, "drawing"):  # the DXF layer count is the whole floor's, not one apartment's/room's
             key = {"wc": "toilet"}.get(target, target)
             n = f.get("counts_dxf", {}).get(key)
             if n is not None:

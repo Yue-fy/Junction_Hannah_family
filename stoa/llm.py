@@ -870,7 +870,7 @@ class Translation:
     note: str = ""            # for Answer.assumptions: "translated from Polish: '...'"
 
 
-_TR_SYSTEM = (
+_TR_SYSTEM_BASE = (
     "You translate questions about construction drawings and building models into English. Rules: keep every "
     "placeholder such as [[1]] exactly as written, once each (a placeholder in quotes is a name or label: keep it "
     "in quotes); keep apartment, room and grid letters or codes; do not answer the question; do not add, drop or "
@@ -878,6 +878,40 @@ _TR_SYSTEM = (
     "toilet, sink, door, window, net floor area, wall, slab). Reply as JSON {\"lang\": \"<ISO 639-1 code of the "
     "source>\", \"english\": \"<the English question>\"}."
 )
+# + a fixed domain glossary and "never add / drop qualifiers" (F 04:36/04:38: the remaining losses were concept-noun
+# slips, e.g. Polish 'belek' (beams) -> balconies, and one ADDED 'external'). experiments/r2/probes/concept_match.py:
+# translation parses to the same (task, target) as its English base on hardL_open 139/158 vs 129/158 without it,
+# lang4 47 vs 46/48, 'belek' fixed, 0 vs 2 lost placeholders. (Two noun hints, washbasin vs kitchen sink and bathtub
+# vs bathroom, were added after seeing hardL_open misses: F's held-out hardL is the honest check.)
+_TR_SYSTEM = _TR_SYSTEM_BASE + (
+    " Never add a qualifier or condition the source does not state (e.g. external, internal, load-bearing, net, "
+    "gross) and never drop one it states; translate every noun. Translate building nouns with these English terms: "
+    "toilet bowl / WC seat (a fixture), separate WC room (a room), washbasin (a bathroom wash basin, lavabo), kitchen "
+    "sink, shower, bathtub (the tub itself, not the room), sauna, bedroom, bathroom / washroom (a room), kitchen, "
+    "living room, balcony, terrace, storey / floor (a level of the building), apartment, room / space, door, window, "
+    "wall, slab, beam, column, stair, roof, railing.")
+# Source-language hints for building nouns the 8B does not know (S0 04:51: pl 'belek' -> balconies). General domain
+# vocabulary (pl, et, cs, hu, ro, es, sv, fi, de, nl, da/no), not taken from any probe or sealed split. Used by
+# to_english since 05:00: concept match hardL_open 141/158 (v2 without it 139, none 129), lang4 47/48, F's 11
+# pl/ro ifc trigger questions 11/11 in the pipeline (v2: 10/11, 'belek' -> balconies).
+_TR_GLOSSARY = (
+    " Source-language hints: beam = belka/belki/belek (pl), tala (et), trám (cs), gerenda (hu), grindă/grinzi (ro), "
+    "viga (es), balk/balkar (sv), palkki (fi), Balken (de), balk (nl), bjælke/bjelke (da/no); column = słup (pl), "
+    "post/sammas (et), sloup (cs), oszlop (hu), stâlp/stâlpi (ro), columna/pilar (es), pelare (sv), pilari (fi), "
+    "Stütze/Säule (de), kolom (nl), søjle/søyle (da/no); slab = płyta/strop (pl), plaat/vahelagi (et), deska/strop "
+    "(cs), födém/lemez (hu), placă/plăci/planșeu (ro), losa/forjado (es), bjälklag/platta (sv), laatta (fi), "
+    "Decke/Platte (de), vloerplaat (nl), dæk (da); stair = schody (pl), trepp (et), schodiště (cs), lépcső (hu), "
+    "scară/scări (ro), escalera (es), trappa (sv), porras (fi); wall = ściana (pl), sein (et), stěna (cs), fal (hu), "
+    "perete (ro), muro/pared (es), vägg (sv), seinä (fi); balcony = balkon (pl, cs), rõdu (et), erkély (hu), balcon "
+    "(ro), balcón (es), balkong (sv), parveke (fi); washbasin = umywalka (pl), kraanikauss (et), umyvadlo (cs), mosdó "
+    "(hu), lavoar (ro), lavabo (es), handfat (sv); kitchen sink = zlew (pl), valamu (et), dřez (cs), mosogató (hu), "
+    "chiuvetă (ro), fregadero (es), diskbänk (sv); toilet bowl = sedes/miska WC (pl), WC-pott (et), mísa (cs), "
+    "WC-csésze (hu), vas WC (ro), inodoro (es), toalettstol (sv); bathtub = wanna (pl), vann (et), vana (cs), kád "
+    "(hu), cadă/căzi (ro), bañera (es), badkar (sv), kylpyamme (fi); shower = prysznic (pl), dušš (et), sprcha (cs), "
+    "zuhany (hu), duș (ro), ducha (es), dusch (sv); sauna = bastu (sv), szauna (hu); bathroom = łazienka (pl), "
+    "vannituba (et), koupelna (cs), fürdőszoba (hu), baie (ro), baño (es), badrum (sv); bedroom = sypialnia (pl), "
+    "magamistuba (et), ložnice (cs), hálószoba (hu), dormitor (ro), dormitorio (es), sovrum (sv); storey = kondygnacja/"
+    "piętro (pl), korrus (et), podlaží/patro (cs), szint/emelet (hu), nivel/etaj (ro), planta (es), våning (sv).")
 _TR_SCHEMA = {"type": "object", "properties": {"lang": {"type": "string"}, "english": {"type": "string"}},
               "required": ["lang", "english"]}
 _LANG_NAMES = {"pl": "Polish", "et": "Estonian", "es": "Spanish", "cs": "Czech", "hu": "Hungarian", "tr": "Turkish",
@@ -955,7 +989,7 @@ def should_translate(question: str, intent: Any = None) -> bool:
 
 
 def to_english(question: str, *, keep: Sequence[str] = COVERED_LANGS, force: bool = False,
-               backend: str = "local", model: str = "default") -> Translation:
+               backend: str = "local", model: str | None = None) -> Translation:
     """Translate a question into English unless its language is in `keep` (default: the languages our rules cover).
 
     One local-LLM call (~150 tokens in / ~40 out, cost recorded like any chat) for an uncovered language; none
@@ -974,7 +1008,7 @@ def to_english(question: str, *, keep: Sequence[str] = COVERED_LANGS, force: boo
             return _tr_memo[key]
     masked, spans = _protect(question)
     try:
-        r = chat(masked, system=_TR_SYSTEM, backend=backend, model=model, max_tokens=300, temperature=0.0,
+        r = chat(masked, system=_TR_SYSTEM + _TR_GLOSSARY, backend=backend, model=model, max_tokens=300, temperature=0.0,
                  json_schema=_TR_SCHEMA)
         d = extract_json(r.text) or {}
         eng = str(d.get("english", "")).strip()

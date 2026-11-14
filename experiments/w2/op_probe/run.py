@@ -27,7 +27,7 @@ def right(gold, unit, a) -> bool:
 def main():
     rows = [json.loads(l) for l in open(sys.argv[1])]
     kw = dict(a.split("=", 1) for a in sys.argv[2:])
-    s = get_solver("dxf", **kw)
+    s = get_solver(kw.pop("solver", "dxf"), **kw)
     by = defaultdict(lambda: [0, 0, 0])
     for r in rows:
         a = s.solve(r["path"], r["question"])
