@@ -525,3 +525,15 @@ def test_dxf_plan_vs_dxf_question_words():
     q = "Do this floor plan and its DXF file agree on the number of doors?"
     assert D.AGREE_Q.search(q) and D.DXF_Q.search(q)
     assert not D.DXF_Q.search("How many doors are shown on this floor plan?")
+
+
+def test_schedule_answer_echoing_a_question_number():
+    from stoa.solvers.vector.schedule_solver import _echoes_question_number as e
+
+    assert e(0.1, "What is the net floor area of the room 'Hall (0.1)' on '0'?")
+    assert e("115", "What is the occupant load of room 115?")
+    assert not e(27.3, "What is the occupant load of the community room (room 115)?")
+    assert not e(2, "How many units are on the 2nd floor?")
+    assert not e(50, "Is the room larger than 50 m²?")
+    assert not e(120, "What is the area of unit U120 in square feet?")
+    assert not e("22' - 5\"", "What is the elevation of the 3rd floor level?")
