@@ -27,7 +27,7 @@ import os
 import random
 from pathlib import Path
 
-from stoa.data import Question, concept_map, drawing_group, load_questions, make_qid, template_of
+from stoa.data import Question, concept_map, dataset_rel, drawing_group, load_questions, make_qid, template_of
 
 SEED = 20261113
 SPLITS = ("smoke", "dev", "test", "train")
@@ -279,6 +279,7 @@ def load_split(name: str) -> list[Question]:
             # written by hand, e.g. Stoa's example questions. `answer` and `qid` are optional there: no answer =
             # unscored (predictions and evidence only), qid defaults to a hash of path + question.
             if "question" in r and "path" in r:
+                r["path"] = dataset_rel(r["path"])  # hand-written files may use absolute paths
                 q = Question(r.get("qid") or make_qid(r["path"], r["question"]), r["path"], r["question"],
                              r.get("answer"), r.get("unit"), r.get("type", "other"))
                 if r.get("meta"):

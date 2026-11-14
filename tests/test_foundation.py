@@ -137,3 +137,16 @@ def test_adhoc_split_file_without_answers(tmp_path):
     assert qs[1].answer is None and qs[2].type == "other"
     assert score("count", None, None, 4, "count") is None
     assert score("count", 3, None, 3, "count") is True
+
+
+def test_source_of_absolute_paths(tmp_path):
+    """R1 03:44: an absolute path used to give source '/' (no gate, no LoRA, no CC5K)."""
+    from stoa.data import data_root, dataset_rel, source_of
+    rel = "data/cubicasa5k/high_quality_architectural-6652.png"
+    assert source_of(rel) == "cubicasa5k"
+    assert source_of(str(data_root() / rel)) == "cubicasa5k"
+    assert dataset_rel(str(data_root() / rel)) == rel
+    assert source_of("/mnt/copy/junction-dataset/data/swiss_dwellings/x.png") == "swiss_dwellings"
+    assert dataset_rel("/mnt/copy/junction-dataset/data/swiss_dwellings/x.png") == "data/swiss_dwellings/x.png"
+    assert source_of(str(tmp_path / "plan.png")) == "unknown"
+    assert dataset_rel(rel) == rel
