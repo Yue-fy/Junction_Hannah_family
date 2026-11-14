@@ -68,6 +68,27 @@ LoRA 22%, detector 36%, max 26%, min 32%, rounded mean 24%, oracle-of-two 48%; a
 combination of the two beats the detector alone, so the next window gain needs a better counter, not an ensemble.
 Doors: LoRA 31–44%, detector 22–67% (n ≤ 45), no stable winner (R1 saw the sign flip across sets too).
 
+### NEGATIVE: the detector's window undercount is not a resolution problem (03:45)
+Leak-free cc5k_heldout (340 drawings outside CC5K's train list; fit/check halves by path hash; CPU; R1's model code used
+read-only; `experiments/F/cc5k_scale_probe.py`, `cc5k_scale_score.py`, data in `$JUNCTION_SHARED/artifacts/F/cc5k_scale/`).
+The miss grows with window density (long side / √gold < 200 px: 6% exact, 45% of windows missed; ≥ 400 px: 46% exact,
+no bias), so two fixes were tried. Splitting long boxes (by median box length or wall thickness): never beats raw.
+Upscaling ×1.5 / ×2 × morphology kernel 0/3/5/7: ×1.5 shrinks the windows bias (−2.8 → −2.1 per drawing) but exact
+accuracy does not move (FROZEN 28.3 / 31.4 fit/check; best ×1.5 k=3 33.3 / 28.6); ×2 is worse on every symbol (check:
+windows 18.6, WC 41.1, sinks 38.1). R1's FROZEN settings stand; the missed windows are styles, not pixels.
+
+### `hard` on the test-1 code (run 20261114-031744-pipeline-hard-bb4a), by kind
+| kind / source | n | acc | mean conf | share of wrong |
+|---|---:|---:|---:|---:|
+| composition / cubicasa | 83 | 38.6 | 0.27 | 48% |
+| paraphrase / cubicasa | 100 | 70.0 | 0.45 | 28% |
+| translation / cubicasa | 100 | 76.0 | 0.73 | 22% |
+| swiss (all kinds) | 270 | 99.3 | 0.96 | 2% |
+| ifc (all kinds) | 135 | 100 | 0.96 | 0% |
+
+Paraphrases and translations generalise at the dev template level (73.4%); compositions are bounded by the atomic
+counters (two counts both right). The paraphrase confidence (0.45 at 70% right) is the 0.5 unseen-wording cap (told W4).
+
 ## Earlier (01:45): night fdb0ecc: where the points are now, LoRA routing worth +8, held-out mechanisms
 
 ### Dev (S0's run 20261114-012630-pipeline-dev-878d): weighted 74.0%, micro 84.0%
