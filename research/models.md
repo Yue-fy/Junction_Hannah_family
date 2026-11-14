@@ -164,12 +164,26 @@ a 4× bigger base VLM on our counting. :8001 stays Qwen3-VL-8B + cc-v2/cc-v3. EX
   hardL_open neutral (89.7 vs 89.4, the 3 diffs are rows whose lang_guess did not change = batching noise).
 
 ## Noon playbook (model side)
+0. One command (09:45): put Stoa's examples in eval-split format (path, question, answer or null, type, meta.kind) and run
+   `experiments/r2/noon_models.sh EXAMPLES.jsonl [NEMOTRON_LIMIT=40]` → pipeline vs plain local VLM vs hosted Nemotron (1 worker,
+   first N), numbers exact/2%, text by the local judge, one per-kind table + cost per run (`compare_runs.py --by kind`).
+   Tested on a 12-row mix (log $JUNCTION_SHARED/logs/R2/noon_models.log). For an unknown-folder raster, `experiments/r2/style/style.py
+   FILE` says which reader family fits (cubicasa5k / swiss_dwellings / ifc_models / scan, p≥0.8 → 96.7% right).
 1. New question kinds on rasters/scans: first run `vlm_direct` (8B base, conf=logprob) and `vlm_lora` on Stoa's examples; if the LoRA
    answers a kind it was never trained on, its confidence is NOT calibrated (F 01:28) — keep W4's unseen-wording cap.
 2. Hosted Nemotron (`backend=nvidia`, 1 worker, ~4–8 s/Q) is the only model clearly different from ours; use it for visible demo
    steps (Nemotron prize) and as a second opinion on unsure answers, never bulk.
 3. To try another open model quickly: `experiments/r2/hold_8002.sh <preset> <name> <minutes>` (GPU lock, private :8002), then
    `experiments/r2/eval_backend.py --agent local2 -- --solver pipeline --split <file>` or `vlm_direct -k backend=local2`.
+
+## Drawing style from image content (09:30–09:40, `experiments/r2/style/`)
+- `guess_style(path)` → (cubicasa5k | swiss_dwellings | ifc_models | scan, p): numpy softmax on ~110 cheap features (grey/sat/hue
+  histograms, paper tone and texture, edge density and direction, long dark runs, 8×8 thumbnail), image flattened on white first (no
+  file-mode / pixel-size cues). Trained on train groups + one upload-like variant each (grayscale / JPEG q40 / crop / downscale ÷3).
+- Held-out groups (site / model / building): 92.4%; variants 90–91% (without the augmentation, grayscale or JPEG Swiss plans were 0/308);
+  p≥0.8 covers 85% at 96.7%. Residue = CubiCasa ↔ historical scans (CubiCasa contains scanned plans; Wikimedia has CubiCasa-like plans).
+- End to end, 40 dev CubiCasa count Qs as unknown-folder files vs filed under the guess: 30 vs 29/40, evidence boxes 0 → 17/40,
+  $0.203 → $0.036/1k, ECE 0.100 → 0.044. Not wired (W5 upload path / W4 route for source 'unknown', after the freeze).
 
 ## Candidates surveyed (23:35–23:50, HF hub listing; vLLM 0.31 registry checked)
 | model | size | vLLM | why interesting | verdict |
