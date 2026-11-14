@@ -392,6 +392,13 @@ class Agent:
                 if n_bad >= 3:
                     break
             msgs.append({"role": "user", "content": f"RESULT of {tool}: {obs[:3600]}"})
+            if not over and results and any(c >= 0 for _, c, _, _ in results):
+                from stoa.router import budget
+
+                sk = budget.skip("further agent steps")
+                if sk:  # D20-2: the whole question's LLM budget (every solver + this agent) is spent
+                    over = True
+                    trace.append(sk + " -> answering now")
             if not over and (cost.llm_calls >= BUDGET_CALLS or cost.llm_tokens_in >= BUDGET_TOKENS) and \
                     max((c for _, c, _, _ in results if c >= 0), default=0.0) < BUDGET_CONF:
                 over = True
