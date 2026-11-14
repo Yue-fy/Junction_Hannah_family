@@ -121,6 +121,14 @@ ifc flooring-waste 4/8, swiss occupancy 8/11 (**10 in test 1**), cubicasa per-sa
   for "5.908 days → 6") and the fraction guard caps 0.3. → W4: never un-round when unit == count.
 - Flooring waste (4, Italian): language guessed 'fr', the waste percentage read as a share → agent, 0.3.
 
+**7. Sealed hard2r on test-2 code: 63.0 → 80.4 (aggregates).** Run 20261114-081509-pipeline-hard2r-dd4e vs -035900-…-6f03.
+Scored (189): left = cubicasa wc+showers 12/25 and wet-rooms 15/25 (perception, low conf), swiss rooms-above-threshold
+7/15 (4 in test 1; "how many of rooms … larger than N m²" parsed as an AREA question → dxf area differences at ≤ 0.3 →
+agent), ifc room-share-% 4/8 (Estonian: "translation lost a name or number; used the original" → vlm_direct guess at
+0.27). Gains since test 1: swiss apartment-ratio 8 → 15, doors-per-apartment 9 → 15, ifc 14 → 30 of 36. Text (67,
+judged): 60 right; two-wc-yes-no has 5 wrong at ≥ 0.8. Underconfidence (S0): 42% of answers at ≥ 0.8, 98.7% right —
+same picture as hardL §2, so "both readings" applies here too.
+
 ## Earlier (04:55, cycle 62): language is the biggest held-out gap, and a translate-first front end closes most of it
 
 ### 1. hardL: the same known-gold questions in 8 languages nobody tuned on (stoa/eval/hardl.py)
