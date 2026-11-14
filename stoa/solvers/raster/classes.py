@@ -83,11 +83,37 @@ _MEASURE = re.compile(r"\b(area|m²|m2|ft²|sq\.? ?ft|square|volume|m³|length|l
                       r"pinta-ala|surface|superficie|meters|metres)\b", re.I)
 
 
+# count words that tolerate one typo ('Kunika monta', 'How mnay'); not 'count'/'number'/'quanto'/'viel' (county,
+# room numbers, 'quanto costa', 'wie viel kostet' are not counts). 'many' only right after 'how' (not the month 'May').
+_FUZZY_CUES = ("monta", "montako", "kuinka", "anzahl", "combien", "många", "hoeveel", "cuántos", "cuántas")
+
+
+def _osa(a: str, b: str) -> int:
+    """Optimal-string-alignment edit distance (one transposition = 1)."""
+    d = [[i + j if i * j == 0 else 0 for j in range(len(b) + 1)] for i in range(len(a) + 1)]
+    for i in range(1, len(a) + 1):
+        for j in range(1, len(b) + 1):
+            d[i][j] = min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] != b[j - 1]))
+            if i > 1 and j > 1 and a[i - 1] == b[j - 2] and a[i - 2] == b[j - 1]:
+                d[i][j] = min(d[i][j], d[i - 2][j - 2] + 1)
+    return d[-1][-1]
+
+
+def fuzzy_count_cue(question: str) -> bool:
+    toks = re.findall(r"\w+", question.lower())
+    for k, t in enumerate(toks):
+        if len(t) >= 4 and any(abs(len(t) - len(c)) <= 1 and _osa(t, c) <= 1 for c in _FUZZY_CUES):
+            return True
+        if k and len(t) >= 3 and _osa(t, "many") <= 1 and _osa(toks[k - 1], "how") <= 1:
+            return True
+    return False
+
+
 def question_op(question: str) -> tuple[str, list[str]]:
     """-> (op, classes): op is "single", "sum", "diff" (first minus second), "exists" (yes/no), or "none"
     (not a count/yes-no question about our object classes, e.g. an area question that names a kitchen)."""
     is_yesno = bool(_YESNO.search(question))
-    if not is_yesno and (not _COUNT_CUE.search(question) or _MEASURE.search(question)):
+    if not is_yesno and (not (_COUNT_CUE.search(question) or fuzzy_count_cue(question)) or _MEASURE.search(question)):
         return "none", []
     m = _MORE.search(question)
     if m:

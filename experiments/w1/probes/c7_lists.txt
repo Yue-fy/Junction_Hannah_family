@@ -1,0 +1,80 @@
+# c7 (09:25) list / threshold answers (Q red-team v19 + own variants), gold written BEFORE any fix.
+# Gold = the model's own per-room areas / per-storey counts (ifc index), non-test models only.
+# Esplanades: rooms 1..5.korrus = 50/60/60/60/55, doors 46/42/42/42/39, windows 55/60/60/60/60; MAGAMISTUBA on 2..5.korrus
+PATH bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf
+# gold 101 105 119 114
+Which rooms on '1.korrus' are larger than 50 m²?
+Millised ruumid korrusel „1.korrus“ on suuremad kui 50 m²?
+Welche Räume im Geschoss '1.korrus' sind größer als 50 m²?
+# gold 118 120 6-2
+List the rooms on '1.korrus' with a net floor area under 4 m².
+# gold 101 105 119
+What are the three largest rooms on '1.korrus'?
+# gold 110 6-1 116
+Name the rooms on '1.korrus' whose net floor area is between 20 and 25 m².
+# gold 6-1 only
+Which ELUTUBA+KÖÖK rooms on '1.korrus' are smaller than 25 m²?
+# gold 9
+How many ELUTUBA+KÖÖK rooms on '1.korrus' are larger than 25 m²?
+# gold 52.1 (9 TUALETTRUUM > 5 m²)
+What is the total area of the TUALETTRUUM rooms on '1.korrus' that are larger than 5 m²?
+# gold 2.korrus 3.korrus 4.korrus 5.korrus
+On which floors is there a room called MAGAMISTUBA?
+# gold 1.korrus
+On which floor is the room SERVER?
+# gold 2.korrus 3.korrus 4.korrus
+Which floors have more than 55 rooms?
+Welche Geschosse haben mehr als 55 Räume?
+# gold 5.korrus
+Which floors have fewer than 42 doors?
+# gold 2..5.korrus
+Which floors have more than 55 windows?
+# gold 4 / 3 / 3
+How many rooms on '1.korrus' are larger than 50 m²?
+How many rooms on '1.korrus' have a net floor area under 4 m²?
+How many rooms on '1.korrus' are between 20 and 25 m²?
+# gold 3 (2.korrus 3.korrus 4.korrus)
+How many floors have more than 55 rooms?
+PATH bimspeed-warmond_ar_plan-03-1-level.pdf
+# gold three Living 25.27 (414B-7-001-003, 414B-19-001-002, 414B-1-001-002)
+List the living rooms on '1. Level' that are smaller than 30 m².
+# gold 4 (10.92, 10.86 x3)
+How many bedrooms on '1. Level' are larger than 10.8 m²?
+# gold 414B-3-002-001 414B-9-002-004 414B-21-002-004 414B-15-002-010
+Which bedrooms on '2. Level' are smaller than 10.75 m²?
+# gold 1. Level, 2. Level, 3. Level
+Which floors have more than 50 rooms?
+PATH rwth-digitalhub_digitalhub-fm-arc-v2_plan-02-e00-okrd.pdf
+# gold Gruppenbüro 2 3 4 5 (37.18)
+Welche Gruppenbüros im Geschoss 'E00_OKRD' sind größer als 37 m²?
+# gold WC Damen West - EG (14.20), WC Damen Ost - EG (14.13)
+Which WCs on 'E00_OKRD' are larger than 14 m²?
+# gold B01_OKRD
+Which floors have fewer than 20 rooms?
+PATH kit-smiley-west_ac-20-smiley-west-10-bldg_plan-01-kg.pdf
+# gold 10 (Kellerraum-xx-2, 4.58)
+How many Kellerräume in 'KG' are smaller than 10 m²?
+# gold EG 1.OG 2.OG
+Which floors have more than 45 doors?
+# --- Q v17 open items + location / sheet wordings (gold from the model + the plan SVG GUID tags), written 09:40
+PATH bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf
+# gold no, 52 of 55 drawn
+Does this drawing show every window that the model has on '1.korrus'?
+# gold yes (46 of 46)
+Are all the doors of the model on '1.korrus' drawn on this plan?
+# gold plan-01 / 1.korrus
+Which sheet shows the server room?
+# gold plan-03 / 3.korrus
+On which drawing is the room 'MAGAMISTUBA (41-2)'?
+# gold 1.korrus
+On which storey is the space 'LIFT'?
+# gold 1..5.korrus (ELUTUBA+KÖÖK)
+On which floor is the kitchen?
+# gold 1.korrus only (870.3 m²; 2..5.korrus 857-860)
+Which floors have a total floor area of more than 860 m²?
+PATH rwth-digitalhub_digitalhub-fm-arc-v2_plan-02-e00-okrd.pdf
+# gold E00_OKRD
+Which level is the 'Cafeteria' on?
+In welchem Geschoss liegt die Cafeteria?
+# gold E00_OKRD, E01_OKRD
+On which floors are there WCs?

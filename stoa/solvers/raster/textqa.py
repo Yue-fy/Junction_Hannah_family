@@ -21,7 +21,7 @@ from stoa.solvers.raster import scalebar as SB
 from stoa.solvers.raster import textlayer as T
 
 # a size question (length / width / height / area / distance) in the languages of the dataset
-_SIZE = re.compile(r"\b(length|long|width|wide|height|high|tall|area|size|dimensions?|distance|span|depth|deep|"
+_SIZE = re.compile(r"\b(length|long|width|wide|height|high|tall|areas?|size|dimensions?|distance|span|depth|deep|"
                    r"perimeter|how big|square (?:feet|foot|meters?|metres?)|sq\.? ?ft|m²|m2|ft²|pituus|pitkä|leveys|"
                    r"korkeus|pinta-ala|länge|lang|breite|breit|höhe|hoch|fläche|longueur|largeur|hauteur|surface|"
                    r"superficie|lunghezza|larghezza|altezza|längd|lång|bredd|höjd|yta)\b", re.I)
@@ -222,7 +222,7 @@ _AGG_Q = re.compile(r"\b(total|combined|sum|together|altogether|in all|both|all|
 # VLM-box measurements: Swiss PNG rooms (experiments/w3/measure_eval.py, 22 Qs) 0 within 2%, 5 within 20%, median
 # error 47%: an estimate whose box a reader can check, not a measurement
 MEASURED_CONF = 0.05
-_AREA_Q = re.compile(r"\b(area|floor space|square (?:feet|foot|meters?|metres?)|sq\.? ?ft|m²|m2|ft²|pinta-ala|fläche|"
+_AREA_Q = re.compile(r"\b(areas?|floor space|square (?:feet|foot|meters?|metres?)|sq\.? ?ft|m²|m2|ft²|pinta-ala|fläche|"
                      r"flache|surface|superficie|yta|area)\b", re.I)
 
 
