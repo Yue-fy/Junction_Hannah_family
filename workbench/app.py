@@ -82,6 +82,7 @@ def view(path: str = Query(...), page: int = 0):
         _bad(e)
     return {"path": path, "page": page, "n_pages": meta["n_pages"], "w": meta["w"], "h": meta["h"],
             "img": f"api/img?path={catalog._q(path)}&page={page}", "name": catalog.human_name(path),
+            "kind": meta["kind"], "zoom": meta.get("zoom"),
             "credit": catalog.credit_line(path), "boxes": []}
 
 

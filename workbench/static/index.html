@@ -90,6 +90,15 @@
           <button id="ask-mark" class="ghost toggle">✎ Mark on drawing</button>
           <button id="ask-clear" class="ghost">Clear my marks</button>
         </div>
+        <div class="measure-bar">
+          <b>Measure:</b>
+          <button id="m-scale" class="ghost toggle" title="Click both ends of a known dimension (scale bar, a dimension line)">📏 Set scale (2 clicks)</button>
+          <button id="m-printed" class="ghost" title="Only for drawings printed to scale (e.g. 'Echelle 1:200')" hidden>Printed scale 1:N</button>
+          <button id="m-length" class="ghost toggle" title="Click points along a line; Esc to restart">Length</button>
+          <button id="m-area" class="ghost toggle" title="Click the corners; click the first corner again to close">Area</button>
+          <span id="m-out" class="mout">Set the scale first.</span>
+          <button id="m-use" class="ghost" hidden>→ add to “how I worked it out”</button>
+        </div>
         <div id="ask-viewer" class="viewer"></div>
         <div id="ask-credit" class="credit"></div>
       </div>

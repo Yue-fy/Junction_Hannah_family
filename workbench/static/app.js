@@ -73,8 +73,17 @@ class Viewer {
         this.tx = drag.tx + (e.clientX - drag.x); this.ty = drag.ty + (e.clientY - drag.y); this.apply();
       }
     });
+    el.addEventListener("pointermove", (e) => {
+      if (drag || !this.onHover) return;
+      const r = el.getBoundingClientRect();
+      this.onHover(this.toImg(e.clientX - r.left, e.clientY - r.top));
+    });
     const end = (e) => {
       if (!drag) return;
+      if (!drag.mark && this.onClick && Math.hypot(e.clientX - drag.x, e.clientY - drag.y) < 5) {
+        const r = el.getBoundingClientRect();
+        this.onClick(this.toImg(e.clientX - r.left, e.clientY - r.top), e);
+      }
       if (drag.mark) {
         const r = el.getBoundingClientRect();
         const p = this.toImg(e.clientX - r.left, e.clientY - r.top);
@@ -96,6 +105,8 @@ class Viewer {
   }
   fit() {
     const W = this.el.clientWidth, H = this.el.clientHeight;
+    if (!W || !H) { this.needFit = true; return; }  // hidden tab: fit when shown
+    this.needFit = false;
     this.s = this.minS = Math.min(W / this.w, H / this.h) * 0.97;
     this.tx = (W - this.w * this.s) / 2; this.ty = (H - this.h * this.s) / 2; this.apply();
   }
@@ -151,16 +162,18 @@ class Viewer {
       t.setAttribute("class", "ev-lbl"); t.setAttribute("x", b[0]); t.setAttribute("y", b[1]); t.textContent = n;
       this.svg.appendChild(t);
     });
-    this.drawMarks(); this._labels();
+    this.drawMarks(); this.onDraw && this.onDraw(this.svg); this._labels();
   }
   drawMarks() {
     $$(".mine-box", this.svg).forEach((r) => r.remove());
     this.marks.forEach((b) => this._rect(b, "mine-box"));
   }
   _labels() {  // keep labels and point markers a constant size on screen
+    if (!(this.s > 0) || !isFinite(this.s)) return;
     const k = 1 / this.s;
     $$("text.ev-lbl", this.svg).forEach((t) => { t.setAttribute("font-size", 15 * k); t.setAttribute("dy", -4 * k); });
     $$("circle.ev-pt", this.svg).forEach((c) => c.setAttribute("r", 7 * k));
+    this.onZoom && this.onZoom(k);
   }
   setMarking(on) { this.marking = on; this.el.classList.toggle("marking", on); }
 }
@@ -368,6 +381,7 @@ const asker = {
     pg.innerHTML = v.n_pages > 1 ? `Page <select id="ask-page">${Array.from({ length: v.n_pages }, (_, i) => `<option value="${i}" ${i === page ? "selected" : ""}>${i + 1}</option>`).join("")}</select> of ${v.n_pages}` : "";
     if (v.n_pages > 1) $("#ask-page").addEventListener("change", (e) => this.open(this.path, +e.target.value));
     await this.viewer.load(v, []);
+    measure.reset(v);
   },
   async ask() {
     const question = $("#q-text").value.trim();
@@ -437,12 +451,153 @@ $("#ask-change").addEventListener("click", () => { $("#asker").hidden = true; $(
 $("#q-ask").addEventListener("click", () => asker.ask());
 $("#q-save").addEventListener("click", () => asker.save());
 $("#ask-mark").addEventListener("click", (e) => {
-  const on = !asker.viewer.marking; asker.viewer.setMarking(on); e.target.classList.toggle("on", on);
+  const on = !asker.viewer.marking;
+  if (on && measure.mode) measure.setMode(measure.mode); asker.viewer.setMarking(on); e.target.classList.toggle("on", on);
   e.target.textContent = on ? "✎ Marking: drag a box (click to stop)" : "✎ Mark on drawing";
 });
 const DEFAULT_UNIT = { count: "count", area: "m2", length: "m", volume: "m3", ratio: "%", text: "" };
 $("#q-type").addEventListener("change", (e) => { $("#q-unit").value = DEFAULT_UNIT[e.target.value] ?? ""; });
 $("#ask-clear").addEventListener("click", () => { asker.viewer.marks = []; asker.viewer.drawMarks(); });
+
+// Measuring tool (tab 2): scale from two clicks (or the printed 1:N scale of a vector PDF), then lengths/areas
+const UNIT_RE = /^\s*([0-9]+(?:[.,][0-9]+)?)\s*(mm|cm|m|km|ft|feet|foot|in|inch|inches|'|")?\s*$/i;
+const measure = {
+  v: asker.viewer, mode: null, pts: [], hov: null, closed: false, scale: null, view: null,
+  key() { return this.view ? `wb-scale|${this.view.path}|${this.view.page}` : ""; },
+  reset(view) {
+    this.view = view; this.mode = null; this.pts = []; this.closed = false; this.hov = null; this.scale = null;
+    try { const s = localStorage.getItem(this.key()); if (s) this.scale = JSON.parse(s); } catch {}
+    $("#m-printed").hidden = view.kind !== "vector";
+    this.buttons(); this.render();
+  },
+  setMode(m) {
+    if (this.v.marking) $("#ask-mark").click();
+    this.mode = this.mode === m ? null : m; this.pts = []; this.closed = false; this.hov = null;
+    if ((m === "length" || m === "area") && !this.scale && this.mode) {
+      this.mode = "scale";
+    }
+    this.buttons(); this.render();
+  },
+  buttons() {
+    $("#m-scale").classList.toggle("on", this.mode === "scale");
+    $("#m-length").classList.toggle("on", this.mode === "length");
+    $("#m-area").classList.toggle("on", this.mode === "area");
+    this.v.el.classList.toggle("measuring", !!this.mode);
+  },
+  click(p) {
+    if (!this.mode) return;
+    if (this.mode === "scale") {
+      this.pts.push(p);
+      if (this.pts.length === 2) {
+        const dpx = Math.hypot(this.pts[1].x - this.pts[0].x, this.pts[1].y - this.pts[0].y);
+        const ans = prompt("How long is this in reality? (e.g. 5 m, 1200 mm, 10 ft)", "1 m");
+        const m = ans && ans.match(UNIT_RE);
+        if (m && dpx > 0) {
+          const L = parseFloat(m[1].replace(",", ".")), u = this.normUnit(m[2] || "m");
+          this.setScale({ k: L / dpx, unit: u, desc: `${L} ${u} over ${dpx.toFixed(0)} px (two clicks)` });
+        } else if (ans !== null) alert("Please write a number and a unit, e.g. 5 m");
+        this.mode = null; this.pts = [];
+      }
+    } else if (this.mode === "length") {
+      this.pts.push(p);
+    } else if (this.mode === "area") {
+      if (this.closed) { this.pts = []; this.closed = false; }
+      const f = this.pts[0];
+      if (this.pts.length >= 3 && Math.hypot(p.x - f.x, p.y - f.y) * this.v.s < 12) this.closed = true;
+      else this.pts.push(p);
+    }
+    this.buttons(); this.render();
+  },
+  normUnit(u) {
+    u = u.toLowerCase();
+    return { feet: "ft", foot: "ft", "'": "ft", inch: "in", inches: "in", '"': "in" }[u] || u;
+  },
+  setScale(sc) {
+    this.scale = sc;
+    try { localStorage.setItem(this.key(), JSON.stringify(sc)); } catch {}
+  },
+  printed() {
+    const n = prompt("Printed scale 1 : N — what is N? (only valid if the PDF is to scale, e.g. 'Echelle 1:200' on an A3 sheet)", "100");
+    const N = n && parseFloat(n.replace(",", "."));
+    if (!N || !this.view || !this.view.zoom) return;
+    // 1 PDF point = 0.3527778 mm on paper; the rendered image has `zoom` px per point
+    this.setScale({ k: (0.3527778e-3 * N) / this.view.zoom, unit: "m", desc: `printed scale 1:${N} (PDF assumed to scale)` });
+    this.buttons(); this.render();
+  },
+  value() {
+    if (!this.scale || this.pts.length < 2) return null;
+    const pts = this.hov && !this.closed && this.mode ? [...this.pts, this.hov] : this.pts;
+    const k = this.scale.k, u = this.scale.unit;
+    if (this.mode === "length" || (!this.mode && !this.closed && this.lastMode === "length")) {
+      let d = 0;
+      for (let i = 1; i < pts.length; i++) d += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+      return { kind: "length", v: d * k, unit: u, n: pts.length };
+    }
+    if (this.mode === "area" && pts.length >= 3) {
+      let a = 0;
+      for (let i = 0; i < pts.length; i++) { const p = pts[i], q = pts[(i + 1) % pts.length]; a += p.x * q.y - q.x * p.y; }
+      return { kind: "area", v: (Math.abs(a) / 2) * k * k, unit: `${u}2`, n: pts.length };
+    }
+    return null;
+  },
+  fmt(x) { return x >= 100 ? x.toFixed(1) : x >= 10 ? x.toFixed(2) : x.toFixed(3); },
+  render(svg = this.v.svg) {
+    $$(".measure", svg).forEach((g) => g.remove());
+    const g = document.createElementNS(SVGNS, "g"); g.setAttribute("class", "measure");
+    const pts = this.hov && !this.closed && this.mode && this.pts.length ? [...this.pts, this.hov] : this.pts;
+    if (pts.length) {
+      const el = document.createElementNS(SVGNS, this.mode === "area" && (this.closed || pts.length >= 3) ? "polygon" : "polyline");
+      el.setAttribute("points", pts.map((p) => `${p.x},${p.y}`).join(" "));
+      el.setAttribute("class", this.mode === "scale" ? "m-scale" : this.mode === "area" ? "m-poly" : "m-line");
+      g.appendChild(el);
+      this.pts.forEach((p) => { const c = document.createElementNS(SVGNS, "circle"); c.setAttribute("cx", p.x); c.setAttribute("cy", p.y); c.setAttribute("class", "m-pt"); g.appendChild(c); });
+    }
+    const val = this.value();
+    if (val && pts.length) {
+      const last = pts[pts.length - 1];
+      const tx = document.createElementNS(SVGNS, "text"); tx.setAttribute("class", "m-lbl");
+      tx.setAttribute("x", last.x); tx.setAttribute("y", last.y); tx.textContent = `${this.fmt(val.v)} ${val.unit}`;
+      g.appendChild(tx);
+    }
+    svg.appendChild(g); this.zoom(1 / this.v.s);
+    const out = $("#m-out");
+    const sc = this.scale ? `scale: ${esc(this.scale.desc)}` : "no scale yet";
+    if (this.mode === "scale") out.innerHTML = `Click both ends of a known dimension (${this.pts.length}/2). <small>${sc}</small>`;
+    else if (val) out.innerHTML = `<b>${val.kind === "area" ? "Area" : "Length"}: ${this.fmt(val.v)} ${val.unit}</b> <small>(${val.n} points; ${sc})</small>`;
+    else if (this.mode === "length") out.innerHTML = `Click points along the line. <small>${sc}</small>`;
+    else if (this.mode === "area") out.innerHTML = `Click the corners; click the first corner again to close. <small>${sc}</small>`;
+    else out.innerHTML = this.scale ? `<small>${sc}</small>` : "Set the scale first.";
+    this.last = val && (this.closed || this.mode === "length") ? val : null;
+    $("#m-use").hidden = !this.last;
+  },
+  zoom(k) {
+    $$(".measure circle", this.v.svg).forEach((c) => c.setAttribute("r", 5 * k));
+    $$(".measure text", this.v.svg).forEach((t) => { t.setAttribute("font-size", 16 * k); t.setAttribute("dx", 8 * k); t.setAttribute("dy", -8 * k); });
+  },
+  use() {
+    this.hov = null;
+    const val = this.value();
+    if (!val) return;
+    const line = `Measured ${val.kind}: ${this.fmt(val.v)} ${val.unit} (${val.n} points; ${this.scale.desc}).`;
+    const m = $("#q-method"); m.value = (m.value.trim() ? m.value.trim() + "\n" : "") + line;
+    if (!$("#q-answer").value.trim()) { $("#q-answer").value = this.fmt(val.v); $("#q-unit").value = val.unit; $("#q-type").value = val.kind; }
+    flash("Added ✓");
+  },
+};
+asker.viewer.onClick = (p) => measure.click(p);
+asker.viewer.onHover = (p) => { if (measure.mode && measure.mode !== "scale" && measure.pts.length && !measure.closed) { measure.hov = p; measure.render(); } };
+asker.viewer.onDraw = (svg) => measure.render(svg);
+asker.viewer.onZoom = (k) => measure.zoom(k);
+$("#m-scale").addEventListener("click", () => measure.setMode("scale"));
+$("#m-length").addEventListener("click", () => measure.setMode("length"));
+$("#m-area").addEventListener("click", () => measure.setMode("area"));
+$("#m-printed").addEventListener("click", () => measure.printed());
+$("#m-use").addEventListener("click", () => measure.use());
+document.addEventListener("keydown", (e) => {
+  if ($("#tab-ask").hidden || e.target.matches("textarea, input, select")) return;
+  if (e.key === "Escape" && measure.mode) { measure.pts = []; measure.closed = false; measure.hov = null; measure.render(); }
+  if (e.key === "Enter" && measure.mode === "area" && measure.pts.length >= 3) { measure.closed = true; measure.render(); }
+});
 
 // ---------------------------------------------------------------------------------------------------------
 // Tab 3: rules
