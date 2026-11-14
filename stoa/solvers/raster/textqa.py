@@ -86,8 +86,9 @@ def answer(path: str, question: str, image_path: str | None = None, backend: str
         value = int(v) if v.is_integer() and (unit in (None, "count")) else v
     ev = [Evidence(file=image_path or path, page=0, bbox=[round(x, 1) for x in i.box], bbox_space="image_px",
                    note=f"text '{i.text[:60]}'") for i in cited[:6]]
-    # Confidence: a prior guess, not yet calibrated (experiments/w3/textlayer_eval.py, scan probes)
-    conf = 0.7 if (cited and in_cited) else 0.5 if cited else 0.3
+    # Confidence from the 80-question scan probe (artifacts/W3/scan_text.jsonl, run 031842-346a; HABS + Finna, judged):
+    # cited lines 54/72 right (75%; HABS alone 90%), image-only 1/2 -> cited 0.75, image-only 0.3
+    conf = 0.75 if cited else 0.3
     missing = [] if cited else ["the answer is not printed as text: an image-only reading"]
     assumptions = [a for a in [str(d.get("assumptions", "")).strip()] if a and a.lower() not in ("none", "n/a")]
     trace.append(f"answer '{val}' from text lines {[k for k in d.get('lines', [])][:8]}"
