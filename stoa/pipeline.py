@@ -126,6 +126,35 @@ def _echoes_question(value, question: str) -> bool:
                for t in re.findall(r"(?<![\w.])\d+(?:[.,]\d+)?(?![\w.])", q))
 
 
+# Swiss/Liechtenstein thousands apostrophe: "1'200 CHF", "1’250'000" (Q 05:08: the agent read 1'200 as 200 -> 7,200
+# instead of 43,200, and an apostrophe opens a fake quoted span for every quote-masking regex downstream)
+_APOS_THOUSANDS = re.compile(r"(?<=\d)['\u2019\u02bc](?=\d{3}(?!\d))")
+
+
+# Next to a currency (Q 05:08: ifc read "1,200 euros" as 1.2, the agent "1'200 CHF" as 200), a separator followed by
+# exactly three digits is a thousands separator in every locale we see: "1,200 €", "1.200 €", "€1,500", "1 200 euroa",
+# "1.250,50 CHF". Elsewhere "1,250 m" may be a German decimal (1.25 m), so it is left to the solvers.
+_CUR = (r"(?:€|\$|£|(?:EUR|CHF|USD|GBP|SEK|NOK|DKK|kr|euros?|euroa?|eurot|euron|Euro|Franken|francs?|franchi|"
+        r"kronor|kroner|kruunua|dollars?)\b)")
+_GROUPED = (r"(?P<num>\d{1,3}(?P<sep>[.,\u00a0\u202f ])\d{3}(?:(?P=sep)\d{3})*)"
+            r"(?:(?P<dsep>[.,])(?P<dec>\d{1,2}))?(?!\d)")
+_CUR_AFTER = re.compile(r"(?<![\d.,])" + _GROUPED + r"(?=\s?" + _CUR + ")", re.I)
+_CUR_BEFORE = re.compile("(?P<cur>" + _CUR + r"\s?)" + _GROUPED, re.I)
+
+
+def _ungroup(m: re.Match) -> str:
+    num, sep, dsep, dec = m.group("num"), m.group("sep"), m.group("dsep"), m.group("dec")
+    if dsep and dsep == sep:  # "1.200.50": not a grouped number
+        return m.string[m.start("num"):m.end()]
+    return num.replace(sep, "") + ("." + dec if dec else "")
+
+
+def normalise_numbers(question: str) -> str:
+    q = _APOS_THOUSANDS.sub("", question)
+    q = _CUR_AFTER.sub(_ungroup, q)
+    return _CUR_BEFORE.sub(lambda m: m.group("cur") + _ungroup(m), q)
+
+
 def _question_numbers(question: str) -> list[float]:
     q = re.sub(r"'[^']*'|\"[^\"]*\"|«[^»]*»|„[^“”]*[“”]", " ", question)
     return [float(t.replace(",", ".")) for t in re.findall(r"(?<![\w.])\d+(?:[.,]\d+)?(?![\w.])", q)]
@@ -203,6 +232,10 @@ def _num(v):
         return float(v)
     except (TypeError, ValueError):
         return None
+
+
+def _fmt_num(y: float) -> str:
+    return str(int(y)) if float(y).is_integer() else f"{y:g}"
 
 
 def _agree(a, b, task: str) -> bool:
@@ -323,6 +356,7 @@ class Pipeline(BaseSolver):
             ans.solver = f"pipeline/{ans.solver}"
             ans.cost.wall_seconds = round(time.perf_counter() - t0, 4)
             return ans
+        question = normalise_numbers(question)
         asked = question
         question, tr_note, tr_cost = self._front_end(question) if self.translate else (question, None, None)
         plan = decompose(source_of(path), question) if self.compose else None
@@ -966,6 +1000,16 @@ class Pipeline(BaseSolver):
         ans.cost = _cost_of(ans).add(_cost_of(a_u))
         if not _fits(intent.task, a_u):
             ans.trace.append(f"{n_u} answered {a_u.value} {a_u.unit} to a {intent.task} question: ignored")
+            return ans
+        u_a, u_s = str(ans.unit or "").strip().lower(), str(a_u.unit or "").strip().lower()
+        if u_a and u_a not in _UNIT_KIND and (not u_s or u_s in _UNIT_KIND) and u_a != u_s:
+            # W5 05:10: "hours to paint every door" -> agent 69 h (46 x 1.5), ifc the bare 46 doors at 0.30: the solver
+            # answered the operation's INPUT, not a competing value -> no "sources disagree" on the card
+            y = _num(a_u.value)
+            used = y is not None and any(
+                re.search(rf"calc\([^)]*(?<![\d.]){re.escape(_fmt_num(y))}(?![\d])", str(t)) for t in ans.trace)
+            ans.trace.append(f"cross-check: {n_u} gave {a_u.value} {a_u.unit or ''} (the quantity before the operation; "
+                             f"the agent answers in {ans.unit})" + (" — the agent's calculation uses it ✓" if used else ""))
             return ans
         x, y = _num(ans.value), _num(a_u.value)
         # the 2% tolerance is for measured sizes; a price/rate/text answer must match exactly (1620 EUR is not 1610)
