@@ -161,7 +161,7 @@ class Pipeline(BaseSolver):
                  max_tries: int | str = 3, vlm_args: str | dict | None = None, use_gate: int | str = 1,
                  compose: int | str = 1, normalise: int | str = 1, crosscheck: int | str = 1, agent: int | str = 1,
                  raw_first: int | str = 1, raw_accept: float | str = 0.45, cc5k: int | str = 1, lora: int | str = 1,
-                 **kwargs):
+                 lora_second: int | str = 0, lora_conf: str = "gate", **kwargs):
         super().__init__(**kwargs)
         self.accept = float(accept)
         self.agree = {"1": "cheap", "0": "never", "2": "always"}.get(str(agree), str(agree))  # cheap|never|always
@@ -179,6 +179,12 @@ class Pipeline(BaseSolver):
         self.raw_accept = float(raw_accept)
         self.cc5k = bool(int(cc5k))
         self.lora = bool(int(lora))  # R2's counting LoRA (vlm_lora) on cubicasa; 0 = never call it
+        # raster as a second reader of every LoRA count (503463a) cost x20 on cubicasa (S0 03:56: $0.021 -> $0.417/1k)
+        # for no accuracy; off by default: boxes come on demand (W5's 'Show where'), cc5k=1 adds cached detector boxes
+        self.lora_second = bool(int(lora_second))
+        # LoRA confidence: "gate" = its per-key train_gate hit rate (5760cce, measured); "own" = vlm_lora's own
+        # train_gate-calibrated p(answer digits) (R1 04:06: dev ECE 0.022 vs 0.035; awaiting F's held-out check)
+        self.lora_conf = str(lora_conf)
         self.vlm_args = json.loads(vlm_args) if isinstance(vlm_args, str) else dict(vlm_args or {})
         self._solvers: dict[str, object | None] = {}
         self._cc5k_gate: dict | None = None
@@ -391,13 +397,17 @@ class Pipeline(BaseSolver):
                 conf = ans.confidence
             trace.append(f"{name}: {ans.value} {ans.unit or ''} (conf {conf:.2f}"
                          + (", held-out hit rate" if name in rates else ", train hit rate" if name in acc else "") + ")")
-            if name == "vlm_lora" and gate and gate.get("lora_vs_raster"):
-                conf, extra = self._lora_vs_raster(path, ask, ans, gate["lora_vs_raster"], trace, conf)
-                if not known_template(question):
-                    conf = _unseen_conf(conf, question)
-                total = total.add(extra)
+            if name == "vlm_lora":
+                if self.lora_conf == "own" and ans.confidence is not None:
+                    conf = ans.confidence if known_template(question) else _unseen_conf(ans.confidence, question)
+                    trace.append(f"vlm_lora: its own calibrated confidence {conf:.2f} used")
+                if self.lora_second and gate and gate.get("lora_vs_raster"):
+                    conf, extra = self._lora_vs_raster(path, ask, ans, gate["lora_vs_raster"], trace, conf)
+                    if not known_template(question):
+                        conf = _unseen_conf(conf, question)
+                    total = total.add(extra)
                 answers.append((name, ans, conf))
-                break  # the LoRA's count stands; raster only sets the confidence and lends its boxes
+                break  # the LoRA's count stands; raster (lora_second=1) only sets the confidence and lends its boxes
             answers.append((name, ans, conf))
             if conf >= self.accept or self.agree == "never" or len(answers) >= 2:
                 break
