@@ -203,6 +203,8 @@ _APT_REFS = [
 ]
 _OUT_EN = r"(?:balcon(?:y|ies)|terraces?|loggias?|outdoor (?:spaces?|areas?))"
 _EXCL_AFTER = re.compile(rf"\b({_OUT_EN}(?:\s*(?:,|and)\s*{_OUT_EN})*)\s+(?:excluded|not included)\b", re.I)
+# F 09:10 typo probe: "apartment D net area in sq m (no balconies)" -> dxf measured the balconies (11/30)
+_EXCL_NO = re.compile(rf"(\(\s*|,\s*|\bwith\s+)no\s+({_OUT_EN}(?:\s*(?:,|or|and)\s*{_OUT_EN})*)\b", re.I)
 # fr/de/it fronted exclusions ("…, balcons exclus ?" -> dxf answered the balcony area, F 08:40)
 _OUT_FR, _OUT_DE, _OUT_IT = r"(?:balcons?|terrasses?|loggias?)", r"(?:Balkone?|Terrassen?|Loggien|Loggias?)", \
     r"(?:balconi|balcone|terrazz[ie]|logge)"
@@ -214,12 +216,34 @@ _EXCL_AFTER_ML = [
 ]
 
 
+# F 09:10 quick-typing probe (same gold, controls 98.6%): typos a live judge makes. "area of room 5,11" (decimal comma)
+# -> vlm_direct 2/30; "apartment d without balconies" 12/30; 'appartment' 19/30, 'apartmnet' 14/30; "net area in sq m" 11/30
+_ROOM_COMMA = re.compile(r"\b([Rr]ooms?|[Rr]aum|[Pp]ièce|[Ll]ocale|[Hh]uone|[Rr]um)\s+(\d{1,2}),(\d{2})\b(?!,?\d)")
+_APT_TYPO = re.compile(r"\b([Aa])p(?:partment|artmnet|parment|artmet|artement(?=\s+[A-Za-z]\b\s*(?:without|excluding|in|net|$|[?,.])))\b")
+_APT_LOWER = re.compile(r"\b((?:[Aa]partment|[Ff]lat|[Uu]nit|[Ww]ohnung|[Aa]ppartement|[Aa]ppartamento)\s+)([a-z])"
+                        r"(?=\s*(?:$|[?,.;:)]|'s\b|\s(?:without|excluding|excl\.?|including|in|net|on|has|have|ohne|"
+                        r"sans|senza|exkl\.?|inkl\.?|ist|hat|est|a|è|ha)\b))")
+_SQM = re.compile(r"\bsq\.?\s?m\b\.?|\bsqm\b|\bsq\.?\s?met(?:re|er)s?\b", re.I)
+
+
+def normalise_typos(question: str) -> str:
+    q = _ROOM_COMMA.sub(lambda m: f"{m.group(1)} {m.group(2)}.{m.group(3)}", question)
+    if q != question:  # "rooms 2,03 and 2,05": the rest of the list too
+        q = re.sub(r"(\b(?:and|und|et|e|ja|och) |, )(\d{1,2}),(\d{2})\b(?!,?\d)",
+                   lambda m: f"{m.group(1)}{m.group(2)}.{m.group(3)}", q)
+    q = _APT_TYPO.sub(lambda m: m.group(1) + "partment", q)
+    q = _APT_LOWER.sub(lambda m: m.group(1) + m.group(2).upper(), q)
+    return _SQM.sub("m²", q)
+
+
 def normalise_refs(question: str) -> str:
-    q = question
+    q = normalise_typos(question)
     for rx, fmt in _APT_REFS:
         q = rx.sub(lambda m: (lambda t: t[:1].upper() + t[1:] if m.start() == 0 else t)(fmt.format(id=m.group("id"))), q)
     # "balconies excluded" -> "excluding balconies" (dxf read the fronted form as the balcony area, F 08:28)
     q = _EXCL_AFTER.sub(lambda m: "excluding " + m.group(1), q)
+    q = _EXCL_NO.sub(lambda m: ("(" if m.group(1).startswith("(") else ", " if m.group(1).startswith(",") else "")
+                     + "excluding " + m.group(2), q)
     for rx, fmt in _EXCL_AFTER_ML:
         q = rx.sub(lambda m: fmt.format(x=m.group(1)), q)
     return q
@@ -422,6 +446,40 @@ def _link_shape(v) -> tuple[str, object] | None:
     return None
 
 
+# Q 09:16 (Stoa point 3 audit, 647 red-team answers): of 92 answers below 0.5, 34 carry only a PROCESS note in `missing`
+# ("no located evidence from this solver", "not backed by a tool result"); Stoa wants what the documents lack. For the
+# usual unanswerable topics, name the absent fact and where it would be found. Changes no value or confidence.
+_PROCESS_NOTE = re.compile(r"no located evidence|not backed by a tool|no reliable reading|not traced to any value|"
+                           r"did not reach an answer|stopped after \d+ model calls|LLM budget", re.I)
+_ABSENT_FACTS = [
+    (re.compile(r"\b(rent|price|prices|cost|costs|costing|budget|€|eur|chf|usd|dollars?|euros?)\b|\$\s?\d", re.I),
+     "prices and costs are not part of construction drawings: a unit price (per m² or per item) from a cost plan, tender "
+     "or market data is needed; the drawing gives only the quantities"),
+    (re.compile(r"\bu-?values?\b|\bthermal\b|\binsulation\b|energy (?:class|rating|label|performance)|heat loss", re.I),
+     "thermal properties (U-values, insulation) are not shown on a plan: the energy report or the wall/roof build-up "
+     "schedule states them"),
+    (re.compile(r"\b(?:what|which) year\b|\bwhen (?:was|were|is)\b.*\b(built|constructed|drawn|made|designed|completed)\b|"
+                r"\bconstruction year\b|\byear of construction\b|\bbuilt in\b", re.I),
+     "a date: the title block or the project record states it; none was read with certainty here"),
+    (re.compile(r"\b(occupants?|residents?|inhabitants|tenants|how many people|persons? (?:live|can live|living))\b", re.I),
+     "occupancy is not drawn on a plan (it depends on use): the number of bedrooms gives only an estimate "
+     "(about 1-2 persons each)"),
+    (re.compile(r"\bfire[- ](?:rating|resistance|class|protection)|\bEI ?\d{2}\b|\bfire[- ]rated\b", re.I),
+     "fire ratings are stated in the door/wall schedule or the fire safety plan, not on this sheet"),
+    (re.compile(r"\b(architect|owner|client|contractor|engineer|designer)\b", re.I),
+     "the names of the parties are in the title block; none was read with certainty on this sheet"),
+]
+
+
+def _absent_fact(question: str, ans: Answer) -> None:
+    if ans.confidence >= 0.5 or any(not _PROCESS_NOTE.search(str(m)) for m in ans.missing):
+        return
+    for rx, line in _ABSENT_FACTS:
+        if rx.search(question):
+            ans.missing = [*ans.missing, line]
+            return
+
+
 def _cost_of(ans: Answer) -> Cost:
     c = ans.cost
     return Cost.model_validate(c) if isinstance(c, dict) else (c or Cost())
@@ -621,6 +679,7 @@ class Pipeline(BaseSolver):
                 ans.trace.append(f"converted {ans.value} {ans.unit} to {v:.4g} {want} (the question asks in {want})")
                 ans.assumptions = [*ans.assumptions, f"{ans.value} {ans.unit} = {round(v, 2)} {want}"]
                 ans.value, ans.unit = round(v, 2), want
+        _absent_fact(asked, ans)
         if ans.evidence and any(e.bbox or getattr(e, "ifc_guid", None) for e in ans.evidence):
             # W5 08:32: a LoRA count that got room-segmentation boxes afterwards still said "no located evidence"
             ans.missing = [m for m in ans.missing if "no located evidence" not in str(m)]
