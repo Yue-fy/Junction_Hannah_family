@@ -174,12 +174,14 @@ def _n_objects(evidence: list[dict]) -> int:
 
 def summarize(preds: list[dict]) -> dict:
     def block(rows: list[dict]) -> dict:
-        scored = [r for r in rows if r["type"] in SCORED_TYPES]
+        # questions without a known answer (ad-hoc files, e.g. Stoa's examples) are predicted but never scored
+        scored = [r for r in rows if r["type"] in SCORED_TYPES and r.get("gold") is not None]
         text = [r for r in rows if r["type"] not in SCORED_TYPES]
         answered = [r for r in rows if not r["abstained"]]
         d = {
             "n": len(rows),
             "scored_n": len(scored),
+            "no_gold_n": sum(1 for r in rows if r.get("gold") is None),
             "correct": sum(1 for r in scored if r["correct"]),
             "accuracy": round(sum(1 for r in scored if r["correct"]) / len(scored), 4) if scored else None,
             "coverage": round(len(answered) / len(rows), 4) if rows else None,
@@ -282,6 +284,8 @@ def print_report(m: dict, file=sys.stdout) -> None:
                  f"{m['evidence_count_n']}" if m.get("evidence_count_match") is not None else ""), file=file)
     print(f"weighted_acc (full-data bucket shares): {pct(m.get('weighted_acc'))}   macro: {pct(m['macro_accuracy'])}   "
           f"refusal: {pct(m.get('refusal_rate'))}   errors: {m['errors']}", file=file)
+    if m.get("no_gold_n"):
+        print(f"no known answer (predicted, not scored or judged): {m['no_gold_n']} of {m['n']} questions", file=file)
     cm = m.get("cost_mean") or {}
     print(f"cost/question: ${cm.get('usd', 0):.6f} (${m.get('usd_per_1k_q', 0):.3f} per 1k)  tokens in/out "
           f"{cm.get('llm_tokens_in', 0):.0f}/{cm.get('llm_tokens_out', 0):.0f}  llm calls {cm.get('llm_calls', 0):.2f}  "

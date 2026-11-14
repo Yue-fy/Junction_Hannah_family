@@ -141,6 +141,13 @@ Tried and not adopted:
 - A per-class probability threshold instead of argmax (P(window) ≥ τ, τ = 0.15–0.45; 227 val drawings):
   never better (windows 44.1% argmax vs 43.6%). The missed windows are not near-misses in probability.
 
+- 2× upscaling with the maps KEPT at 2× (`dense2x.py`; `infer.py --scale 2 --keep-res`, so neighbouring symbols
+  don't merge again on the way back to 1×), for all 688 val+test plans ≤ 1500 px, min_frac × kernel grid on val.
+  Always-2×: windows val 40.1 → 34.7, test 33.9 → 32.5; doors val 46.3 → 40.6, test 39.6 → 36.0. The best gated
+  rule from val (2× only on small, dense plans) gives test windows +0.5 [−2.1, +3.4] and doors +1.1 [−1.4, +3.6],
+  which is selection noise (800 rules tried). The worst misses, such as 29 windows on a 785×355 plan, are not
+  caused by low resolution.
+
 **Memorisation check (D3).** Accuracy on drawings from the model's original *train* list is about the
 same as on held-out *test* drawings of the same style, so there is little memorisation:
 
@@ -315,6 +322,61 @@ deterministic geometry (DXF/IFC/PDF text, ~0 cost) → OCR/CV → small local VL
 Expected cost = Σ_k P(reach k) · cost_k. Pick τ_k from the risk–coverage curve of stage k on dev
 (`experiments/r1/stats/compare.py RUN`): the smallest τ at which accuracy-when-answered ≥ the next stage's
 accuracy on the same questions. Escalating only then can't lower accuracy, and it cuts cost.
+
+### 8d. Calibrated count ranges from two counters (measured)
+`experiments/r1/count_interval/interval.py`; live in `stoa/solvers/raster_cc5k/crosscheck.py` (`interval()`, and
+`check()` adds it to LoRA answers). Stoa wants "a best estimate with a calibrated confidence" instead of a refusal.
+For a count, the natural form is an integer range that holds the true count with a stated probability.
+
+Two independent counters answer every cubicasa count: the LoRA (L) and the CubiCasa5K detector (C). Rule:
+`[min(L, C) − lo, max(L, C) + hi]`, with margins per group (openings = windows, doors; fixtures = WC seats, sinks;
+rooms) × (agree | disagree). The margins are split-conformal: on the calibration run, take the narrowest (lo, hi)
+whose coverage is at least ⌈(n+1)(1−α)⌉/n. That is the finite-sample level that guarantees ≥ 1−α on
+exchangeable new drawings. Calibration run: the LoRA on train_gate (320 answers; it never trained there).
+
+| 90% nominal | lo, hi when agree | lo, hi when disagree | dev coverage (width) | leak-free-for-both coverage (width) |
+|---|---|---|---|---|
+| fixtures, rooms | 0, 0 | 0, 0 (the two counts' range) | 87–100% (1.1–1.8) | 88–100% (1.3–1.7) |
+| windows, doors | 1, 4 | 1, 5 | windows 89% (9.4), doors 100% (9.2) | 100% (8.9), 100% (8.1) |
+| all | | | **93% (3.9)**; through `check()` on dev run feec: 91.9% (4.3) | **97% (3.2)** |
+
+Compared with the same margins around the single arbitrated answer (`point`: dev 90%, width 4.3) and relative
+margins (`rel`: 92%, 4.1), the two-counter range is both narrower and better covered. It also needs no extra model
+call. At 80% nominal: dev 89% (3.2), leak-free 92% (2.6). Window ranges are wide (about 9 values) because both
+counters miss windows on large plans (dev residuals up to +28). That is the honest answer, and it shows where the
+method is weak.
+
+How to use it: show `7 windows (90%: 6–12)`. A comparison ("more bedrooms than bathrooms?") is sure only when the
+two ranges don't overlap. A sum of two counts has the range [lo₁+lo₂, hi₁+hi₂], which covers the true sum at
+least 1−2α of the time (union bound). The ranges were fitted for LoRA answers only, so other solvers get none.
+
+**Detector alone (leak-safe).** When the pipeline sends a count to `raster_cc5k` first (windows on cc5k=1), no
+second counter exists. Then the range is `[C − lo, C + hi]`, with margins per class × count bucket. The margins are
+fitted on the original CC5K **val** list and checked on the original **test** list
+(`experiments/r1/count_interval/det_interval.py`, D8-clean). raster_cc5k's answers carry it automatically
+("interval90: [lo, hi]").
+
+| 90% nominal | test coverage | mean width | margins (bucket: −lo/+hi) |
+|---|---|---|---|
+| windows (n 368) | 89.7% | 10.2 | ≤4: −1/+3, ≤8: −3/+5, >8: −3/+13 |
+| doors (264) | 93.2% | 10.7 | ≤4: −1/+9, ≤8: −2/+9, >8: −3/+5 |
+| WC seats (367) | 91.3% | 2.0 | ≤1: −0/+1, >1: −1/+0 |
+| sinks (363) | 92.8% | 3.5 | ≤2: −0/+2, >2: −2/+1 |
+
+With a second independent counter, the fixture ranges are narrower at the same coverage: 1.4–1.7 values wide
+instead of 2.0–3.5. That is the measurable value of linking two sources (Stoa point 4).
+
+**Yes/no threshold questions ("at least two toilets?").** The answer comes from one count, but its confidence
+should come from whether the second counter is on the same side of N. LoRA + CC5K, pooled over N = 1..10, fitted
+on train_gate (`threshold_side.py`, `crosscheck.threshold_confidence()`):
+
+| group | same side: conf (dev right) | straddling N: conf (dev right) |
+|---|---|---|
+| openings (windows, doors) | 0.94 (95%, n 1124) | 0.53 (59%, n 249) |
+| fixtures (WC, sinks) | 0.97 (96%, n 562) | 0.68 (69%, n 121) |
+| rooms | 0.97 (98%, n 302) | 0.80 (90%, n 40) |
+
+The pipeline today gives "at least two WC seats?" 0.82 whether the answer is right or wrong (hard2: 0.82 vs 0.79).
 
 ### 8c. Linked data as a cross-check
 - Swiss (measured, `experiments/r1/link_dxf_pdf/fit_affine.py`): DXF → PDF is one affine map per floor,

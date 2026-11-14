@@ -125,7 +125,7 @@ _LEX: list[tuple[str, tuple[str, ...]]] = [
     ("pipe", ("pipe", "rohr", "leiding", "tuberia")),
     ("outlet", ("outlet", "receptacle", "socket", "steckdose", "wandcontactdoos")),
     ("switch", ("switch", "schalter", "schakelaar")),
-    ("valve", ("valve", "ventil", "klep", "valvula")),
+    ("valve", ("valve", "ventile", "ventil ", "ventils", "klep", "valvula")),  # not "ventilation"
     ("damper", ("damper", "klappe")),
     ("pump", ("pump", "pumpe", "pomp")),
     ("cable", ("cable", "kabel", "cable tray")),
@@ -135,7 +135,7 @@ _LEX: list[tuple[str, tuple[str, ...]]] = [
                "camer", "incaper", "stanz", "piece", "salle", "huone", "tila", "rom ")),
     ("door", ("door", "tur", "tuer", "puerta", "dor", "doer", "deur", "uks", "ust", "drzwi", "usi", "porte",
               "porta", "ovi", "ovet", "dorr")),
-    ("window", ("window", "fenster", "ventana", "vindu", "raam", "ramen", "aken", "akna", "okien", "okn",
+    ("window", ("window", "glazing", "glazed", "verglasung", "beglazing", "fenster", "ventana", "vindu", "raam", "ramen", "aken", "akna", "okien", "okn",
                 "ferestr", "fenetre", "finestr", "ikkun", "fonster")),
     ("wall", ("wall", "wand", "waend", "wande", "muro", "muros", "vaeg", "vag", "seina", "sein", "scian",
               "sciana", "perete", "pereti", "mur", "murs", "paret", "parete", "sein", "seinä", "vagg")),
@@ -184,7 +184,7 @@ _MAX = ("largest", "biggest", "greatest", "maximum", "max ", "most ", "bigger", 
         "groesser", "groter", "storre", "suurem", "wiekszy", "wieksze", "mai mare", "mas grande", "piu grand", "grosste", "groesste", "grosster", "groesster",
         "grootste", "mayor ", "mas grande", "storste", "suurim", "najwieksz", "cel mai mare", "plus grand",
         "piu grande", "suurin", "storsta")
-_MIN = ("smallest", "least", "minimum", "min ", "smaller", "kleiner", "kleiner", "mindre", "vaiksem", "mniejsz",
+_MIN = ("smallest", "least", "fewest", "minimum", "min ", "smaller", "kleiner", "kleiner", "mindre", "vaiksem", "mniejsz",
         "mai mic", "mas pequeno", "plus petit", "kleinste", "menor ", "mas pequen", "mindste", "vaikseim",
         "najmniejsz", "cel mai mic", "plus petit", "piu piccol", "pienin", "minsta")
 _WHICH = ("which", "what room", "welche", "welcher", "welches", "welke", "cual ", "hvilk", "milline", "ktory",
@@ -398,7 +398,11 @@ def parse(question: str) -> Intent:
     text = _QUOTED.sub(" ", question)  # room/storey names must not trigger the lexicon ("Bathroom", "Stair hall")
     t = " " + fold(text) + " "
     asked_unit = None
-    if re.search(r"ft2|ft²|sq\.? ?ft|square f", t):
+    if re.search(r"ft3|ft³|cubic f(ee|oo)t|cu\.? ?ft", t):
+        asked_unit = "ft3"
+    elif re.search(r"\b(litres?|liters?)\b", t):
+        asked_unit = "l"
+    elif re.search(r"ft2|ft²|sq\.? ?ft|square f", t):
         asked_unit = "ft2"
     elif re.search(r"m2|m²|sq\.? ?m|square met", t):
         asked_unit = "m2"
@@ -411,7 +415,7 @@ def parse(question: str) -> Intent:
 
     if _has(t, _SIDE):
         metric = "area"
-    elif _has(t, _VOLUME) or asked_unit == "m3":
+    elif _has(t, _VOLUME) or asked_unit in ("m3", "ft3", "l"):
         metric = "volume"
     elif _has(t, _AREA) or asked_unit in ("m2", "ft2"):
         metric = "area"

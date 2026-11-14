@@ -55,10 +55,11 @@ def _init(threads):
 
 
 def _run(args):
-    stem, tta, scale, probs = args
+    stem, tta, scale, probs = args[:4]
+    keep = len(args) > 4 and args[4]  # keep maps at the upscaled resolution (count small symbols there)
     import torch
     import torch.nn.functional as F
-    tag = ("p_" if probs else "") + ("tta_" if tta else "") + (f"s{scale:g}_" if scale != 1 else "")
+    tag = ("p_" if probs else "") + ("tta_" if tta else "") + (f"{'u' if keep else 's'}{scale:g}_" if scale != 1 else "")
     dst = os.path.join(OUT, tag + stem + ".npz")
     if os.path.exists(dst):
         return stem, 0.0
@@ -68,6 +69,8 @@ def _run(args):
     H, W = im.shape[:2]
     if scale != 1:
         x = F.interpolate(x, scale_factor=scale, mode="bicubic", align_corners=False).clamp(-1, 1)
+        if keep:
+            H, W = x.shape[2], x.shape[3]
     with torch.no_grad():
         acc = 0
         for k in ((0, 1, 2, 3) if tta else (0,)):
@@ -98,6 +101,7 @@ def main():
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--scale", type=float, default=1.0, help="upscale the input; maps are saved at original size")
     ap.add_argument("--probs", action="store_true", help="also save per-class icon probabilities (prefix p_)")
+    ap.add_argument("--keep-res", action="store_true", help="with --scale: save maps at the upscaled size (tag u<s>_)")
     a = ap.parse_args()
     os.makedirs(OUT, exist_ok=True)
     if a.stems.startswith("@"):
@@ -108,7 +112,7 @@ def main():
         todo = todo[: a.limit]
     t0, n, secs = time.time(), 0, []
     with mp.get_context("spawn").Pool(a.procs, initializer=_init, initargs=(a.threads,)) as pool:
-        for stem, s in pool.imap_unordered(_run, [(s, a.tta, a.scale, a.probs) for s in todo]):
+        for stem, s in pool.imap_unordered(_run, [(s, a.tta, a.scale, a.probs, a.keep_res) for s in todo]):
             n += 1
             if s:
                 secs.append(s)

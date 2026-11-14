@@ -266,15 +266,25 @@ function bench() {
       prior: summary(pick("prior", split, minN)) };
   // S0's sealed test (experiments/s0/run_test.sh): only the CLEAN run counts (cc5k=0, or the single run when the
   // pipeline has no cc5k switch); the cc5k=1 run is labelled inflated (D8) and never shown as the headline.
-  const clean = (r: LbRow) => String(r.solver_args?.cc5k ?? "") === "0" || /test-cc5k0\b/.test(r.note ?? "")
-    || (r.solver_args?.cc5k === undefined && !/cc5k/i.test(r.note ?? ""));
+  // Ablations (e.g. test-lora0: cc5k=0 + lora=0) are not the headline either: exactly {cc5k: 0}, or no args at all.
+  const clean = (r: LbRow) => {
+    const args = Object.keys(r.solver_args ?? {});
+    if (/test-(lora|cc5k1)/i.test(r.note ?? "")) return false;
+    if (/test-cc5k0\b/.test(r.note ?? "")) return true;
+    return (args.length === 1 && String(r.solver_args?.cc5k) === "0") || (args.length === 0 && !/cc5k|lora/i.test(r.note ?? ""));
+  };
   const test = rows.filter((r) => r.solver === "pipeline" && r.split === "test" && r.agent === "S0" && r.n >= 500 && full(r) && clean(r)).at(-1);
-  out.test = { pipeline: summary(test) };
-  // novel question kinds (operators no template covers): hard2 = developed on; hard2q = clean held-out rewording,
-  // reported as an aggregate only (D10)
-  for (const split of ["hard2", "hard2q"]) {
+  // the same sealed test without R2's counting LoRA (run_test.sh "test-lora0": cc5k=0 + lora=0, same commit): shows what the
+  // small fine-tuned model adds on data nobody has seen
+  const lora0 = test && rows.filter((r) => r.solver === "pipeline" && r.split === "test" && r.agent === "S0" && full(r)
+    && r.commit === test.commit && (/test-lora0\b/.test(r.note ?? "") || String(r.solver_args?.lora ?? "") === "0")).at(-1);
+  out.test = { pipeline: summary(test), ...(lora0 ? { no_lora: summary(lora0) } : {}) };
+  // novel question kinds (operators no template covers): hard2 = developed on; hard2q = held-out rewording (D10, now
+  // "worn"); hard2r = F's sealed fresh draw in a fourth wording (D12, the clean one). Aggregates only.
+  for (const split of ["hard2", "hard2q", "hard2r"]) {
     const r = rows.filter((x) => x.solver === "pipeline" && x.split === split && x.n >= 200 && full(x));
-    out[split] = { pipeline: summary(r.filter((x) => x.agent === "S0" || x.agent === "F").at(-1) ?? r.at(-1)) };
+    // S0's integration run on the night commit first; F's (often an experimental branch) only when S0 has none
+    out[split] = { pipeline: summary(r.filter((x) => x.agent === "S0").at(-1) ?? r.filter((x) => x.agent === "F").at(-1) ?? r.at(-1)) };
   }
   return { from: "leaderboard", generated: new Date().toISOString(), runs: out };
 }
