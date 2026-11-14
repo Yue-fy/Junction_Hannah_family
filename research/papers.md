@@ -63,6 +63,8 @@ excluded, as `Answer.assumptions`.
 | Liang, Fukuda & Yabuki, EC3 2026 | OCR + segmentation → metric grid from the annotations (strict OCR accuracy 90.2%) | Links each dimension to the element it measures | ec-3.org/wp-content/uploads/2026/08/EC32026_212.pdf | – | M–H |
 | "Robust DL-based scale inference", ASCE (snippet) | YOLOv7 finds dimension lines, EasyOCR reads them, and a vote picks the pixel resolution | The voting idea | ascelibrary.com/doi/10.1061/9780784485248.087 | – | M |
 | US patent 10395147 | scale = OCR'd room area ÷ room pixel area | A cheap cross-check when plans print m² labels, which some cubicasa plans do | patent | – | L |
+| Dodge, Xu & Stenger, "Parsing floor plan images", MVA 2017 | Wall segmentation + object detection + OCR of the printed room sizes; known sizes are propagated to unlabelled rooms through their relative (pixel) sizes, which fixes the scale | Prior art for our ground truth (printed areas × CC5K regions, methods 8e). We add a door-width fallback with a cross-fitted 80% band for plans that print nothing | mva-org.jp/Proceedings/2017USB/papers/10-01.pdf | – | – |
+| Lv et al., "Residential floor plan recognition and reconstruction", CVPR 2021 | Notes the same area-text-to-scale idea and that pixel misclassification adds error | Same caveat we measured: single-room areas err ~21% even at the true scale | openaccess.thecvf.com (CVPR 2021) | – | – |
 
 ## 5. Symbol counting on raster plans (cubicasa windows, doors, WC seats, sinks, showers/bathtubs)
 

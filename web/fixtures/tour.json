@@ -22,7 +22,7 @@
  {
   "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
   "q": "If each door costs 450 euros, what do all the doors on '1.korrus' cost in total?",
-  "note": "A question no template covers, with a number in it: the IFC solver reads the price from the question, counts the 46 doors in the model and multiplies in code (46 × 450 € = 20,700 €). No model call; every counted door is evidence."
+  "note": "A question no template covers, with a number in it. A small local model plans the steps but never does the maths: it asks the pipeline how many doors (46, by rules, cross-checked), multiplies in code (46 × 450 € = 20,700 €), and the IFC solver's own reading of the whole question gives the same total: two independent derivations agree."
  },
  {
   "file": "data/ifc_bench/4351_arc.ifc",
@@ -55,6 +55,11 @@
   "q": "What kind of drawing is this (floor plan, elevation, section, site plan)?",
   "second": true,
   "note": "Historical scan (HAER, 1977): no digital text at all. The local vision model reads the printed text tile by tile and answers from it, citing the lines it used: the title 'NORTH ELEVATION' is boxed on the sheet. NVIDIA Nemotron (hosted, one paid call) gives a second opinion. Below: the other sheets of the same survey, linked."
+ },
+ {
+  "file": "data/finna/mfa.81125dbb-8b52-48e3-bc9d-1128e233ac93.jpg",
+  "q": "Mikä on piirustuksen mittakaava?",
+  "note": "Helsinki Olympic Stadium, site plan (Lindegren & Jäntti; Architecture & Design Museum, CC BY 4.0), asked in Finnish: 'what is the scale of the drawing?' The answer 1/500 is read from the hand-lettered note 'ASEMAPIIRROS M.K. 1/500', which is boxed. On scans, every answer points at the printed text it came from; local model only, no cloud call."
  },
  {
   "file": "",

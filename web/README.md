@@ -14,6 +14,11 @@ npm install
 npm run dev          # http://localhost:5173 (Vite, port 5173)
 ```
 
+**Before a demo, one command:** `web/demo.sh` (from anywhere). It uses the API at `STOA_API_URL` (default :8100)
+or starts one from this checkout, checks the local model server (`LLM_BASE_URL`; IFC/Swiss/schedule steps need no
+model), starts Vite on :5173 if needed, and asks every tour question once so the presenter's answers come from the
+API cache (`DEMO_WARM=0` skips that; `fixtures/recorded.json` is not changed). Then open http://localhost:5173.
+
 - `STOA_DATA` must point at the dataset root (default: the team path in `AGENTS.md`).
 - `/api/*` goes to W4's API (`STOA_API_URL`, default `http://127.0.0.1:8100`, see `docs/CONTRACT.md`;
   start it with `$JUNCTION_VENV/bin/python -m uvicorn stoa.api:app --port 8100` from the repo root).
@@ -29,7 +34,7 @@ npm run dev          # http://localhost:5173 (Vite, port 5173)
 Deep links: `/?file=<dataset-relative path>&q=<question>` opens a file and asks right away, e.g.
 `/?file=data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf&q=How many doors are shown on the floor plan of '1.korrus'?`
 
-## Demo script (12 steps, ~2 min; steps 1–3 + 6 + 10 + 12 for a short pitch)
+## Demo script (13 steps, ~2 min; steps 1–3 + 6 + 10 + 12 + 13 for a short pitch)
 
 Click **Demo tour ▸** (top left), or press → / ← (when not typing). Each step opens a file, asks one question
 and shows a one-line note:
@@ -43,11 +48,14 @@ and shows a one-line note:
    highlighted ("windows plan 52 · IFC 52 at the cut (55 on storey) ✓").
 4. Model-wide doors → 211 with evidence on 5 sheets (chips; click one to open that plan, same answer).
 5. A question no template covers, with a number in it ("if each door costs 450 euros, what do all the doors on
-   '1.korrus' cost in total?") → 20,700 €. The card says "Understood as: factor 450 EUR per door · not a template: ifc
-   read the question itself and computed it in code"; "Why" shows `46 count x 450 = 20700.00 EUR` (green = arithmetic
-   done in code), and the 46 doors are the evidence in 2D and 3D. No model call. Same path: "what share of the total
-   room area on '1.korrus' does 'KORIDOR (119)' take?" → 7.34 %. Questions no solver can read go to W4's planning
-   agent (ask → ask → calc → answer; sub-questions clickable, evidence rows labelled by step).
+   '1.korrus' cost in total?") → 20,700 €. Since night 0589ce3 (W4 3eed544) a rules answer to a *derived* quantity
+   is only a second opinion, so W4's planning agent answers: "Reasoning · 3 steps · numbers from tools only":
+   ASK "How many doors are shown on the floor plan of '1.korrus'?" → 46 (ifc, cross-checked), CALC 46 × 450 =
+   20,700 (in code), ANSWER. The card's first check line is "agent 20700 = ifc 20700 ✓" (the IFC solver's own
+   reading of the whole question, W1, gives the same total), the second the 46-door check of step 1. Evidence rows
+   are labelled "step 1"; click the sub-question to re-ask it and see all 46 doors (the agent passes only the first
+   6 boxes; told W4). Cost: 3 local LLM calls, ≈ €0.25 per 1,000 such questions. Same family: "what share of the
+   total room area on '1.korrus' does 'KORIDOR (119)' take?" → 7.34 %.
 6. A free-text question about a model (4351_arc.ifc, "what plumbing fixtures are in this building and their counts?"):
    the solver's text cites no elements, so the browser checks it against the loaded IFC model by element name
    (`findNamed` in `src/viewer3d.ts`, no model call). With the 03:29 answer ("Toilet-Domestic-3D: 9, Urinal-Wall-3D: 4")
@@ -77,7 +85,11 @@ and shows a one-line note:
    knowledge-graph strip links the other sheets of the same survey, named from the Library of Congress titles
    ("West Elevation", "South Elevation", "Machinery, North Elevation"). Finna scans link the drawings filed
    under the same address ("drawing 2 of 13").
-12. "How well it works": accuracy per source on held-out drawings against "just ask the VLM" and the template
+12. Finna scan of the Helsinki Olympic Stadium site plan (Lindegren & Jäntti, Architecture & Design Museum, CC BY
+   4.0), asked in Finnish: "Mikä on piirustuksen mittakaava?" → 1/500 (0.75), read from the hand-lettered note
+   "ASEMAPIIRROS M.K. 1/500", which is boxed. Also try "Mistä rakennuksesta tai paikasta piirustus on?" → Stadion
+   and "Millainen piirustus tämä on…?" → asemapiirros, each with its line boxed (~5 s, local model only).
+13. "How well it works": accuracy per source on held-out drawings against "just ask the VLM" and the template
    prior, the hard (generality) split, new question kinds (hard2, plus the clean held-out rewording hard2q as an
    aggregate), cost per 1,000 questions, the share answered by rules alone, and calibration. Read live from the
    stoa.eval leaderboard (`STOA_LEADERBOARD`; pipeline rows from S0's integration runs), else

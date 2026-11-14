@@ -21,6 +21,10 @@ talks to Stoa can decide on the spot. Keep it to 10 minutes: ask 1–6 first.
   *confidently wrong* answers on unusual wordings, not wrong answers in general.
 - **Do:** if confidence is scored, tighten the caps on unseen wordings (costs a little accuracy, buys calibration).
   If only accuracy counts, loosen them.
+- Follow-up from our red team: **if a question names something the drawing doesn't have** (a storey '7. Level' in a
+  5-storey model, room 'Ballsaal' on a plan without one), what do you want back: "not found" + the list of what
+  exists, or the closest match with a warning? (Tonight our IFC path answered the closest storey at 0.97 confidence;
+  we are fixing that either way, but the answer format depends on you.)
 
 ## 3. What will the "harder, different" questions look like?
 - More arithmetic on top of a quantity (prices, rates, per-unit ratios, percentages)? Questions across several

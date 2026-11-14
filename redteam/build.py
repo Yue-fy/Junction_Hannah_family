@@ -18,6 +18,7 @@ import os
 import random
 import re
 import shutil
+from collections import defaultdict
 from pathlib import Path
 
 from PIL import Image
@@ -48,7 +49,7 @@ def typo(q: str) -> str:
     """Swap two adjacent inner letters in the two longest words outside quotes (a fast typist's slip)."""
     quoted = set(re.findall(r"'[^']*'|\"[^\"]*\"|«[^»]*»", q))
     words = [w for w in re.findall(r"[A-Za-z]{6,}", q) if not any(w in s for s in quoted)]
-    for w in sorted(set(words), key=len, reverse=True)[:2]:
+    for w in sorted(set(words), key=lambda w: (-len(w), w))[:2]:  # tie order fixed (a set iterates by hash seed)
         i = len(w) // 2
         q = q.replace(w, w[:i - 1] + w[i] + w[i - 1] + w[i + 1:], 1)
     return q
@@ -219,6 +220,140 @@ def main():
     for b in img_bases:
         for name, p in transform_images(b, IMG_DIR).items():
             out.append(row(p, b["question"], b["gold"], b["gold_unit"], b["type"], f"image:{name}", "same", b))
+
+    # ===== v2 (04:20): own RNG so every v1 row above stays byte-identical ===================================
+    rng2 = random.Random(1402)
+
+    def pick2(source, typ, n, pred):
+        c = sorted((r for r in good if r["source"] == source and r["type"] == typ and pred(r)), key=lambda r: r["qid"])
+        rng2.shuffle(c)
+        o, seen = [], set()
+        for r in c:
+            if r["path"] not in seen:
+                seen.add(r["path"])
+                o.append(r)
+        return o[:n]
+
+    # G. everyday area wordings ("how big is …") of confidently-right room-area questions (gold unchanged)
+    sw_room = re.compile(r"^What is the net floor area of room ([\d.]+) \('([^']+)'\) in m²\?$")
+    for b in pick2("swiss_dwellings", "area", 4, lambda r: sw_room.match(r["question"])):
+        num_, name = sw_room.match(b["question"]).groups()
+        for kind, q in (("how-big", f"How big is room {num_} ({name})?"),
+                        ("sqm", f"How many square metres is room {num_} ('{name}')?"),
+                        ("size", f"what's the size of the {name.lower()}, room {num_}?")):
+            out.append(row(b["path"], q, b["gold"], b["gold_unit"], "area", f"wording:{kind}", "same", b))
+    ifc_room = re.compile(r"^What is the net floor area of the room '([^']+)' on '([^']+)', in m²\?$")
+    for b in pick2("ifc_models", "area", 4, lambda r: ifc_room.match(r["question"])):
+        room, storey = ifc_room.match(b["question"]).groups()
+        for kind, q in (("how-big", f"How big is the room '{room}' on '{storey}'?"),
+                        ("sqm", f"How many square metres is '{room}' on '{storey}'?")):
+            out.append(row(b["path"], q, b["gold"], b["gold_unit"], "area", f"wording:{kind}", "same", b))
+
+    # H. false premises on Swiss vector plans (v1's pick filtered them out by mistake: 'm²' is not ASCII)
+    for b in pick2("swiss_dwellings", "area", 3, lambda r: sw_room.match(r["question"])):
+        out.append(row(b["path"], "What is the net floor area of room 9.99 ('Ballsaal') in m²?", None, None, "area",
+                       "false-premise", "flag", note="room number/name not on this plan"))
+    for b in pick2("swiss_dwellings", "area", 2, lambda r: "apartment" in r["question"]):
+        out.append(row(b["path"], "What is the net floor area of apartment Z in m², summing all its rooms except "
+                       "balconies, loggias, terraces and other outdoor spaces?", None, None, "area", "false-premise",
+                       "flag", note="no apartment Z"))
+    # a real room number with the WRONG name: must not silently answer the room that has the number
+    for b in pick2("swiss_dwellings", "area", 2, lambda r: sw_room.match(r["question"])
+                   and sw_room.match(r["question"]).group(2) not in ("Sauna",)):
+        num_, _ = sw_room.match(b["question"]).groups()
+        out.append(row(b["path"], f"What is the net floor area of room {num_} ('Sauna') in m²?", None, None, "area",
+                       "false-premise", "flag", b, note="room number exists, name does not match"))
+
+    # I. a question for another format: IFC-only facts asked on a plan that has no model
+    for b in pick2("swiss_dwellings", "count", 2, lambda r: True):
+        out.append(row(b["path"], "What is the fire rating of the entrance door of apartment A?", None, None, "other",
+                       "unanswerable", "flag", b, note="no fire ratings on this plan"))
+    for b in pick2("cubicasa5k", "count", 2, lambda r: True):
+        out.append(row(b["path"], "How many IfcWall elements are in this model?", None, None, "count",
+                       "unanswerable", "flag", b, note="a raster plan has no IFC model"))
+
+    # ===== v3 (04:40): "A and B in total" in 7 languages on Swiss vector plans ================================
+    # dxf counts are ~100 % right, so a miss here is the composer / language parsing, not perception. hard's 211
+    # compositions are all English. Gold = sum of the drawing's own atomic dev golds.
+    from stoa.eval.splits import load_split
+
+    rng3 = random.Random(1403)
+    atom = {"door": "How many doors (interior doors and entrance doors together) are drawn on this floor plan?",
+            "window": "How many windows are drawn on this floor plan?",
+            "toilet": "How many toilets (WC) are drawn on this floor plan?",
+            "basin": "How many washbasins are drawn on this floor plan?",
+            "bathtub": "How many bathtubs are drawn on this floor plan?"}
+    words = {  # plural / partitive forms as a native speaker would write them in this sentence
+        "en": {"door": "doors", "window": "windows", "toilet": "toilets", "basin": "washbasins", "bathtub": "bathtubs"},
+        "fi": {"door": "ovea", "window": "ikkunaa", "toilet": "WC-istuinta", "basin": "pesuallasta",
+               "bathtub": "kylpyammetta"},
+        "de": {"door": "Türen", "window": "Fenster", "toilet": "WCs", "basin": "Lavabos", "bathtub": "Badewannen"},
+        "fr": {"door": "portes", "window": "fenêtres", "toilet": "WC", "basin": "lavabos", "bathtub": "baignoires"},
+        "it": {"door": "porte", "window": "finestre", "toilet": "WC", "basin": "lavabi", "bathtub": "vasche da bagno"},
+        "nl": {"door": "deuren", "window": "ramen", "toilet": "toiletten", "basin": "wastafels", "bathtub": "badkuipen"},
+        "sv": {"door": "dörrar", "window": "fönster", "toilet": "toaletter", "basin": "handfat", "bathtub": "badkar"},
+    }
+    tmpl = {"en": "How many {a} and {b} are drawn on this floor plan in total?",
+            "fi": "Kuinka monta {a} ja {b} pohjapiirustukseen on piirretty yhteensä?",
+            "de": "Wie viele {a} und {b} sind insgesamt auf diesem Grundriss eingezeichnet?",
+            "fr": "Combien de {a} et de {b} y a-t-il au total sur ce plan ?",
+            "it": "Qual è il numero totale di {a} e {b} su questa pianta?",
+            "nl": "Hoeveel {a} en {b} staan er in totaal op deze plattegrond?",
+            "sv": "Hur många {a} och {b} finns det totalt på planritningen?"}
+    from stoa.data import load_questions
+
+    dev_paths = {q.path for q in load_split("dev") if q.source == "swiss_dwellings"}
+    gold_by = defaultdict(dict)  # atomic golds of dev drawings (the English twin may sit outside the dev cap)
+    for q in load_questions():
+        if q.path in dev_paths:
+            for k, t in atom.items():
+                if q.question == t:
+                    gold_by[q.path][k] = q.answer
+    pairs = [("door", "window"), ("toilet", "basin"), ("bathtub", "basin"), ("window", "toilet")]
+    paths = sorted(p for p, g in gold_by.items() if len(g) == len(atom))
+    rng3.shuffle(paths)
+    for i, path in enumerate(paths[:6]):
+        a_, b_ = pairs[i % len(pairs)]
+        g = gold_by[path]
+        for lang, t in tmpl.items():
+            q = t.format(a=words[lang][a_], b=words[lang][b_])
+            out.append(row(path, q, int(g[a_]) + int(g[b_]), "count", "count", f"compose:{lang}", "same",
+                           note=f"{a_} {g[a_]} + {b_} {g[b_]}"))
+
+    # ===== v4 (04:45): the same on CubiCasa raster plans (the LoRA must not read a compound as one class) =======
+    # Each composed row has atomic EN controls for its two parts (kind compose-atom), so the analysis can compare
+    # the composed answer with the sum of the pipeline's own atomic answers: parsing isolated from perception.
+    rng4 = random.Random(1404)
+    catom = {"bedroom": "How many bedrooms (makuuhuone, usually marked MH) are on this floor plan?",
+             "sauna": "How many saunas are on this floor plan?",
+             "wc": "How many toilet bowls (WC seats) are drawn on this floor plan?",
+             "balcony": "How many balconies (parveke, including glazed balconies) are on this floor plan?"}
+    cwords = {"en": {"bedroom": "bedrooms", "sauna": "saunas", "wc": "WC seats", "balcony": "balconies"},
+              "fi": {"bedroom": "makuuhuonetta", "sauna": "saunaa", "wc": "WC-istuinta", "balcony": "parveketta"},
+              "de": {"bedroom": "Schlafzimmer", "sauna": "Saunen", "wc": "WC-Sitze", "balcony": "Balkone"},
+              "sv": {"bedroom": "sovrum", "sauna": "bastur", "wc": "toalettstolar", "balcony": "balkonger"}}
+    ctmpl = {"en": "How many {a} and {b} are on this floor plan in total?",
+             "fi": "Kuinka monta {a} ja {b} pohjapiirustuksessa on yhteensä?",
+             "de": "Wie viele {a} und {b} gibt es insgesamt auf diesem Grundriss?",
+             "sv": "Hur många {a} och {b} finns det totalt på planritningen?"}
+    cdev = {q.path for q in load_split("dev") if q.source == "cubicasa5k"}
+    cgold = defaultdict(dict)
+    for q in load_questions():
+        if q.path in cdev:
+            for k, t in catom.items():
+                if q.question == t:
+                    cgold[q.path][k] = q.answer
+    cpairs = [("bedroom", "sauna"), ("wc", "balcony"), ("sauna", "balcony")]
+    cpaths = sorted(p for p, g in cgold.items() if len(g) == len(catom))
+    rng4.shuffle(cpaths)
+    for i, path in enumerate(cpaths[:6]):
+        a_, b_ = cpairs[i % len(cpairs)]
+        g = cgold[path]
+        for k in (a_, b_):
+            out.append(row(path, catom[k], g[k], "count", "count", "compose-atom", "same", note=k))
+        for lang, t in ctmpl.items():
+            out.append(row(path, t.format(a=cwords[lang][a_], b=cwords[lang][b_]), int(g[a_]) + int(g[b_]), "count",
+                           "count", f"compose-cc:{lang}", "same", note=f"{a_} {g[a_]} + {b_} {g[b_]}"))
 
     with open(OUT, "w", encoding="utf-8") as f:
         for r in out:
