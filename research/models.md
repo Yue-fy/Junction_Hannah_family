@@ -219,7 +219,7 @@ Cost of one answer (D21 item 4), measured, not assumed:
 
   The hook touches 588 Qs (147/200 images): 586 answers identical to the dataset path. The adapter-only variant loses 13 W / 21 L
   (the per-concept gate matters, not the adapter) → dropped. Runtime moved to `stoa/style.py` (+ `stoa/style_weights.json`); the
-  hook belongs in `stoa/data.py` (F): patch `$JUNCTION_SHARED/artifacts/R2/data_style_hook.patch`, measured with
+  hook would go in `stoa/data.py` (F's file; **D23: not tonight — a day-team item**; tonight W4 caps confidence on 'unknown' rasters instead): patch `$JUNCTION_SHARED/artifacts/R2/data_style_hook.patch`, measured with
   `experiments/r2/style/eval_hooked.py`, compared with `experiments/r2/style/upload_compare.py`. False positives at p≥0.8 (held-out
   groups): 12/820 non-CubiCasa images, all historical scans (Wikimedia 10); Swiss/IFC renders 0. First question on a new image runs
   the CC5K detector live (median 0.4 → 1.5 s).
@@ -296,5 +296,5 @@ pretrained CC5K net never saw them) minus drawings in the LoRA's training data m
 10. Agent planner: the local 8B; hosted Nemotron as planner ties at 9× the cost.
 11. Free-text answers (IFC fact cards): Qwen3.6-35B-A3B on :8002 via `llm.text_backend()` (D21), +20% GPU-s, judged +7.5.
 12. Files outside our folders (uploads, a hidden set in new folders): `stoa/style.py` guesses the reader family from the
-    image (p≥0.8 → 96.7% right); filing an upload under the guess (stoa/data.py hook) restores the CubiCasa gate, boxes and the
+    image (p≥0.8 → 96.7% right); filing an upload under the guess (stoa/data.py hook; day team, D23) restores the CubiCasa gate, boxes and the
     cheap path: confident misses 47 → 31 on 800 dev Qs as uploads, 586/588 touched answers = the dataset path.
