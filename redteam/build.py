@@ -815,6 +815,49 @@ def main():
             r_["meta"]["accept_re"] = rx
         out.append(r_)
 
+    # ===== v18 (08:58): historical scans asked naturally, in other languages, rotated (Stoa: scans matter) =========
+    # Base = W4's scan probe (artifacts/W4/scans.jsonl: 20 HABS sheets, gold from the Library of Congress catalogue
+    # title "(sheet N of M)" + state = what the title block prints), which asks with a format hint ("Answer like '2 of
+    # 5'", "Give the two-letter state code"). Here: the first 6 sheets asked the way a person would, in DE/FI, and on a
+    # copy rotated by 90° (scans arrive sideways). Counts are scored as numbers; the state by name or code.
+    states = {"AL": "Alabama", "AK": "Alaska", "AZ": "Arizona", "AR": "Arkansas", "CA": "California", "CO": "Colorado",
+              "CT": "Connecticut", "DE": "Delaware", "DC": "District of Columbia", "FL": "Florida", "GA": "Georgia",
+              "HI": "Hawaii", "ID": "Idaho", "IL": "Illinois", "IN": "Indiana", "IA": "Iowa", "KS": "Kansas",
+              "KY": "Kentucky", "LA": "Louisiana", "ME": "Maine", "MD": "Maryland", "MA": "Massachusetts",
+              "MI": "Michigan", "MN": "Minnesota", "MS": "Mississippi", "MO": "Missouri", "MT": "Montana",
+              "NE": "Nebraska", "NV": "Nevada", "NH": "New Hampshire", "NJ": "New Jersey", "NM": "New Mexico",
+              "NY": "New York", "NC": "North Carolina", "ND": "North Dakota", "OH": "Ohio", "OK": "Oklahoma",
+              "OR": "Oregon", "PA": "Pennsylvania", "RI": "Rhode Island", "SC": "South Carolina", "SD": "South Dakota",
+              "TN": "Tennessee", "TX": "Texas", "UT": "Utah", "VT": "Vermont", "VA": "Virginia", "WA": "Washington",
+              "WV": "West Virginia", "WI": "Wisconsin", "WY": "Wyoming", "PR": "Puerto Rico", "VI": "Virgin Islands"}
+    scan_rows = [json.loads(line) for line in open(SHARED / "artifacts/W4/scans.jsonl")]
+    sheets = []
+    for r_ in scan_rows:
+        if r_["path"] not in sheets:
+            sheets.append(r_["path"])
+    rot_dir = IMG_DIR / "scans"
+    rot_dir.mkdir(parents=True, exist_ok=True)
+    for p in sheets[:6]:
+        gold = {r_["meta"]["recipe"]: r_["answer"] for r_ in scan_rows if r_["path"] == p}
+        n, m = (int(x) for x in re.match(r"(\d+) of (\d+)", gold["sheet-of"]).groups())
+        code = gold["state"]
+        st_rx = rf"\b{code}\b|{states.get(code, code)}"
+        rot = rot_dir / (Path(p).stem + "_rot90.jpg")
+        if not rot.exists():
+            Image.open(abspath(p)).convert("RGB").rotate(90, expand=True).save(rot, quality=90)
+        for path, q, g, kind in [
+            (p, "How many sheets are in this drawing set?", m, "scan18:count"),
+            (p, "Which sheet number is this?", n, "scan18:count"),
+            (p, "Wie viele Blätter hat dieser Plansatz?", m, "scan18:de"),
+            (rot, "How many sheets are in this drawing set?", m, "scan18:rot90"),
+        ]:
+            out.append(row(path, q, g, "count", "count", kind, "same", note=f"catalogue: sheet {n} of {m}"))
+        for path, q, kind in [(p, "Where is this building located?", "scan18:state"),
+                              (p, "Missä osavaltiossa rakennus sijaitsee?", "scan18:state-fi")]:
+            r_ = row(path, q, states.get(code, code), None, "text", kind, "same", note=f"catalogue: state {code}")
+            r_["meta"]["accept_re"] = st_rx
+            out.append(r_)
+
     with open(OUT, "w", encoding="utf-8") as f:
         for r in out:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")

@@ -1,7 +1,7 @@
 # Red team report (agent Q) — can we break the pipeline?
 
-**573 adversarial questions** (`redteam/questions.jsonl`, built by `redteam/build.py`, analysed by `redteam/analyze.py`),
-in seventeen families written one after another tonight; each new family was aimed at the mechanism the last one exposed.
+**609 adversarial questions** (`redteam/questions.jsonl`, built by `redteam/build.py`, analysed by `redteam/analyze.py`),
+in eighteen families written one after another tonight; each new family was aimed at the mechanism the last one exposed.
 Builds on F's `hard` (translations/paraphrases/compositions/ft²) and `hard2` (new operators) and covers what those
 don't. The first 205 rows start from dev questions the pipeline had **right at conf ≥ 0.8**, so a failure there is
 caused by the perturbation, not by the drawing.
@@ -654,6 +654,15 @@ knowledge graph (sheets ↔ storeys ↔ spaces ↔ GUIDs, plan-vs-model checks) 
 *answer* a question about the links themselves ("do they agree?", "which sheet?", "how many sheets?"). Those are the
 questions a judge asks right after the demo shows "drawing 46 = model 46 ✓".
 
+## v18 (08:58): historical scans asked naturally, in German / Finnish, and rotated by 90° — 36 Qs (held)
+The first 6 HABS sheets of W4's scan probe (gold = the Library of Congress catalogue title "(sheet N of M)" + state,
+which the title block prints), asked without W4's format hints: "How many sheets are in this drawing set?", "Which
+sheet number is this?", "Wie viele Blätter hat dieser Plansatz?", the same on a copy rotated by 90°, "Where is this
+building located?", "Missä osavaltiossa rakennus sijaitsee?". Night 62754aa (run `20261114-084906-pipeline-v18-08d8`):
+**36/36 right**, all by `raster` from W3's text layer (boxed), 34 at 0.75 and 2 at 0.30 — robust, if under-confident
+for text printed in a title block. Caveat: W3/W4 have seen these sheets (W4's probe), so this is robustness to
+wording / language / rotation, not a held-out accuracy.
+
 ## For Saturday noon: red-team Stoa's example questions in one command (`redteam/from_examples.py`)
 Put Stoa's examples in a jsonl (`path`, `question`, and `answer` / `unit` when known; a path may be absolute), then
 ```
@@ -679,8 +688,8 @@ stayed 3 but moved confidence band (0.75 → 0.35 / 0.92).
 - Rotated, grayscale, heavily compressed and half-resolution copies of a plan: 30/30 right, at the same confidence.
 
 ## Re-run
-`questions.jsonl` now has 573 rows: v1 (174) + v2 (31) + v3 Swiss compositions (42) + v4 CubiCasa compositions (36) +
-v5 natural references (70) + v6 judge questions on the demo drawings (21) + v7 scope words in 9 languages (36) + v8 scope premises (8) + v9 Finnish judge (14) + v10 scan follow-ups (8) + v11 number formats (10) + v12 Estonian labels (5) + v13 lone PDF/PNG (8) + v14 two-part / comparisons / heights / which (31) + v15 bug-18 probe (22) + v16 Swiss dev plans alone as PNG/PDF (48) + v17 linking (9) = 573; earlier rows are byte-identical across builds (checked with cmp), so runs on the first 205 /
+`questions.jsonl` now has 609 rows: v1 (174) + v2 (31) + v3 Swiss compositions (42) + v4 CubiCasa compositions (36) +
+v5 natural references (70) + v6 judge questions on the demo drawings (21) + v7 scope words in 9 languages (36) + v8 scope premises (8) + v9 Finnish judge (14) + v10 scan follow-ups (8) + v11 number formats (10) + v12 Estonian labels (5) + v13 lone PDF/PNG (8) + v14 two-part / comparisons / heights / which (31) + v15 bug-18 probe (22) + v16 Swiss dev plans alone as PNG/PDF (48) + v17 linking (9) + v18 scans (36) = 609; earlier rows are byte-identical across builds (checked with cmp), so runs on the first 205 /
 283 rows compare directly (`python3 $JUNCTION_SHARED/artifacts/Q/subset_stats.py <run> 283`). Build with
 `PYTHONHASHSEED=0 PYTHONPATH=.`; v5 calls the ifc solver for its gold (deterministic, < 1 s per row).
 ```
