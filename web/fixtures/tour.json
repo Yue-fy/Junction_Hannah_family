@@ -27,7 +27,7 @@
  {
   "file": "data/ifc_bench/4351_arc.ifc",
   "q": "What plumbing fixtures are in this building and their respective counts?",
-  "note": "A free-text question about a Revit model. A local model answers from facts extracted from the IFC, then the browser counts every fixture type it names in the loaded model (no model call). The card leads with that table: 4 types, 21 fixtures, each count ✓, highlighted in 3D (orange). Fixtures of the same kind that an answer leaves out would be listed ✗ and shown in purple."
+  "note": "A free-text question about a Revit model: the answer lists the fixture types and their counts. The browser then counts every type it names in the loaded model with its own IFC parser (no model call) and leads with that table: 4 types, 21 fixtures, each count ✓, highlighted in 3D (orange). Fixtures of the same kind an answer leaves out would be listed ✗ and shown in purple."
  },
  {
   "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
