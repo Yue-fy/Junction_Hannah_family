@@ -71,8 +71,19 @@ export function crossChecks(a: Answer, asks: string[] = []): { text: string; ok:
     return [{ text: text.replace(/\s*[✓✗]\s*/g, " ").trim(), ok: !/✗|≠|!=|disagree|differs?\b|mismatch|conflict/i.test(text) }];
   });
   // Evidence notes carry the specific check; the trace usually repeats it, so use the trace only as fallback.
+  // Exception: boxes added by "Show where" (notes start with the locator's name) carry the locator's check only;
+  // the solver's own check (e.g. "vlm_lora 4 = raster 4") is then in the trace, so keep it next to it.
   const fromEv = parse(a.evidence.map((e) => e.note ?? ""));
-  const out = fromEv.length ? fromEv : parse(a.trace ?? []);
+  const fromTrace = parse(a.trace ?? []);
+  const located = a.evidence.some((e) => LOCATED_NOTE.test(e.note ?? ""));
+  const key = (t: string) => t.split("→")[0].replace(/\s+/g, " ").trim().slice(0, 24);
+  // "label reader (raster) finds 1 …" already says what the pipeline's "vlm_lora 0 ≠ raster 1" says: keep one line
+  const same = (t: string) => fromEv.some((e) => {
+    const m = e.text.match(/\((\w+)\) finds (\d+)/);
+    return m && new RegExp(`\\b${m[1]} ${m[2]}\\b`).test(t);
+  });
+  const extra = located ? fromTrace.filter((t) => !same(t.text) && !fromEv.some((e) => t.text.startsWith(key(e.text)) || e.text.startsWith(key(t.text)))) : [];
+  const out = fromEv.length ? [...fromEv, ...extra] : fromTrace;
   return out.filter((x, i) => out.findIndex((y) => y.text === x.text) === i).slice(0, Math.max(2, parts.size));
 }
 
@@ -282,9 +293,29 @@ export function secondOpinionHtml(a: Answer, b: Answer, ms: number) {
     ${raw ? `<details><summary>its reasoning</summary><p>${esc(raw.replace(/\s*\|\s*/g, " ").slice(0, 900))}</p></details>` : ""}</div>`;
 }
 
+/** Who can mark what a CubiCasa count counted when the answer itself carries no boxes: room names → the label
+ * reader (raster, local VLM, cached per drawing); symbols → R1's pretrained CubiCasa5K detector (cached, no GPU). */
+const ROOM_TARGETS = new Set(["bedroom", "kitchen", "bathroom", "sauna", "wc_room", "balcony"]);
+const SYMBOL_TARGETS = new Set(["window", "door", "wc", "sink"]);
+export const LOCATED_NOTE = /^(label reader|CubiCasa5K detector): /;
+export interface Locator { solver: string; name: string; button: string; title: string; noun: string }
+const NOUNS: Record<string, string> = { window: "windows", door: "doors", wc: "WC seats", sink: "sinks", wc_room: "WC room labels" };
+export function locatorFor(a: Answer, file: string): Locator | null {
+  if (a.value === null || (a.evidence ?? []).length || !/^data\/cubicasa5k\/.*\.(png|jpe?g)$/i.test(file)) return null;
+  const t = a.intent?.target ?? (a.trace ?? []).map((l) => l.match(/^intent: count (\w+)/)?.[1]).find((x) => x) ?? "";
+  const noun = NOUNS[t] ?? (ROOM_TARGETS.has(t) ? `${t} labels` : "symbols");
+  // the pipeline already asked the label reader and it found none: nothing to mark
+  if (ROOM_TARGETS.has(t) && (a.trace ?? []).some((l) => /cross-check:.*\braster 0\b/.test(l))) return null;
+  if (ROOM_TARGETS.has(t)) return { solver: "raster", name: "label reader", button: "Show where · read the room labels", noun,
+    title: "Read the room labels on the drawing (local vision model, once per drawing, cached) and mark the ones this answer counts" };
+  if (SYMBOL_TARGETS.has(t)) return { solver: "raster_cc5k", name: "CubiCasa5K detector", button: "Show where · symbol detector", noun,
+    title: "Mark every symbol the pretrained CubiCasa5K model finds (Kalervo et al. 2019, weights CC BY-NC 4.0; cached, no GPU)" };
+  return null;
+}
+
 export interface CardOpts {
-  /** CubiCasa answers without located evidence: ask the label reader (raster) where the counted rooms are. */
-  onLocate?: () => Promise<void>;
+  /** CubiCasa answers without located evidence: ask a locator (see locatorFor) to mark what was counted. */
+  onLocate?: (loc: Locator) => Promise<void>;
   onSecondOpinion?: () => Promise<{ answer: Answer; ms: number }>;
   onAsk?: (question: string) => void;
   roundTripMs: number;
@@ -328,6 +359,7 @@ export function renderCard(el: HTMLElement, a: Answer, opts: CardOpts) {
   const ev = a.evidence ?? [];
   const groups = groupEvidence(ev);
   const shown = groups.slice(0, 80);
+  const loc = locatorFor(a, opts.currentFile);
 
   el.className = `card answer ${a.value === null ? "refused" : ""}`;
   el.innerHTML = `
@@ -341,8 +373,7 @@ export function renderCard(el: HTMLElement, a: Answer, opts: CardOpts) {
     ${intentHtml(a, run)}
     ${checks.map((x) => `<div class="xcheck ${x.ok ? "ok" : "bad"}"><b>${x.ok ? "✓ Cross-checked" : "✗ Sources disagree"}</b> ${esc(x.text)}</div>`).join("")}
     ${cascadeHtml(tier)}
-    ${opts.onLocate && !ev.length && a.value !== null && /^data\/cubicasa5k\/.*\.(png|jpe?g)$/i.test(opts.currentFile)
-      ? `<div class="locate-slot"><button class="locate-btn" title="Read the room labels on the drawing (local vision model, once per drawing, cached) and mark the ones this answer counts">Show where · read the room labels</button></div>` : ""}
+    ${opts.onLocate && loc ? `<div class="locate-slot"><button class="locate-btn" title="${esc(loc.title)}">${esc(loc.button)}</button></div>` : ""}
     ${opts.onSecondOpinion && /\.(png|jpe?g|pdf)$/i.test(opts.currentFile) && (tier !== "deterministic" || (a.confidence ?? 0) < 0.8)
       ? `<div class="second-slot"><button class="second-btn" title="Ask NVIDIA Nemotron 3.5 Super VL (hosted vision + reasoning model) the same question: one API call, only when you click">Second opinion · NVIDIA Nemotron</button></div>` : ""}
     <div class="cost">
@@ -367,15 +398,15 @@ export function renderCard(el: HTMLElement, a: Answer, opts: CardOpts) {
     b.addEventListener("keydown", (e) => e.key === "Enter" && opts.onAsk?.(b.dataset.q!));
   });
   const lb = el.querySelector<HTMLButtonElement>(".locate-btn");
-  if (lb && opts.onLocate) {
+  if (lb && opts.onLocate && loc) {
     const go = opts.onLocate;
     lb.addEventListener("click", async () => {
       lb.disabled = true;
-      lb.textContent = "Reading the labels…";
+      lb.textContent = loc.solver === "raster" ? "Reading the labels…" : "Detecting symbols…";
       try {
-        await go();
+        await go(loc);
       } catch (e) {
-        lb.parentElement!.innerHTML = `<div class="xcheck bad"><b>Label reader failed</b> ${esc(e)}</div>`;
+        lb.parentElement!.innerHTML = `<div class="xcheck bad"><b>${esc(loc.name)} failed</b> ${esc(e)}</div>`;
       }
     });
   }

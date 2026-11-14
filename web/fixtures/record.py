@@ -36,6 +36,7 @@ QUESTIONS = [
      "Wie viele Türen und Fenster sind insgesamt auf diesem Grundriss eingezeichnet?"),
     ("data/cubicasa5k/colorful-4539.png",
      "Kuinka monta makuuhuonetta (MH) pohjapiirustuksessa on?"),
+    ("data/cubicasa5k/colorful-3182.png", "How many windows are shown on this floor plan?"),
     ("data/habs/vi0026_sheet_00003.jpg",
      "What kind of drawing is this (floor plan, elevation, section, site plan)?"),
 ]
@@ -48,8 +49,10 @@ SECOND = [
      "What kind of drawing is this (floor plan, elevation, section, site plan)?"),
 ]
 SECOND_SOLVER = ("vlm_direct", {"backend": "nvidia"})
-# "Show where" on CubiCasa answers without evidence: the label reader (raster) answers the same question.
-LOCATE = [("data/cubicasa5k/colorful-4539.png", "Kuinka monta makuuhuonetta (MH) pohjapiirustuksessa on?")]
+# "Show where" on CubiCasa answers without evidence (web/src/card.ts locatorFor): room counts → the label reader
+# (raster), symbol counts → R1's pretrained CubiCasa5K detector (raster_cc5k, cached). (path, question, solver)
+LOCATE = [("data/cubicasa5k/colorful-4539.png", "Kuinka monta makuuhuonetta (MH) pohjapiirustuksessa on?", "raster"),
+          ("data/cubicasa5k/colorful-3182.png", "How many windows are shown on this floor plan?", "raster_cc5k")]
 
 
 def main() -> None:
@@ -58,7 +61,7 @@ def main() -> None:
     args = ap.parse_args()
     out = []
     jobs = ([(p, q, None) for p, q in QUESTIONS] + [(p, q, SECOND_SOLVER) for p, q in SECOND]
-            + [(p, q, ("raster", {})) for p, q in LOCATE])
+            + [(p, q, (solver, {})) for p, q, solver in LOCATE])
     for path, q, solver in jobs:
         body = {"path": path, "question": q}
         if solver:

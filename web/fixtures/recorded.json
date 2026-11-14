@@ -35,7 +35,7 @@
     "ifc: 63.841 m2 (conf 0.98, train hit rate)",
     "cross-check: answer 63.84 m² vs IFC geometry 63.84 m² ✓; room polygon on the plan (1:100, scale fitted on all rooms) 63.84 m² ✓",
     "[ifc] asked on bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf; answering from its source model bsc-esplanades_1807-ep-ar-v18.ifc",
-    "[ifc] model bsc-esplanades_1807-ep-ar-v18.ifc: IFC2X3, 7 storeys, 2249 elements (index 7.3s, cached)",
+    "[ifc] model bsc-esplanades_1807-ep-ar-v18.ifc: IFC2X3, 7 storeys, 2249 elements (index 14.7s, cached)",
     "[ifc] parsed: metric=area kind=space scope=room names=['KORIDOR (119)', '1.korrus']",
     "[ifc] storey '1.korrus' -> '1.korrus' (exact, 100) guid 1oZ0wPs_PE8ANCPg3bIs4j",
     "[ifc] room 'KORIDOR (119)' -> IfcSpace 'KORIDOR (119)' (exact, 100) guid 2yu9t5gFecDw4PK0F5sh2s",
@@ -54,7 +54,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 0.1968
+    "wall_seconds": 1.2041
    },
    "intent": {
     "task": "area",
@@ -69,7 +69,7 @@
     "key": "area:room:room"
    }
   },
-  "recorded_at": "2026-11-14 01:51",
+  "recorded_at": "2026-11-14 03:15",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -1053,7 +1053,7 @@
     "ifc: 46 count (conf 0.97, train hit rate)",
     "cross-check: answer 46 vs IFC model: 46 IfcDoor on storey '1.korrus' ✓; plan drawing: 46 symbols ✓",
     "[ifc] asked on bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf; answering from its source model bsc-esplanades_1807-ep-ar-v18.ifc",
-    "[ifc] model bsc-esplanades_1807-ep-ar-v18.ifc: IFC2X3, 7 storeys, 2249 elements (index 7.3s, cached)",
+    "[ifc] model bsc-esplanades_1807-ep-ar-v18.ifc: IFC2X3, 7 storeys, 2249 elements (index 14.7s, cached)",
     "[ifc] parsed: metric=count kind=door scope=storey names=['1.korrus']",
     "[ifc] storey '1.korrus' -> '1.korrus' (exact, 100) guid 1oZ0wPs_PE8ANCPg3bIs4j",
     "[ifc] 46 elements of IfcDoor in storey '1.korrus'",
@@ -1073,7 +1073,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 0.0117
+    "wall_seconds": 0.0743
    },
    "intent": {
     "task": "count",
@@ -1087,7 +1087,7 @@
     "key": "count:door:storey"
    }
   },
-  "recorded_at": "2026-11-14 01:51",
+  "recorded_at": "2026-11-14 03:15",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -2260,7 +2260,7 @@
     "ifc: 55 count (conf 0.95, train hit rate)",
     "cross-check: answer 55 vs IFC model: 55 IfcWindow on storey '1.korrus' ✓; plan drawing: 52 symbols = the 52 the cut plane at floor +1.2 m crosses ✓ (3 lie entirely above/below it, so they are not drawn)",
     "[ifc] asked on bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf; answering from its source model bsc-esplanades_1807-ep-ar-v18.ifc",
-    "[ifc] model bsc-esplanades_1807-ep-ar-v18.ifc: IFC2X3, 7 storeys, 2249 elements (index 7.3s, cached)",
+    "[ifc] model bsc-esplanades_1807-ep-ar-v18.ifc: IFC2X3, 7 storeys, 2249 elements (index 14.7s, cached)",
     "[ifc] parsed: metric=count kind=window scope=storey names=['1.korrus']",
     "[ifc] storey '1.korrus' -> '1.korrus' (exact, 100) guid 1oZ0wPs_PE8ANCPg3bIs4j",
     "[ifc] 55 elements of IfcWindow in storey '1.korrus'",
@@ -2281,7 +2281,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 0.0124
+    "wall_seconds": 0.0142
    },
    "intent": {
     "task": "count",
@@ -2295,7 +2295,7 @@
     "key": "count:window:storey"
    }
   },
-  "recorded_at": "2026-11-14 01:51",
+  "recorded_at": "2026-11-14 03:15",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -6744,7 +6744,7 @@
     "ifc: 211 count (conf 0.94, train hit rate)",
     "cross-check: answer 211 vs IFC model total 211 IfcDoor ✓",
     "[ifc] asked on bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf; answering from its source model bsc-esplanades_1807-ep-ar-v18.ifc",
-    "[ifc] model bsc-esplanades_1807-ep-ar-v18.ifc: IFC2X3, 7 storeys, 2249 elements (index 7.3s, cached)",
+    "[ifc] model bsc-esplanades_1807-ep-ar-v18.ifc: IFC2X3, 7 storeys, 2249 elements (index 14.7s, cached)",
     "[ifc] parsed: metric=count kind=door scope=model names=['Maleva tänav 18 korterelamu (Esplanades example model)']",
     "[ifc] 'Maleva tänav 18 korterelamu (Esplanades example model)' taken as the model's name (not in IfcProject/IfcBuilding names; the file is the model)",
     "[ifc] 211 elements of IfcDoor in whole model",
@@ -6761,7 +6761,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 0.0137
+    "wall_seconds": 0.016
    },
    "intent": {
     "task": "count",
@@ -6775,7 +6775,7 @@
     "key": "count:door:model"
    }
   },
-  "recorded_at": "2026-11-14 01:51",
+  "recorded_at": "2026-11-14 03:15",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -7850,7 +7850,7 @@
     "operator question (modifier share changes what is computed)",
     "ifc (question as asked): 7.336 % (conf 0.88; the solver read the question itself, no LLM needed)",
     "[ifc] asked on bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf; answering from its source model bsc-esplanades_1807-ep-ar-v18.ifc",
-    "[ifc] model bsc-esplanades_1807-ep-ar-v18.ifc: IFC2X3, 7 storeys, 2249 elements (index 7.3s, cached)",
+    "[ifc] model bsc-esplanades_1807-ep-ar-v18.ifc: IFC2X3, 7 storeys, 2249 elements (index 14.7s, cached)",
     "[ifc] parsed: metric=area kind=space scope=storey names=['1.korrus', 'KORIDOR (119)']",
     "[ifc] part 63.841 m2",
     "[ifc] whole (all space on '1.korrus') 870.288 m2",
@@ -7872,7 +7872,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 0.0396
+    "wall_seconds": 0.0444
    },
    "intent": {
     "task": "area",
@@ -7887,7 +7887,7 @@
     "key": "area:room:room"
    }
   },
-  "recorded_at": "2026-11-14 01:51",
+  "recorded_at": "2026-11-14 03:15",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -8389,7 +8389,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 0.1729
+    "wall_seconds": 0.1021
    },
    "intent": {
     "task": "count",
@@ -8401,7 +8401,7 @@
     "key": "count:door:drawing"
    }
   },
-  "recorded_at": "2026-11-14 01:51",
+  "recorded_at": "2026-11-14 03:15",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -8589,7 +8589,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 0.0162
+    "wall_seconds": 0.0177
    },
    "intent": {
     "task": "count",
@@ -8603,7 +8603,7 @@
     "key": "count:room:label"
    }
   },
-  "recorded_at": "2026-11-14 01:51",
+  "recorded_at": "2026-11-14 03:15",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -9467,7 +9467,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 0.6288
+    "wall_seconds": 0.7151
    },
    "intent": {
     "task": "count",
@@ -9490,7 +9490,7 @@
     ]
    }
   },
-  "recorded_at": "2026-11-14 01:51",
+  "recorded_at": "2026-11-14 03:15",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -9499,32 +9499,71 @@
   "answer": {
    "value": 3,
    "unit": "count",
-   "confidence": 0.833,
-   "evidence": [],
+   "confidence": 0.857,
+   "evidence": [
+    {
+     "file": "data/cubicasa5k/colorful-4539.png",
+     "page": null,
+     "bbox": [
+      276.0,
+      322.9,
+      334.5,
+      356.0
+     ],
+     "bbox_space": "image_px",
+     "ifc_guid": null,
+     "note": "label 'MH' = bedroom 1; cross-check: vlm_lora 3 = raster 3 ✓"
+    },
+    {
+     "file": "data/cubicasa5k/colorful-4539.png",
+     "page": null,
+     "bbox": [
+      990.0,
+      322.9,
+      1048.5,
+      356.0
+     ],
+     "bbox_space": "image_px",
+     "ifc_guid": null,
+     "note": "label 'MH' = bedroom 2; cross-check: vlm_lora 3 = raster 3 ✓"
+    },
+    {
+     "file": "data/cubicasa5k/colorful-4539.png",
+     "page": null,
+     "bbox": [
+      580.5,
+      861.1,
+      637.5,
+      894.2
+     ],
+     "bbox_space": "image_px",
+     "ifc_guid": null,
+     "note": "label 'MH' = bedroom 3; cross-check: vlm_lora 3 = raster 3 ✓"
+    }
+   ],
    "trace": [
     "intent: count bedroom [drawing] (lang fi)",
     "gate (train n=40): prior 28%, raster 72%, vlm_lora 85%, vlm_direct 70%",
     "vlm_lora: 3 count (conf 0.83, train hit rate)",
+    "cross-check: vlm_lora 3 = raster 3 ✓ → conf 0.86 (LoRA right 29/33 on train_gate when raster agreed)",
     "[vlm_lora] kind=count unit=count",
     "[vlm_lora] local:cc-v2 0.3s tok 2104->2",
     "[vlm_lora] raw: 3",
-    "[vlm_lora] p(answer digits) = 0.90700 -> confidence 0.92",
+    "[vlm_lora] p(answer digits) = 0.91797 -> confidence 0.92",
     "[vlm_lora] cost: calls=1 tok_in=2104 tok_out=2 gpu_s=0.09 api_calls=0"
    ],
    "solver": "pipeline/vlm_lora",
    "assumptions": [],
-   "missing": [
-    "no located evidence from this solver"
-   ],
+   "missing": [],
    "cost": {
-    "llm_tokens_in": 2104,
-    "llm_tokens_out": 2,
-    "gpu_seconds": 0.0862,
+    "llm_tokens_in": 7364,
+    "llm_tokens_out": 442,
+    "gpu_seconds": 11.012198449325561,
     "api_calls": 0,
     "api_tokens_in": 0,
     "api_tokens_out": 0,
-    "llm_calls": 1,
-    "wall_seconds": 0.524
+    "llm_calls": 2,
+    "wall_seconds": 2.4125
    },
    "intent": {
     "task": "count",
@@ -9536,7 +9575,55 @@
     "key": "count:bedroom:drawing"
    }
   },
-  "recorded_at": "2026-11-14 01:51",
+  "recorded_at": "2026-11-14 03:15",
+  "api": "http://127.0.0.1:8102"
+ },
+ {
+  "path": "data/cubicasa5k/colorful-3182.png",
+  "question": "How many windows are shown on this floor plan?",
+  "answer": {
+   "value": 4,
+   "unit": "count",
+   "confidence": 0.333,
+   "evidence": [],
+   "trace": [
+    "intent: count window [drawing] (lang en)",
+    "raster_cc5k: no held-out rate for this question kind; not used",
+    "gate (train n=40): prior 10%, raster 10%, vlm_lora 15%, vlm_direct 12%; skip raster, vlm_direct",
+    "vlm_lora: 4 count (conf 0.17, train hit rate)",
+    "cross-check: vlm_lora 4 = raster 4 ✓ → conf 0.33 (LoRA right 1/4 on train_gate when raster agreed)",
+    "[vlm_lora] kind=count unit=count",
+    "[vlm_lora] local:cc-v2 0.3s tok 374->2",
+    "[vlm_lora] raw: 4",
+    "[vlm_lora] p(answer digits) = 0.24534 -> confidence 0.22",
+    "[vlm_lora] cost: calls=1 tok_in=374 tok_out=2 gpu_s=0.02 api_calls=0"
+   ],
+   "solver": "pipeline/vlm_lora",
+   "assumptions": [],
+   "missing": [
+    "no located evidence from this solver"
+   ],
+   "cost": {
+    "llm_tokens_in": 374,
+    "llm_tokens_out": 2,
+    "gpu_seconds": 0.017,
+    "api_calls": 0,
+    "api_tokens_in": 0,
+    "api_tokens_out": 0,
+    "llm_calls": 1,
+    "wall_seconds": 0.3115
+   },
+   "intent": {
+    "task": "count",
+    "target": "window",
+    "scope": "drawing",
+    "unit": "count",
+    "filters": {},
+    "lang": "en",
+    "key": "count:window:drawing"
+   }
+  },
+  "recorded_at": "2026-11-14 03:15",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -9569,7 +9656,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 1,
-    "wall_seconds": 1.3351
+    "wall_seconds": 0.6152
    },
    "intent": {
     "task": "text",
@@ -9581,7 +9668,7 @@
     "key": "text:unknown:drawing"
    }
   },
-  "recorded_at": "2026-11-14 01:51",
+  "recorded_at": "2026-11-14 03:15",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -9594,22 +9681,22 @@
    "evidence": [],
    "trace": [
     "kind=count unit=count",
-    "nvidia:private/nvidia/nemotron-3.5-super-120b-a12b 25.6s tok 2150->158",
-    "raw:  There is a label \"MH\". |     *   Bottom middle-left room: There is a label \"MH\". |  | 2.  **Verify the count.** |     *   Room 1: Top left corner. |     *   Room 2: Top right area (next to OH). |     *   Room 3: Bottom middle area (next to VAR and VH). |  | 3.  **Final Count:** 3. |  | 4.  **Format:** Single integer.3",
-    "cost: calls=1 tok_in=2150 tok_out=158 gpu_s=0.00 api_calls=1"
+    "nvidia:private/nvidia/nemotron-3.5-super-120b-a12b 7.2s tok 2150->157",
+    "raw:  room: There is a label \"MH\". |     *   Bottom middle room: There is a label \"MH\". |  | 2.  **Verify the count.** |     *   Room 1: Top left corner. |     *   Room 2: Top right area (next to OH). |     *   Room 3: Bottom middle area (next to ET and VH). |  | 3.  **Final Count:** 3. |  | 4.  **Format:** Single integer.3",
+    "cost: calls=1 tok_in=2150 tok_out=157 gpu_s=0.00 api_calls=1"
    ],
    "solver": "vlm_direct",
    "assumptions": [],
    "missing": [],
    "cost": {
     "llm_tokens_in": 2150,
-    "llm_tokens_out": 158,
+    "llm_tokens_out": 157,
     "gpu_seconds": 0.0,
     "api_calls": 1,
     "api_tokens_in": 2150,
-    "api_tokens_out": 158,
+    "api_tokens_out": 157,
     "llm_calls": 1,
-    "wall_seconds": 25.902
+    "wall_seconds": 7.5571
    },
    "intent": {
     "task": "count",
@@ -9621,7 +9708,7 @@
     "key": "count:bedroom:drawing"
    }
   },
-  "recorded_at": "2026-11-14 01:51",
+  "recorded_at": "2026-11-14 03:15",
   "api": "http://127.0.0.1:8102",
   "solver": "vlm_direct",
   "solver_args": {
@@ -9638,7 +9725,7 @@
    "evidence": [],
    "trace": [
     "kind=text unit=None",
-    "nvidia:private/nvidia/nemotron-3.5-super-120b-a12b 7.0s tok 3249->3",
+    "nvidia:private/nvidia/nemotron-3.5-super-120b-a12b 5.2s tok 3249->3",
     "raw: Elevation",
     "cost: calls=1 tok_in=3249 tok_out=3 gpu_s=0.00 api_calls=1"
    ],
@@ -9653,7 +9740,7 @@
     "api_tokens_in": 3249,
     "api_tokens_out": 3,
     "llm_calls": 1,
-    "wall_seconds": 7.1875
+    "wall_seconds": 5.3874
    },
    "intent": {
     "task": "text",
@@ -9665,7 +9752,7 @@
     "key": "text:unknown:drawing"
    }
   },
-  "recorded_at": "2026-11-14 01:51",
+  "recorded_at": "2026-11-14 03:15",
   "api": "http://127.0.0.1:8102",
   "solver": "vlm_direct",
   "solver_args": {
@@ -9724,7 +9811,7 @@
     "class=bedroom",
     "prior (train mode for bedroom) = 1 (hit rate 31%, n=5410)",
     "gate[bedroom] = labels (train acc {'prior': 0.26, 'labels': 0.64, 'labels_code': 0.64, 'max1': 0.54})",
-    "labels: 13 read in 10.9s: MH->bedroom, MH->bedroom, OH->-, VAR->-, VAR->-, MH->bedroom, VH->-, TK->kitchen, K->kitchen, ET->-, PH->bathroom, WC->wc_room, AUTOTALLI->-",
+    "labels (shared with another question): 13 read in 10.9s: MH->bedroom, MH->bedroom, OH->-, VAR->-, VAR->-, MH->bedroom, VH->-, TK->-, K->kitchen, ET->-, PH->bathroom, WC->wc_room, AUTOTALLI->-",
     "reused R1 v2 label output",
     "cross-check vs prior 1: differs"
    ],
@@ -9734,14 +9821,14 @@
    ],
    "missing": [],
    "cost": {
-    "llm_tokens_in": 5260,
-    "llm_tokens_out": 440,
-    "gpu_seconds": 10.925998449325562,
+    "llm_tokens_in": 0,
+    "llm_tokens_out": 0,
+    "gpu_seconds": 0.0,
     "api_calls": 0,
     "api_tokens_in": 0,
     "api_tokens_out": 0,
-    "llm_calls": 1,
-    "wall_seconds": 1.4623
+    "llm_calls": 0,
+    "wall_seconds": 0.0288
    },
    "intent": {
     "task": "count",
@@ -9753,8 +9840,102 @@
     "key": "count:bedroom:drawing"
    }
   },
-  "recorded_at": "2026-11-14 01:51",
+  "recorded_at": "2026-11-14 03:15",
   "api": "http://127.0.0.1:8102",
   "solver": "raster"
+ },
+ {
+  "path": "data/cubicasa5k/colorful-3182.png",
+  "question": "How many windows are shown on this floor plan?",
+  "answer": {
+   "value": 4,
+   "unit": "count",
+   "confidence": 0.561,
+   "evidence": [
+    {
+     "file": "data/cubicasa5k/colorful-3182.png",
+     "page": null,
+     "bbox": [
+      96.0,
+      95.0,
+      152.0,
+      126.0
+     ],
+     "bbox_space": "image_px",
+     "ifc_guid": null,
+     "note": "window 1"
+    },
+    {
+     "file": "data/cubicasa5k/colorful-3182.png",
+     "page": null,
+     "bbox": [
+      222.0,
+      96.0,
+      279.0,
+      130.0
+     ],
+     "bbox_space": "image_px",
+     "ifc_guid": null,
+     "note": "window 2"
+    },
+    {
+     "file": "data/cubicasa5k/colorful-3182.png",
+     "page": null,
+     "bbox": [
+      304.0,
+      97.0,
+      362.0,
+      133.0
+     ],
+     "bbox_space": "image_px",
+     "ifc_guid": null,
+     "note": "window 3"
+    },
+    {
+     "file": "data/cubicasa5k/colorful-3182.png",
+     "page": null,
+     "bbox": [
+      432.0,
+      102.0,
+      487.0,
+      136.0
+     ],
+     "bbox_space": "image_px",
+     "ifc_guid": null,
+     "note": "window 4"
+    }
+   ],
+   "trace": [
+    "raster_cc5k: 4 window components (cached)",
+    "pretrained CubiCasa5K multi-task model (Kalervo et al. 2019), weights CC BY-NC 4.0"
+   ],
+   "solver": "raster_cc5k",
+   "assumptions": [
+    "symbols segmented by the pretrained CubiCasa5K model (Kalervo et al. 2019); each box is one counted symbol"
+   ],
+   "missing": [],
+   "cost": {
+    "llm_tokens_in": 0,
+    "llm_tokens_out": 0,
+    "gpu_seconds": 0.0,
+    "api_calls": 0,
+    "api_tokens_in": 0,
+    "api_tokens_out": 0,
+    "llm_calls": 0,
+    "wall_seconds": 0.0001
+   },
+   "intent": {
+    "task": "count",
+    "target": "window",
+    "scope": "drawing",
+    "unit": "count",
+    "filters": {},
+    "lang": "en",
+    "key": "count:window:drawing"
+   }
+  },
+  "recorded_at": "2026-11-14 03:15",
+  "api": "http://127.0.0.1:8102",
+  "solver": "raster_cc5k"
  }
 ]
