@@ -381,6 +381,29 @@ Comparisons are asked as numbers so they score. Rows: `meta.kind = judge:*` (als
   "raster image with no known scale: the size is an estimate" (exactly Stoa's ask).
 - Owners: W1 (all IFC rows, sent 05:00). Demo guidance for W5: `demo/DEMO.md` "If a judge types their own question".
 
+## v7 (05:00): scope words in 9 languages — 36 Qs, run `20261114-045651-pipeline-v7-7654` (night dde6347)
+v6's Finnish "koko rakennuksessa" miss, measured: "How many doors/windows are there in the whole building?" asked on a
+storey sheet of 3 IFC models (esplanades 1.korrus, Smiley West EG, Amersfoort gym 00), and "How many doors are there
+on this floor?" on the esplanades sheet, each in EN/DE/NL/FI/SV/FR/IT/ET/PL. Gold = the dataset's own "in the model
+'…'" answers (211 / 170 / 69) and the sheet's storey (46).
+
+| scope | EN | DE | NL | PL | FI | SV | FR | IT | ET |
+|---|---|---|---|---|---|---|---|---|---|
+| whole building (3 each) | 3/3 | 3/3 | 3/3 | 2/3 | 1/3 | **0/3** | **0/3** | **0/3** | **0/3** |
+| this floor (1 each) | ✓ | ✓ | ✓ | ✓ (0.75) | ✗ (0.30) | ✓ | ✓ | ✓ | ✓ |
+
+### 16. "In the whole building" is ignored outside EN/DE/NL, and the right answers are the less confident ones (HIGH) — owners W1 (`ifc` scope words), W4 (cross-check)
+- SV/FR/IT/ET (and 2 of 3 FI): the scope phrase is not recognised, the sheet's storey default fires: **14 answers at
+  0.875–0.985, all wrong** (46 / 50 / 20 instead of 211 / 170 / 69). Estonian matters twice: the demo model is
+  Estonian, and Estonian was where sealed hard2r's IFC questions collapsed (20 %).
+- The *right* whole-building answers sit at 0.68–0.70: a cross-check compares the model-wide total with the plan
+  symbols of the sheet on screen, reads the scope mismatch as a disagreement, and W4's ✗ cap applies. Calibration on
+  this family is inverted (right ≈ 0.69, wrong ≈ 0.95).
+- **Fix:** (a) model-scope words in more languages (hela byggnaden, hele bygningen, tout le bâtiment, tutto
+  l'edificio, todo el edificio, kogu hoone(s), koko rakennus, całym budynku, celé budově …); (b) the general guard: the
+  sheet's-storey default needs a positive cue — "this floor / plan / sheet" in any language, or no place words at all —
+  otherwise conf ≤ 0.5 or translate and re-ask; (c) cross-check like with like (sheet symbols vs that storey's count).
+
 ## What held (worth saying in the pitch)
 - Paraphrase / casing / context / distractor numbers: **0 of 56 answers changed**. Typos and injections changed 7
   answers, **all of them at conf ≤ 0.42**, so the confidence flagged every one.
@@ -390,8 +413,8 @@ Comparisons are asked as numbers so they score. Rows: `meta.kind = judge:*` (als
 - Rotated, grayscale, heavily compressed and half-resolution copies of a plan: 30/30 right, at the same confidence.
 
 ## Re-run
-`questions.jsonl` now has 374 rows: v1 (174) + v2 (31) + v3 Swiss compositions (42) + v4 CubiCasa compositions (36) +
-v5 natural references (70) + v6 judge questions on the demo drawings (21) = 374; earlier rows are byte-identical across builds (checked with cmp), so runs on the first 205 /
+`questions.jsonl` now has 410 rows: v1 (174) + v2 (31) + v3 Swiss compositions (42) + v4 CubiCasa compositions (36) +
+v5 natural references (70) + v6 judge questions on the demo drawings (21) + v7 scope words in 9 languages (36) = 410; earlier rows are byte-identical across builds (checked with cmp), so runs on the first 205 /
 283 rows compare directly (`python3 $JUNCTION_SHARED/artifacts/Q/subset_stats.py <run> 283`). Build with
 `PYTHONHASHSEED=0 PYTHONPATH=.`; v5 calls the ifc solver for its gold (deterministic, < 1 s per row).
 ```

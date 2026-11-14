@@ -501,6 +501,39 @@ def main():
     out.append(row(CC, "How big is this apartment in square metres?", None, None, "area", "judge:cubicasa", "flag",
                    note="no scale on the plan: an estimate must say so"))
 
+    # ===== v7 (05:05): scope words in 9 languages — "in the whole building" vs "on this floor" on a storey sheet ====
+    # v6 found FI 'koko rakennuksessa' answered for the sheet's storey at 0.88. Asked on a storey sheet, the sheet
+    # default is the trap for 'whole building' and the right answer for 'this floor'. Gold = the dataset's own
+    # "How many doors/windows are there in the model '…'?" answers (= ifcopenshell counts) and storey containment.
+    whole = {
+        "doors": {"en": "How many doors are there in the whole building?", "de": "Wie viele Türen gibt es im ganzen Gebäude?",
+                  "nl": "Hoeveel deuren zijn er in het hele gebouw?", "fi": "Montako ovea koko rakennuksessa on?",
+                  "sv": "Hur många dörrar finns det i hela byggnaden?",
+                  "fr": "Combien de portes y a-t-il dans tout le bâtiment ?",
+                  "it": "Quante porte ci sono in tutto l'edificio?", "et": "Mitu ust on kogu hoones?",
+                  "pl": "Ile drzwi jest w całym budynku?"},
+        "windows": {"en": "How many windows are there in the whole building?",
+                    "de": "Wie viele Fenster gibt es im ganzen Gebäude?", "nl": "Hoeveel ramen zijn er in het hele gebouw?",
+                    "fi": "Montako ikkunaa koko rakennuksessa on?", "sv": "Hur många fönster finns det i hela byggnaden?",
+                    "fr": "Combien de fenêtres y a-t-il dans tout le bâtiment ?",
+                    "it": "Quante finestre ci sono in tutto l'edificio?", "et": "Mitu akent on kogu hoones?",
+                    "pl": "Ile okien jest w całym budynku?"},
+    }
+    this_floor = {"en": "How many doors are there on this floor?", "de": "Wie viele Türen gibt es auf diesem Geschoss?",
+                  "nl": "Hoeveel deuren zijn er op deze verdieping?", "fi": "Montako ovea tässä kerroksessa on?",
+                  "sv": "Hur många dörrar finns det på den här våningen?", "fr": "Combien de portes y a-t-il à cet étage ?",
+                  "it": "Quante porte ci sono su questo piano?", "et": "Mitu ust on sellel korrusel?",
+                  "pl": "Ile drzwi jest na tym piętrze?"}
+    for path, k, g, sheet_g in [(E, "doors", 211, 46),
+                                (f"{M}kit-smiley-west_ac-20-smiley-west-10-bldg_plan-02-eg.pdf", "doors", 170, 50),
+                                (f"{M}bsc-gymzaal-amersfoort_example-project-location_plan-01-00-begane-grond.pdf",
+                                 "windows", 69, 20)]:
+        for lang, q in whole[k].items():
+            out.append(row(path, q, g, "count", "count", f"scope-whole:{lang}", "same",
+                           note=f"model {k} {g}; the sheet's storey has {sheet_g}"))
+    for lang, q in this_floor.items():
+        out.append(row(E, q, 46, "count", "count", f"scope-floor:{lang}", "same", note="1.korrus (the sheet) 46"))
+
     with open(OUT, "w", encoding="utf-8") as f:
         for r in out:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
