@@ -19,7 +19,8 @@ echo "[$(date +%H:%M)] got the GPU lock"
 cleanup() { "$REPO/serving/stop.sh" 8002 || true; }
 trap cleanup EXIT
 cd "$REPO"
-PORT=8002 GPU_UTIL=${GPU_UTIL:-0.30} SERVED_NAME=qwen3-vl-8b-lora-test LORA="$NAME=$DIR" serving/start.sh qwen3vl8b 9>&-   # the server must not inherit the lock fd
+PRESET=${PRESET:-qwen3vl8b}   # base model preset of serving/start.sh (gemma4-e4b for a Gemma adapter)
+PORT=8002 GPU_UTIL=${GPU_UTIL:-0.30} SERVED_NAME=$PRESET-lora-test LORA="$NAME=$DIR" serving/start.sh "$PRESET" 9>&-   # the server must not inherit the lock fd
 
 run() {
   echo "[$(date +%H:%M)] eval: $*"

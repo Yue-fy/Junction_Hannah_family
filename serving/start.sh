@@ -24,11 +24,22 @@ case "$PRESET" in
     : "${SERVED_NAME:=qwen3.6-35b-a3b}" ;;
   gemma4-e4b)  # Gemma 4 E4B-it (ungated, 16 GB bf16): bake-off candidate, Gemma prize. Use PORT=8002 + GPU lock.
     : "${MODEL:=$MODELS/hf/google/gemma-4-E4B-it}"
-    : "${SERVED_NAME:=gemma-4-e4b}" ;;
+    : "${SERVED_NAME:=gemma-4-e4b}"
+    # default image budget is 280 soft tokens (too coarse for floor plans); 1120 is the maximum
+    gemma_kw="{\"max_soft_tokens\":${GEMMA_IMG_TOKENS:-1120}}"
+    : "${EXTRA_ARGS:=--mm-processor-kwargs $gemma_kw}" ;;
   *) : "${MODEL:?set MODEL for a custom preset}"; : "${SERVED_NAME:=$PRESET}" ;;
 esac
 PORT=${PORT:-8001}
 GPU_UTIL=${GPU_UTIL:-0.45}
+# The shared server must always serve the counting LoRAs (vlm_lora; without them cubicasa drops ~12 points).
+# Default for the shared qwen3vl8b server: every adapter below that exists. NO_LORA=1 to start without them.
+if [[ $PORT == 8001 && $PRESET == qwen3vl8b && -z ${LORA:-} && ${NO_LORA:-0} != 1 ]]; then
+  for a in cc-v2 cc-v3; do
+    d=$SHARED/artifacts/R2/lora/$a
+    [[ -f $d/adapter_config.json ]] && LORA=${LORA:+$LORA,}$a=$d
+  done
+fi
 MAX_LEN=${MAX_LEN:-32768}
 if [[ $PORT == 8001 ]]; then SUFFIX=""; else SUFFIX="-$PORT"; fi
 LOG=$SHARED/logs/model-server$SUFFIX.log
