@@ -108,13 +108,8 @@ def ece(rows, bins=10):
     return sum(len(v) / n * abs(sum(c for c, _ in v) / len(v) - sum(o for _, o in v) / len(v)) for v in b.values())
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("run")
-    ap.add_argument("--md", default=None)
-    ap.add_argument("--rerun", default=None, help="another run over the same questions: report answer changes")
-    a = ap.parse_args()
-    rows = [json.loads(line) for line in open(a.run)]
+def rescore(rows):
+    """Score the rows the eval scorer leaves open (yes/no, multi-part, 'which', accepted text), in place."""
     for r in rows:
         k = (r.get("meta") or {}).get("kind", "")
         if k.startswith("yesno"):
@@ -129,6 +124,17 @@ def main():
         elif k == "judge:ifc-text":  # v6 'which floor': the storey name must appear in the answer
             norm = lambda x: re.sub(r"[\s.]+", "", str(x or "").lower())
             r["correct"] = norm(r.get("gold")) in norm(r["value"])
+    return rows
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("run")
+    ap.add_argument("--md", default=None)
+    ap.add_argument("--rerun", default=None, help="another run over the same questions: report answer changes")
+    a = ap.parse_args()
+    rows = [json.loads(line) for line in open(a.run)]
+    rescore(rows)
     out = []
     p = out.append
 

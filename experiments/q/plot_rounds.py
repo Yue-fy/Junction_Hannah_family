@@ -3,16 +3,19 @@ Writes demo/redteam-rounds.svg (render to PNG with headless chromium, see REPORT
 conf >= 0.8 that is wrong, or any answer at >= 0.8 to a false-premise/unanswerable row, over the runs in REPORT.md.
 Palette: dataviz reference categorical slots 1-5, validated (light); every segment carries its value (relief rule)."""
 SURF, INK, INK2, GRID = "#fcfcfb", "#0b0b0b", "#52514e", "#e2e1dc"
-SER = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300"]
+SER = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#e34948", "#6250d6"]
 FAMS = ["v1–v2 noise, injection, images, false premises (205 Qs)", "v3–v4 “A and B in total”, 11 languages (78)",
         "v5 everyday storey &amp; room words (70)", "v6–v8 judge questions, “whole building”, 7th floor (65)",
-        "v9–v10 Finnish judge, scan follow-ups (22)", "v11 number formats: “1,200 euros”, “1'200 CHF” (10)"]
-SIZES = [205, 78, 70, 65, 22, 10]
+        "v9–v10 Finnish judge, scan follow-ups (22)", "v11 number formats: “1,200 euros”, “1'200 CHF” (10)",
+        "v12–v13 Estonian room labels, the plan without its DXF (13)", "v14 two-part questions, comparisons, storey heights (31)"]
+SIZES = [205, 78, 70, 65, 22, 10, 13, 31]
 ROUNDS = [("04:15", "0589ce3"), ("04:19", "58073d5"), ("04:33", "W4 fix"), ("04:41", "cc1ca5b"), ("04:46", "dde6347"),
-          ("04:59", "753eccb"), ("05:05", "+W1/W2/W4"), ("05:12", "+W1 basement")]
-DATA = [[8, None, None, None, None, None], [7, None, None, None, None, None], [2, None, None, None, None, None],
-        [2, 2, None, None, None, None], [0, 0, 18, None, None, None], [0, 0, 11, 9, None, None], [0, 0, 6, 9, 0, None],
-        [0, 0, 1, 6, 0, 2]]
+          ("04:59", "753eccb"), ("05:05", "+W1/W2/W4"), ("05:12", "+W1 basement"),
+          ("08:16", "bb94fe4 = test 2")]
+DATA = [[8, None, None, None, None, None, None, None], [7, None, None, None, None, None, None, None],
+        [2, None, None, None, None, None, None, None], [2, 2, None, None, None, None, None, None],
+        [0, 0, 18, None, None, None, None, None], [0, 0, 11, 9, None, None, None, None], [0, 0, 6, 9, 0, None, None, None],
+        [0, 0, 1, 6, 0, 2, None, None], [0, 0, 1, 6, 0, 2, 0, 3]]
 W, H = 1100, 600
 L, R, T, B = 70, 30, 200, 90          # plot margins
 YMAX = 24
