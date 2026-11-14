@@ -907,7 +907,7 @@ out-of-drawing like a rent rate, so it belongs in the estimate route next to ren
   (W1's ifc solver, 'total net side area of all walls', accepted at conf ≥ 0.3, 0 LLM) × FACES_PER_SIDE 1.5 (1.2–1.9),
   + ceilings = floor area when asked; the floor-area factor stays the fallback. Coverage over one file per IFC project
   (345 files, 200 s): measured on 11 (gdynia, vitoria, warmond, clinic, duplex, esplanades, gymzaal, molio, fzk-haus,
-  institute, smiley-west); the other 334 (324 resbim + barlad, frigento, chesapeake, …) have neither walls nor IfcSpace
+  institute, smiley-west); the other 334 (331 resbim + barlad, frigento, chesapeake; the 200 s cap stopped before the last resbim files) have neither walls nor IfcSpace
   areas the solver reads, so they get the typical-dwelling fallback (90 m², 3,500 EUR, range 600–19,400). Esplanades:
   8,227 m² one face → 12,341 m² painted (the floor factor gave 11,190) → 185,100 EUR (79,000–469,000), conf 0.1.
   Known limits: 'on this floor' on an `.ifc` path is still the whole model (dwelling() already did that for floor area,
