@@ -29,8 +29,9 @@ SYSTEM = ("You answer questions about one apartment floor plan from its room gra
           "MH/AH/H = bedroom, OH = living room, K/KT/KK/KEITTIÖ = kitchen, KPH/KH/PH/PESUH = bathroom/washroom, "
           "S/L.H./SAUNA = sauna, WC = toilet room, ET/ETEINEN = entrance hall, VH/HV/VAR = closet/storage, "
           "PARV/PARVEKE = balcony, TK = vestibule, RT = dining, SUIHKU = shower room, KHH = utility room. "
-          "Reply with JSON only: {\"value\": <a number, or a short text answer that names rooms by their type and "
-          "printed label, e.g. \"bathroom (KPH)\", never by an id like R3>, \"unit\": <\"count\"|\"m2\"|null>, "
+          "Reply with JSON only: {\"value\": <a number, or a short text answer that names rooms by their type plus "
+          "the label quoted in the graph if the room has one, e.g. \"bathroom\" or \"bedroom (MH 12.0)\"; never "
+          "invent a code that is not quoted in the graph; never use an id like R3>, \"unit\": <\"count\"|\"m2\"|null>, "
           "\"rooms\": [<ids of the rooms the answer is about>], \"terms\": [<if the answer is a sum or total of "
           "areas or counts: the numbers to add, one per room; else []>], \"why\": <one short sentence>}.")
 
@@ -123,6 +124,12 @@ def solve(path: str, question: str, backend: str = "local"):
             trace.append(f"LLM value {value} kept; its listed terms sum to {s:g}")
     by = {r["id"]: r for r in g["rooms"]}
     used = [by[i] for i in ids if i in by]
+    if isinstance(value, str):  # internal ids never reach the user: '(R9)' -> the room's printed label, or nothing
+        def _name(m):
+            r = by.get(m.group(1))
+            return f" ({r['label']})" if r and r.get("label") else ""
+        value = re.sub(r"\s*\((R\d+)\)", _name, value)
+        value = re.sub(r"\s*\((?:R\d+(?:,\s*)?)+\)", "", value).strip() or value
     assumptions, missing = [], []
     conf = 0.7
     if unit == "m2":

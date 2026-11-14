@@ -597,3 +597,9 @@ area reads (1 cached VLM call, 3 when nothing with a unit is printed) + CC5K on 
 v3 misses (all methods): the balcony door of a bedroom that also opens to the living room (all say living room); a
 closet entered from the hall (solve says bedroom); upper-floor bedroom areas on a two-storey sheet (graph has no
 floor split: 25.0 for 36.5).
+**Final version (night-R1, this commit):** prompt asks for the label quoted in the graph (no invented codes: it wrote
+'bathroom (KPH)' where the plan prints PH) and internal ids are stripped from text answers ('(R9)' → the room's
+label or nothing). Same cached LLM calls otherwise. Scores: v1 24/29, v2 12/14, v3 7/11 (ed6489a had 8/11 on v3:
+one balcony answer flipped from living room to bedroom, LLM wobble) → **43/54 (80%) vs pipeline 27/54, +29.6 pts
+[+18.5, +40.7], McNemar 19 vs 3 p = 0.0009; vs vlm_direct 17 vs 3 p = 0.003**; v3 alone 3 vs 0 (p = 0.25).
+Read: a robust direction over 14 plans, a size between ~+15 and +40 points; v3 is too small to confirm on its own.
