@@ -1555,7 +1555,12 @@ class Pipeline(BaseSolver):
                              f"(its operation check rewrote the question), but the question excludes no apartment: "
                              "dropped")
                 continue
-            if derived and not any(str(t).startswith("table QA code") for t in a.trace) and \
+            # W2 09:32 (night-W2 20fd6c7): dxf applies a stated price IN CODE on its rule count/area ('price x quantity:'
+            # trace line; 11/11 price probes right) -> trusted like table-QA code, for cost questions only (an add /
+            # remove / time rate stays with the agent)
+            priced = "cost" in derived and any(re.match(r"\s*(?:\[\w+\]\s*)?(?:price x quantity|stated price/rate):",
+                                                        str(t)) for t in a.trace)
+            if derived and not priced and not any(str(t).startswith("table QA code") for t in a.trace) and \
                     not _code_applied_all(question, a.trace) and a.confidence >= self.raw_accept:
                 # W1 04:15: ifc applies rates/prices in code ("outer operation: factor 450 EUR per door" / "per door";
                 # 26/26 right on derived.jsonl) -> trusted; its 'add N' is not ("15 metres of wall per day" -> "add 15"
