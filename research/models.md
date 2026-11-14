@@ -4,7 +4,7 @@ Hardware: 1× RTX PRO 6000 Blackwell 96 GB. Shared server budget ≈ 45 GB (`--g
 **Bandwidth is the real constraint tonight:** this machine downloads from Hugging Face at only ~2.5 MB/s total
 (Wi-Fi; measured with 8 parallel range requests), i.e. ~2 h per 19 GB. Every download must be chosen carefully.
 
-## TL;DR for the captain (09:45, end of night)
+## TL;DR for the captain (10:45, end of night)
 - **Small fine-tuned beats big general.** A LoRA on our own 8B (cc-v2, 2 output tokens per answer) is the night's largest gain on
   SEALED test: CubiCasa +8.8 [+6.0, +11.9], weighted 73.8 → 79.8, at ~$0.02 per 1k questions. A 4× bigger base VLM (Qwen3.6-35B-A3B)
   and hosted Nemotron 3.5 Super VL both count WORSE (35B base: −21 vs cc-v2 on dev CubiCasa; Nemotron: below even the base 8B on smoke).
@@ -13,6 +13,11 @@ Hardware: 1× RTX PRO 6000 Blackwell 96 GB. Shared server budget ≈ 45 GB (`--g
 - **Hosted Nemotron = visible second opinion** (demo button), not a bulk tier: as planner it ties at 9× cost, as translator 25× slower.
 - **Language front end**: translate only what the rules can't read (`should_translate`); held-out languages (nb/hr/el/lt) 78 → 84.5
   in the pipeline (F), 0 dataset questions touched.
+- **Files outside our folders (uploads, a hidden set in its own layout)** lose the folder-keyed readers: 800 dev CubiCasa Qs as
+  uploads have 47 confident misses vs 24 on the dataset path. Tonight: W4's confidence cap (D23). Day team: file the upload by
+  its image-guessed style (`stoa/style.py`, CubiCasa only): 47 → 31, evidence 0 → 32%, 586/588 touched answers = dataset path.
+- **Gemini** (key from Sat 10:50): `backend="gemini"` in stoa.llm with the no-abuse rules in code (daily cap, purpose log, rpm);
+  for visible steps only. Not yet run live.
 - **Cost honesty:** every local call is billed from tokens at measured GPU throughput (not wall time, which includes queueing).
 - Negative results are listed under each section and in board/R2.md ("don't repeat").
 
@@ -20,6 +25,7 @@ Hardware: 1× RTX PRO 6000 Blackwell 96 GB. Shared server budget ≈ 45 GB (`--g
 | what | value |
 |---|---|
 | :8002 (since 09:40, D21) | Qwen3.6-35B-A3B-FP8 `qwen3.6-35b-a3b`, util 0.48; ONLY via `llm.text_backend()` (STOA_TEXT_BACKEND=local2), falls back to :8001 |
+| hosted Gemini (`backend="gemini"`, 10:38) | `gemini-3-flash-preview` default ($GEMINI_MODEL); per-agent daily cap 200 ($STOA_AGENT), purpose log `logs/gemini_calls.jsonl`, 10 rpm; demo / small probes only (Google no-abuse rule); offline-tested, **not yet run live** |
 | :8001 adapters | LoRAs `cc-v2` (CubiCasa counts) and `cc-v3` (+ Swiss PNG), loaded by `serving/start.sh` |
 | model | Qwen3-VL-8B-Instruct (bf16), from the text encoder inside Qwen-Image-2.1 (full VLM: vision tower + lm_head; same config as Qwen3-VL-8B-Instruct) |
 | URL | http://127.0.0.1:8001/v1, model `default` or `qwen3-vl-8b` |
@@ -191,8 +197,10 @@ Cost of one answer (D21 item 4), measured, not assumed:
 0. One command (09:45): put Stoa's examples in eval-split format (path, question, answer or null, type, meta.kind) and run
    `experiments/r2/noon_models.sh EXAMPLES.jsonl [NEMOTRON_LIMIT=40]` → pipeline vs plain local VLM vs hosted Nemotron (1 worker,
    first N), numbers exact/2%, text by the local judge, one per-kind table + cost per run (`compare_runs.py --by kind`).
-   Tested on a 12-row mix (log $JUNCTION_SHARED/logs/R2/noon_models.log). For an unknown-folder raster, `experiments/r2/style/style.py
-   FILE` says which reader family fits (cubicasa5k / swiss_dwellings / ifc_models / scan, p≥0.8 → 96.7% right).
+   Tested on a 12-row mix (log $JUNCTION_SHARED/logs/R2/noon_models.log). Rows without gold (answer null) are predicted but not
+   scored ('-' in the table, 10:30 fix); every question with each model's answer @ confidence goes to
+   `$JUNCTION_SHARED/artifacts/R2/noon_side_by_side_<split>.txt`; F's `python -m stoa.eval.review RUN.jsonl` gives a readable review. For an unknown-folder raster, `experiments/r2/style/style.py
+   FILE` (PYTHONPATH=.) says which reader family fits (cubicasa5k / swiss_dwellings / ifc_models / scan, p≥0.8 → 96.7% right).
 1. New question kinds on rasters/scans: first run `vlm_direct` (8B base, conf=logprob) and `vlm_lora` on Stoa's examples; if the LoRA
    answers a kind it was never trained on, its confidence is NOT calibrated (F 01:28) — keep W4's unseen-wording cap.
 2. Hosted Nemotron (`backend=nvidia`, 1 worker, ~4–8 s/Q) is the only model clearly different from ours; use it for visible demo
@@ -200,14 +208,35 @@ Cost of one answer (D21 item 4), measured, not assumed:
 3. To try another open model quickly: `experiments/r2/hold_8002.sh <preset> <name> <minutes>` (GPU lock, private :8002), then
    `experiments/r2/eval_backend.py --agent local2 -- --solver pipeline --split <file>` or `vlm_direct -k backend=local2`.
 
-## Drawing style from image content (09:30–09:40, `experiments/r2/style/`)
+## Drawing style from image content (09:30–10:25, `stoa/style.py`; training in `experiments/r2/style/`)
 - `guess_style(path)` → (cubicasa5k | swiss_dwellings | ifc_models | scan, p): numpy softmax on ~110 cheap features (grey/sat/hue
   histograms, paper tone and texture, edge density and direction, long dark runs, 8×8 thumbnail), image flattened on white first (no
   file-mode / pixel-size cues). Trained on train groups + one upload-like variant each (grayscale / JPEG q40 / crop / downscale ÷3).
 - Held-out groups (site / model / building): 92.4%; variants 90–91% (without the augmentation, grayscale or JPEG Swiss plans were 0/308);
   p≥0.8 covers 85% at 96.7%. Residue = CubiCasa ↔ historical scans (CubiCasa contains scanned plans; Wikimedia has CubiCasa-like plans).
 - End to end, 40 dev CubiCasa count Qs as unknown-folder files vs filed under the guess: 30 vs 29/40, evidence boxes 0 → 17/40,
-  $0.203 → $0.036/1k, ECE 0.100 → 0.044. Not wired (W5 upload path / W4 route for source 'unknown', after the freeze).
+  $0.203 → $0.036/1k, ECE 0.100 → 0.044.
+- **Dev size (10:16–10:25), Q's upload probe = all 800 dev CubiCasa Qs saved as `<sha>/plan.png`** (source 'unknown'), same code:
+
+  | run | acc | conf≥0.8 (right) | confident misses | evidence | $/1k |
+  |---|---|---|---|---|---|
+  | style off (today's night) | 74.2 | 567 (91.7%) | 47 | 0% | 0.046 |
+  | vlm_lora adapter chosen by style only | 73.2 | 521 (93.5%) | 34 | 0% | 0.046 |
+  | **source hook: outside raster → 'cubicasa5k' at p≥0.8** | **75.1** | 478 (93.5%) | **31** | **32.4%** | **0.041** |
+  | dataset path (control, Q 09:33) | 75.9 | 450 (94.7%) | 24 | 47.8% | 0.016 |
+  | same 800 as JPEG q85 uploads: off → hook | 74.6 → 75.1 | 562 → 477 | 47 → 30 | 0 → 32.0% | 0.043 → 0.040 |
+
+  Swiss PNG dev counts as uploads (200 Qs, 95 images, all guessed Swiss at p≥0.8), filed as 'swiss_dwellings' vs 'unknown':
+  56.5 vs 56.0%, confident misses 6 vs 6, evidence 0 vs 0 (no Swiss raster reader with boxes; both answer with vlm_lora),
+  $0.099 vs $0.149/1k → **file CubiCasa only**; a Swiss guess buys nothing until a Swiss raster reader exists
+  (runs 20261114-103517-pipeline-upload_swiss_png-6dc9 / -c73f; `STYLE_HOOK_CLASSES=cubicasa5k,swiss_dwellings eval_hooked.py`).
+
+  The hook touches 588 Qs (147/200 images): 586 answers identical to the dataset path. The adapter-only variant loses 13 W / 21 L
+  (the per-concept gate matters, not the adapter) → dropped. Runtime moved to `stoa/style.py` (+ `stoa/style_weights.json`); the
+  hook would go in `stoa/data.py` (F's file; **D23: not tonight — a day-team item**; tonight W4 caps confidence on 'unknown' rasters instead): patch `$JUNCTION_SHARED/artifacts/R2/data_style_hook.patch`, measured with
+  `experiments/r2/style/eval_hooked.py`, compared with `experiments/r2/style/upload_compare.py`. False positives at p≥0.8 (held-out
+  groups): 12/820 non-CubiCasa images, all historical scans (Wikimedia 10); Swiss/IFC renders 0. First question on a new image runs
+  the CC5K detector live (median 0.4 → 1.5 s).
 
 ## Candidates surveyed (23:35–23:50, HF hub listing; vLLM 0.31 registry checked)
 | model | size | vLLM | why interesting | verdict |
@@ -280,5 +309,6 @@ pretrained CC5K net never saw them) minus drawings in the LoRA's training data m
    (`should_translate`); ~0.4 s, ~700 tokens, on 0.03% of dataset questions; held-out languages 50 → 81%.
 10. Agent planner: the local 8B; hosted Nemotron as planner ties at 9× the cost.
 11. Free-text answers (IFC fact cards): Qwen3.6-35B-A3B on :8002 via `llm.text_backend()` (D21), +20% GPU-s, judged +7.5.
-12. Files outside our folders (uploads, a hidden set in new folders): `experiments/r2/style` guesses the reader family from the
-    image (p≥0.8 → 96.7% right); filing an upload under the guess keeps accuracy and restores boxes + the cheap path.
+12. Files outside our folders (uploads, a hidden set in new folders): `stoa/style.py` guesses the reader family from the
+    image (p≥0.8 → 96.7% right); filing an upload under the guess (stoa/data.py hook; day team, D23) restores the CubiCasa gate, boxes and the
+    cheap path: confident misses 47 → 31 on 800 dev Qs as uploads, 586/588 touched answers = the dataset path.

@@ -305,6 +305,19 @@ def print_report(m: dict, file=sys.stdout) -> None:
                                     for t, v in m["by_tier"].items()), file=file)
 
 
+# Google's hackathon Gemini key (COMMON.md, Sat 10:50): no bulk use (thousands of requests can disqualify the team; cap
+# ~200 calls per agent per day). An eval run larger than this hides the key from every solver unless --allow-gemini.
+GEMINI_BULK_CAP = 200
+GEMINI_ENV = ("GEMINI_API_KEY", "GOOGLE_API_KEY")
+
+
+def _hide_gemini(n: int) -> None:
+    for k in GEMINI_ENV:
+        if os.environ.pop(k, None) is not None:
+            print(f"[eval] {k} hidden from solvers for this run ({n} questions > {GEMINI_BULK_CAP}: no bulk Gemini, "
+                  f"COMMON.md); pass --allow-gemini to keep it", file=sys.stderr)
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="python -m stoa.eval", description=__doc__)
     ap.add_argument("--solver", required=True, help="registered solver name (see --list)")
@@ -320,6 +333,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--note", default="", help="free text stored in the leaderboard line")
     ap.add_argument("--no-leaderboard", action="store_true", help="don't append to results/leaderboard.jsonl")
     ap.add_argument("--allow-test", action="store_true", help="required for --split test (S0 only)")
+    ap.add_argument("--allow-gemini", action="store_true",
+                    help=f"keep GEMINI_API_KEY visible to solvers on runs of more than {GEMINI_BULK_CAP} questions")
     ap.add_argument("--quiet", action="store_true")
     ap.add_argument("--judge", default="none", choices=("none", "local", "nvidia"),
                     help="grade text/other answers with an LLM judge (reported as text_judge; not in accuracy)")
@@ -333,17 +348,18 @@ def main(argv: list[str] | None = None) -> int:
     sources = {s for x in (a.source or []) for s in x.split(",") if s}
     types = {t for x in (a.type or []) for t in x.split(",") if t}
     kwargs = _parse_kv(a.solver_arg)
+    qs = select(load_split(a.split), sources, types, a.limit, grep=a.grep)
+    if not qs:
+        print("no questions selected", file=sys.stderr)
+        return 2
+    if len(qs) > GEMINI_BULK_CAP and not a.allow_gemini:
+        _hide_gemini(len(qs))
     try:
         solver = get_solver(a.solver, **kwargs)
     except KeyError as e:
         print(e, file=sys.stderr)
         for mod, tb in import_errors().items():
             print(f"[import error] {mod}\n{tb}", file=sys.stderr)
-        return 2
-
-    qs = select(load_split(a.split), sources, types, a.limit, grep=a.grep)
-    if not qs:
-        print("no questions selected", file=sys.stderr)
         return 2
     # unique even for runs started in the same second (R2 00:00): random suffix + exclusive create below
     split_tag = Path(a.split).stem if a.split.endswith(".jsonl") else a.split

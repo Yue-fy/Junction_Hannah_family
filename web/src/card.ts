@@ -38,7 +38,7 @@ export function costTier(c: Cost): "deterministic" | "local" | "api" {
 
 const UNIT_LABEL: Record<string, string> = { m2: "m²", m3: "m³", ft2: "ft²", count: "", m: "m", EUR: "€", eur: "€", USD: "$", usd: "$" };
 /** Unit for display: known units from the table, free-text ones (W4: "m2/door", "CHF", "h") with m2/m3/ft2 prettified. */
-const unitLabel = (u: string | null | undefined) => !u ? "" : UNIT_LABEL[u] ?? u.replace(/\b(m|ft|cm|mm)([23])\b/g, (_, b, e) => b + (e === "2" ? "²" : "³")).replace(/\bEUR\b/g, "€");
+export const unitLabel = (u: string | null | undefined) => !u ? "" : UNIT_LABEL[u] ?? u.replace(/\b(m|ft|cm|mm)([23])\b/g, (_, b, e) => b + (e === "2" ? "²" : "³")).replace(/\bEUR\b/g, "€");
 
 const esc = (s: unknown) => String(s ?? "").replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
@@ -50,7 +50,7 @@ function fmtEur(usd: number) {
   return `€${per1k < 10 ? per1k.toFixed(2) : per1k.toFixed(0)} / 1k Qs`;
 }
 
-function fmtValue(a: Answer) {
+export function fmtValue(a: Answer) {
   if (a.value === null || a.value === undefined) return "—";
   if (typeof a.value === "boolean") return a.value ? "yes" : "no"; // Python bool (int subclass) arrives as true/false
   if (typeof a.value === "number") {
@@ -601,8 +601,8 @@ const SYMBOL_TARGETS = new Set(["window", "door", "wc", "sink"]);
 /** `missing` without "no located evidence …" when the answer does carry located evidence (boxes or GUIDs). */
 const missingNow = (a: Answer) => (a.missing ?? []).filter((t) => !(/^no located evidence\b/i.test(t) && a.evidence.some((e) => e.bbox || e.ifc_guid))).map(tidyCut);
 
-export const LOCATED_NOTE = /^(label reader|CubiCasa5K detector): /;
-export interface Locator { solver: string; name: string; button: string; title: string; noun: string }
+export const LOCATED_NOTE = /^(label reader|CubiCasa5K detector|door-swing reader): /;
+export interface Locator { solver: string; name: string; button: string; title: string; noun: string; args?: Record<string, unknown> }
 const NOUNS: Record<string, string> = { window: "windows", door: "doors", wc: "WC seats", sink: "sinks", wc_room: "WC room labels" };
 /** Room words (EN/FI/SV/DE) and the Finnish plan codes printed on CubiCasa plans → R1's room-graph classes. */
 const ROOM_WORDS: [RegExp, string][] = [
@@ -620,8 +620,14 @@ const ROOM_WORDS: [RegExp, string][] = [
 export const roomKindsIn = (q: string) => ROOM_WORDS.filter(([re]) => re.test(q)).map(([, k]) => k);
 
 export function locatorFor(a: Answer, file: string, question = ""): Locator | null {
-  if (a.value === null || (a.evidence ?? []).length || !/^(data|upload\/[0-9a-f]{12})\/cubicasa5k\/[^/]*\.(png|jpe?g)$/i.test(file)) return null;
+  if (a.value === null || (a.evidence ?? []).length) return null;
   const t = a.intent?.target ?? (a.trace ?? []).map((l) => l.match(/^intent: count (\w+)/)?.[1]).find((x) => x) ?? "";
+  // an uploaded image that is not a CubiCasa-style plan: W3's door-swing reader (raster, twins=0) marks one box per
+  // swing arc it finds (W5 c8: lone Swiss PNG upload, answer 26 @0.11, reader 35 boxes, gold 36; ~18 s, no model call)
+  if (/^upload\/[0-9a-f]{12}\/[^/]*\.(png|jpe?g)$/i.test(file) && t === "door" && a.intent?.task !== "area")
+    return { solver: "raster", args: { twins: 0 }, name: "door-swing reader", button: "Show where · door swings", noun: "doors",
+      title: "Find the door swing arcs on the image (geometry, no model call, ~20 s) and mark each one; doors on an apartment boundary count twice, like the source data" };
+  if (!/^(data|upload\/[0-9a-f]{12})\/cubicasa5k\/[^/]*\.(png|jpe?g)$/i.test(file)) return null;
   // "where is the kitchen?", "which room is the sauna entered from?", room areas…: not a count of labels or symbols, but
   // the question names a room: R1's room graph (cached CubiCasa5K segmentation, no model call) boxes the rooms named
   const kinds = roomKindsIn(question);

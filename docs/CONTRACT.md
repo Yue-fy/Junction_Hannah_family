@@ -144,12 +144,36 @@ $JUNCTION_VENV/bin/python -m stoa.eval --list        # registered solvers + impo
   confidence, solver, evidence, assumptions, missing, cost, trace; for gold-less files such as Stoa's examples;
   refuses held-out/sealed runs).
   Extra splits: `train_gate` (960 train Qs for choosing gates/thresholds), `cc5k_heldout` (CC5K-pretrained
-  models only), `hard` (generality), or any split file path.
+  models only), `hard` (generality), `human` (the expert's own questions from agent H's workbench,
+  `$JUNCTION_SHARED/human/questions.jsonl`; last save per qid wins; `meta.kind = "human:<sureness>"`; report it
+  separately from dev), or any split file path.
+- **Hosted Gemini guard** (COMMON.md, Sat 10:50: no bulk use of Google's hackathon key): a run of more than 200
+  questions hides `GEMINI_API_KEY` / `GOOGLE_API_KEY` from every solver (printed on stderr) unless `--allow-gemini`.
+  Solvers that call Gemini must therefore work (fall back) without the key. `experiments/F/probe_suite.py` always hides it.
 - **Ad-hoc question files** (e.g. the example questions Stoa shows on Saturday): `--split path/to/file.jsonl`, one
   JSON object per line with `path` (relative to the dataset root, e.g. `data/cubicasa5k/x.png`) and `question`;
   optional `answer`, `type` (count|area|length|volume|ratio|text; default `other` = not scored), `unit`, `qid`
   (default: hash of path + question). Rows without `answer` are predicted (value, evidence, trace, cost in the
   predictions file) but never scored or judged; the report prints how many. Add `--no-leaderboard` for quick looks.
+- **Files outside the dataset** (Stoa's own files, demo uploads): `path` may be absolute; evidence `file` is then that
+  absolute path. Nothing else is known about such a file except what `stoa.data` reads from its path (no new interface,
+  this documents existing behaviour, F c226–c227):
+  - `source_of()`: the `<source>` of a `.../data/<source>/...` folder in the path (known sources only); else an IFC plan
+    sheet (`.pdf/.svg/.png/.jpg`) whose model sits in the same folder (`<model>_<view>.pdf` next to `<model>.ifc`, or the
+    only `.ifc` in the folder) is `ifc_models`; else `unknown` (routed by extension: the CubiCasa readers and the
+    LoRA's per-concept gate are not used; `dxf` still reads a same-stem DXF twin whose layer table uses the Swiss layer
+    names, W2 e461199).
+  - `siblings()`: files with the same stem in the same folder (+ the IFC model of an `ifc_models` sheet).
+  - `dataset_rel()`: an absolute path is cut to `data/<source>/<file>` only when the dataset holds the same file
+    (same relative path and size), so a new drawing is never confused with a dataset file of the same name.
+  - Measured on the OPEN neutral-path probe (168 dev Qs × 5 layouts of the same bytes, night 1a4e2af, run
+    `20261114-101541-pipeline-neutral_path-6f61`): dataset paths 91.1%; a neutral folder with all twins, original or
+    hashed names, 90.5%; the asked file alone 66.1% (IFC sheets without their model 0–14%, at confidence ≤ 0.31;
+    Swiss PDFs alone 90–100% via `pdf_vector`; CubiCasa PNGs same accuracy, conf-wrong 2 → 3; schedules unchanged).
+  - **Recommended layout for new files**: `<ROOT>/data/<source>/<name>.<ext>`, every format of one drawing under one
+    stem, an IFC model next to its sheets; then `--split file.jsonl` with absolute paths. Check a new route on such
+    copies with `experiments/F/neutralize.py IN OUT --mode hash|name|lone`, and run F's same-gold regression suite
+    with `experiments/F/probe_suite.py run --tag X` / `compare` (baseline = night 1a4e2af).
 
 ## HTTP API (W4 implements `stoa/api.py`, port 8100)
 

@@ -61,9 +61,11 @@ def _toks(s: str) -> list[str]:
     return out
 
 
-def retrieve(question: str, rows: list[dict], k: int = 70) -> list[dict]:
-    """Rows sharing words with the question (rarer words weigh more; ids/numbers x3), best k, in sheet order."""
+def retrieve(question: str, rows: list[dict], k: int = 70, context: str = "") -> list[dict]:
+    """Rows sharing words with the question (rarer words weigh more; ids/numbers x3), best k, in sheet order.
+    `context` (the sheet title / project) adds its words at half weight: they steer to the right view."""
     q = set(_toks(question))
+    cq = set(_toks(context)) - q
     df = Counter(t for r in rows for t in set(_toks(r["text"] + " " + (r.get("view") or ""))))
     n = max(len(rows), 1)
     scored = []
@@ -73,6 +75,8 @@ def retrieve(question: str, rows: list[dict], k: int = 70) -> list[dict]:
         for t in q & toks:
             w = math.log(1 + n / df[t])
             sc += w * (3 if re.search(r"\d", t) else 1)
+        for t in cq & toks:
+            sc += 0.5 * math.log(1 + n / df[t])
         # prefix matches ("occupan" ~ "occupancy", "studio" ~ "studios")
         for t in q - toks:
             if len(t) >= 5 and any(x.startswith(t[:5]) for x in toks):
@@ -93,6 +97,7 @@ def _num(s) -> float | None:
         return None
 
 
+DIM_IN_ROW = re.compile(r"-?\d+\s*'\s*-\s*\d+(?:\s+\d+/\d+)?\s*\"")
 FTIN_RE = re.compile(r"^\s*(-?\d+)\s*'\s*-?\s*(?:(\d+)(?:\s+(\d+)/(\d+))?|(\d+)/(\d+))?\s*\"?\s*$")
 
 
@@ -124,17 +129,19 @@ def _norm(s: str) -> str:
     return re.sub(r"[\s'\"]", "", str(s).lower())
 
 
-def ask(question: str, rows: list[dict], backend: str = "local") -> dict:
+def ask(question: str, rows: list[dict], backend: str = "local", context: str = "") -> dict:
     """rows: [{"id": int, "view": str|None, "text": str}]. Returns {value, unit, used, op, trace, ok}."""
     from stoa.llm import chat, extract_json
 
-    sel = retrieve(question, rows)
+    sel = retrieve(question, rows, context=context)
     if not sel:
         return {"value": None, "unit": None, "used": [], "op": "none", "trace": ["no text row shares a word with the "
                                                                                     "question"], "ok": False}
     by_id = {r["id"]: r for r in sel}
     listing = "\n".join(f"[{r['id']}] view={r.get('view') or '-'} | {r['text'][:400]}" for r in sel)
-    msgs = [{"role": "user", "content": PROMPT.format(rows=listing, question=question)}]
+    msgs = [{"role": "user", "content": PROMPT.format(rows=listing, question=question).replace(
+        "Text printed on one construction drawing sheet", f"Text printed on one construction drawing sheet ({context})"
+        if context else "Text printed on one construction drawing sheet", 1)}]
     res = chat(msgs, backend=backend, max_tokens=900, temperature=0.0, json_schema=SCHEMA)
     js = extract_json(res.text) or {}
     retried = False
@@ -194,6 +201,18 @@ def ask(question: str, rows: list[dict], backend: str = "local") -> dict:
                 out.update(value=_fmt_ftin(v), unit=None)
             trace.append(f"{op} over {len(dims)} feet-inch lengths = {out['value']} (computed in Python)")
             return out
+        def _length(it):  # the value is (the feet part of) a printed feet-inch dimension: a length, not a count
+            v = str(it.get("value") or "").strip()
+            return _ftin(v) is not None or bool(re.fullmatch(r"\d+", v) and re.search(
+                rf"(?<![\d.]){re.escape(v)}\s*'\s*-", by_id[it["row"]]["text"]))
+        lengths = [it for it in items if _length(it)]
+        if lengths and len(items) - len(lengths) >= 2:
+            # A-100-A: '24 PARKING STALLS' + ... + "60' - 0\" (UNLIMITED AREA SETBACK)" summed to 176 (gold 116):
+            # a length mixed into a sum of plain numbers is another quantity -> dropped
+            trace.append("dropped lengths mixed into a sum of plain numbers: " +
+                         "; ".join(f"[{it['row']}] {it.get('value')}" for it in lengths))
+            items = [it for it in items if it not in lengths]
+            out["used"] = [it["row"] for it in items]
         nums = [(_num(it.get("value")), it) for it in items]
         if any(v is None for v, _ in nums):
             out["ok"] = False
@@ -218,6 +237,16 @@ def ask(question: str, rows: list[dict], backend: str = "local") -> dict:
         ans = js.get("answer")
         if not isinstance(ans, str) or not ans.strip():
             ans = items[0].get("value")
+        if re.fullmatch(r"\s*-?\d+(?:\s+\d+/\d+)?\s*['\"]?\s*", str(ans)):
+            # only the feet or the inches part of a printed dimension ('0"' for "10' - 0\" REAR SETBACK"): the whole
+            # dimension is the answer (W2 09:50; same fix as the table path's c10aa9e)
+            dims = [m.group(0).strip() for it in items for m in DIM_IN_ROW.finditer(by_id[it["row"]]["text"])]
+            core = re.sub(r"[\s'\"]", "", str(ans))
+            hits = [d for d in dims if core in re.findall(r"\d+(?:/\d+)?", d)]
+            if len(set(hits)) == 1 and _norm(hits[0]) != _norm(ans):
+                trace.append(f"the answer {str(ans).strip()!r} is part of the printed dimension {hits[0]!r}: answered "
+                             "the whole dimension")
+                ans, unit = hits[0], None
         if unit in ("ft2", "m2", "ft", "m", "count") and _num(ans) is not None and unit != "ft":
             v = _num(ans)
             out.update(value=int(v) if unit == "count" and v == int(v) else v)
