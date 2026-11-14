@@ -69,7 +69,7 @@
     "key": "area:room:room"
    }
   },
-  "recorded_at": "2026-11-14 03:15",
+  "recorded_at": "2026-11-14 03:29",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -1087,7 +1087,7 @@
     "key": "count:door:storey"
    }
   },
-  "recorded_at": "2026-11-14 03:15",
+  "recorded_at": "2026-11-14 03:29",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -2295,7 +2295,7 @@
     "key": "count:window:storey"
    }
   },
-  "recorded_at": "2026-11-14 03:15",
+  "recorded_at": "2026-11-14 03:29",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -6775,7 +6775,7 @@
     "key": "count:door:model"
    }
   },
-  "recorded_at": "2026-11-14 03:15",
+  "recorded_at": "2026-11-14 03:29",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -7887,7 +7887,65 @@
     "key": "area:room:room"
    }
   },
-  "recorded_at": "2026-11-14 03:15",
+  "recorded_at": "2026-11-14 03:29",
+  "api": "http://127.0.0.1:8102"
+ },
+ {
+  "path": "data/ifc_bench/4351_arc.ifc",
+  "question": "What plumbing fixtures are in this building and their respective counts?",
+  "answer": {
+   "value": "Plumbing fixtures in this building include:\n- Toilet-Domestic-3D: 9 units\n- Urinal-Wall-3D: 4 units\n\nNo other plumbing fixtures are listed in the model facts.",
+   "unit": null,
+   "confidence": 0.3,
+   "evidence": [
+    {
+     "file": "data/ifc_bench/4351_arc.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": null,
+     "note": "IFC model (fact card source)"
+    }
+   ],
+   "trace": [
+    "intent: text unknown [drawing] (lang en)",
+    "ifc (question as asked): Plumbing fixtures in this building include:\n- Toilet-Domestic-3D: 9 units\n- Urinal-Wall-3D: 4 units\n\nNo other plumbing fixtures are listed in the model facts.  at conf 0.30, unsure",
+    "no train gate for this kind of question: general path by file type",
+    "ifc: Plumbing fixtures in this building include:\n- Toilet-Domestic-3D: 9 units\n- Urinal-Wall-3D: 4 units\n\nNo other plumbing fixtures are listed in the model facts.  (conf 0.30)",
+    "[ifc] model 4351_arc.ifc: IFC2X3, 5 storeys, 401 elements (index 1.0s, cached)",
+    "[ifc] parsed: metric=text kind=None scope=auto names=[]",
+    "[ifc] abstain: free-text question: no deterministic rule",
+    "[ifc] rules could not answer; asking the local LLM with a fact card of the model (45 lines, 4546 chars)",
+    "[ifc] fact card (first lines): Model: 4351_arc.ifc | schema IFC2X3 | project 'Project Number' | Authoring application: Autodesk Revit Architecture 2011 2011 (Autodesk Revit Architecture 2011) | Element totals: IfcBuildingElementProxy 122, IfcLightFixture 119, IfcWallStandardCase 41, IfcAirTerminal 36, IfcDoor 17, IfcCovering 14, IfcFurnishingElement 13, IfcRailing 11, IfcSlab 6, IfcSpace 6, IfcMember 4, IfcStair 4, IfcStairFlig"
+   ],
+   "solver": "pipeline/ifc",
+   "assumptions": [
+    "answered by the local LLM from facts extracted from the IFC (counts, types, materials, fire ratings, rooms); not verified by a rule"
+   ],
+   "missing": [
+    "a quantity question (count/area/volume/length)"
+   ],
+   "cost": {
+    "llm_tokens_in": 2041,
+    "llm_tokens_out": 46,
+    "gpu_seconds": 0.1276,
+    "api_calls": 0,
+    "api_tokens_in": 0,
+    "api_tokens_out": 0,
+    "llm_calls": 1,
+    "wall_seconds": 9.9841
+   },
+   "intent": {
+    "task": "text",
+    "target": "unknown",
+    "scope": "drawing",
+    "unit": null,
+    "filters": {},
+    "lang": "en",
+    "key": "text:unknown:drawing"
+   }
+  },
+  "recorded_at": "2026-11-14 03:29",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -8401,7 +8459,7 @@
     "key": "count:door:drawing"
    }
   },
-  "recorded_at": "2026-11-14 03:15",
+  "recorded_at": "2026-11-14 03:29",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -8603,7 +8661,7 @@
     "key": "count:room:label"
    }
   },
-  "recorded_at": "2026-11-14 03:15",
+  "recorded_at": "2026-11-14 03:29",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -9490,7 +9548,7 @@
     ]
    }
   },
-  "recorded_at": "2026-11-14 03:15",
+  "recorded_at": "2026-11-14 03:29",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -9575,7 +9633,7 @@
     "key": "count:bedroom:drawing"
    }
   },
-  "recorded_at": "2026-11-14 03:15",
+  "recorded_at": "2026-11-14 03:29",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -9623,7 +9681,7 @@
     "key": "count:window:drawing"
    }
   },
-  "recorded_at": "2026-11-14 03:15",
+  "recorded_at": "2026-11-14 03:29",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -9668,7 +9726,7 @@
     "key": "text:unknown:drawing"
    }
   },
-  "recorded_at": "2026-11-14 03:15",
+  "recorded_at": "2026-11-14 03:29",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -9708,7 +9766,7 @@
     "key": "count:bedroom:drawing"
    }
   },
-  "recorded_at": "2026-11-14 03:15",
+  "recorded_at": "2026-11-14 03:29",
   "api": "http://127.0.0.1:8102",
   "solver": "vlm_direct",
   "solver_args": {
@@ -9752,7 +9810,7 @@
     "key": "text:unknown:drawing"
    }
   },
-  "recorded_at": "2026-11-14 03:15",
+  "recorded_at": "2026-11-14 03:29",
   "api": "http://127.0.0.1:8102",
   "solver": "vlm_direct",
   "solver_args": {
@@ -9840,7 +9898,7 @@
     "key": "count:bedroom:drawing"
    }
   },
-  "recorded_at": "2026-11-14 03:15",
+  "recorded_at": "2026-11-14 03:29",
   "api": "http://127.0.0.1:8102",
   "solver": "raster"
  },
@@ -9934,7 +9992,7 @@
     "key": "count:window:drawing"
    }
   },
-  "recorded_at": "2026-11-14 03:15",
+  "recorded_at": "2026-11-14 03:29",
   "api": "http://127.0.0.1:8102",
   "solver": "raster_cc5k"
  }

@@ -84,7 +84,9 @@ export function crossChecks(a: Answer, asks: string[] = []): { text: string; ok:
   });
   const extra = located ? fromTrace.filter((t) => !same(t.text) && !fromEv.some((e) => t.text.startsWith(key(e.text)) || e.text.startsWith(key(t.text)))) : [];
   const out = fromEv.length ? [...fromEv, ...extra] : fromTrace;
-  return out.filter((x, i) => out.findIndex((y) => y.text === x.text) === i).slice(0, Math.max(2, parts.size));
+  // a failed check is never the one cut off: failures first (stable), then the cap
+  const uniq = out.filter((x, i) => out.findIndex((y) => y.text === x.text) === i);
+  return [...uniq.filter((x) => !x.ok), ...uniq.filter((x) => x.ok)].slice(0, Math.max(2, parts.size));
 }
 
 /** One row per object: evidence items that share an ifc_guid (2D box + 3D element) are grouped. */

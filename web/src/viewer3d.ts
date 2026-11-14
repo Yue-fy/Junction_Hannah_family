@@ -530,6 +530,63 @@ export class Viewer3D {
     };
   }
 
+  /** Element types a free-text answer names ("Toilet-Domestic-3D: 9 units"), found in the loaded model by name: Revit
+   * "Family:Type:Type:id" names give the family and "Family:Type"; ObjectType too. Per named type: its elements and the
+   * number the text puts right after the name (null when it gives none). Generic class words alone never match. */
+  findNamed(text: string): { name: string; guids: string[]; said: number | null; missed?: boolean }[] {
+    this.ensureGuidIndex();
+    const api = this.api;
+    if (!api || !text) return [];
+    const families = new Map<string, Set<string>>();
+    const GENERIC = /^(ifc\w*|walls?|doors?|windows?|floors?|roofs?|slabs?|columns?|beams?|stairs?|railings?|spaces?|rooms?|default|generic|level \d+|none|unnamed)$/i;
+    const lower = text.toLowerCase();
+    const byName = new Map<string, Set<string>>();
+    for (const id of this.elementBuckets.keys()) {
+      const gid = this.idToGuid.get(id);
+      if (!gid || this.spaceBuckets.has(id)) continue;
+      let l: { Name?: { value?: string }; ObjectType?: { value?: string } };
+      try {
+        l = api.GetLine(this.modelID, id);
+      } catch {
+        continue;
+      }
+      const name = String(l.Name?.value ?? "");
+      const segs = name.split(":").map((x) => x.trim()).filter(Boolean);
+      if (segs[0]) (families.get(segs[0]) ?? families.set(segs[0], new Set()).get(segs[0])!).add(gid);
+      const cands = new Set([segs[0], segs.length > 2 ? `${segs[0]}:${segs[1]}` : "", String(l.ObjectType?.value ?? "").trim()]);
+      for (const c of cands) {
+        if (!c || c.length < 5 || GENERIC.test(c) || /^\d+$/.test(c) || !lower.includes(c.toLowerCase())) continue;
+        if (!byName.has(c)) byName.set(c, new Set());
+        byName.get(c)!.add(gid);
+      }
+    }
+    // keep the most specific name per element ("Sink Vanity-Round:19\" x 19\"" over "Sink Vanity-Round")
+    const names = [...byName.keys()].sort((a, b) => b.length - a.length);
+    const taken = new Set<string>();
+    const out: { name: string; guids: string[]; said: number | null; missed?: boolean }[] = [];
+    for (const n of names) {
+      const guids = [...byName.get(n)!].filter((g) => !taken.has(g));
+      if (!guids.length) continue;
+      guids.forEach((g) => taken.add(g));
+      const esc = n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const m = text.match(new RegExp(`${esc}[^\\n\\d]{0,24}?(\\d+)(?![\\d.,]*\\s*(mm|cm|m\\b|m²|m2|"|in\\b|ft))`, "i"));
+      out.push({ name: n, guids, said: m ? Number(m[1]) : null });
+    }
+    // Omissions: when the named types are fixtures of one kind (sanitary, furniture, lighting), other families of that
+    // kind in the model that the answer does not name ("Sink Vanity-Round ×6" next to toilets and urinals).
+    const KINDS = [/toilet|\bwc\b|urinal|sink|basin|lavatory|shower|bath|tub\b|bidet|faucet|\btap\b|water closet/i,
+      /chair|table|desk|\bbed\b|sofa|couch|cabinet|shelf|shelving|wardrobe|bench/i, /light|lamp|luminaire/i];
+    for (const k of KINDS) {
+      if (!out.some((o) => k.test(o.name))) continue;
+      for (const [fam, gs] of families) {
+        if (!k.test(fam) || out.some((o) => o.name.startsWith(fam) || fam.startsWith(o.name))) continue;
+        const guids = [...gs].filter((g) => !taken.has(g));
+        if (guids.length) out.push({ name: fam, guids, said: null, missed: true });
+      }
+    }
+    return out.slice(0, 16);
+  }
+
   /** Name lookup for evidence labels (e.g. "IfcSpace 119 KORIDOR"). */
   describe(guid: string): string {
     this.ensureGuidIndex();

@@ -489,6 +489,37 @@ async function showAnswer(a: Answer, roundTripMs: number) {
   } else if (v3d && v3d.file === state.ifc) {
     applyEvidence3D(a); // clears the previous answer's highlight
   }
+  // A free-text answer about a model with no element evidence ("Toilet-Domestic-3D: 9 units, Urinal-Wall-3D: 4"):
+  // find the element types it names in the loaded model (in the browser, no model call), highlight them and check
+  // the counts it gives against the model.
+  if (/\.ifc$/i.test(askedPath) && typeof a.value === "string" && !a.evidence.some((e) => e.ifc_guid)) {
+    await ensure3D();
+    const v = v3d;
+    if (state.answer !== a || !v || v.file !== askedPath) return;
+    const named = v.findNamed(String(a.value));
+    if (!named.length) return;
+    const said = named.filter((n) => !n.missed);
+    const missed = named.filter((n) => n.missed);
+    if (!said.length) return;
+    const checks = said.filter((n) => n.said !== null).map((n) => `${n.name} ${n.guids.length}${n.said === n.guids.length ? " ✓" : ` ✗ (answer says ${n.said})`}`);
+    const ev = said.flatMap((n) => n.guids.map((g, i) => ({
+      file: askedPath, ifc_guid: g,
+      note: `named in the answer: ${n.name} (${i + 1} of ${n.guids.length})${i === 0 && n.said !== null
+        ? `; cross-check: the model has ${n.guids.length} '${n.name}', the answer says ${n.said} ${n.said === n.guids.length ? "✓" : "✗"}` : ""}`,
+    }) as Answer["evidence"][number]));
+    // same kind of fixture in the model but not in the answer: shown as a ✗ check, its elements listed after the named ones
+    const miss = missed.map((n) => `${n.name} ×${n.guids.length}`).join(", ");
+    ev.push(...missed.flatMap((n) => n.guids.map((g, i) => ({
+      file: askedPath, ifc_guid: g,
+      note: `NOT in the answer: ${n.name} (${i + 1} of ${n.guids.length})${i === 0 && n === missed[0] ? `; cross-check: the model also has ${miss} of the same kind, which the answer does not mention ✗` : ""}`,
+    }) as Answer["evidence"][number])));
+    await showAnswer({
+      ...a, evidence: [...ev, ...a.evidence],
+      trace: [...(a.trace ?? []), `named in the answer → found in the model by element name (in the browser, no model call): ${said.map((n) => `${n.name} ×${n.guids.length}`).join(", ")}${checks.length ? `; counts: ${checks.join(", ")}` : ""}${miss ? `; same kind, not named: ${miss}` : ""}`],
+      missing: [...(a.missing ?? []), ...(miss ? [`the answer does not mention ${miss} (same kind of fixture in the model)`] : [])],
+      assumptions: [...(a.assumptions ?? []), "highlighted elements are matched by the family/type names the answer uses; the solver did not cite them"],
+    }, roundTripMs);
+  }
 }
 
 function applyEvidence3D(a: Answer) {
@@ -546,6 +577,9 @@ const TOUR: { file: string; q: string; note: string; bench?: boolean; second?: b
   { file: "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
     q: "What share of the total room area on '1.korrus' does the room 'KORIDOR (119)' take, in percent?",
     note: "A question no template covers: the IFC solver reads the operator itself, computes part ÷ whole in code (see 'Why') and marks every room it summed. No model call. Questions no solver can read go to a small planning agent (ask → calc → answer)." },
+  { file: "data/ifc_bench/4351_arc.ifc",
+    q: "What plumbing fixtures are in this building and their respective counts?",
+    note: "A free-text answer about a model: the browser finds the fixture types it names in the IFC model, highlights them, checks its counts (9 ✓, 4 ✓) and flags what it left out: 8 sinks of the same kind. No model call for the check." },
   { file: "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
     q: "How many doors (interior doors and entrance doors together) are drawn on this floor plan?",
     note: "Vector drawing: doors counted on the CAD layer and mapped back onto the PDF." },
