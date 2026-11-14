@@ -329,7 +329,11 @@ function intentHtml(a: Answer, run: AgentRun | null) {
   } else if (it) {
     bits.push(`<b>${esc(it.task)}</b>`);
     const target = a.plan?.parts?.length ? a.plan.parts.join(a.plan.op === "sum" ? " + " : ", ") : it.target;
-    if (target && target !== it.task && target !== "unknown") bits.push(esc(target.replace(/_/g, " ")));
+    // free-text questions: the template parser often guesses a target nobody used (Finnish "Mikä on piirustuksen
+    // mittakaava?" → 'door'); show it only when the solver's trace mentions it beyond the intent line itself
+    const used = it.task !== "text" || a.plan?.parts?.length || !target
+      || (a.trace ?? []).some((l) => !/^intent:/.test(l) && new RegExp(`\\b${target.replace(/_/g, " ").replace(/[^\w ]/g, "")}`, "i").test(l));
+    if (target && target !== it.task && target !== "unknown" && used) bits.push(esc(target.replace(/_/g, " ")));
     const f = Object.entries(it.filters ?? {}).filter(([, v]) => v !== null && v !== "" && v !== false)
       .map(([k, v]) => `${esc(k.replace(/_/g, " "))} <i>${esc(v === true ? "yes" : v)}</i>`);
     bits.push(...(f.length ? f : it.scope ? [`scope <i>${esc(it.scope)}</i>`] : []));
