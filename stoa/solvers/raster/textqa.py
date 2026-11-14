@@ -186,7 +186,8 @@ def _room_area_answer(img_path: str, question: str, tl: T.TextLayer, bars: list,
                       evidence=[lab_ev, Evidence(file=img_path, page=0, bbox=[round(x, 1) for x in a["box"]],
                                                  bbox_space="image_px", note=f"printed area '{a['line'][:40]}'")],
                       trace=[f"room label '{lab.text}' at {lab.box}; printed area next to it: '{a['line']}'"])
-    r = M.room_area(img_path, lab.box, bar.px_per_m, **M.FILL)
+    r = M.room_area(img_path, lab.box, bar.px_per_m, **M.FILL,
+                    others=[i.box for i in ids if i is not lab and M._ROOM_ID.fullmatch(i.text.strip())])
     if r is None:
         return None
     unit = "ft2" if re.search(r"\b(sq\.? ?ft|square feet|ft²|feet)\b", question, re.I) else "m2"
@@ -200,8 +201,9 @@ def _room_area_answer(img_path: str, question: str, tl: T.TextLayer, bars: list,
                   assumptions=[f"the room's outline is the blank region around its label up to the drawn walls "
                                f"(convex hull, so fixtures against walls count), measured with the graphic scale bar "
                                f"({bar.px_per_m:.2f} px per m); no area is printed for this room"],
-                  missing=[f"a printed area or dimensions: on 71 test rooms this measurement was within 5% for "
-                           f"{100 * W['5%']:.0f}% and within 10% for {100 * W['10%']:.0f}% (median error 6.5%)"])
+                  missing=[f"a printed area or dimensions: on 71 Swiss plan rooms this measurement was within 2% for "
+                           f"{100 * W['2%']:.0f}%, within 5% for {100 * W['5%']:.0f}% and within 10% for "
+                           f"{100 * W['10%']:.0f}%"])
 
 
 def measure(m: dict, bar, question: str, size: tuple[int, int]):

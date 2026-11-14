@@ -14,6 +14,11 @@ ap.add_argument("--door", type=float, default=1.05)
 ap.add_argument("--wall", type=float, default=0.0)
 ap.add_argument("--hull", action="store_true")
 ap.add_argument("--clip", type=float, default=0.0)
+ap.add_argument("--split", action="store_true")
+ap.add_argument("--fixture", action="store_true")
+ap.add_argument("--grow", type=int, default=0)
+ap.add_argument("--paths", default="", help="file with PNG paths to use (e.g. held-out drawings); default: all cached")
+ap.add_argument("--exclude", default="", help="file with PNG paths to leave out")
 ap.add_argument("--out", default=os.environ["JUNCTION_SHARED"] + "/artifacts/W3/room_fill_eval.jsonl")
 a = ap.parse_args()
 layers = {}
@@ -23,12 +28,16 @@ for f in glob.glob(str(T.CACHE_DIR / "site*.json")):
     d["size"] = tuple(d["size"])
     layers.setdefault(d["path"], T.TextLayer(**d))
 qs = [json.loads(l) for l in open(os.environ["STOA_DATA"] + "/questions.jsonl")]
+only = set(open(a.paths).read().split()) if a.paths else set()
+excl = set(open(a.exclude).read().split()) if a.exclude else set()
 rows, inks, seen = [], {}, set()
 for q in qs:
     if q.get("type") != "area" or "swiss" not in q["path"]:
         continue
     png = q["path"][:-4] + ".png"
     if png not in layers or len(M._ROOM_ID.findall(q["question"])) != 1:
+        continue
+    if (only and png not in only) or png in excl:
         continue
     if re.search(r"apartment|wohnung|appartement|appartamento|summe|sum|total|gesamt|tutte|toutes", q["question"], re.I):
         continue
@@ -44,7 +53,9 @@ for q in qs:
     if bar and lab:
         if png not in inks:
             inks[png] = M._ink(png)
-        got = M.room_area(png, lab.box, bar.px_per_m, door_m=a.door, ink=inks[png], wall_m=a.wall, hull=a.hull, clip=a.clip > 0, clip_m2=a.clip or 3.0)
+        got = M.room_area(png, lab.box, bar.px_per_m, door_m=a.door, ink=inks[png], wall_m=a.wall, hull=a.hull, clip=a.clip > 0, clip_m2=a.clip or 3.0,
+                           others=[i.box for i in tl.items if M._ROOM_ID.fullmatch(i.text.strip()) and i is not lab]
+                           if a.split else None, fixture_retry=a.fixture, grow=a.grow)
         if got:
             r.update(value=got["m2"], rel_err=abs(got["m2"] / q["answer"] - 1), box=got["box"])
     rows.append(r)
