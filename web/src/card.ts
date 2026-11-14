@@ -73,7 +73,10 @@ export function crossChecks(a: Answer, asks: string[] = []): { text: string; ok:
     const part = l.match(/^([^:;]+):\s/)?.[1];
     const k = asks.length ? evStep(l, asks) : -1;
     const text = (k >= 0 ? `step ${k + 1}: ` : part && parts.has(part) ? `${part}: ` : "") + m[1].trim();
-    return [{ text: text.replace(/\s*[✓✗]\s*/g, " ").trim(), ok: !/✗|≠|!=|disagree|differs?\b|mismatch|conflict/i.test(text) }];
+    // numbers as the value shows them: "20700.0" → "20,700" (integers lose ".0"; separators from 10,000 up)
+    const pretty = text.replace(/\s*[✓✗]\s*/g, " ").trim().replace(/(?<![\w.])(\d+)\.0(?![\d.])/g, "$1")
+      .replace(/(?<![\w.,])\d{5,}(?![\d.,]|\w)/g, (n) => Number(n).toLocaleString("en"));
+    return [{ text: pretty, ok: !/✗|≠|!=|disagree|differs?\b|mismatch|conflict/i.test(text) }];
   });
   // Evidence notes carry the specific check; the trace usually repeats it, so use the trace only as fallback.
   // Exception: boxes added by "Show where" (notes start with the locator's name) carry the locator's check only;
