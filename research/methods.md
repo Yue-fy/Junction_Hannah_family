@@ -835,3 +835,73 @@ no pipeline effect yet: _link_question admits only IFC sources). (c) Q v27 (Q's 
 9/9 held; imperative second parts ('… and say how many …') split; 'how many X does the model have there' read from
 the storey's C row; 'fewer doors drawn here than the model' and it/es/sv/nl/et 'not drawn' fire → 2 W / 0 L
 (-103938-…-b9d0 → -105146-…-58c1). Every trigger change re-checked: 0 / 128,535 dataset questions.
+
+### 8n. Integration check on night b656826 + a noon triage kit (cycle 22, 11:05-11:15)
+**Link probes on the merged build** (night b656826 = every agent's final answer-changing head; pipeline end to end):
+| probe | base (cycle 21 run) | night b656826 | conf ≥ 0.8 right | tokens/Q |
+|---|---|---|---|---|
+| R1 r1v5 (15) | 15/15 | **15/15** | 15/15 | 3214 → 3212 |
+| Q v23 (21) | 21/21 | **21/21** | 18 → **21** | 4087 → **2353** |
+| R1 probe_kg (21) | 20/21 (09:31 run) | **21/21** | 17 → **20** | 2983 → **1829** |
+| R1 r1v6_files (6) | 6/6 (standalone) | **6/6** | 0 → **6** (evidence 0 → 6) | 9434 → **0** |
+| W1 c8_cmp (22) | 22/22 | **22/22** | 18 → **22** | 2460 → 2162 |
+| Q v27 (23; base run had 14 rows) | 14/14 | **23/23** | 20/20 | 3664 → 2239 |
+| W4 file_exists (14) | 14/14 | **14/14** | 12/12 | 190 → 190 |
+| **total** | | **122/122, 0 wrong at ≥ 0.8** | | |
+W4's GlobalId check (W1 plan_vs_model, 0 LLM) raises the share of answers at ≥ 0.8 (it agrees with kg_qa → ✓) and
+cuts tokens on v23q/probe_kg by ~40%. W4's file-subject gate makes 'Is there an IFC model for this drawing?' cost
+0 tokens. Runs: artifacts/eval/20261114-110451-…-probe_r1v5-ee65, -110519-…-probe_v23q-1a9c, -110540-…-probe_kg-d67d,
+-110605-…-probe_r1v6_files-f489, -110606-…-c8_cmp-5370, -110624-…-v27-1865, -110641-…-file_exists-399f.
+Scorer fix: experiments/r1/kg_qa/run.py correct() now reads Q's `meta.items` (every regex must match). Before the fix
+it marked 3 right v27 two-part answers as wrong.
+
+**Noon triage** (experiments/r1/noon/, README there): `triage.py EXAMPLES.jsonl` = for each question, with 0 LLM
+calls and in ~10 s, the source, W4's intent parse, train-template hit, compose plan, R1's triggers (link / room /
+estimate), the nearest train+dev question (TF-IDF over words + char 4-grams; test is never read) and where a fix
+would go (stoa/router/README.md §3). NEW = nearest < 0.5 and no train template. Calibrated (`calibrate.py`): NEW on
+dev 14%, hard 33%, hard2 77%, Q's red team 70%.
+**Negative result: novelty does not predict failure** (`triage_vs_run.py RUN`, Q's rescore for text rows):
+| split (run) | NEW acc | seen acc | what does predict it |
+|---|---|---|---|
+| Q red team (snap12, 973 scored) | 95.4% (453) | 78.3% (520) | CubiCasa seen 68.7%, 'unknown' (uploads) 72.4% |
+| hard (c43 gate, 688) | 87.3% (157) | 84.9% (531) | CubiCasa 63.9-68.8%, Swiss/IFC 99-100% |
+| hard2 (c43 gate, 189) | 97.4% (116) | 83.6% (73) | CubiCasa seen 76.0% |
+The team has worked on these rows all night (they are in-sample for the fixes), and the weak part is a source, not
+a wording: CubiCasa raster counts. So NEW tells you where to write probes, and it must not become a confidence cap.
+Small-sample rule for Stoa's examples (exact McNemar): a fix needs ≥ 6 W / 0 L (p = 0.031) or 8 W / 1 L (p = 0.039);
+15/20 right = 75% [53, 89] Wilson. Write 5-10 rewordings per example (Q's redteam/from_examples.py) so that a fix
+can be tested at all.
+**8m re-check on night b656826 (11:13):** pipeline_est on probe_e2e (run -111321-pipeline_est-probe_e2e-7c2c vs
+-103949-…-d933): out-of-drawing rows 0 'unknown'/None, 100/101 a number or flagged estimate, conf ≥ 0.5 on 10 (11),
+177 LLM calls (180), 477k tokens (492k); the 6 rate-stated rows: 0 values changed. So the post-noon option still runs
+unchanged on the final build. Gap found with triage: kind_of misses renovation costs ('What would it cost to repaint
+all walls on this floor?'). That is a derived quantity (wall area × a rate), so it belongs in the agent, not the estimate.
+
+### 8o. Repaint cost as an estimate kind (cycle 23, 11:20-11:30; NOT wired, same post-noon option as 8m)
+Correction to the 8m note above: a repaint question is derived (wall area × rate) only when it STATES the rate
+("… at 12 €/m²"; `_STATED` keeps those out, so the composer/agent answers them exactly). Without a rate, the rate is
+out-of-drawing like a rent rate, so it belongs in the estimate route next to rent/price.
+- `experiments/r1/estimate/estimate.py` kind `repaint`: a cost/price word within 60 characters of a paint word, 9
+  languages (en/de/fi/fr/it/sv/nl/es/et), placed before `construction_cost`.
+- Value = floor area (the same `dwelling()` read as rent: IfcSpace sums per storey, DXF room polygons, CubiCasa room
+  graph; else a typical dwelling) × painted surface per floor m² × a painter rate per m².
+  Wall surface per floor m²: for square rooms of a m², 2.6 m high, ~12% openings, 4·2.6·√a·0.88 / a = 9.15/√a, which is
+  2.9 at 10 m², 2.4 at 15, 2.0 at 20 and 1.8 at 25 → 2.4 (range 1.8–3.2), now 2.6 (1.6–4.0) after the IFC check below. Tiled wet rooms are left out. 'ceilings' adds
+  1.0 × floor area. If no surface is named, walls only (stated as an assumption).
+  Rates (labour + paint, 2 coats) are **rules of thumb, not cited statistics**, and they are labelled "assumed": FI 15
+  (10–25) EUR/m², CH 30 (20–45) CHF, US 30 (15–55) USD, EU 15 (8–30) EUR. Rounded to 100, conf 0.1, and `missing`
+  says what would settle it (a quote or a stated rate, plus the real wall areas).
+- Checks: 0 repaint fires on 141,343 questions (all 127,044 dataset questions + open splits + W4/F derived sets + Q's
+  red team; the only fire is the old energy one). 11/11 positive and 5/5 negative wordings in
+  `experiments/r1/estimate/probe_repaint.txt`. Those wordings are IN-SAMPLE (I wrote them together with the regex).
+  One drawing per source gives sensible values (CubiCasa 106 m² → 3,800 EUR; Swiss 304 m² floor → 21,900 CHF walls,
+  31,000 walls + ceilings; IFC storey 325 m² → 11,700 EUR; HABS/finna without an area → a typical dwelling, wide range).
+- IFC check (11:23, `experiments/r1/estimate/wall_factor_ifc.py`, W1's ifc solver, 11 ifc_models projects in 150 s):
+  R = total wall net side area (one face) / total IfcSpace area: median 1.91, IQR 1.23–2.80. Range over projects 0.59
+  (gym hall) to 4.45 (warmond). Residential: duplex 2.06, fzk-haus 1.10, smiley-west 1.83, esplanades 1.91. Painted
+  surface ≈ 1.5 R (interior walls are painted on both faces, exterior walls on one) → median 2.9, IQR 1.8–4.2. Several
+  wall sums are the solver's fallback at conf 0.41. **WALL_PER_FLOOR is now 2.6 (1.6–4.0)** (was 2.4 (1.8–3.2)): between
+  the geometry and the IFC median, with the range widened to the measured IQR. n = 11, mostly non-residential, so
+  this is a sanity check, not a fit.
+- Open: on an IFC file, measure the real wall faces (the ifc solver's side area × 1.5, or per-wall faces) and use the
+  stated or reference rate. That is a better central value than any factor.

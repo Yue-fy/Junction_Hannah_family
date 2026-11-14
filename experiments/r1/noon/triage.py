@@ -23,6 +23,11 @@ Per question it prints:
   todo     where a fix would go (stoa/router/README.md section 3)
 and a summary: how many examples each route catches and how many are new kinds.
 
+What 'NEW' does NOT mean (measured, triage_vs_run.py on the 10:54 builds): it is not a failure predictor and must
+not become a confidence cap. Accuracy NEW vs seen: Q's red team 95.4 vs 78.3% (973 scored rows), hard 87.3 vs 84.9%
+(688), hard2 97.4 vs 83.6% (189); the SOURCE predicts failure (CubiCasa counts 64-77% right in every split, Swiss and
+IFC 94-100%, new or not). Use NEW to decide where to write probes (wordings nobody tested), not how much to trust.
+
 Why this is useful: tonight's rule was 'measure the trigger before the run' (a route that fires on the right rows
 and on 0 dataset rows cannot move dev). This shows, before spending a token, which examples land on a route that was
 measured tonight and which fall through to the generic cascade/agent, i.e. where to write probes first.
