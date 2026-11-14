@@ -278,7 +278,9 @@ function reasoningHtml(run: AgentRun, a: Answer) {
     const th = (s.thought ? `<div class="th">${esc(s.thought)}</div>` : "") + (s.warn ? `<div class="warn">⚠ ${esc(s.warn)}</div>` : "");
     if (s.tool === "ask") {
       const k = evCount(s.input);
-      const meta = [s.conf !== undefined ? `${Math.round(s.conf * 100)}%` : "", s.by ?? "", k ? `${k} evidence` : ""].filter(Boolean).join(" · ");
+      const cnt = askCount(s);
+      const meta = [s.conf !== undefined ? `${Math.round(s.conf * 100)}%` : "", s.by ?? "",
+        k ? (cnt && cnt > k ? `${k} of ${cnt} passed as evidence` : `${k} evidence`) : ""].filter(Boolean).join(" · ");
       return `<li>${n}${tool}<span role="button" tabindex="0" class="subq" data-q="${esc(s.input)}" title="Ask this sub-question on its own">${esc(s.input)}</span><span class="res">→ <b>${fmtRes(s.result)}</b>${meta ? ` <small>${esc(meta)}</small>` : ""}</span>${th}</li>`;
     }
     if (s.tool === "calc") return `<li>${n}${tool}<code>${esc(s.input.replace(/\*/g, "×").replace(/\//g, "÷"))}</code><span class="res">= <b>${fmtRes(s.result)}</b></span>${th}</li>`;
@@ -288,6 +290,24 @@ function reasoningHtml(run: AgentRun, a: Answer) {
   };
   const head = run.why ? `<div class="why-agent">Not a known question template (${esc(run.why.replace(/;\s*not a known template$/, ""))}), so a small local model plans the steps; every number comes from a tool, never from the model.</div>` : "";
   return `${head}<ol class="steps">${run.steps.map(li).join("")}</ol>`;
+}
+
+/** The count an ask step returned ("46 count (confidence 0.99, …)" → 46), else null. */
+function askCount(s: AgentStep): number | null {
+  const m = s.result.match(/^\s*(\d+)\s*(?:count\b|$|\()/);
+  return m ? Number(m[1]) : null;
+}
+
+/** Agent answers pass on only part of a counted sub-answer's evidence (W4: the first 6): say so, and how to see all. */
+function partialEvidence(run: AgentRun | null, a: Answer): string {
+  if (!run) return "";
+  const asks = run.steps.map((s, i) => ({ s, i })).filter(({ s }) => s.tool === "ask");
+  for (const { s, i } of asks) {
+    const n = askCount(s);
+    const k = (a.evidence ?? []).filter((e) => evStep(e.note ?? "", [s.input]) === 0).length;
+    if (n && k && n > k) return ` · first ${k} of the ${n} from step ${i + 1}; click its question to see all`;
+  }
+  return "";
 }
 
 /** Which ask step an agent evidence note came from: notes are "<ask input[:55]> — <note>". -1 = none. */
@@ -489,7 +509,7 @@ export function renderCard(el: HTMLElement, a: Answer, opts: CardOpts) {
     ${(a.assumptions ?? []).length ? `<details class="sec" open><summary>Assumptions</summary><ul class="assume">${a.assumptions!.map((t) => `<li>${esc(t)}</li>`).join("")}</ul></details>` : ""}
     ${(a.missing ?? []).length ? `<details class="sec" open><summary>What would make it certain</summary><ul class="missing">${a.missing!.map((t) => `<li>${esc(t)}</li>`).join("")}</ul></details>` : ""}
     ${sheetsHtml(ev, opts.currentFile)}
-    <details class="sec" open><summary>Evidence <small>${groups.length} item${groups.length === 1 ? "" : "s"}${groups.length < ev.length ? ` (${ev.length} boxes/elements)` : ""} · click to zoom</small></summary>
+    <details class="sec" open><summary>Evidence <small>${groups.length} item${groups.length === 1 ? "" : "s"}${groups.length < ev.length ? ` (${ev.length} boxes/elements)` : ""} · click to zoom${esc(partialEvidence(run, a))}</small></summary>
       <ul class="evidence">${shown.map((g, n) => evLabel(ev, g, n + 1, opts.describeGuid, asks)).join("")}${groups.length > shown.length ? `<li class="more">+ ${groups.length - shown.length} more</li>` : ""}</ul></details>
   `;
   el.querySelectorAll<HTMLElement>(".ev-item").forEach((li) => li.addEventListener("click", () => opts.onEvidence(Number(li.dataset.i))));
