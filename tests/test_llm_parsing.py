@@ -164,3 +164,14 @@ def test_should_translate_fires_only_on_unparsed_non_english():
     assert not should_translate("Wie viele WC-Schüsseln sind auf diesem Grundriss eingezeichnet?")
     assert should_translate("Kolik saun je na tomto půdorysu?")  # Czech: the rules can't read it
     assert should_translate("Mekkora a(z) '00 Begane grond' szinten lévő összes fal teljes hossza méterben?")
+
+
+def test_protect_keeps_grouped_thousands_as_one_number():
+    from stoa.llm import _protect, _restore
+
+    for q, num in [("Wenn eine Tür 1'200 CHF kostet, was kosten alle Türen auf 'Level 2'?", "1'200"),
+                   ("Ile kosztują drzwi, jeśli jedne kosztują 1 200 zł?", "1 200"),
+                   ("Quanto costa se una porta costa 1’200 CHF?", "1’200")]:
+        masked, spans = _protect(q)
+        assert num in spans and "'200" not in masked and "200" not in masked
+        assert _restore(masked, spans) == (q, True)

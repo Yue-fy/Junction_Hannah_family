@@ -54,7 +54,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 0.0471
+    "wall_seconds": 1.1961
    },
    "intent": {
     "task": "area",
@@ -69,7 +69,7 @@
     "key": "area:room:room"
    }
   },
-  "recorded_at": "2026-11-14 05:07",
+  "recorded_at": "2026-11-14 08:31",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -1073,7 +1073,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 0.0186
+    "wall_seconds": 0.0867
    },
    "intent": {
     "task": "count",
@@ -1087,7 +1087,7 @@
     "key": "count:door:storey"
    }
   },
-  "recorded_at": "2026-11-14 05:07",
+  "recorded_at": "2026-11-14 08:31",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -2283,7 +2283,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 0.0212
+    "wall_seconds": 0.0239
    },
    "intent": {
     "task": "count",
@@ -2297,7 +2297,7 @@
     "key": "count:window:storey"
    }
   },
-  "recorded_at": "2026-11-14 05:07",
+  "recorded_at": "2026-11-14 08:31",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -6763,7 +6763,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 0.021
+    "wall_seconds": 0.0246
    },
    "intent": {
     "task": "count",
@@ -6777,7 +6777,7 @@
     "key": "count:door:model"
    }
   },
-  "recorded_at": "2026-11-14 05:07",
+  "recorded_at": "2026-11-14 08:31",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -7782,7 +7782,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 0.1919
+    "wall_seconds": 0.0221
    },
    "intent": {
     "task": "text",
@@ -7796,14 +7796,14 @@
     "key": "text:door:storey"
    }
   },
-  "recorded_at": "2026-11-14 05:07",
+  "recorded_at": "2026-11-14 08:31",
   "api": "http://127.0.0.1:8102"
  },
  {
   "path": "data/ifc_bench/4351_arc.ifc",
   "question": "What plumbing fixtures are in this building and their respective counts?",
   "answer": {
-   "value": "Plumbing fixtures are not listed in the model facts.\n\nMissing: explicit list of plumbing fixtures (e.g., sinks, toilets, urinals) and their counts.\n\nEstimate:  \n- Toilet-Domestic-3D: 9 (from IfcBuildingElementProxy)  \n- Urinal-Wall-3D: 4 (from IfcBuildingElementProxy)  \n- Sink Vanity-Round:19\" (6)  \n- Sink Kitchen-Double:42\" (2)  \n→ Total estimated plumbing fixtures: 21 (toilets + urinals + sinks)  \nNote: This is an estimate based on proxy types; actual plumbing fixtures may differ.",
+   "value": "Plumbing fixtures are not listed in the model facts.\n\nMissing: explicit list of plumbing fixtures (e.g., sinks, toilets, urinals) and their counts.\n\nEstimate:  \n- Toilet-Domestic-3D: 9 (from IfcBuildingElementProxy)  \n- Urinal-Wall-3D: 4 (from IfcBuildingElementProxy)  \n- Sink Vanity-Round:19\" (6)  \n- Sink Kitchen-Double:42\" (2)  \nTotal estimated plumbing fixtures: 21.",
    "unit": null,
    "confidence": 0.3,
    "evidence": [
@@ -7818,9 +7818,9 @@
    ],
    "trace": [
     "intent: text unknown [drawing] (lang en)",
-    "ifc (question as asked): Plumbing fixtures are not listed in the model facts.\n\nMissing: explicit list of plumbing fixtures (e.g., sinks, toilets, urinals) and their counts.\n\nEstimate:  \n- Toilet-Domestic-3D: 9 (from IfcBuildingElementProxy)  \n- Urinal-Wall-3D: 4 (from IfcBuildingElementProxy)  \n- Sink Vanity-Round:19\" (6)  \n- Sink Kitchen-Double:42\" (2)  \n→ Total estimated plumbing fixtures: 21 (toilets + urinals + sinks)  \nNote: This is an estimate based on proxy types; actual plumbing fixtures may differ.  at conf 0.30, unsure",
+    "ifc (question as asked): Plumbing fixtures are not listed in the model facts.\n\nMissing: explicit list of plumbing fixtures (e.g., sinks, toilets, urinals) and their counts.\n\nEstimate:  \n- Toilet-Domestic-3D: 9 (from IfcBuildingElementProxy)  \n- Urinal-Wall-3D: 4 (from IfcBuildingElementProxy)  \n- Sink Vanity-Round:19\" (6)  \n- Sink Kitchen-Double:42\" (2)  \nTotal estimated plumbing fixtures: 21.  at conf 0.30, unsure",
     "no train gate for this kind of question: general path by file type",
-    "ifc: Plumbing fixtures are not listed in the model facts.\n\nMissing: explicit list of plumbing fixtures (e.g., sinks, toilets, urinals) and their counts.\n\nEstimate:  \n- Toilet-Domestic-3D: 9 (from IfcBuildingElementProxy)  \n- Urinal-Wall-3D: 4 (from IfcBuildingElementProxy)  \n- Sink Vanity-Round:19\" (6)  \n- Sink Kitchen-Double:42\" (2)  \n→ Total estimated plumbing fixtures: 21 (toilets + urinals + sinks)  \nNote: This is an estimate based on proxy types; actual plumbing fixtures may differ.  (conf 0.30)",
+    "ifc: Plumbing fixtures are not listed in the model facts.\n\nMissing: explicit list of plumbing fixtures (e.g., sinks, toilets, urinals) and their counts.\n\nEstimate:  \n- Toilet-Domestic-3D: 9 (from IfcBuildingElementProxy)  \n- Urinal-Wall-3D: 4 (from IfcBuildingElementProxy)  \n- Sink Vanity-Round:19\" (6)  \n- Sink Kitchen-Double:42\" (2)  \nTotal estimated plumbing fixtures: 21.  (conf 0.30)",
     "[ifc] model 4351_arc.ifc: IFC2X3, 5 storeys, 401 elements (index 1.0s, cached)",
     "[ifc] parsed: metric=text kind=None scope=auto names=[]",
     "[ifc] abstain: free-text question: no deterministic rule",
@@ -7836,13 +7836,13 @@
    ],
    "cost": {
     "llm_tokens_in": 2463,
-    "llm_tokens_out": 141,
-    "gpu_seconds": 0.2395,
+    "llm_tokens_out": 113,
+    "gpu_seconds": 0.2115,
     "api_calls": 0,
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 1,
-    "wall_seconds": 3.6367
+    "wall_seconds": 3.3497
    },
    "intent": {
     "task": "text",
@@ -7854,7 +7854,7 @@
     "key": "text:unknown:drawing"
    }
   },
-  "recorded_at": "2026-11-14 05:07",
+  "recorded_at": "2026-11-14 08:31",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -8356,7 +8356,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 0.0597
+    "wall_seconds": 0.2141
    },
    "intent": {
     "task": "count",
@@ -8368,7 +8368,7 @@
     "key": "count:door:drawing"
    }
   },
-  "recorded_at": "2026-11-14 05:07",
+  "recorded_at": "2026-11-14 08:31",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -9232,7 +9232,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 0.9029
+    "wall_seconds": 1.0037
    },
    "intent": {
     "task": "count",
@@ -9255,7 +9255,7 @@
     ]
    }
   },
-  "recorded_at": "2026-11-14 05:07",
+  "recorded_at": "2026-11-14 08:31",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -9265,16 +9265,57 @@
    "value": 3,
    "unit": "count",
    "confidence": 0.915,
-   "evidence": [],
+   "evidence": [
+    {
+     "file": "data/cubicasa5k/colorful-4539.png",
+     "page": null,
+     "bbox": [
+      464.0,
+      639.0,
+      757.0,
+      1076.0
+     ],
+     "bbox_space": "image_px",
+     "ifc_guid": null,
+     "note": "bedroom region R9 (CubiCasa5K room segmentation), printed label 'MH'"
+    },
+    {
+     "file": "data/cubicasa5k/colorful-4539.png",
+     "page": null,
+     "bbox": [
+      163.0,
+      184.0,
+      453.0,
+      507.0
+     ],
+     "bbox_space": "image_px",
+     "ifc_guid": null,
+     "note": "bedroom region R8 (CubiCasa5K room segmentation), printed label 'MH'"
+    },
+    {
+     "file": "data/cubicasa5k/colorful-4539.png",
+     "page": null,
+     "bbox": [
+      876.0,
+      182.0,
+      1162.0,
+      509.0
+     ],
+     "bbox_space": "image_px",
+     "ifc_guid": null,
+     "note": "bedroom region R7 (CubiCasa5K room segmentation), printed label 'MH'"
+    }
+   ],
    "trace": [
     "intent: count bedroom [drawing] (lang fi)",
     "gate (train n=40): prior 28%, raster 72%, vlm_lora 85%, vlm_direct 70%",
     "vlm_lora: 3 count (conf 0.83, train hit rate)",
     "vlm_lora: its own calibrated confidence 0.92 used",
+    "room segmentation (pretrained CubiCasa5K): 3 bedroom region(s) = the answer ✓ (boxes attached as evidence; confidence unchanged)",
     "[vlm_lora] kind=count unit=count",
-    "[vlm_lora] local:cc-v2 0.1s tok 2104->2",
+    "[vlm_lora] local:cc-v2 0.3s tok 2104->2",
     "[vlm_lora] raw: 3",
-    "[vlm_lora] p(answer digits) = 0.92308 -> confidence 0.92",
+    "[vlm_lora] p(answer digits) = 0.91816 -> confidence 0.92",
     "[vlm_lora] cost: calls=1 tok_in=2104 tok_out=2 gpu_s=0.09 api_calls=0"
    ],
    "solver": "pipeline/vlm_lora",
@@ -9290,7 +9331,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 1,
-    "wall_seconds": 0.4231
+    "wall_seconds": 0.9887
    },
    "intent": {
     "task": "count",
@@ -9302,7 +9343,7 @@
     "key": "count:bedroom:drawing"
    }
   },
-  "recorded_at": "2026-11-14 05:07",
+  "recorded_at": "2026-11-14 08:31",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -9318,6 +9359,7 @@
     "gate (train n=40): prior 42%, raster 85%, vlm_lora 98%, vlm_direct 52%",
     "vlm_lora: 0 count (conf 0.95, train hit rate)",
     "vlm_lora: its own calibrated confidence 0.82 used",
+    "room segmentation (pretrained CubiCasa5K): 1 sauna region(s); no boxes attached",
     "[vlm_lora] kind=count unit=count",
     "[vlm_lora] local:cc-v2 0.1s tok 288->2",
     "[vlm_lora] raw: 0",
@@ -9337,7 +9379,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 1,
-    "wall_seconds": 0.107
+    "wall_seconds": 0.1515
    },
    "intent": {
     "task": "count",
@@ -9349,7 +9391,7 @@
     "key": "count:sauna:drawing"
    }
   },
-  "recorded_at": "2026-11-14 05:07",
+  "recorded_at": "2026-11-14 08:31",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -9405,7 +9447,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 7,
-    "wall_seconds": 0.2107
+    "wall_seconds": 0.2178
    },
    "intent": {
     "task": "text",
@@ -9417,7 +9459,7 @@
     "key": "text:unknown:drawing"
    }
   },
-  "recorded_at": "2026-11-14 05:07",
+  "recorded_at": "2026-11-14 08:31",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -9447,7 +9489,7 @@
     "intent: text stair [drawing] (lang en)",
     "no train gate for this kind of question: general path by file type",
     "raster: 1:500  (conf 0.75)",
-    "[raster] text layer: 49 texts in 6 tile(s); No scale note was found in the texts.",
+    "[raster] text layer: 49 texts in 6 tile(s); Scale notes found: 'ASEMAPIIRROS M.K. 1/500' = 1:500.",
     "[raster] answer '1:500' from text lines [5]"
    ],
    "solver": "pipeline/raster",
@@ -9456,14 +9498,14 @@
    ],
    "missing": [],
    "cost": {
-    "llm_tokens_in": 28021,
+    "llm_tokens_in": 28040,
     "llm_tokens_out": 2142,
-    "gpu_seconds": 3.2628000000000004,
+    "gpu_seconds": 3.2636000000000003,
     "api_calls": 0,
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 8,
-    "wall_seconds": 0.9587
+    "wall_seconds": 1.4708
    },
    "intent": {
     "task": "text",
@@ -9475,7 +9517,7 @@
     "key": "text:unknown:drawing"
    }
   },
-  "recorded_at": "2026-11-14 05:07",
+  "recorded_at": "2026-11-14 08:31",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -10572,7 +10614,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 0.0892
+    "wall_seconds": 0.1094
    },
    "intent": {
     "task": "area",
@@ -10587,7 +10629,7 @@
     "key": "area:room:room"
    }
   },
-  "recorded_at": "2026-11-14 05:07",
+  "recorded_at": "2026-11-14 08:31",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -10775,7 +10817,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 0.0202
+    "wall_seconds": 0.0244
    },
    "intent": {
     "task": "count",
@@ -10789,7 +10831,7 @@
     "key": "count:room:label"
    }
   },
-  "recorded_at": "2026-11-14 05:07",
+  "recorded_at": "2026-11-14 08:31",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -10845,7 +10887,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 1,
-    "wall_seconds": 0.1897
+    "wall_seconds": 0.2291
    },
    "intent": {
     "task": "text",
@@ -10857,7 +10899,7 @@
     "key": "text:unknown:drawing"
    }
   },
-  "recorded_at": "2026-11-14 05:07",
+  "recorded_at": "2026-11-14 08:31",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -10900,7 +10942,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 1,
-    "wall_seconds": 0.1742
+    "wall_seconds": 0.1935
    },
    "intent": {
     "task": "text",
@@ -10912,7 +10954,7 @@
     "key": "text:stair:drawing"
    }
   },
-  "recorded_at": "2026-11-14 05:07",
+  "recorded_at": "2026-11-14 08:31",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -10955,7 +10997,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 1,
-    "wall_seconds": 0.174
+    "wall_seconds": 0.1824
    },
    "intent": {
     "task": "text",
@@ -10967,7 +11009,7 @@
     "key": "text:unknown:drawing"
    }
   },
-  "recorded_at": "2026-11-14 05:07",
+  "recorded_at": "2026-11-14 08:31",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -10980,7 +11022,7 @@
    "evidence": [],
    "trace": [
     "kind=count unit=count",
-    "nvidia:private/nvidia/nemotron-3.5-super-120b-a12b 10.2s tok 2150->2",
+    "nvidia:private/nvidia/nemotron-3.5-super-120b-a12b 5.4s tok 2150->2",
     "raw: 4",
     "cost: calls=1 tok_in=2150 tok_out=2 gpu_s=0.00 api_calls=1"
    ],
@@ -10995,7 +11037,7 @@
     "api_tokens_in": 2150,
     "api_tokens_out": 2,
     "llm_calls": 1,
-    "wall_seconds": 10.4649
+    "wall_seconds": 5.6676
    },
    "intent": {
     "task": "count",
@@ -11007,7 +11049,7 @@
     "key": "count:bedroom:drawing"
    }
   },
-  "recorded_at": "2026-11-14 05:08",
+  "recorded_at": "2026-11-14 08:31",
   "api": "http://127.0.0.1:8102",
   "solver": "vlm_direct",
   "solver_args": {
@@ -11024,7 +11066,7 @@
    "evidence": [],
    "trace": [
     "kind=text unit=None",
-    "nvidia:private/nvidia/nemotron-3.5-super-120b-a12b 5.3s tok 3249->3",
+    "nvidia:private/nvidia/nemotron-3.5-super-120b-a12b 3.8s tok 3249->3",
     "raw: Elevation",
     "cost: calls=1 tok_in=3249 tok_out=3 gpu_s=0.00 api_calls=1"
    ],
@@ -11039,7 +11081,7 @@
     "api_tokens_in": 3249,
     "api_tokens_out": 3,
     "llm_calls": 1,
-    "wall_seconds": 10.318
+    "wall_seconds": 4.0452
    },
    "intent": {
     "task": "text",
@@ -11051,7 +11093,7 @@
     "key": "text:unknown:drawing"
    }
   },
-  "recorded_at": "2026-11-14 05:08",
+  "recorded_at": "2026-11-14 08:31",
   "api": "http://127.0.0.1:8102",
   "solver": "vlm_direct",
   "solver_args": {
@@ -11127,7 +11169,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 1,
-    "wall_seconds": 1.7851
+    "wall_seconds": 1.7346
    },
    "intent": {
     "task": "count",
@@ -11139,7 +11181,7 @@
     "key": "count:bedroom:drawing"
    }
   },
-  "recorded_at": "2026-11-14 05:08",
+  "recorded_at": "2026-11-14 08:31",
   "api": "http://127.0.0.1:8102",
   "solver": "raster"
  },
@@ -11187,7 +11229,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 6,
-    "wall_seconds": 0.0723
+    "wall_seconds": 0.0693
    },
    "intent": {
     "task": "count",
@@ -11199,7 +11241,7 @@
     "key": "count:sauna:drawing"
    }
   },
-  "recorded_at": "2026-11-14 05:08",
+  "recorded_at": "2026-11-14 08:31",
   "api": "http://127.0.0.1:8102",
   "solver": "raster"
  },
@@ -11350,7 +11392,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 0.2946
+    "wall_seconds": 0.226
    },
    "intent": {
     "task": "count",
@@ -11362,7 +11404,7 @@
     "key": "count:door:drawing"
    }
   },
-  "recorded_at": "2026-11-14 05:08",
+  "recorded_at": "2026-11-14 08:31",
   "api": "http://127.0.0.1:8102",
   "solver": "raster_cc5k"
  }

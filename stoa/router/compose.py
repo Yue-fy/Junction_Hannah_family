@@ -23,6 +23,12 @@ from stoa.router.intent import _NEGATION, _QUOTED, _TARGETS, Intent, parse
 
 _TOGETHER = re.compile(r"\b(in total|together|altogether|combined|in all|total number|sum of|zusammen|insgesamt|"
                        r"yhteens[aä]|au total|in totale|i alt|totaal)\b", re.I)
+# Q 08:21: "How many doors and how many windows are on '1.korrus'?" was summed (101 @ 0.86; gold 46 and 55): two counting
+# cues, or "respectively / each / separately", without a total cue -> one count per class
+_COUNT_CUE = re.compile(r"\bhow many\b|\bnumber of\b|\bwie viele\b|\bcombien\b|\bquant[ie]\b|\bkuinka monta\b|"
+                        r"\bhur många\b|\bhoeveel\b|\bmitu\b|\bhvor mange\b", re.I)
+_EACH = re.compile(r"\b(respectively|separately|each separately|one by one|for each (?:kind|type|class)|jeweils|"
+                   r"respectivement|rispettivamente|vastaavasti|var för sig|respectivamente|elk afzonderlijk)\b", re.I)
 _MORE_THAN = re.compile(r"how many more (?P<a>.+?) than (?P<b>.+?)(?: are| is| does| do| on| in|\?|$)", re.I)
 _LARGER = re.compile(r"by how (?:many|much) (?:m²|m2|square metres|square meters|ft²)? ?is (?P<a>.+?) (?:larger|bigger|greater) than (?P<b>.+?)(?:\s*\(|\?|$)", re.I)
 _SMALLER = re.compile(r"by how (?:many|much) (?:m²|m2|square metres|square meters|ft²)? ?is (?P<a>.+?) smaller than (?P<b>.+?)(?:\s*\(|\?|$)", re.I)
@@ -175,6 +181,11 @@ def decompose(source: str, question: str) -> Plan | None:
         for _, t in _targets_in(clause):
             if t not in ts and t not in ("room", "storey") and not (mc and t == "sanitary"):
                 ts.append(t)
+        first = re.split(r"\?", qn)[0]
+        if len(ts) >= 2 and not _TOGETHER.search(q) and (len(_COUNT_CUE.findall(first)) >= 2 or _EACH.search(qn)):
+            subs = [_sub_for(source, t, base) for t in ts]
+            if all(subs):
+                return Plan("list", subs, list(ts), "count")
         if len(ts) >= 2:
             subs, labels = [], []
             for t in ts:
@@ -207,6 +218,10 @@ def combine(plan: Plan, values: list) -> tuple[object, str]:
         n, k = nums[0], int(plan.note)
         yes = n is not None and n >= k
         return ("yes" if yes else "no"), f"{lab[0]} count = {values[0]} {'≥' if yes else '<'} {k} → {'yes' if yes else 'no'}"
+    if plan.op == "list":  # separate answers, one per class (no arithmetic)
+        shown = [_fmt(n, plan.unit) if n is not None else str(v) for n, v in zip(nums, values)]
+        return "; ".join(f"{lab[i]}: {shown[i]}" for i in range(len(values))), "separate counts, not a sum: " + ", ".join(
+            f"{lab[i]} {shown[i]}" for i in range(len(values)))
     if any(n is None for n in nums):
         return None, "a part has no numeric value"
     if plan.op in ("gt", "lt", "ge"):
