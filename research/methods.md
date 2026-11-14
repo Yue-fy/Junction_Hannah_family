@@ -664,3 +664,7 @@ in `missing`; the value never changes. Live on all 78: area answers right 11/23 
 text layer per plan, ~3–7k tokens in, up to 5k out; local). n = 6 agreements: the direction is clear, the 0.75 is a
 guess. `xcheck_eval.py` reproduces the table. Text-layer PITFALL: 9 of 20 CubiCasa tiles hit the 2,500-token cap
 and 1841 came back with 3 items (a loop), so dense plans lose labels at the end of the list.
+NEGATIVE (exploratory, same cycle): per-floor questions on two-storey sheets cannot lean on printed floor titles —
+the OCR text layer finds one on 1 of 4 two-storey probe sheets ('1 KRS' on 6007; none on 4828, 5046, 9976). A floor
+split needs layout cues (entrance door, stair position, which part holds the kitchen), not text. Latency note for the
+demo: a cold text layer took 6–165 s per plan with the GPU saturated (1–2 tiles, up to 2,500 tokens out per tile).
