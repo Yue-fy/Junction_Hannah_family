@@ -90,15 +90,18 @@ By source on sealed test 2: Swiss vector plans 99.0 %, IFC models 100 % (397/397
 ## 2:35–2:55 · Where it breaks, and why (slide 4 — the failure analysis)
 Slide image: `demo/redteam-rounds.png` (SVG next to it; regenerate with `python3 experiments/q/plot_rounds.py` and
 headless chromium, numbers from `redteam/REPORT.md`). **Say only this (≈ 22 s, 65 words):**
-> "We tried to break it ourselves: almost 900 adversarial questions — rewordings, nine languages, rotated scans, rooms
-> that don't exist, a judge's own upload. Every confident mistake had one cause: we checked the number, not that it
-> answered what was asked. Each bar is a round of fixes; the last two are this morning's new attacks. On the first
-> 600, all 378 confident answers are right — and it never just refuses."
-(The 09:28 / 09:50 bars = 14 / 12 confident misses from the three newest families — uploads, link wordings, storey
-roles — on builds where every older family is at 0; 7a78559 fixed the storey roles. If the fixes for bugs 25–26 merge
-before the pitch, re-run and redraw.)
-(Numbers by stage build — say the line for the build on stage: **night 7a78559 (09:50) and later: "… all 378 confident
-answers are right, and no confident answer to a trick question"** (run `…-094023-…-all-7a78559-2466`; 413 of 413 on
+> "We tried to break it ourselves: over a thousand adversarial questions — rewordings, nine languages, rotated scans,
+> rooms that don't exist, renamed files, a judge's own upload. Every confident mistake had one cause: we checked the
+> number, not that it answered what was asked. Each bar is a round of fixes; the tall ones on the right are this
+> morning's new attacks. On the first 600, all 398 confident answers are right — and it never just refuses."
+(The bars from 09:28 on count only the newest families — uploads, links, lists, rankings, renamed files, relative
+storeys — on builds where every older family is at 0: 14 / 12 / 19 / 18, then 10 with the 10:47 owner heads. The 10
+left: "the floor above this one" (4, W1), CubiCasa uploads (4), one ranking, one agent flake. Redraw after the final
+build: `python3 experiments/q/bar_count.py MAIN_RUN [V27_RUN] --v26 V26_RUN` gives the bar.)
+(Numbers by stage build — say the line for the build on stage: **the 11:15 merge of the 10:47 heads (pre-merge #10):
+"… all 398 confident answers are right, and no confident answer to a trick question"** (run
+`…-104643-…-all-snap11-83bd`; 433 of 433 on v1–v20); night 6025963: "… all 402" (`…-103834-…-all-6025963-f05a`);
+41188a4: "… all 379"; **7a78559 (09:50): "… all 378"** (run `…-094023-…-all-7a78559-2466`; 413 of 413 on
 v1–v20); 0ffd81b: "… all 364" (run `…-092751-…-all-0ffd81b-ba15`); be57171 / 31397eb: "609 … all 360"; bb94fe4 (test 2):
 "494 … 283 of 290"; c1d6149: "564 … 338 of 339"; 62754aa: "609 … 337 of 339". "Never just refuses": 0 of 647
 answers on be57171 are a bare refusal, and every wrong one carries an assumption or a "missing" line — see backup.)
@@ -141,7 +144,7 @@ new surface (storeys in everyday words, "whole building" in Swedish, "1,200 euro
   extra step. Fix in place: detect the unexplained operation, compute it in code or lower the confidence (derived
   probe 29.5 % → 56.8 %, 100 % right when confident). Test 2 measures it on the sealed sets (hard2r, hard3).
 
-### If a judge types their own question (measured 09:28 on night 0ffd81b, run `…-092751-…-all-0ffd81b-ba15`; `redteam/REPORT.md` v6–v24)
+### If a judge types their own question (measured 10:38 on night 6025963, run `…-103834-…-all-6025963-f05a` + v27 `…-103938-…-v27-b9d0`; `redteam/REPORT.md` v6–v27)
 On older builds more of these break: see the git history of this file (08:20 and 08:37 versions).
 - **Esplanades IFC sheet — safe:** "How many rooms / columns are on this floor?" (50 / 37), "How many doors are on the
   ground floor?" (46, 0.98), "How many windows does the whole building have?" (297; also Finnish "koko
@@ -162,13 +165,18 @@ On older builds more of these break: see the git history of this file (08:20 and
   in French/Spanish/Swedish too ("Le plan et la maquette IFC ont-ils le même nombre de portes … ?" → yes).
   Right but shown as unsure (fine to type, the card says why): "How many floors does this building have?" (5, 0.60),
   "How many doors are on the top floor?" (39, 0.53), "1.korrus and 2.korrus together" (88, 0.63).
-  **Steer away from:** comparative link questions ("Does this plan show fewer windows than the IFC model?" → "no" at
-  0.85 while its own numbers say 52 < 55 — bug 25, R1), two questions in one link question ("Which storey does this
-  sheet show, and does its door count match?" answers only the storey), "How big is the laundry room?" (870 at 0.30),
-  "the same area as room X" (returns X's area). On the smiley-west model, "the ground floor" from another storey's
-  sheet answers that sheet's storey at 0.98 (bug 24, W1) — on Esplanades "ground floor" is right (46). If one of these
-  comes up, open the evidence and say it: "the trace shows what it computed — this is a known failure, it's on the
-  failure slide."
+  **Since 6025963 also safe:** comparative link questions in five languages ("Does this plan show fewer windows than
+  the IFC model has?" → yes 52 < 55; "Does the IFC model contain more windows … than this drawing shows?" → yes; "How
+  many more windows does the model have than this plan shows?" → 3), "Which sheet shows the ground floor?" (smiley:
+  plan-02-eg), "Which storey does this sheet show, and does its door count match?" (both halves), rankings that name a
+  tie ("Which floor has the most rooms?" → "2.korrus and 3.korrus and 4.korrus (tie, 60 each)" at 0.56), "the three
+  largest rooms on '1.korrus'" (0.90), "the total area of the three largest rooms" (232.88 m²), "top floor" (5.korrus).
+  **Steer away from (bugs 27–28, W1, fixes pending at 10:46):** "the floor above / below this one" (answers the open
+  sheet's own storey at 0.98), "Which floor has *no* X?" (lists the floors that have X), "Of the floors …, which has
+  the fewest?" (answers the smallest room), the Italian / German which-floor and top-3 wordings ("Quale piano ha …" →
+  a count). Also "How big is the laundry room?" (870 at 0.30) and "the same area as room X" (returns X's area). If one
+  of these comes up, open the evidence and say it: "the trace shows what it computed — this is a known failure, it's
+  on the failure slide."
 - Esplanades rooms are labelled in Estonian; English room words work and the card says which labels it used:
   "How many kitchens are on this floor?" → 10 ('ELUTUBA+KÖÖK'), "How many toilets …?" → 13, "How big is the server
   room?" → 4.26 m². Typed without quotes, "how big is the corridor KORIDOR (119) on 1.korrus?" is now right (63.84 at
