@@ -6,7 +6,11 @@ Builds on F's `hard` (translations/paraphrases/compositions/ft²) and `hard2` (n
 don't. The first 205 rows start from dev questions the pipeline had **right at conf ≥ 0.8**, so a failure there is
 caused by the perturbation, not by the drawing.
 
-## Now (10:54) — the short version
+## Now (11:03) — the short version
+- **Pre-merge check #11 (every owner head of 10:54, the candidate for S0's 11:15 merge): 11 won / 1 lost vs night
+  6025963 (the loss: a LoRA flip at 0.37), v1–v18 396/396 at ≥ 0.8, 0 false premises, 1015 rows 602/611; the newest
+  families' confident misses 18 → 5** (relative storeys fixed except "directly above"; 3 CubiCasa uploads; one agent
+  confidence bug).
 - **Pre-merge check #10 (10:47, all owner heads on 6025963 — what S0 merges at 11:15): 4 won / 1 lost (0.50), v1–v18
   398/398 at ≥ 0.8, renamed-file IFC rows 240/251 with kg_qa answering again (2 → 27); confident misses on the newest
   families 18 → 10** (left: relative storeys ×4 — bug 28, CubiCasa uploads ×4, one ranking, one agent flake).
@@ -971,6 +975,16 @@ v21 "3rd floor level" (21.92 at 0.85 → 22'-5" at 0.65), the plan-without-IFC "
 201/210), 3 won / 0 lost — still 2 link answers of the wrong shape on hashed names ("Is the door count … the same …?"
 → 50 at 0.97; Italian "Quante finestre … non sono disegnate …?" → 55 at 0.88), both caught by W4's 87eaf64 shape guard
 or not (pre-merge check #10 below).
+
+## Pre-merge check #11 (10:54): 6025963 + every owner head of 10:54 (W1 2ac850e, W2 ea0e1a8, W3 9b1abd3, W4 f4724ed, R1 891f4a2, R2 9b1abd3, F c850a6a, W5 9521587)
+Merged one by one (an 8-head octopus fails: "cannot read more than 8 trees"). Runs `20261114-105439-pipeline-all-snap12-e712`
+(1015 rows) + `-105439-…-v26_hash-snap12-5889`. **vs #10 8 won / 1 lost (a LoRA flip at 0.37), vs 6025963 11 won / 1
+lost; v26 2 won / 0 lost. v1–v18 396/396 at ≥ 0.8 right, 0 false premises; 1015 rows 602/611 — nothing lost at ≥ 0.8.**
+Bar 10 → 5. Bug 28 fixed (W1 82dc141): "doors on the floor above this one" → 42 at 0.98, "walls on the floor below this
+one" → 81, "doors on the floor below this one" → 0 at 0.42 (the foundation); IT "Quale piano …" → Piano 1 at 0.75 (W1
+2ac850e); "Which floor has the biggest room?" → 1.korrus at 0.86; "Are fewer doors drawn here …?" → no (kg_qa); the
+two-part "storey + windows" → "1.korrus; 55". Left at ≥ 0.8: 3 CubiCasa upload rows (bug 26), "How many windows does
+the storey *directly* above this one have?" → 55 at 0.88 (W1, told 11:03), and the agent's 297 at 0.95 (W4).
 
 ## Pre-merge check #10 (10:47): 6025963 + W1 bbd2544 + W2 19c25d4 + W3 88eb185 + W4 c2b0fad + R1 c8d67d0 + R2 d6ce0dd + F 8aef6b2
 Scratch snapshot, all 1015 rows v1–v27 (`20261114-104643-pipeline-all-snap11-83bd`) + v26 hashed
