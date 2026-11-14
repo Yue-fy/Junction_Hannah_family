@@ -871,3 +871,8 @@ a wording: CubiCasa raster counts. So NEW tells you where to write probes, and i
 Small-sample rule for Stoa's examples (exact McNemar): a fix needs ≥ 6 W / 0 L (p = 0.031) or 8 W / 1 L (p = 0.039);
 15/20 right = 75% [53, 89] Wilson. Write 5-10 rewordings per example (Q's redteam/from_examples.py) so that a fix
 can be tested at all.
+**8m re-check on night b656826 (11:13):** pipeline_est on probe_e2e (run -111321-pipeline_est-probe_e2e-7c2c vs
+-103949-…-d933): out-of-drawing rows 0 'unknown'/None, 100/101 a number or flagged estimate, conf ≥ 0.5 on 10 (11),
+177 LLM calls (180), 477k tokens (492k); the 6 rate-stated rows: 0 values changed. So the post-noon option still runs
+unchanged on the final build. Gap found with triage: kind_of misses renovation costs ('What would it cost to repaint
+all walls on this floor?'). That is a derived quantity (wall area × a rate), so it belongs in the agent, not the estimate.
