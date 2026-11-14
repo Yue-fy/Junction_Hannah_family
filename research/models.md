@@ -63,6 +63,9 @@ Paired cc-v3 − cc-v2: dev +0.8 [−1.0, +2.5], train_gate −0.4 [−2.3, +1.5
 Verdict: more passes over the same cubicasa labels saturate; mixing a second drawing style transfers (+16 over the
 base on swiss PNGs, DE windows 0 → 33, WC 62 → 88). cc-v2 stays the cubicasa model (every gate is fitted on it);
 cc-v3 is the candidate for count questions on raster plans that are NOT cubicasa (the hidden set's "different" data).
+Escalation check (03:50): on the 80 swiss-PNG Qs where cc-v3 is unsure (raw p < 0.9) hosted Nemotron is right 22.5% vs
+cc-v3 41.2% ($2.45/1k, 10.5 s/Q) → no Nemotron tier for raster counts. Window errors are spread ±3+ (mode 0), so a
+count shift doesn't help either.
 
 Cost accounting: local calls record `gpu_seconds = tokens_in/25k + tokens_out/1k` (amortised throughput measured
 at saturation), not HTTP wall time (which includes queueing behind other agents).

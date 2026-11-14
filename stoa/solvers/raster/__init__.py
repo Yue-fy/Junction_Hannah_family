@@ -254,8 +254,9 @@ class RasterSolver(BaseSolver):
                      + ", ".join(i.text for i in hits)[:300])
         ev = [Evidence(file=img_path, page=0, bbox=[round(v, 1) for v in i.box], bbox_space="image_px",
                        note=f"{what} {k + 1}: '{i.text}'") for k, i in enumerate(hits)]
-        # confidence: small-sample guesses (exact quoted labels 7/7 on Swiss PNG floors, class labels 5/7)
-        conf = (0.6 if label else 0.45) if hits else 0.3
+        # confidence: exact quoted labels 36/39 right on Swiss PNG floors (R2's swiss_png_counts_dev, run a065; method
+        # chosen on 7 of those Qs) -> 0.85; class labels unmeasured off CubiCasa (5/7 on the same floors) -> 0.45
+        conf = (0.85 if label else 0.45) if hits else 0.3
         return Answer(value=len(hits), unit="count", confidence=conf, evidence=ev, solver=self.name, trace=trace,
                       assumptions=[f"counted the printed {what}s read from the drawing (tiled VLM text reading); "
                                    f"one label = one room"],

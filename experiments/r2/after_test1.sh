@@ -9,7 +9,8 @@ set -uo pipefail
 S=${JUNCTION_SHARED:-/home/fangy4/work/projects/junction-shared}
 REPO=$(cd "$(dirname "$0")/../.." && pwd)
 DRIVER=$S/logs/S0/test1-driver.log
-until grep -qw 'done' "$DRIVER" 2>/dev/null; do sleep 30; done
+# S0 D14 (03:54): training is OK once the test-cc5k1 stage has finished (3rd 'predictions:' line) or the driver is done
+until grep -qw 'done' "$DRIVER" 2>/dev/null || [ "$(grep -c '^predictions:' "$DRIVER" 2>/dev/null)" -ge 3 ]; do sleep 30; done
 echo "[$(date +%H:%M)] test 1 done: $(tail -1 "$DRIVER")"
 
 if curl -s -m 5 http://127.0.0.1:8001/v1/models | grep -q '"cc-v3"'; then
