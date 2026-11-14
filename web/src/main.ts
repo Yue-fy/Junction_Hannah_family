@@ -8,8 +8,8 @@ import { roomKind, roomName, roomShown, Viewer2D } from "./viewer2d";
 import type { Viewer3D } from "./viewer3d"; // loaded lazily: web-ifc + three are ~4 MB
 import tourSteps from "../fixtures/tour.json";
 import tourCustomer from "../fixtures/tour-customer.json";
-import { diffQuestion, diffsHtml, heroHtml, heroLoadingHtml, initialView, landingHtml, numbered, projectDifferences, projectOf, PROJECTS, saveView, type Difference, type View } from "./customer";
-import type { Project } from "./projects";
+import { diffQuestion, diffsHtml, heroHtml, heroLoadingHtml, initialView, landingHtml, numbered, projectDifferences, projectOf, PROJECTS, saveView, type Difference, type FloorGroup, type View } from "./customer";
+import { floorName, type Project } from "./projects";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -752,6 +752,7 @@ async function runAsk() {
 
 async function showAnswer(a: Answer, roundTripMs: number) {
   state.answer = a;
+  hero = { groups: undefined, roundTripMs };
   const askedPath = state.file?.path ?? "";
   const askedQ = $<HTMLTextAreaElement>("question").value.trim();
   renderCard($("card"), a, {
@@ -899,7 +900,58 @@ function applyEvidence3D(a: Answer) {
   const pane = $("pane3d");
   pane.dataset.found = String(n);
   // the same numbers as the answer's short list (customer view; CSS hides them in the expert view)
-  v.setNumbers(numbered(a.evidence).map((i) => a.evidence[i].ifc_guid ?? ""));
+  // customer view, many elements on several floors: one numbered line (and pin) per floor instead of per element
+  const groups = isCustomer() && a === state.answer ? floorGroups(a, v) : undefined;
+  if (groups) {
+    if (!hero.groups) {
+      hero.groups = groups;
+      renderHero(a, hero.roundTripMs);
+      // the plan shows its own floor's number on one of its elements
+      v2d.setNumbers(groups.map((g) => a.evidence.findIndex((e) => !!e.ifc_guid && g.guids.includes(e.ifc_guid) && !!e.bbox && e.file === state.file?.path)));
+    }
+    v.setNumberGroups(groups.map((g) => g.guids));
+  } else v.setNumbers(numbered(a.evidence).map((i) => a.evidence[i].ifc_guid ?? ""));
+}
+
+/** The answer's elements grouped by floor (bottom first), when there are more than 5 on 2+ floors. */
+function floorGroups(a: Answer, v: Viewer3D): FloorGroup[] | undefined {
+  const guids = [...new Set(a.evidence.filter((e) => e.ifc_guid && !/^NOT in the answer:/.test(e.note ?? "")).map((e) => e.ifc_guid!))];
+  if (guids.length <= 5) return undefined;
+  const by = new Map<number, string[]>();
+  for (const g of guids) {
+    const s = v.storeyOfGuid(g);
+    if (s === null) continue;
+    if (by.has(s)) by.get(s)!.push(g);
+    else by.set(s, [g]);
+  }
+  if (by.size < 2) return undefined;
+  const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
+  return v.storeys.filter((s) => by.has(s.id)).map((s) => ({ storey: s.id, label: cap(floorName(s.name)), guids: by.get(s.id)! }));
+}
+
+/** A floor line of a whole-building answer: that floor in 3D, its elements framed, only its number shown. */
+async function focusFloor(k: number) {
+  const g = hero.groups?.[k];
+  if (!g || !state.ifc) return;
+  if (state.mode === "2d") setMode("3d");
+  await ensure3D();
+  if (!v3d) return;
+  const rows = $("hero").querySelectorAll<HTMLElement>(".hw-item[data-floor]");
+  const again = [...rows].some((b) => b.dataset.floor === String(k) && b.classList.contains("sel"));
+  rows.forEach((b) => b.classList.toggle("sel", !again && b.dataset.floor === String(k)));
+  if (again) {
+    // the same floor again: back to the whole building
+    v3d.highlight(hero.groups!.flatMap((x) => x.guids), false);
+    v3d.setStorey(null);
+    v3d.frameAll();
+    v3d.setNumberGroups(hero.groups!.map((x) => x.guids));
+    $<HTMLSelectElement>("storey").value = "";
+    return;
+  }
+  v3d.highlight(g.guids, false);
+  v3d.focusGuids(g.guids, g.storey);
+  v3d.setNumberGroups(hero.groups!.map((x, i) => (i === k ? x.guids : [])));
+  $<HTMLSelectElement>("storey").value = String(g.storey);
 }
 
 function focusEvidence(i: number) {
@@ -1080,6 +1132,9 @@ function projectChrome(f: FileInfo) {
   });
 }
 
+/** What the hero was last drawn with (the floor groups arrive once the 3D model has loaded). */
+let hero: { groups: FloorGroup[] | undefined; roundTripMs: number } = { groups: undefined, roundTripMs: 0 };
+
 function renderHero(a: Answer, roundTripMs: number) {
   const el = $("hero");
   el.hidden = false;
@@ -1088,7 +1143,9 @@ function renderHero(a: Answer, roundTripMs: number) {
   el.innerHTML = heroHtml(a, {
     question: $<HTMLTextAreaElement>("question").value.trim(), file: state.file?.path ?? "", roundTripMs,
     sheetLabel: (path) => p?.sheets.find((s) => s.path === path)?.label ?? "",
+    groups: hero.groups,
   });
+  el.querySelectorAll<HTMLButtonElement>("[data-floor]").forEach((b) => b.addEventListener("click", () => void focusFloor(Number(b.dataset.floor))));
   el.querySelectorAll<HTMLButtonElement>("[data-ev]").forEach((b) => {
     b.addEventListener("click", () => focusEvidence(Number(b.dataset.ev)));
     b.addEventListener("mouseenter", () => v2d.hoverEvidence(Number(b.dataset.ev)));

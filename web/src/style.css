@@ -529,6 +529,8 @@ body[data-view="customer"] #askBtn { min-height: 46px; padding: 0 26px; font-siz
 .hw-title { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 4px 0 2px; }
 .hw-item { display: flex; gap: 10px; align-items: center; border: 0; background: transparent; padding: 8px 6px; min-height: 44px; border-radius: 10px; cursor: pointer; text-align: left; font-size: 15px; }
 .hw-item:hover { background: #f1f4f8; }
+.hw-item.sel { background: var(--accent-soft); }
+.hw-item .lbl b { font-weight: 700; }
 .hw-item .num { font-size: 15px; }
 .hw-more { font-size: 13px; color: var(--muted); padding-left: 6px; }
 .hero-loading { display: flex; gap: 14px; align-items: center; font-size: 16px; }

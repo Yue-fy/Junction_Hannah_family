@@ -80,6 +80,23 @@ export interface HeroCtx {
   roundTripMs: number;
   /** the sheet label of a path in the current project ("Floor 2"), or "" */
   sheetLabel: (path: string) => string;
+  /** many elements on several floors (a whole-building answer): one numbered line per floor instead of per element */
+  groups?: FloorGroup[];
+}
+
+export interface FloorGroup {
+  storey: number;
+  /** "Floor 1", "Basement" */
+  label: string;
+  guids: string[];
+}
+
+/** "windows" for a count of the intent's target; "elements" when the answer names none. */
+export function targetNoun(target: string | undefined, n: number): string {
+  const t = (target ?? "").toLowerCase().replace(/^ifc/, "").replace(/_/g, " ").trim();
+  const base = !t ? "element" : t === "space" ? "room" : t === "storey" ? "floor" : t;
+  if (n === 1) return base;
+  return /(s|x|ch|sh)$/.test(base) ? `${base}es` : /[^aeiou]y$/.test(base) ? `${base.slice(0, -1)}ies` : `${base}s`;
 }
 
 export function confidenceWords(c: number): { cls: string; word: string; hint: string } {
@@ -225,7 +242,10 @@ export function heroHtml(a: Answer, ctx: HeroCtx): string {
       <span>Answered in <b>${wall < 1 ? `${Math.max(0.1, wall).toFixed(1)} s` : `${wall.toFixed(1)} s`}</b></span>
       <span>about <b>${mt.minutes} min</b> by hand <small>(estimate)</small></span>
     </div>
-    ${shown.length ? `<div class="hero-where"><div class="hw-title">Where it comes from</div>
+    ${ctx.groups && ctx.groups.length > 1 ? `<div class="hero-where"><div class="hw-title">Where it comes from · by floor</div>
+      ${ctx.groups.map((g, k) => `<button type="button" class="hw-item" data-floor="${k}"><span class="num pin-badge">${k + 1}</span><span class="lbl">${esc(g.label)} · <b>${g.guids.length}</b> ${esc(targetNoun(a.intent?.target, g.guids.length))}</span></button>`).join("")}
+      <div class="hw-more">every one lit in the 3D model; pick a floor to see only that floor</div></div>`
+    : shown.length ? `<div class="hero-where"><div class="hw-title">Where it comes from</div>
       ${shown.map((i, k) => `<button type="button" class="hw-item" data-ev="${i}"><span class="num pin-badge">${k + 1}</span><span class="lbl">${esc(place(i))} · ${esc(evidenceLabel(ev[i].note ?? ""))}</span></button>`).join("")}
       ${more > 0 ? `<div class="hw-more">+ ${more} more, all marked ${/\.ifc$/i.test(ctx.file) || !ev.some((e) => e.bbox && e.file === ctx.file)
         || ev.some((e) => e.ifc_guid && !(e.bbox && e.file === ctx.file) && !ev.some((x) => x.ifc_guid === e.ifc_guid && x.bbox && x.file === ctx.file))

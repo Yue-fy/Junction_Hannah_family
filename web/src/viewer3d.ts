@@ -116,6 +116,11 @@ export class Viewer3D {
 
   /** Number these elements 1 2 3 … (GlobalIds in the order of the answer's list; '' = no element for that number); [] clears. */
   setNumbers(guids: string[]) {
+    this.setNumberGroups(guids.map((g) => (g ? [g] : [])));
+  }
+
+  /** One number per group of elements (e.g. one per floor), placed over the centre of the group's top. */
+  setNumberGroups(groups: string[][]) {
     this.ensureGuidIndex();
     for (const l of this.labels) l.el.remove();
     this.labels = [];
@@ -124,14 +129,9 @@ export class Viewer3D {
       this.el.append(this.labelLayer);
     }
     const mat = new THREE.MeshBasicMaterial();
-    guids.forEach((g, k) => {
-      if (!g) return; // a numbered item without a GlobalId (a 2D box only): its number stays free
-      const id = this.guidToId.get(g);
-      if (id === undefined) return;
-      const m = this.elementMesh(id, mat);
-      if (!m) return;
-      const box = new THREE.Box3().setFromObject(m);
-      m.geometry.dispose();
+    groups.forEach((gs, k) => {
+      // an empty group = a numbered item without a GlobalId (a 2D box only): its number stays free
+      const box = this.boxOf(gs, mat);
       if (box.isEmpty()) return;
       const p = box.getCenter(new THREE.Vector3());
       p.y = box.max.y;
@@ -143,6 +143,36 @@ export class Viewer3D {
     });
     mat.dispose();
     this.needsRender = true;
+  }
+
+  private boxOf(guids: string[], mat: THREE.Material) {
+    this.ensureGuidIndex();
+    const box = new THREE.Box3();
+    for (const g of guids) {
+      const id = this.guidToId.get(g);
+      const m = id === undefined ? null : this.elementMesh(id, mat);
+      if (!m) continue;
+      box.union(new THREE.Box3().setFromObject(m));
+      m.geometry.dispose();
+    }
+    return box;
+  }
+
+  /** Show one storey and frame these elements on it (customer view: a floor row of a whole-building answer). */
+  focusGuids(guids: string[], storey: number | null) {
+    this.ensureGuidIndex();
+    this.setStorey(storey);
+    const mat = new THREE.MeshBasicMaterial();
+    const g = new THREE.Group();
+    for (const guid of guids) {
+      const id = this.guidToId.get(guid);
+      const m = id === undefined ? null : this.elementMesh(id, mat);
+      if (m) g.add(m);
+    }
+    // frame() samples the vertices (kept in JS memory after dispose) and re-fits on resize until the visitor orbits
+    if (g.children.length) this.frame(g);
+    for (const m of g.children) (m as THREE.Mesh).geometry.dispose();
+    mat.dispose();
   }
 
   private placeLabels() {
