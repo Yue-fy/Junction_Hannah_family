@@ -1,6 +1,6 @@
 # Error analysis (E = agent F)
 
-Updated 04:55, 14 Nov 2026 (sections newest first). Regenerate the tables with
+Updated 08:45, 14 Nov 2026 (sections newest first). Regenerate the tables with
 `/data/User/fangy4/envs/junction/bin/python -m stoa.eval.analyze <run_id> --baseline <dummy run_id> --top 20`.
 For paired significance use `python3 experiments/r1/stats/compare.py RUN_A RUN_B --by template` (cluster CI).
 
@@ -13,7 +13,74 @@ answer) vs `20261113-234812-dummy-dev` (template prior), both on dev v2 (hash f4
 | dummy (prior) | 26.1% | 40.4% | 0 | 0% |
 | vlm_direct | 32.0% (28.0–36.5) | 44.1% | 200 (all IFC) | 0% |
 
-## LATEST (04:55, cycle 62): language is the biggest held-out gap, and a translate-first front end closes most of it
+## LATEST (08:45, cycle 224): the wired language front end on held-out languages; "both readings" fixes its underconfidence; one English confident-wrong
+
+Context: all agents were stopped by the org spend limit 05:20–08:10, so night is still bb94fe4 (S0 cycle 19) and
+sealed test 2 started only at 08:12 (S0). S0's last gate on bb94fe4: dev 89.9 / 83.6 w, hard 84.7, hard2 92.1,
+ifc dev 100, $0.036/1k (logs/S0/c19-*.log). The dev loss table is unchanged from 04:55 (cubicasa window/door
+counts still 37% / 33% of the 165 such dev questions; dev run 20261114-051705-pipeline-dev-f35a).
+
+**1. The pipeline's language front end, measured as wired (night bb94fe4), paired on the same items.**
+hardL v2 = 58 dev/hard2 bases (39 atomic, 19 compositions) in 4 held-out languages (nb/hr/el/lt; F/S0 only,
+aggregates) and 4 open ones (cs/hu/tr/ro). English base 93.1% on the same items.
+
+| split | front end on | translate=0 | paired on − off (drawing-cluster 95% CI) | conf ≥ 0.8 (on / off) |
+|---|---:|---:|---|---|
+| hardL held-out (232) | **84.5** | 78.0 | **+6.5 [+1.7, +11.6]**, 20 won / 5 lost | 22% @ 100% / 41% @ 99.0% |
+| hardL_open (232 non-en) | 84.5 | 76.7 | +7.8 [+0.9, +15.4], 25 / 7 | 25% @ 100% / 42% @ 96.9% |
+
+Runs: held-out 20261114-081146-pipeline-hardL-4273 (on) / -081245-…-hardL-b5d8 (off); open -081146-…-hardL_open-aa12 /
+-081246-…-hardL_open-d162. By language (held-out, on): nb 86.2, hr 87.9, lt 82.8, el 81.0. By source (on vs off):
+cubicasa 56.9 vs 37.5, swiss 95.7 = 95.7, ifc 98.5 vs 97.1.
+- translate=0 is no longer "no translation": W2's dxf translates inside itself and W1's ifc cross-checks a translated
+  reading, so swiss/ifc are already ~96–98% without the pipeline front end (the 04:45 "as is" baseline was 50.0).
+  The pipeline front end now earns its points on **cubicasa** (+19 points held-out), where the VLM reads the
+  question.
+- Caveat: LT/HR appear in W4's lang4b probe (R2 declined to tune on it; R2's glossary has general da/no nouns for
+  beam/column). Greek is the cleanest language here and it is the lowest (81.0).
+
+**2. The front end is underconfident, and it demotes right answers.** Translated answers are capped at 0.9, or 0.75
+with extra structure. The 0.7 bin is 96% right on held-out (109/114) and 91% on open (101/111), and on Swiss
+plans the ≥ 0.8 bin falls from 69 answers (front end off, all right) to 25 (front end on): the cap throws away
+confidence that the rules solver earned on the original wording. ECE 0.173 held-out.
+**"Both readings" rule** (offline from the two stored runs; `experiments/F/both_readings_sim.py ON OFF [--det-only]`):
+for a question the front end translated, also answer the original (translate=0). If the two answers agree,
+confidence = max(both); if they disagree, take the more confident one, capped at 0.5.
+
+| | acc | ECE | conf ≥ 0.8 | confident-wrong |
+|---|---:|---:|---|---:|
+| open, current | 84.5 | 0.145 | 25% @ 100% | 0 |
+| open, both readings (rule designed here) | 84.9 | 0.114 | 56% @ 97.7% | 3 (2 = bug in §3, 1 = probe defect) |
+| held-out, current | 84.5 | 0.173 | 22% @ 100% | 0 |
+| held-out, both readings | 84.9 | 0.132 | 54% @ 99.2% | 1 (cubicasa) |
+| held-out, both readings, lift only for rules solvers (`--det-only`)* | 84.9 | 0.134 | 53% @ 100% | 0 |
+
+\*`--det-only` was chosen after seeing the held-out cubicasa row (ECE worse when a VLM answer is lifted; the
+open set showed the same direction), so its held-out row is slightly optimistic. Cost: one more pipeline pass,
+only on questions the front end translates (0 of 2,199 on sealed test; 75/256 on hard2r). The two readings share
+the memoised translation inside dxf/ifc, so they are not independent; agreement still separates right from wrong
+here: held-out, 89.8% of agreeing answers are right; on disagreement the translated reading is right 56% (20/36) and the original only 14% (5/36), (open: 90.0%; 60% vs 17%). Always taking the translated answer on disagreement (`--dis-pick translated`) is no better than the more confident one (acc 84.5 vs 84.9, ECE 0.135 vs 0.132 held-out), so keep the simple rule.
+
+**3. An English confident-wrong found through the Turkish rows (W4, intent.py).** "What is the net floor area of
+B apartment in m², excluding balconies…?" → `_APT` (case-insensitive) takes 'in' from "apartment in m²" →
+apartment 'IN' → dxf sums the whole floor: **321.76 m² @ 0.95** (gold 63.07; "apartment B" wording → 63.07 @ 0.965).
+Fix: in the area branch, require the id to be upper case or a digit in the original text (the count branch
+already does this), accept "<Letter> apartment|flat|unit", and add 'flat' (currently "area of flat A" parses as area/unknown).
+
+**4. Other translated-question mechanisms (open set, en base right → translated wrong, 20 rows):**
+- compose adds a fixture to a room sum (6 rows, all at 0.75): translated "bathrooms or **toilets** (KH, KPH, PH…)"
+  → parts bathroom + **wc (toilet bowls)** + wc_room + sauna → 2 instead of 1. With 'rooms' as the head noun, only
+  room kinds should be summed, and "X or Y (codes)" names one class.
+- count answered with an area (1, 0.67): hu "How many rooms (spaces) … on the '-1' floor" → 54.406 m². The
+  fraction guard only fires when unit == count; a how-many question answered in m² should be capped too.
+- translation slips (6, all ≤ 0.63): cs 'Kolik van' (bathtubs) → "How many are shown" (inside dxf), hu
+  'Hány … közül' (how many of) → "Which of", 'washrooms' → 'toilets', 'showers and bathtubs' → 'showers and
+  bathrooms' (ro 'băi', tr 'banyo' are ambiguous).
+- Probe defects (mine): the hosted Romanian translations contain non-words ('arulate', 'aritate', 'bați',
+  'număruând', 'sediiile'), and one ro composition dropped "average" (gold 13.81 = average, the question as written
+  asks the sum 27.63 → the pipeline is right). The ro numbers are slightly pessimistic.
+
+## Earlier (04:55, cycle 62): language is the biggest held-out gap, and a translate-first front end closes most of it
 
 ### 1. hardL: the same known-gold questions in 8 languages nobody tuned on (stoa/eval/hardl.py)
 Base = dev questions with gold (v0: 20 atomic; cubicasa 7, ifc 9, swiss 4; the 20 hard2 compositions are still
