@@ -88,7 +88,30 @@ def source_of(path: str) -> str:
     for i in range(len(parts) - 3, -1, -1):
         if parts[i] == "data" and parts[i + 1] in KNOWN_SOURCES:
             return parts[i + 1]
-    return "unknown"
+    return _outside_source(str(path))
+
+
+SHEET_EXT = (".pdf", ".svg", ".png", ".jpg", ".jpeg")
+
+
+def _outside_source(path: str) -> str:
+    """Source of a drawing outside the dataset and outside any .../data/<source>/ folder (a visitor's upload, Stoa's
+    hidden files in their own layout). F c226 neutral-path probe: an IFC plan sheet next to its model used to be
+    'unknown', so siblings() skipped the model, route() skipped `ifc` and ifc.can_handle() said no: ifc_models dev
+    questions 100% -> 0-21% on the same files. A sheet whose model sits next to it (ifc_model_for) is 'ifc_models'."""
+    p = Path(path)
+    if p.suffix.lower() not in SHEET_EXT or not p.is_absolute():
+        return "unknown"
+    try:
+        mtime = p.parent.stat().st_mtime_ns
+    except OSError:
+        return "unknown"
+    return _outside_source_cached(path, mtime)
+
+
+@functools.lru_cache(maxsize=4096)
+def _outside_source_cached(path: str, folder_mtime: int) -> str:
+    return "ifc_models" if ifc_model_for(path) else "unknown"
 
 
 def abspath(path: str, root: Path | None = None) -> Path:
@@ -162,6 +185,12 @@ def ifc_model_for(path: str, root: Path | None = None) -> str | None:
         base = re.sub(r"_plan$", "", stem)
         if base != stem and f"{base}_model" in local:
             return str(folder / f"{base}_model.ifc")
+        # a project folder with ONE model and its sheets under other names ("A101 Ground floor.pdf" + "house.ifc"):
+        # that model is the building the sheet shows (F c226; demo uploads live in one folder per upload)
+        # (not in a .../data/ifc_models/ folder: there names follow <model>_<view> and a mismatch means another model)
+        if len(local) == 1 and Path(path).suffix.lower() in (".pdf", ".svg", ".png", ".jpg", ".jpeg") and \
+                folder.parts[-2:] != ("data", "ifc_models"):
+            return str(folder / f"{local[0]}.ifc")
         return None
     stems = _ifc_models_stems(str(rootp))
     for m in stems:
