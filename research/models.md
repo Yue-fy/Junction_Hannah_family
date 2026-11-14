@@ -43,6 +43,10 @@ Served on :8001 as model `cc-v2` from 01:40 (base unchanged as `default`); solve
 | train_gate cubicasa (480, unseen by LoRA) | **76.7** | | | 51.9 | 45.6 | (memorised) |
 | hard cubicasa translations / paraphrases / compositions | **75 / 66** / 9.6 | 67 / 62 / 26.5 | 67 / 60 / 19.3 | | | |
 | leak-free for both (200, `cc5k_heldout_notLoRA`) | **79.0** | | | 54.0 | 51.5 | 60.5 |
+**Sealed test 1 (S0, frozen 95f2277, 03:21–03:55; aggregates only):** pipeline with the LoRA vs `lora=0`:
+cubicasa 61.6 → 70.5, **+8.8 [+6.0, +11.9]** (111 wins / 40 losses), micro 83.9 → 87.4, **weighted 73.8 → 79.8**,
+cost $0.19 → $0.28 per 1k, ECE 0.016 → 0.017. About 3/4 of the dev gain (+11.9): symbol concepts transfer, room-label
+concepts drop (saunas 93 → 80, bedrooms 90 → 82, separate WC rooms 100 → 90; F). The team's largest gain on sealed data.
 Paired: vs raster +11.4 [+8.2, +14.4]; vs CC5K net +18.5 [+11.5, +25.5] (`experiments/r2/paired.py`). Only per-concept loss
 vs raster: EN showers+bathtubs 73 vs 84. Compositions must go through the pipeline's compose step (atomic questions).
 Cost $0.035/1k (780 tok in, 2 out). Confidence: own map (CONF_MAPS["cc-v2"], fit on train_gate), AUROC 0.885–0.928.
