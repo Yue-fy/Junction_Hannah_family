@@ -3,6 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<script>/* behind a path prefix (e.g. /workbench) the relative URLs need a trailing slash */
+if (!location.pathname.endsWith("/")) location.replace(location.pathname + "/" + location.search + location.hash);</script>
 <title>Expert Workbench</title>
 <link rel="icon" href="data:,">
 <link rel="stylesheet" href="static/style.css">
