@@ -22,6 +22,14 @@ Hardware: 1× RTX PRO 6000 Blackwell 96 GB. Shared server budget ≈ 45 GB (`--g
 - Negative results are listed under each section and in board/R2.md ("don't repeat").
 
 ## Serving now
+**If a server dies during the day** (nobody from the night shift is watching after 11:45): restart by hand with
+`serving/start.sh` (:8001, loads cc-v2 + cc-v3) and `PORT=8002 GPU_UTIL=0.48 SERVED_NAME=qwen3.6-35b-a3b serving/start.sh qwen36-35b-a3b`
+(:8002, optional: answers fall back to :8001), ~2–3 min each. Or let `serving/watchdog.sh` do it (written + dry-run tested 10:58,
+**NOT running**: starting a detached restarter was not permitted from the night agent's session) — start it from a terminal with
+`setsid nohup serving/watchdog.sh >> $JUNCTION_SHARED/logs/watchdog.log 2>&1 < /dev/null &`. It restarts a port only when its pid
+file exists, the pid is dead and /v1/models fails twice (so `serving/stop.sh` is never undone), never kills a live server, max 3
+restarts/port, :8002 only without the GPU lock held; `touch $JUNCTION_SHARED/locks/watchdog.off` stops it; exits at 19:00.
+
 | what | value |
 |---|---|
 | :8002 (since 09:40, D21) | Qwen3.6-35B-A3B-FP8 `qwen3.6-35b-a3b`, util 0.48; ONLY via `llm.text_backend()` (STOA_TEXT_BACKEND=local2), falls back to :8001 |
