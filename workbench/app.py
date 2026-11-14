@@ -257,6 +257,7 @@ def audit_item(item_id: str):
             "text_match": it.get("text_fuzzy"),
             "assumptions": it.get("assumptions") or [], "missing": it.get("missing") or [],
             "trace": it.get("trace") or [], "solver": it.get("solver"), "views": views, "other_evidence": other,
+            "cost": {**(it.get("cost") or {}), "latency_s": it.get("latency_s")},
             "drawing_name": catalog.human_name(it["path"]), "credit": catalog.credit_line(it["path"]),
             "last": last}
 

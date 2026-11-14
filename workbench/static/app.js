@@ -28,6 +28,15 @@ function confWords(c) {
   return `confidence ${p}% (${w})`;
 }
 
+function costWords(c) {
+  // what the answer cost us (Stoa scores cost): language-model tokens and time
+  if (!c) return "";
+  const tok = (c.llm_tokens_in || 0) + (c.llm_tokens_out || 0);
+  const t = c.latency_s ?? c.wall_seconds;
+  const bits = [tok ? `${tok.toLocaleString("en")} model tokens` : "no language model", t != null ? `${(+t).toFixed(1)} s` : ""];
+  return "cost: " + bits.filter(Boolean).join(", ");
+}
+
 // ---------------------------------------------------------------------------------------------------------
 // Zoom/pan viewer with an SVG overlay in image-pixel coordinates.
 class Viewer {
@@ -303,6 +312,7 @@ const audit = {
     $("#audit-answer").classList.toggle("long", String(d.answer).length > 30);
     $("#audit-ref").classList.toggle("long", String(d.reference).length > 30);
     $("#audit-conf").textContent = confWords(d.confidence);
+    $("#audit-cost").textContent = costWords(d.cost);
     $("#audit-ref").textContent = d.reference ?? "none yet";
     $("#audit-match").textContent = d.reference == null ? "no reference: please judge from the drawing, and type the right answer below if you know it" :
       d.matches_reference === true ? "our answer matches it" :
