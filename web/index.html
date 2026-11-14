@@ -3,23 +3,30 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Blueprints Talk</title>
+    <title>Blueprint Evidence</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231d3557'/%3E%3Cpath d='M8 23V9h9a5 5 0 0 1 0 10h-5' stroke='%23ff6a13' stroke-width='3' fill='none'/%3E%3C/svg%3E" />
   </head>
-  <body>
+  <body data-view="customer">
+    <div id="landing" class="landing" hidden></div>
     <div id="app">
       <aside id="side">
         <header class="brand">
           <div class="logo">B</div>
           <div>
-            <h1>Blueprints Talk</h1>
+            <h1>Blueprint Evidence</h1>
             <p>Ask a drawing or a building model. Every answer shows where it came from.</p>
           </div>
           <div class="brand-right">
             <span id="backend" class="badge" title="Which backend answered the last request">API …</span>
             <button id="tourBtn" class="tour" title="Step through the demo questions">Demo tour ▸</button>
+            <button id="viewToggle" class="view-toggle" type="button" title="Switch between the simple view and the expert view (files, solvers, costs, traces)">Expert view</button>
           </div>
         </header>
+        <section id="projHead" class="proj-head" hidden>
+          <button id="projectsBtn" class="proj-back" type="button" title="All projects">‹ Projects</button>
+          <div class="ph-name" id="projName"></div>
+          <div class="ph-place" id="projPlace"></div>
+        </section>
 
         <section class="panel" id="picker">
           <div class="row">
@@ -40,19 +47,22 @@
             <input id="search" type="search" placeholder="Filter files…" aria-label="Filter files" />
           </div>
           <ul id="files" class="files"></ul>
-          <label class="upload-box" id="uploadBox" title="Your own floor plan, sheet, scan or IFC model: it is saved only on this machine and answered by the same pipeline, with no template and no twin">
-            <input id="uploadInput" type="file" accept=".pdf,.png,.jpg,.jpeg,.ifc" hidden />
-            <b>＋ Your own drawing</b><small id="uploadMsg">PDF, PNG, JPG, IFC · or drop it here</small>
+          <label class="upload-box" id="uploadBox" title="Your own floor plan, sheet, scan or IFC model: it is saved only on this machine and answered by the same pipeline, with no template and no twin. Select a sheet and its .ifc model together to link them.">
+            <input id="uploadInput" type="file" accept=".pdf,.png,.jpg,.jpeg,.ifc" multiple hidden />
+            <b>＋ Your own drawing</b><small id="uploadMsg">PDF, PNG, JPG, IFC · or drop it here · a sheet + its .ifc together link up</small>
           </label>
-          <select id="uploadStyle" class="upload-style" aria-label="Drawing style of your upload" title="Optional, for images: say it is a Nordic apartment plan (room codes like MH, OH, KPH) so the readers trained on CubiCasa5K plans may answer and mark what they count (fine-tuned counter, symbol detector)">
-            <option value="">Style: any drawing</option>
+          <select id="uploadStyle" class="upload-style" aria-label="Drawing style of your upload" title="For images: by default the style is guessed from the image (no model call); a Nordic apartment plan (room codes like MH, OH, KPH) is then read by the readers trained on CubiCasa5K plans, which mark what they count (fine-tuned counter, symbol detector)">
+            <option value="auto">Style: guess from the image</option>
             <option value="cubicasa5k">Style: Nordic apartment plan (CubiCasa-like)</option>
+            <option value="none">Style: other drawing (no guess)</option>
           </select>
         </section>
 
         <section class="panel" id="ask">
           <form id="askForm">
             <textarea id="question" rows="3" placeholder="e.g. How many doors are shown on the floor plan?"></textarea>
+            <small class="any-lang">Ask in your own words, in any language.</small>
+            <button type="button" class="ask-more" id="askMore">Example questions</button>
             <div id="chips" class="chips"></div>
             <div class="row">
               <select id="examples" aria-label="Example questions"><option value="">Example questions…</option></select>
@@ -61,15 +71,21 @@
           </form>
         </section>
 
-        <section id="card" class="card empty">
-          <p class="hint">Pick a drawing, then ask a question. The answer card shows the value, how sure we are,
-            what it cost, the reasoning, and the evidence to click through.</p>
-        </section>
+        <section id="hero" class="hero" hidden></section>
+        <details id="how" class="how" open>
+          <summary>How we worked it out</summary>
+          <section id="card" class="card empty">
+            <p class="hint">Pick a drawing, then ask a question. The answer card shows the value, how sure we are,
+              what it cost, the reasoning, and the evidence to click through.</p>
+          </section>
+        </details>
+        <section id="diffs" class="diffs" hidden></section>
       </aside>
 
       <main id="main">
         <div id="toolbar">
           <div class="file-title"><span id="fileTitle">No file</span><small id="fileMeta"></small></div>
+          <div class="seg sheet-tabs" id="sheetTabs" role="tablist" hidden></div>
           <div class="seg" id="modes" role="tablist">
             <button data-mode="2d" role="tab">Drawing</button>
             <button data-mode="3d" role="tab">3D model</button>
@@ -78,7 +94,7 @@
           <select id="storey" aria-label="Storey" hidden></select>
           <button id="roomsBtn" class="ghost" hidden title="Rooms and the doors that link them, read from the plan by the pretrained CubiCasa5K model + geometry rules (no language model)">Rooms &amp; doors</button>
           <button id="fitBtn" class="ghost" title="Frame the evidence">Frame evidence</button>
-          <button id="benchBtn" class="ghost" title="Accuracy, generality and cost on held-out drawings">How well it works</button>
+          <button id="benchBtn" class="ghost" title="Accuracy, generality and cost on held-out drawings">Accuracy report</button>
         </div>
         <div id="tourNote" class="tour-note"></div>
         <div id="views" data-mode="2d">

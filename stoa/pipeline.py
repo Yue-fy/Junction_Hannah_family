@@ -28,7 +28,12 @@ raw_first=1 (before the agent, an operator question goes AS ASKED to the determi
 pdf_vector); if one answers with confidence >= raw_accept=0.45 it applied the operator itself and no LLM is called),
 lora=1 (cubicasa counts may go to R2's counting LoRA `vlm_lora` where the train_gate gate prefers it; 0 = never),
 cc5k=1 (D8: cubicasa window/door/WC-seat/sink counts go to R1's pretrained `raster_cc5k` when it is registered, with
-hit rates measured on `cc5k_heldout` (stoa/router/gating_cc5k.json); cc5k=0 leaves every answer as without it).
+hit rates measured on `cc5k_heldout` (stoa/router/gating_cc5k.json); cc5k=0 leaves every answer as without it),
+links=1 (questions about the plan <-> model relation / the sheet set go to R1's kg_qa over stoa.kg first),
+pvm=1 (those link answers are checked by W1's deterministic GlobalId reading, stoa.solvers.ifc.plan_vs_model: agree
+-> ✓ + GUID evidence, disagree -> its value at LINK_DISAGREE, no KG answer -> it answers; 0 = the older ifc check).
+Every final answer passes `_shape_guard`: a which-floor/room/sheet question answered by a bare number or yes/no, a
+yes/no question by a bare number, or a how-many question by yes/no is capped at SHAPE_CAP (0.3).
 """
 
 from __future__ import annotations
@@ -389,6 +394,54 @@ _AREA_UNIT_WORD = re.compile(r"m²|\bm2\b|square (?:met|feet|foot)|sq\.? ?m\b|m�
 _AREA_SUM = re.compile(r"\b(?:total|combined|summed|together|sum of)\b[^?]{0,40}\barea|\barea of (?:the )?(?:two|three|all|both)\b|"
                        r"\barea of [^?]{1,40}\band\b", re.I)
 IMG_EXT = (".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp", ".gif")
+# objects nearly every building plan draws: a VLM's "0" for them with no located evidence is an unchecked absence claim
+# (Q 09:58: smiley 1.OG sheet uploaded alone, "How many stairs ...?" -> 0 @0.89 from p(answer digits); '0 swimming
+# pools' at the same 0.89 is right and keeps it)
+COMMON_OBJECTS = {"door", "window", "wall", "stair", "room", "column", "storey", "space"}
+ABSENCE_CAP = 0.5
+
+
+def _located(ans: Answer) -> bool:
+    return any(e.bbox or getattr(e, "ifc_guid", None) for e in ans.evidence or [])
+
+
+_TOTAL_CUE = re.compile(r"\b(?:total|sum|combined|together|altogether|in all|insgesamt|zusammen|gesamt\w*|yhteensä|"
+                        r"yhteenlaskettu|somme|au total|totale?|samman\w*|totalt)\b", re.I)
+_LIST_LEAD = re.compile(r"^\W*(?:which|list|name|what are|give|show|welche|nenne|liste|mitkä|luettele|quel(?:le)?s|"
+                        r"listez|vilka|lista)\b", re.I)
+_LISTED_QTY = re.compile(r"^(?P<name>[^;()]{1,80}(?:\([^;()]{1,20}\))?)\s*\((?P<v>\d+(?:\.\d+)?)\s*(?P<u>m²|m2|m³|m3|m)\)$")
+
+
+def _listed_total(question: str, intent: Intent, ans: Answer) -> Answer | None:
+    """Q v25: "What is the total area of the three largest rooms on '1.korrus'?" -> ifc listed the top 3 rooms with
+    their areas at 0.90 (gold = their sum, 232.88). A total asked of a list whose every item carries ONE quantity in
+    the same unit is that list's sum; a list request ('Which rooms …') is left alone."""
+    if intent.task not in ("area", "length", "volume") or not isinstance(ans.value, str) or \
+            not _TOTAL_CUE.search(question) or _LIST_LEAD.search(question):
+        return None
+    # a tie note after the last item ("… (22.04 m²) (tie at 22.04 m² with Bedroom 2 (B203))") does not change the sum
+    items = [re.sub(r"\s*\(tie at [^()]*(?:\([^()]*\)[^()]*)*\)$", "", x.strip()) for x in ans.value.split(";") if x.strip()]
+    ms = [_LISTED_QTY.match(x) for x in items]
+    if len(items) < 2 or not all(ms) or len({m["u"].replace("2", "²").replace("3", "³") for m in ms}) != 1:
+        return None
+    unit = ms[0]["u"].replace("2", "²").replace("3", "³")
+    total = round(sum(float(m["v"]) for m in ms), 2)
+    out = ans.model_copy(deep=True)
+    out.value, out.unit = total, unit
+    out.trace = [*out.trace, f"total of the {len(ms)} listed: " + " + ".join(m["v"] for m in ms) + f" = {total} {unit}"]
+    return out
+
+
+def _absence_cap(intent: Intent, conf: float, ans: Answer, trace: list[str]) -> tuple[float, Answer]:
+    if intent.task != "count" or intent.target not in COMMON_OBJECTS or conf <= ABSENCE_CAP or _located(ans):
+        return conf, ans
+    if _num(ans.value) != 0:
+        return conf, ans
+    trace.append(f"0 {intent.target}s with no located evidence: an absence claim on an object plans usually draw -> "
+                 f"confidence {conf:.2f} capped at {ABSENCE_CAP}")
+    ans = ans.model_copy(update={"missing": [*ans.missing, f"no {intent.target} was located on the drawing; a 0 count "
+                                             "is not verified"]})
+    return ABSENCE_CAP, ans
 # tier of each solver (cost order); unknown names count as "local"
 TIER = {"dxf": "deterministic", "ifc": "deterministic", "schedule": "deterministic", "pdf_vector": "deterministic",
         "pdf_text": "deterministic", "raster": "local", "vlm_direct": "local", "agent": "local",
@@ -477,6 +530,71 @@ def _clip(v, n: int = 120) -> str:
     return (cut or t[:n]) + " …"
 
 
+_FLOORISH = r"(?:floor|storey|story|level|room|sheet|drawing|space|apartment|unit)s?"
+_WHICH_Q = re.compile(r"^\W*(?:(?:which|what)\s+" + _FLOORISH + r"\b(?!\s+(?:number|no\.?|areas?|size|height|elevation|level|thickness|width|length|depth|"
+                      r"count|plan|scale|type)\b)|"
+                      r"on which (?:floor|storey|level|sheet)\b|(?:quale|quali|in quale)\s+(?:piano|stanza|locale|tavola|foglio)|"
+                      r"(?:welche[rsmn]?|in welchem)\s+(?:geschoss|etage|stockwerk|raum|zimmer|plan|blatt)|"
+                      r"(?:mikä|missä)\s+(?:kerros|kerroksessa|huone|piirustus)|millise[ld]?\s+korrus|"
+                      r"(?:quel(?:le)?s?|à quel)\s+(?:étage|niveau|pièce|plan|local)|"
+                      r"(?:vilken|vilket|på vilken)\s+(?:våning|plan|rum|ritning)|welke?\s+(?:verdieping|ruimte|kamer|tekening))",
+                      re.I)
+_YESNO_Q = re.compile(r"^\W*(?:does|do|is|are|was|were|can|could|has|have|will|would|should|did)\b|\byes or no\b|"
+                      r"\bja oder nein\b|\boui ou non\b", re.I)
+_HOWMANY_Q = re.compile(r"\bhow (?:many|much)\b|\bby how\b|\bwie viele?\b|\bkuinka mont|\bmontako\b|\bcombien\b|"
+                        r"\bquant[ie]\b|\bhur många\b|\bhoeveel\b|\bmitu\b", re.I)
+_BARE_NUM = re.compile(r"^\s*-?\d+(?:[.,]\d+)?\s*$")
+_BARE_YN = re.compile(r"^\s*(?:yes|no|ja|nein|kyllä|ei|oui|non|sì|nej)\s*(?:$|[:(,;—–-])", re.I)
+SHAPE_CAP = 0.3
+
+
+def _shape_guard(question: str, ans: Answer) -> Answer:
+    """Q 10:38/10:40: an answer of the wrong SHAPE for the question is not an answer, whatever its confidence: a
+    which-floor/room/sheet question answered by a bare number or yes/no ('Quale piano ha il maggior numero di porte?'
+    -> 27 @0.97; 'Which floor has the biggest room?' -> 'yes (…)' @0.80), a yes/no question by a bare number ('Is the
+    door count on this drawing the same as in the BIM model?' -> 50 @0.97), 'how many / by how many' by yes/no. Capped
+    at SHAPE_CAP. 0 fires on dev/hard/hard2 (gate runs c39/c39b); a number quoted as an option ('0' or '-1') is fine."""
+    if ans.value is None or float(ans.confidence or 0) <= SHAPE_CAP or isinstance(ans.value, bool):
+        return ans
+    v = str(ans.value)
+    num, yn = bool(_BARE_NUM.match(v)), bool(_BARE_YN.match(v))
+    if not (num or yn):
+        return ans
+    measured = num and str(ans.unit or "").lower() in ("m", "mm", "cm", "m2", "m²", "m3", "m³", "ft", "in")
+    quoted = num and re.search(r"['‘’\"«„]" + re.escape(v.strip()) + r"['’\"»“]", question)
+    why = None
+    if _WHICH_Q.search(question) and not quoted and not measured and (num or not _YESNO_Q.search(question)):
+        why = "the question asks which floor/room/sheet; the answer " + ("is a bare number" if num else "is a yes/no")
+    elif _YESNO_Q.search(question) and num and not _HOWMANY_Q.search(question):
+        why = "the question asks yes or no; the answer is a bare number"
+    elif _HOWMANY_Q.search(question) and yn and not _YESNO_Q.search(question):
+        why = "the question asks how many; the answer is a yes/no"
+    if not why:
+        return ans
+    out = ans.model_copy(deep=True)
+    out.confidence = SHAPE_CAP
+    out.trace = [*out.trace, f"answer shape check: {why} -> confidence capped at {SHAPE_CAP}"]
+    out.missing = [*out.missing, f"the answer does not have the shape the question asks for ({why})"]
+    return out
+
+
+def _plan_vs_model(path: str, question: str) -> Answer | None:
+    """W1 10:26 (night-W1 414e928): ifc's deterministic plan <-> model reading only (GlobalId set differences,
+    comparatives, sheet counts; 0 LLM, None when it is not such a question). Missing module -> None (old route)."""
+    try:
+        from stoa.solvers.ifc import plan_vs_model
+    except Exception:  # noqa: BLE001
+        return None
+    try:
+        a = plan_vs_model(path, question)
+        if a is None:
+            return None
+        a = a if isinstance(a, Answer) else Answer.model_validate(a)
+    except Exception:  # noqa: BLE001
+        return None
+    return a if a.value is not None else None
+
+
 def _link_shape(v) -> tuple[str, object] | None:
     """('num', x) | ('yn', 'yes'|'no') | None: the comparable core of a link answer ("no: model 55, plan draws 52"
     -> ('yn', 'no'); 3 -> ('num', 3.0)); anything else (names, lists) is not compared."""
@@ -539,7 +657,8 @@ class Pipeline(BaseSolver):
                  compose: int | str = 1, normalise: int | str = 1, crosscheck: int | str = 1, agent: int | str = 1,
                  raw_first: int | str = 1, raw_accept: float | str = 0.45, raster_first: int | str = 1,
                  cc5k: int | str = 1, lora: int | str = 1, lora_second: int | str = 0, lora_conf: str = "own", translate: int | str = 1,
-                 translate_cap: float | str = 0.9, both_readings: int | str = 1, links: int | str = 1, **kwargs):
+                 translate_cap: float | str = 0.9, both_readings: int | str = 1, links: int | str = 1,
+                 pvm: int | str = 1, **kwargs):
         super().__init__(**kwargs)
         # R2's language front end (stoa.llm.should_translate / to_english): a non-English question the rules can't read
         # is translated to English once (local model, quoted names/numbers verbatim) and answered in English
@@ -552,6 +671,7 @@ class Pipeline(BaseSolver):
         # Stoa point 4 (Q v17, D20-4): questions about the drawing set / plan <-> model links on an IFC project go to
         # ifc as asked (W1's GlobalId set differences), then R1's kg_qa over stoa.kg; 0 = off
         self.links = bool(int(links))
+        self.pvm = bool(int(pvm))  # link route: W1's deterministic plan_vs_model checks kg_qa (0 = the old ifc check)
         self.accept = float(accept)
         self.agree = {"1": "cheap", "0": "never", "2": "always"}.get(str(agree), str(agree))  # cheap|never|always
         self.api = bool(int(api))
@@ -608,7 +728,7 @@ class Pipeline(BaseSolver):
             n = budget.note()
             if n and ans.value is not None:
                 ans.assumptions = [*ans.assumptions, n]
-        return ans
+        return _shape_guard(question, ans)
 
     def _solve_question(self, path: str, question: str) -> Answer:
         t0 = time.perf_counter()
@@ -1063,10 +1183,21 @@ class Pipeline(BaseSolver):
             trace.append(f"kg_qa: error {type(e).__name__}")
             k = None
         a = None
-        # ifc only where W1 reads the link deterministically (GlobalId set differences, plan sheets: 0 LLM), or when
-        # kg_qa gave nothing; on other kinds ifc falls back to its LLM text reader (+1.2k tokens/Q, not comparable)
-        ifc = self._get("ifc") if (k is None or k.value is None or re.search(
+        # W1 10:26: kg_qa answered plan-vs-model comparatives confidently wrong and ifc never checked them (trigger
+        # reason 'plan and model named'): W1's deterministic reading checks EVERY link question it can read (0 LLM;
+        # 127/127 right where comparable). Same -> ✓ + GUIDs; different -> the GlobalId reading's value at LINK_DISAGREE
+        # (it won all 6 measured disagreements; R1 10:34: no confident overrule); kg_qa gives nothing (hashed copies
+        # have no KG, Q v26) -> the GlobalId reading answers
+        # (the registry imports stoa.solvers.ifc under the pipeline's lock first: a bare import from 6 eval threads at
+        # once met a half-initialised module and the guarded import silently returned None)
+        pvm = _plan_vs_model(path, question) if self.pvm and self._get("ifc") is not None else None
+        # else ifc only where W1 reads the link deterministically (GlobalId set differences, plan sheets: 0 LLM), or
+        # when kg_qa gave nothing; on other kinds ifc falls back to its LLM text reader (+1.2k tokens/Q, not comparable)
+        ifc = None if pvm is not None else self._get("ifc") if (k is None or k.value is None or re.search(
             r"plan vs model|count sheets", str(hit.get("why")))) else None
+        if pvm is not None:
+            a = pvm
+        a_label = "the IFC GlobalId reading" if pvm is not None else "ifc as asked"
         if ifc is not None:
             try:
                 a = ifc.solve(path, question)
@@ -1077,10 +1208,11 @@ class Pipeline(BaseSolver):
                 a = None
         a_ok = a is not None and a.value is not None
         if k is None or k.value is None:
-            if a_ok and float(a.confidence or 0) >= LINK_IFC_ACCEPT:
+            if a_ok and (pvm is not None or float(a.confidence or 0) >= LINK_IFC_ACCEPT):
                 out = a.model_copy(deep=True)
-                out.trace = trace + ["project knowledge graph: no answer", f"ifc (question as asked): {a.value} "
-                                     f"{a.unit or ''} at conf {a.confidence:.2f}, accepted (>= {LINK_IFC_ACCEPT})"] + \
+                out.trace = trace + ["project knowledge graph: no answer", f"{a_label}: {a.value} "
+                                     f"{a.unit or ''} at conf {a.confidence:.2f}, accepted"
+                                     + ("" if pvm is not None else f" (>= {LINK_IFC_ACCEPT})")] + \
                     [f"[ifc] {t}" for t in a.trace[-10:]]
                 out.solver = "pipeline/ifc"
                 out.cost.wall_seconds = round(time.perf_counter() - t0, 4)
@@ -1093,17 +1225,33 @@ class Pipeline(BaseSolver):
             ka, ia = _link_shape(k.value), _link_shape(a.value)
             if ka is not None and ia is not None and ka[0] == ia[0]:
                 if ka[1] == ia[1]:
-                    out.trace.append(f"cross-check: ifc as asked says {_clip(a.value)} ✓")
+                    out.trace.append(f"cross-check: {a_label} says {_clip(a.value)} ✓")
                     out.evidence = [*out.evidence, *[e for e in a.evidence if getattr(e, "ifc_guid", None)][:12]]
+                elif pvm is not None:
+                    # link probe (375 Qs, run 20261114-103528-pipeline-links-d1c0 vs -7a29): the 2 disagreements were
+                    # sheet totals where the GlobalId reading was right (10 vs kg_qa 6 / 4; W1 4/4 before): its value,
+                    # at the disagreement cap, with kg_qa's answer named (R1 10:34: no confident overrule)
+                    kv = k.value
+                    out = a.model_copy(deep=True)
+                    out.confidence = round(min(float(a.confidence or 0), LINK_DISAGREE), 3)
+                    out.trace = trace + [f"project knowledge graph: {_clip(kv)} at conf {k.confidence:.2f}",
+                                         f"cross-check: {a_label} says {_clip(a.value)} ✗ — taking the deterministic "
+                                         f"reading, confidence capped at {LINK_DISAGREE}"] + \
+                        [f"[ifc] {t}" for t in a.trace[-10:]]
+                    out.missing = [*out.missing, f"the knowledge-graph reader answered {_clip(kv)}"]
+                    out.solver = "pipeline/ifc"
+                    out.cost = _cost_of(k).add(_cost_of(a))
+                    out.cost.wall_seconds = round(time.perf_counter() - t0, 4)
+                    return out
                 elif out.confidence > LINK_DISAGREE:
-                    out.trace.append(f"cross-check: ifc as asked says {_clip(a.value)} (conf "
+                    out.trace.append(f"cross-check: {a_label} says {_clip(a.value)} (conf "
                                      f"{float(a.confidence or 0):.2f}) ✗: confidence capped at {LINK_DISAGREE}")
                     out.confidence = LINK_DISAGREE
                     out.missing = [*out.missing, f"the IFC reader answered {_clip(a.value)} to the same question"]
             else:
-                out.trace.append(f"ifc as asked: {_clip(a.value)} (another kind of answer; not compared)")
+                out.trace.append(f"{a_label}: {_clip(a.value)} (another kind of answer; not compared)")
         elif a_ok:
-            out.trace.append(f"ifc as asked: unsure ({float(a.confidence or 0):.2f}); not compared")
+            out.trace.append(f"{a_label}: unsure ({float(a.confidence or 0):.2f}); not compared")
         out.solver = "pipeline/kg_qa"
         out.cost = _cost_of(k).add(_cost_of(a)) if a is not None else _cost_of(k)
         out.cost.wall_seconds = round(time.perf_counter() - t0, 4)
@@ -1342,6 +1490,8 @@ class Pipeline(BaseSolver):
                     total = total.add(extra)
                 answers.append((name, ans, conf))
                 break  # the LoRA's count stands; raster (lora_second=1) only sets the confidence and lends its boxes
+            if name in ("vlm_direct", "vlm_nvidia") and not gate:
+                conf, ans = _absence_cap(intent, conf, ans, trace)
             answers.append((name, ans, conf))
             if conf >= self.accept or self.agree == "never" or len(answers) >= 2:
                 break
@@ -1561,6 +1711,11 @@ class Pipeline(BaseSolver):
                 if any("not understood" in str(x) for x in [*a.missing, *a.trace[-2:]]):
                     abstained.add(name)
                 continue
+            summed = _listed_total(question, intent, a)
+            if summed is not None:
+                trace.append(f"{name} (question as asked) listed {str(a.value).count(';') + 1} items; the question asks "
+                             f"their total: {summed.value} {summed.unit}")
+                a = summed
             if intent.task == "area" and str(a.unit or "").lower() == "count" and _AREA_UNIT_WORD.search(question):
                 # F 08:40: "Combien de mètres carrés fait l'appartement B (hors balcons …)?" -> dxf read 'combien' as a
                 # count and counted the balconies (1 count). A question that names an area unit is not answered by a count

@@ -164,6 +164,7 @@ def test_cc5k_switch(monkeypatch, tmp_path):
     import json
 
     import stoa.pipeline as pl
+    import stoa.solvers.raster_cc5k  # noqa: F401  (register the real one first, or it replaces the stub on first use)
     from stoa.contract import Answer
     from stoa.solvers import _REGISTRY
     from stoa.solvers.base import BaseSolver
@@ -262,3 +263,78 @@ def test_compose_yesno_comparison():
     assert p is not None and p.op == "gt" and p.labels == ["bedroom", "bathroom"]
     assert combine(p, [2, 2])[0] == "no" and combine(p, [3, 1])[0] == "yes"
     assert decompose("cubicasa5k", "Does this apartment have a sauna?").op == "exists"
+
+
+def test_absence_cap():
+    """Q 09:58: a VLM's '0 stairs' with no located evidence is an unverified absence claim (capped); '0 pools' is not."""
+    from stoa.contract import Answer, Evidence
+    from stoa.pipeline import ABSENCE_CAP, _absence_cap
+
+    stairs, pools = parse("How many stairs are shown on the floor plan of '1.OG'?"), parse("How many swimming pools are there?")
+    c, a = _absence_cap(stairs, 0.89, Answer(value=0, unit="count", confidence=0.89), [])
+    assert c == ABSENCE_CAP and a.missing
+    assert _absence_cap(stairs, 0.89, Answer(value=3, unit="count", confidence=0.89), [])[0] == 0.89
+    assert _absence_cap(pools, 0.89, Answer(value=0, unit="count", confidence=0.89), [])[0] == 0.89
+    boxed = Answer(value=0, unit="count", confidence=0.89,
+                   evidence=[Evidence(file="a.pdf", page=0, bbox=[0, 0, 1, 1], bbox_space="pdf_pt", note="x")])
+    assert _absence_cap(stairs, 0.89, boxed, [])[0] == 0.89
+
+
+def test_listed_total():
+    """Q v25: a total asked of a listed top-N (ifc's 'NAME (ID) (90.64 m²); …') is the list's sum; list requests stay."""
+    from stoa.contract import Answer
+    from stoa.pipeline import _listed_total
+
+    lst = "FUAJEE-TREPIKODA (101) (90.64 m²); KORIDOR (105) (78.40 m²); KORIDOR (119) (63.84 m²)"
+    q = "What is the total area of the three largest rooms on '1.korrus'?"
+    out = _listed_total(q, parse(q), Answer(value=lst, confidence=0.9))
+    assert out.value == 232.88 and out.unit == "m²" and out.confidence == 0.9
+    tie = "Bedroom 2 (A203) (22.04 m²); Bedroom 1 (A202) (22.04 m²) (tie at 22.04 m² with Bedroom 2 (B203))"
+    q2 = "What is the total area of the two largest rooms on 'Level 2'?"
+    assert _listed_total(q2, parse(q2), Answer(value=tie, confidence=0.8)).value == 44.08
+    for q3 in ("What are the three largest rooms on '1.korrus'?", "Which rooms have a total area above 50 m²?"):
+        assert _listed_total(q3, parse(q3), Answer(value=lst, confidence=0.9)) is None
+    assert _listed_total(q, parse(q), Answer(value="FUAJEE (101); KORIDOR (105)", confidence=0.9)) is None
+
+
+def test_link_route_plan_vs_model_overrules_kg_qa(monkeypatch):
+    """W1 10:26: W1's deterministic GlobalId reading checks kg_qa on link questions; same -> ✓, different -> its value at the cap."""
+    import experiments.r1.kg_qa.kgqa as kq
+    import stoa.pipeline as pl
+    import stoa.solvers.ifc as ifcmod
+    from stoa.contract import Answer
+
+    monkeypatch.setattr(kq, "is_link_question", lambda q: {"fire": True, "why": "plan and model named"})
+    monkeypatch.setattr(kq, "solve", lambda p, q: Answer(value="no (model 55, plan draws 52)", confidence=0.85))
+    monkeypatch.setattr(ifcmod, "plan_vs_model", lambda p, q: Answer(value="yes: 55 vs 52", confidence=0.85))
+    path = "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf"
+    q = "Does this plan show fewer windows than the IFC model has?"
+    out = pl.Pipeline(crosscheck=0)._link_question(path, q, 0.0)  # disagree -> GlobalId value, capped, kg_qa named
+    assert out.value.startswith("yes") and out.confidence == pl.LINK_DISAGREE and out.solver == "pipeline/ifc"
+    assert any("knowledge-graph reader answered no" in m for m in out.missing)
+    monkeypatch.setattr(kq, "solve", lambda p, q: Answer(value=None, confidence=0.0))  # no KG -> GlobalId reading
+    assert pl.Pipeline(crosscheck=0)._link_question(path, q, 0.0).solver == "pipeline/ifc"
+    monkeypatch.setattr(kq, "solve", lambda p, q: Answer(value="yes (52 < 55)", confidence=0.85))
+    out = pl.Pipeline(crosscheck=0)._link_question(path, q, 0.0)
+    assert out.solver == "pipeline/kg_qa" and any("GlobalId reading says" in t and "✓" in t for t in out.trace)
+    off = pl.Pipeline(crosscheck=0, pvm=0)._link_question(path, q, 0.0)
+    assert not any("GlobalId" in t for t in off.trace)
+
+
+def test_shape_guard():
+    """Q 10:38/10:40: a which-floor question answered by a number, a yes/no question by a number, 'how many' by yes."""
+    from stoa.contract import Answer
+    from stoa.pipeline import SHAPE_CAP, _shape_guard
+
+    def c(q, v):
+        return _shape_guard(q, Answer(value=v, confidence=0.9)).confidence
+
+    assert c("Quale piano ha il maggior numero di porte?", 27) == SHAPE_CAP
+    assert c("Which floor has the biggest room?", "yes (model 55 vs drawn 52)") == SHAPE_CAP
+    assert c("Is the door count on this drawing the same as in the BIM model?", "50") == SHAPE_CAP
+    assert c("By how many doors does this plan differ from the IFC model?", "yes: both have 46") == SHAPE_CAP
+    for q, v in [("Which storey has more doors on its floor plan, '0' or '-1'?", "0"), ("Which sheet number is this?", "2"),
+                 ("How many doors are there?", 12), ("Does the plan show fewer windows than the model?", "yes (52 < 55)"),
+                 ("Which spaces have supply air?", "No spaces are explicitly linked"),
+                 ("Quelle est la surface nette de la pièce 3.03 ?", "10.48"), ("Mikä on asunnon B pinta-ala?", 80.83)]:
+        assert c(q, v) == 0.9, q

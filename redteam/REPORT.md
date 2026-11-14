@@ -1,13 +1,33 @@
 # Red team report (agent Q) — can we break the pipeline?
 
-**957 adversarial questions** (`redteam/questions.jsonl`, built by `redteam/build.py`, analysed by `redteam/analyze.py`),
-in twenty-four families written one after another tonight; each new family was aimed at the mechanism the last one exposed.
+**992 adversarial questions** (+ 259 re-asked on hashed file names) (`redteam/questions.jsonl`, built by `redteam/build.py`, analysed by `redteam/analyze.py`),
+in twenty-six families written one after another tonight; each new family was aimed at the mechanism the last one exposed.
 Builds on F's `hard` (translations/paraphrases/compositions/ft²) and `hard2` (new operators) and covers what those
 don't. The first 205 rows start from dev questions the pipeline had **right at conf ≥ 0.8**, so a failure there is
 caused by the perturbation, not by the drawing.
 
-## Now (10:02) — the short version
-- **Latest night 7a78559 (S0 cycle 39 round 2): on the 609 questions v1–v18, 378 of 378 answers at confidence ≥ 0.8
+## Now (10:46) — the short version
+- **Night 6025963 (S0 cycle 42): v1–v18 402/402 at conf ≥ 0.8 right, 0 false premises at ≥ 0.8; v1–v20 437/437; all
+  992 rows v1–v25 585/599; 9 won / 2 lost vs 41188a4 (both ≤ 0.65).** The v23 link misses are fixed (R1 a07af69);
+  left at ≥ 0.8: 10 CubiCasa upload rows (bug 26) and 4 IFC rankings (bug 27). v27 *links round 4* (23 Qs):
+  comparatives 9/9 in five languages — and a new bug 28: "the floor above / below this one" is ignored (the sheet's
+  own storey at 0.88–0.98, 4 confident misses; W1).
+
+## Earlier (10:37)
+- **Night 41188a4 (S0 cycle 40; answer code unchanged in 5970609): v1–v18 379/379 at conf ≥ 0.8 right, 0 false
+  premises at ≥ 0.8; v1–v20 414/414; all 957 rows v1–v24 544/558** (7a78559: 378/378, 412/412, 544/560); 10 won / 5
+  lost (3 LLM table-code flips on v21 sheets, 2 LoRA flips at 0.37). Cost on the same rows: tokens in/Q −4.9 %, out
+  −29 %, calls/Q −2.6 %, questions with ≥ 6 LLM calls 45 → 35.
+- **Two new families this hour (written before any run):** v25 *rankings / top-k from the IFC* (W1's new code; 35 Qs,
+  two models nobody probed) — 22/35, ties always named, but **6 confident misses**: "Which floor has *no* MAGAMISTUBA?"
+  → the floors that have one; Italian "Quale piano ha il maggior numero di porte?" → 27 at 0.97; German top-3 → top-1;
+  "total area of the 3 largest" → the list; "which floor has the fewest [rooms]" → the smallest room; "which floor has
+  the biggest room?" → kg_qa "yes" (bug 27). v26 *the same IFC rows on hashed file names* (259 Qs, F's neutralize):
+  accuracy holds (231 → 230/249) but kg_qa stops answering (28 → 2), and ifc answers link questions in the wrong
+  shape — a yes/no question with "50" at 0.97 (bug 27 again). Sent to W1, W4, R1 at 10:32–10:35.
+
+## Earlier (10:02)
+- **Night 7a78559 (S0 cycle 39 round 2): on the 609 questions v1–v18, 378 of 378 answers at confidence ≥ 0.8
   are right and 0 false premises get a confident answer** (0ffd81b: 364/364 — 14 more confident answers, all right).
   On v1–v20 (647) 413/413; on all 957 rows v1–v24 544 of 560 (the 16 are this morning's new families, below).
   22 won / 1 lost vs night 31397eb (the loss: an agent flake under the per-question LLM budget). The D20-2 budget
@@ -919,6 +939,105 @@ bedroom?" → Level 2. Missed at low confidence: "Which room on 'Level 1' has th
 Kitchen (A103) (0.30). "What is the largest room on 'Level 2'?" → one of four bedrooms tied at 22.04, without saying
 it is a tie (0.90).
 
+## Night 41188a4 (10:14) = 7a78559 + S0 cycle 40 (W1 6f1edf1 / 882630f / 23ada76, W4 b6a703f, W3 f6a04cf / 595adda, F 749e5c3, W2 061265b, R1, R2, W5)
+Run `20261114-101407-pipeline-all-41188a4-fdda` (all 957 rows of v1–v24; same rows as 7a78559's `-094023-…-2466`, both
+rescored with today's scorer): **v1–v18 379/379 at ≥ 0.8 right (7a78559: 378/378), 0 false premises at ≥ 0.8;
+v1–v20 414/414 (412/412); all 957 rows 85.6 % scored (85.0 %), 544/558 at ≥ 0.8 (544/560).** vs 7a78559 10 won / 5
+lost: the losses are 3 v21 sheet-text answers (LLM table code: "3rd floor level" 22'-5" → 21.92 at 0.85, "overflow
+scupper" 10" X 10" → 3", "seating area" GAS FIRE PIT → SEATING AREA W/ ARCH, all with W4 b6a703f's new sheet-name
+preamble) and 2 LoRA flips at 0.37 on uploads; the wins are 6 v21 rows (fence 56', IRON GREY, stalls 9'x18', 5 and
+6 stalls, U120), W1 d153975's "Apart from the living rooms and kitchens …" (0.30 wrong → 0.92 right) and the Swiss
+"plan vs DXF agree?" (no → yes). **Cost, same 957 rows:** LLM calls/Q 1.211 → 1.179, tokens in/Q 2,636 → 2,506 (−4.9 %),
+tokens out/Q 158 → 112 (−29 %), questions with ≥ 6 LLM calls 45 → 35, mean wall 2.4 → 2.0 s; the worst question went
+11 → 14 calls (an injection row "interior and entrance doors together" that now reaches the agent: 14 at 0.12 → 35 at
+0.15). Left at ≥ 0.8 (14): v21 1 (W2/W4 table code), v22 9 (5 plain-upload LoRA answers = bug 26, D23 pending; 4 are
+the same plan's dataset-path / styled controls), the plan-without-IFC "0 stairs" (vlm_direct), v23 3 (bug 25, R1).
+*Scorer fix:* `analyze.rescore` read an integer answer 0 as an empty string (`str(value or "")`), so the Downtowner
+"front yard setback 0 FT" looked lost; fixed (`"" if value is None else str(value)`), all runs rescored.
+
+## Night 6025963 (10:38) = 41188a4 + S0 cycle 41–42 (W1 bb5b6e6 comparatives / 414e928 plan_vs_model / 7fa37ed 'this building', W4 4b8b6cd top-N totals / 630ca1c VLM-zero cap / 5b2c407, R1 a07af69 kg_qa, W2 50e5365 / 2d088e8 / e461199, W3 raster windows, R2 stoa/style.py)
+Run `20261114-103834-pipeline-all-6025963-f05a` (992 rows v1–v25) vs 41188a4 (`artifacts/Q/night41188a4-992.jsonl`):
+**9 won / 2 lost (both at ≤ 0.65: a v21 table-code flip "(6) accessible stalls" → 1, a LoRA flip at 0.37); v1–v18
+402/402 at ≥ 0.8 right (41188a4: 379/379 — 32 answers gained confidence, all right, 2 lost some), 0 false premises
+at ≥ 0.8; v1–v20 437/437; all 992 rows 585/599.** Fixed here: the three v23 link misses (bug 25: "fewer than"
+polarity, "which sheet shows the ground floor" → plan-02-eg, the two-part storey + match), the top-3 sum (232.88), the
+v21 "3rd floor level" (21.92 at 0.85 → 22'-5" at 0.65), the plan-without-IFC "0 stairs" (0.89 → capped). Left at
+≥ 0.8 (14): 10 CubiCasa upload rows (bug 26; 4 are the same plan's dataset-path / styled controls, 2 bedrooms vs gold
+3) and 4 v25 rankings (bug 27, W1). Cost, same 956 rows: calls/Q 1.180 → 1.169, tokens in/Q 2,509 → 2,469, mean wall
+2.0 → 1.5 s. v26 on this build (`-103835-…-v26_hash-6025963-c9eb`): 235/251 right, 206/213 at ≥ 0.8 (41188a4:
+201/210), 3 won / 0 lost — still 2 link answers of the wrong shape on hashed names ("Is the door count … the same …?"
+→ 50 at 0.97; Italian "Quante finestre … non sono disegnate …?" → 55 at 0.88), both caught by W4's 87eaf64 shape guard
+or not (pre-merge check #10 below).
+
+## v25 (10:20): rankings and top-k lists from the IFC — 35 Qs (W1 882630f / 23ada76 are new code)
+Written before any run. Gold: storey counts by IFC containment / aggregation (ifcopenshell; matches the dataset's
+totals, e.g. barlad windows 38 + 74 + 71 + 70 + 62 = 315) and the dataset's own net room areas (esplanades). Two models
+nobody probed tonight: barlad (Romanian, **no IfcDoor at all**) and frigento (Italian storey names, no IfcSpace). Runs
+`20261114-102014-pipeline-v25-8e8d` + `-103316-pipeline-v25b-b9a0` (night 41188a4): **22/35 right; at ≥ 0.8 12 of 18
+right — 6 confident misses, all in ifc.**
+
+| held (22) | missed at ≥ 0.8 (6) |
+|---|---|
+| every tie named, at 0.56: "most rooms" 2./3./4.korrus 60, "most windows" 2.–5.korrus, walls 3./4.korrus, duplex rooms 10 = 10, barlad columns 109 × 5 | **"Which floor has no MAGAMISTUBA?" → the four floors that HAVE one** (0.90; also "no bedroom", "do not have a …") |
+| "which floor has the most doors" in DE/FI/ET/FR → 1.korrus; duplex/barlad/frigento rankings in English (asked on another storey's sheet too) | IT "Quale piano ha il maggior numero di porte?" → **27** (the whole model's doors, 0.97; the language check "gives the same answer ✓") |
+| "3 smallest rooms on this floor", "top 5 rooms by area on 5.korrus", "the 3 biggest spaces", Finnish "kolme suurinta huonetta" | DE "Welche drei Räume im '1.korrus' sind am größten?" → only the largest room (0.90) |
+| "Which three living rooms … are the largest?" → "tie, 9 rooms at 25.25 m²: …" | "total area of the three largest rooms" → the 3-room list, not 232.88 m² (0.90) |
+| "largest total room area" → 1.korrus 870.35; "third largest room" 63.84; "Which floor has the fewest rooms?" → 1.korrus | "Of the floors that have rooms, which one has the fewest?" → **'ESIK (6-2) (3.01 m²)'**, the smallest room (0.90) |
+| | "Which floor has the biggest room?" → kg_qa "**yes** (model 55 vs drawn 52)" (0.80; its own 'why' says it has no room sizes) |
+
+Below 0.8: "Which floor has the most rooms larger than 30 m² / over 25 m²?" → storeys ranked by total area (0.73;
+gold 1.korrus 5 rooms / 5.korrus 18 rooms), barlad "Of the levels that have windows, which has the fewest?" → 315 (0.30),
+"Which floor of this building has the most doors?" on barlad (no doors) → "Ground Level" (vlm_direct, 0.16, without
+saying the model has none), and the three "How many X does the floor with the most Y have?" compositions (0.09–0.14).
+
+### 27. The answer is of another kind than the question asks, and a check confirms it (HIGH, confident) — owners W1 (`ifc` ranking/negation), W4 (answer-shape guard), R1 (`kg_qa`)
+The root cause of bug 9 again, on the new ranking code: a *which-floor* question answered with a count (27) or a room
+(ESIK), a *no X* question answered with the floors that have X, a *total of the top 3* answered with the list. The
+cross-language check compares two readings of the same wrong parse, so it raises confidence (27 at 0.97). A cheap
+general guard (sent to W4 10:32): **a which-question answered by a bare number or yes/no, a yes/no question answered by
+a number, a how-many question answered by yes/no → conf ≤ 0.3** — it would catch 2 of the 6 here and all 3 of v26.
+
+## v26 (10:33): the IFC rows again on hashed copies — 259 Qs paired (Stoa's files won't sit in our folders)
+All 262 red-team rows on `ifc_models` except the upload rows and questions about the sheet SET (with hashed copies only
+the asked sheet and its model exist), re-asked through F's `experiments/F/neutralize.py --mode hash` (sheet, its SVG
+twin and the IFC model hard-linked as `d<hash>.pdf/.svg/.ifc`, same qids and gold). Run
+`20261114-103316-pipeline-v26_hash-531d` vs the dataset path on the same build (`artifacts/Q/night41188a4-992.jsonl`):
+
+| 259 IFC rows | right (of 249 scored) | at ≥ 0.8 (right) | confident misses | kg_qa answers | tokens in/Q |
+|---|---:|---:|---:|---:|---:|
+| dataset path | 231 | 180 (172) | 8 | 28 | 991 |
+| hashed names | 230 | 210 (201) | 9 | 2 | 838 |
+
+**F 749e5c3 + W1 6f1edf1 hold: a sheet called `d7d455be356.pdf` finds its model and its storey (accuracy 231 → 230).**
+Confidence rises (storey-word rows 0.53–0.68 → 0.88–0.98, all right): the cross-check against the sheet's own storey
+that lowers them on the dataset path does not run. What breaks is linking: **kg_qa answers 28 → 2 times** (its graph
+is built from the dataset's sheet sets), so link questions fall to ifc as asked, which answers the wrong *shape*:
+"Is the door count on this drawing the same as in the BIM model?" → **50 at 0.97**; "By how many doors does this plan
+differ from the IFC model?" → **"yes: … both have 46" at 0.85**; Italian "Quante finestre del modello IFC non sono
+disegnate in questa pianta?" → **55 at 0.88** (gold 3). One link answer gets better: "Does this plan show fewer
+windows than the IFC model has?" → yes (ifc; kg_qa says no on the dataset path, bug 25). Sent to W4 (shape guard) and
+R1 (build the graph from the sheet + the model next to it).
+
+## v27 (10:39): links round 4 — comparatives, two-part, relative storeys — 23 Qs (R1 10:34 asked for wordings neither of us wrote)
+Run `20261114-103938-pipeline-v27-b9d0` (night 6025963). Facts as v17/v20/v23 + IFC containment (esplanades 2.korrus
+doors 42 / windows 60, below 1.korrus only 'Vundament' with walls; smiley KG / EG / 1.OG / 2.OG walls 60 / 81 / 70 /
+70). **17/23; at ≥ 0.8 15 of 20 right.** **Links hold now (R1 a07af69 / W1 bb5b6e6):** comparatives 9/9 in
+EN/DE/FI/ES/SV ("Does the IFC model contain more windows … than this drawing shows?" → yes 55 > 52; "Zeigt dieser Plan
+weniger Fenster …?" → yes; "Visar ritningen lika många dörrar som modellen?" → yes 46 = 46), "How many more windows
+does the model have than this plan shows?" 3, "what's the difference" 0 (twice). Storey roles hold ('top floor' 55 /
+40, 'lowest floor' KG 20). Misses: "Name this sheet's storey and say how many windows the model has there." →
+"1.korrus" at 0.85 (second half dropped, R1); "Are fewer doors drawn here than the model has on this storey?" → 211
+at 0.30 (ifc; kg_qa did not fire on "drawn here").
+
+### 28. A relative storey ("the floor above this one") is ignored; the sheet's own storey is answered (HIGH, confident) — owner W1 (`ifc` storey resolution)
+On the 1.korrus sheet: "How many doors are on the floor above this one?" → **46 at 0.98** (1.korrus; gold 2.korrus
+42); "How many windows does the storey directly above this one have?" → **55 at 0.88** (gold 60); "How many doors are
+on the floor below this one?" → **46 at 0.98** (below is the foundation: 0). On the smiley 1.OG sheet: "How many walls
+does the floor below this one have?" → **70 at 0.98** (gold EG 81). "Walls on the floor above this one" (70) and "rooms
+on the storey above" (40) score as right only because 2.OG has the same counts as 1.OG — 6 of 6 relative references
+were ignored. Same family as bug 13 / 24 (a storey named the way people talk loses to the sheet's storey). Sent to W1
+10:41.
+
 ## "You know what you don't know — but refusing is not useful" (Stoa point 3), audited on be57171 (09:15)
 All 622 answers of run `…-090509-…-v19b-a85a` (+ 25 v19b/v20 rows: same picture), by confidence band:
 
@@ -968,8 +1087,11 @@ stayed 3 but moved confidence band (0.75 → 0.35 / 0.92).
 - Rotated, grayscale, heavily compressed and half-resolution copies of a plan: 30/30 right, at the same confidence.
 
 ## Re-run
-`questions.jsonl` now has 957 rows: v1 (174) + v2 (31) + v3 Swiss compositions (42) + v4 CubiCasa compositions (36) +
-v5 natural references (70) + v6 judge questions on the demo drawings (21) + v7 scope words in 9 languages (36) + v8 scope premises (8) + v9 Finnish judge (14) + v10 scan follow-ups (8) + v11 number formats (10) + v12 Estonian labels (5) + v13 lone PDF/PNG (8) + v14 two-part / comparisons / heights / which (31) + v15 bug-18 probe (22) + v16 Swiss dev plans alone as PNG/PDF (48) + v17 linking (9) + v18 scans (36) + v19 lists (19) + v20 link wordings (19) + v21 sheet text without the hint (57) + v22 uploads (216) + v23 links round 3 + storey roles (26) + v24 lists round 2 (11) = 957; earlier rows are byte-identical across builds (checked with cmp), so runs on the first 205 /
+`questions.jsonl` now has 992 rows: v1 (174) + v2 (31) + v3 Swiss compositions (42) + v4 CubiCasa compositions (36) +
+v5 natural references (70) + v6 judge questions on the demo drawings (21) + v7 scope words in 9 languages (36) + v8 scope premises (8) + v9 Finnish judge (14) + v10 scan follow-ups (8) + v11 number formats (10) + v12 Estonian labels (5) + v13 lone PDF/PNG (8) + v14 two-part / comparisons / heights / which (31) + v15 bug-18 probe (22) + v16 Swiss dev plans alone as PNG/PDF (48) + v17 linking (9) + v18 scans (36) + v19 lists (19) + v20 link wordings (19) + v21 sheet text without the hint (57) + v22 uploads (216) + v23 links round 3 + storey roles (26) + v24 lists round 2 (11) + v25 rankings / top-k (35) = 992 (+ 1 v5 row: v5 keeps a 'first floor' row only when the ifc
+solver answers its template at ≥ 0.9, so W1's code can add or drop one — gdynia came back at 10:20, row 320; qids are
+stable, compare by qid, and the 609 / 647 windows shift by that row). v26 = `artifacts/Q/v26_hash.jsonl`, made from
+the ifc_models rows by `experiments/F/neutralize.py --mode hash`. Earlier rows are otherwise byte-identical across builds, so runs on the first 205 /
 283 rows compare directly (`python3 $JUNCTION_SHARED/artifacts/Q/subset_stats.py <run> 283`). Build with
 `PYTHONHASHSEED=0 PYTHONPATH=.`; v5 calls the ifc solver for its gold (deterministic, < 1 s per row).
 ```

@@ -124,20 +124,20 @@ def rescore(rows):
             r["meta"] = meta[r["qid"]]
         k = (r.get("meta") or {}).get("kind", "")
         if k.startswith("yesno:link"):  # "do the plan and the model agree?": a bare count does not answer it
-            v = str(r["value"] or "")
+            v = ("" if r["value"] is None else str(r["value"]))
             said = "yes" if YES.search(v) else "no" if NO.search(v) else None
             r["correct"] = said == str(r.get("gold")).lower()
         elif k.startswith("yesno"):
             r["correct"] = yesno_ok(r["value"], r.get("gold"))
         elif (r.get("meta") or {}).get("items"):  # v19 list: every gold item named, no excluded item named
-            v = str(r["value"] or "")
+            v = ("" if r["value"] is None else str(r["value"]))
             r["correct"] = (all(re.search(x, v, re.I) for x in r["meta"]["items"])
                             and not any(re.search(x, v, re.I) for x in r["meta"].get("not_items", [])))
         elif (r.get("meta") or {}).get("parts"):  # v14 multi-part: every gold number must be in the answer
             r["correct"] = parts_ok(r["value"], r["meta"]["parts"])
         elif (r.get("meta") or {}).get("accept_re"):  # v14 'which': the answer must name the right thing
-            r["correct"] = (bool(re.search(r["meta"]["accept_re"], str(r["value"] or ""), re.I))
-                            and not re.search(r["meta"].get("reject_re") or r"(?!x)x", str(r["value"] or ""), re.I))
+            r["correct"] = (bool(re.search(r["meta"]["accept_re"], ("" if r["value"] is None else str(r["value"])), re.I))
+                            and not re.search(r["meta"].get("reject_re") or r"(?!x)x", ("" if r["value"] is None else str(r["value"])), re.I))
         elif (r.get("meta") or {}).get("accept"):  # v10 scan text: any accepted substring in the answer
             norm2 = lambda x: re.sub(r"\s+", "", str(x or "").lower())
             r["correct"] = any(norm2(a_) in norm2(r["value"]) for a_ in r["meta"]["accept"])
