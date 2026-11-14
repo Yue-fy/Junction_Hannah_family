@@ -18,6 +18,7 @@ function flash(msg = "Saved ✓") {
   const f = $("#saved-flash");
   f.textContent = msg; f.hidden = false;
   clearTimeout(flash._t); flash._t = setTimeout(() => (f.hidden = true), 1600);
+  counts();
 }
 
 function confWords(c) {
@@ -337,8 +338,11 @@ const asker = {
     let r;
     try { r = await api(`api/catalog${q ? `?q=${encodeURIComponent(q)}` : ""}`); } catch (e) { box.textContent = e.message; return; }
     box.innerHTML = "";
+    $("#pick-jump").innerHTML = r.groups.length > 1 ? "Jump to: " + r.groups.map((g) =>
+      `<button data-g="grp-${esc(g.source)}">${esc(g.label.replace(/ \(.*\)$/, ""))}</button>`).join("") : "";
+    $$("#pick-jump button").forEach((b) => b.addEventListener("click", () => document.getElementById(b.dataset.g).scrollIntoView({ behavior: "smooth" })));
     r.groups.forEach((g) => {
-      const div = document.createElement("div"); div.className = "group";
+      const div = document.createElement("div"); div.className = "group"; div.id = `grp-${g.source}`;
       div.innerHTML = `<h3>${esc(g.label)}${g.historical ? `<span class="tag">historical, no questions yet</span>` : ""}</h3><div class="cards"></div>`;
       const cards = $(".cards", div);
       if (!g.drawings.length) cards.innerHTML = `<p class="hint">Nothing found.</p>`;
@@ -358,7 +362,7 @@ const asker = {
     let v;
     try { v = await api(`api/view?path=${encodeURIComponent(path)}&page=${page}`); } catch (e) { this.viewer.empty(esc(e.message)); return; }
     this.view = v; this.nPages = v.n_pages;
-    $("#ask-name").textContent = v.name;
+    $("#ask-name").textContent = v.name; $("#ask-name").title = v.name;
     $("#ask-credit").textContent = `Drawing: ${v.name} — ${v.credit}`;
     const pg = $("#ask-pages");
     pg.innerHTML = v.n_pages > 1 ? `Page <select id="ask-page">${Array.from({ length: v.n_pages }, (_, i) => `<option value="${i}" ${i === page ? "selected" : ""}>${i + 1}</option>`).join("")}</select> of ${v.n_pages}` : "";
@@ -402,8 +406,11 @@ const asker = {
   async save() {
     const question = $("#q-text").value.trim();
     if (!question) { alert("Please write a question first."); return; }
+    const type = $("#q-type").value, ans = $("#q-answer").value.trim();
+    if (type !== "text" && ans && !/^\s*[-+]?\d+(?:[.,]\d+)?\s*%?\s*$/.test(ans) &&
+        !confirm(`"${ans}" is not a single number, so it cannot be scored automatically. Save anyway? (Tip: choose "Text" for several numbers.)`)) return;
     const body = {
-      path: this.path, page: this.page, question, answer: $("#q-answer").value, unit: $("#q-unit").value,
+      path: this.path, page: this.page, question, answer: ans, unit: $("#q-unit").value, type,
       method: $("#q-method").value, sureness: ($("input[name=sure]:checked") || {}).value || "",
       marks: this.viewer.marks, system: this.system,
     };
@@ -433,6 +440,8 @@ $("#ask-mark").addEventListener("click", (e) => {
   const on = !asker.viewer.marking; asker.viewer.setMarking(on); e.target.classList.toggle("on", on);
   e.target.textContent = on ? "✎ Marking: drag a box (click to stop)" : "✎ Mark on drawing";
 });
+const DEFAULT_UNIT = { count: "count", area: "m2", length: "m", volume: "m3", ratio: "%", text: "" };
+$("#q-type").addEventListener("change", (e) => { $("#q-unit").value = DEFAULT_UNIT[e.target.value] ?? ""; });
 $("#ask-clear").addEventListener("click", () => { asker.viewer.marks = []; asker.viewer.drawMarks(); });
 
 // ---------------------------------------------------------------------------------------------------------
@@ -455,7 +464,17 @@ $("#rule-form").addEventListener("submit", async (e) => {
   } catch (err) { alert(`Could not save: ${err.message}`); }
 });
 
+async function counts() {
+  try {
+    const h = await api("api/health");
+    $("#cnt-audit").textContent = h.items ? `(${h.audited}/${h.items})` : "";
+    $("#cnt-ask").textContent = h.questions ? `(${h.questions})` : "";
+    $("#cnt-rules").textContent = h.rules ? `(${h.rules})` : "";
+  } catch {}
+}
+
 // ---------------------------------------------------------------------------------------------------------
+counts();
 audit.init();
 let startTab = "audit";
 try { startTab = localStorage.getItem("wb-tab") || "audit"; } catch {}

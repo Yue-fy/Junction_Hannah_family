@@ -24,7 +24,7 @@ kbd { font-family: ui-monospace, monospace; font-size: .75rem; border: 1px solid
 .left, .right { min-width: 0; }
 .right { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: .9rem 1rem; }
 #tab-audit .right, #asker .right { max-height: calc(100vh - 190px); overflow: auto; position: sticky; top: 4.2rem; }
-.viewer { position: relative; height: calc(100vh - 230px); min-height: 420px; background: #e9e7e1; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; touch-action: none; cursor: grab; }
+.viewer { user-select: none; -webkit-user-select: none; position: relative; height: calc(100vh - 230px); min-height: 420px; background: #e9e7e1; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; touch-action: none; cursor: grab; }
 .viewer.dragging { cursor: grabbing; }
 .viewer.marking { cursor: crosshair; }
 .viewer .stage { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
@@ -94,7 +94,7 @@ textarea:focus, input:focus { outline: 2px solid var(--accent); border-color: va
 .dcard .nm { font-size: .82rem; padding: .35rem .5rem .1rem; line-height: 1.25; }
 .dcard .nq { font-size: .72rem; color: var(--muted); padding: 0 .5rem .4rem; }
 .viewer-bar { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; margin-bottom: .4rem; }
-.viewer-bar .dname { font-weight: 600; font-size: .95rem; flex: 1; min-width: 10rem; }
+.viewer-bar .dname { font-weight: 600; font-size: .95rem; flex: 1; min-width: 10rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .viewer-bar button { font-size: .9rem; padding: .3rem .7rem; }
 label { display: block; font-weight: 600; font-size: .92rem; margin: .45rem 0; }
 label input, label textarea { margin-top: .2rem; font-weight: 400; }
@@ -119,3 +119,8 @@ label input, label textarea { margin-top: .2rem; font-weight: 400; }
 table { width: 100%; border-collapse: collapse; font-size: .88rem; }
 th, td { text-align: left; border-bottom: 1px solid var(--line); padding: .35rem .4rem; vertical-align: top; }
 th { color: var(--muted); font-weight: 600; }
+select { font: inherit; width: 100%; padding: .45rem .6rem; border: 1px solid var(--line); border-radius: 8px; background: #fff; margin-top: .2rem; font-weight: 400; }
+.small { font-size: .8rem; margin: -.2rem 0 .3rem; }
+.tab .cnt { font-size: .78rem; opacity: .85; margin-left: .2rem; }
+.jump { display: flex; flex-wrap: wrap; gap: .4rem; margin: -.3rem 0 .4rem; align-items: center; font-size: .9rem; }
+.jump button { font-size: .85rem; padding: .25rem .7rem; border-radius: 999px; }

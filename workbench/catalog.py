@@ -277,7 +277,7 @@ def render(rel: str, page: int = 0, maxside: int = 2400) -> dict:
         meta = {"file": fname, "mime": "image/jpeg" if jpeg else "image/png", "w": w, "h": h, "n_pages": 1,
                 "kind": "raster", "scale": w / W, "src_w": W, "src_h": H, "zoom": None, "rot": None}
     else:
-        import fitz
+        import pymupdf as fitz
 
         with fitz.open(p) as doc:
             n = doc.page_count
@@ -309,6 +309,23 @@ def to_img_box(meta: dict, bbox: list[float], space: str | None) -> list[float] 
     pts = [(x * a + y * c + e, x * b + y * d + f) for x, y in ((x0, y0), (x1, y0), (x0, y1), (x1, y1))]
     xs, ys = [p[0] * z for p in pts], [p[1] * z for p in pts]
     return [min(xs), min(ys), max(xs), max(ys)]
+
+
+def from_img_box(meta: dict, box: list[float]) -> tuple[list[float], str] | None:
+    """Pixel box on the rendered image -> (bbox, bbox_space) in the contract's Evidence coordinates."""
+    if not box or len(box) != 4:
+        return None
+    x0, y0, x1, y1 = (float(v) for v in box)
+    if meta["kind"] == "raster":
+        s = meta["scale"]
+        return [round(v / s, 1) for v in (x0, y0, x1, y1)], "image_px"
+    import pymupdf as fitz
+
+    inv = ~fitz.Matrix(*meta["rot"])
+    z = meta["zoom"]
+    pts = [fitz.Point(x / z, y / z) * inv for x, y in ((x0, y0), (x1, y0), (x0, y1), (x1, y1))]
+    xs, ys = [p.x for p in pts], [p.y for p in pts]
+    return [round(min(xs), 1), round(min(ys), 1), round(max(xs), 1), round(max(ys), 1)], "pdf_pt"
 
 
 def views_for(path: str, evidence: list[dict]) -> tuple[list[dict], list[dict]]:

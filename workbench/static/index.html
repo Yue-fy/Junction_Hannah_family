@@ -11,9 +11,9 @@
 <header>
   <div class="brand">Expert workbench <span class="sub">Make Blueprints Talk · Team Hannah Family</span></div>
   <nav>
-    <button class="tab active" data-tab="audit">1 · Check our answers</button>
-    <button class="tab" data-tab="ask">2 · Add a hard question</button>
-    <button class="tab" data-tab="rules">3 · Physics &amp; sanity rules</button>
+    <button class="tab active" data-tab="audit">1 · Check our answers <span class="cnt" id="cnt-audit"></span></button>
+    <button class="tab" data-tab="ask">2 · Add a hard question <span class="cnt" id="cnt-ask"></span></button>
+    <button class="tab" data-tab="rules">3 · Physics &amp; sanity rules <span class="cnt" id="cnt-rules"></span></button>
   </nav>
   <div id="saved-flash" class="flash" hidden>Saved ✓</div>
 </header>
@@ -77,6 +77,7 @@
       <button id="pick-search-btn">Search</button>
       <button id="pick-reset" class="ghost">Show all groups</button>
     </div>
+    <div id="pick-jump" class="jump"></div>
     <div id="pick-groups"></div>
   </div>
   <div id="asker" hidden>
@@ -96,10 +97,22 @@
         <label>Your question <span class="hint">(any language)</span>
           <textarea id="q-text" rows="3" placeholder="e.g. What is the total floor area of all bedrooms, and is the bathroom large enough for a wheelchair?"></textarea></label>
         <div class="row">
-          <label class="grow">Your answer<input id="q-answer" type="text" placeholder="e.g. 34.5"></label>
-          <label>Unit<input id="q-unit" list="units" type="text" placeholder="m2"></label>
-          <datalist id="units"><option>count</option><option>m2</option><option>m</option><option>m3</option><option>mm</option><option>ft2</option><option>ft</option><option>text</option></datalist>
+          <label class="grow">Kind of answer
+            <select id="q-type">
+              <option value="count">A count (how many)</option>
+              <option value="area" selected>An area</option>
+              <option value="length">A length / distance / height</option>
+              <option value="volume">A volume</option>
+              <option value="ratio">A ratio or percentage</option>
+              <option value="text">Text (a name, list, yes/no, several numbers)</option>
+            </select></label>
         </div>
+        <div class="row">
+          <label class="grow">Your answer<input id="q-answer" type="text" placeholder="e.g. 34.5"></label>
+          <label>Unit<input id="q-unit" list="units" type="text" placeholder="m2" value="m2"></label>
+          <datalist id="units"><option>count</option><option>m2</option><option>m</option><option>m3</option><option>mm</option><option>cm</option><option>ft2</option><option>ft</option><option>%</option></datalist>
+        </div>
+        <div class="hint small" id="q-type-hint">One number per question is scored automatically. For several numbers, choose “Text”.</div>
         <label>How I worked it out
           <textarea id="q-method" rows="4" placeholder="e.g. Scale bar 1:100; measured the room 3.2 m × 4.1 m; subtracted the shaft…"></textarea></label>
         <div class="sure-row">How sure are you?

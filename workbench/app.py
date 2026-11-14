@@ -51,7 +51,8 @@ def static(name: str):
 
 @app.get("/api/health")
 def health():
-    return {"ok": True, "items": len(_audit_items()), "audits": len(store.read("audit")),
+    done = {r.get("item_id") for r in store.read("audit")} & {r["item_id"] for r in _audit_items()}
+    return {"ok": True, "items": len(_audit_items()), "audits": len(store.read("audit")), "audited": len(done),
             "questions": len(store.read("questions")), "rules": len(store.read("rules"))}
 
 
@@ -225,7 +226,7 @@ class QuestionIn(BaseModel):
     question: str = Field(min_length=3, max_length=4000)
     answer: str = Field(default="", max_length=2000)
     unit: str = Field(default="", max_length=40)
-    type: str = Field(default="", max_length=20)
+    type: str = Field(default="", pattern="^(|count|area|length|volume|ratio|text)$")
     method: str = Field(default="", max_length=8000)
     sureness: str = Field(default="", max_length=40)
     marks: list[list[float]] = Field(default_factory=list)  # her own boxes on the rendered page (image px)
@@ -242,6 +243,8 @@ def _guess_type(unit: str, answer: str) -> str:
         return "volume"
     if u in ("m", "cm", "mm", "ft", "in", "km"):
         return "length"
+    if u in ("%", "ratio", "percent"):
+        return "ratio"
     if not u and re.fullmatch(r"\s*\d+\s*", answer or ""):
         return "count"
     return "text" if not re.fullmatch(r"\s*-?\d+(?:[.,]\d+)?\s*", answer or "") else "other"
@@ -260,11 +263,22 @@ def post_question(q: QuestionIn):
         s = q.system
         sys_ans = {k: s.get(k) for k in ("value", "unit", "confidence", "solver", "assumptions", "missing",
                                          "evidence", "cost")}
+    evid = []
+    if q.marks:
+        try:
+            meta = catalog.render(q.path, q.page)
+            for b in q.marks[:50]:
+                conv = catalog.from_img_box(meta, b)
+                if conv:
+                    evid.append({"file": q.path, "page": q.page if meta["kind"] == "vector" else None,
+                                 "bbox": conv[0], "bbox_space": conv[1], "note": "expert mark"})
+        except Exception:  # noqa: BLE001
+            evid = []
     row = store.append("questions", {
         "qid": "h-" + make_qid(q.path, q.question.strip()), "path": q.path, "page": q.page,
         "question": q.question.strip(), "answer": q.answer.strip(), "unit": q.unit.strip(),
         "type": q.type or _guess_type(q.unit, q.answer), "method": q.method.strip(), "sureness": q.sureness,
-        "marks": q.marks, "author": "expert", "system": sys_ans})
+        "marks": q.marks, "evidence": evid, "author": "expert", "system": sys_ans})
     n = len(store.read("questions"))
     if n in (1, 5, 10, 20, 40):
         _notify("F", f"expert workbench: {n} human question(s) in $JUNCTION_SHARED/human/questions.jsonl "
