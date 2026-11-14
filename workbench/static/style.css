@@ -9,7 +9,7 @@ body { background: var(--bg); color: var(--ink); font-family: system-ui, -apple-
 header { display: flex; align-items: center; gap: 1.2rem; padding: .5rem 1rem; background: var(--panel); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 10; }
 .brand { font-weight: 700; font-size: 1.1rem; white-space: nowrap; }
 .brand .sub { font-weight: 400; color: var(--muted); font-size: .8rem; margin-left: .4rem; }
-nav { display: flex; gap: .4rem; flex-wrap: wrap; }
+nav { display: flex; gap: .4rem; flex-wrap: nowrap; }
 button { font: inherit; cursor: pointer; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); padding: .45rem .9rem; }
 button:hover { border-color: var(--accent); }
 button:disabled { opacity: .5; cursor: default; }
@@ -140,3 +140,9 @@ select { font: inherit; width: 100%; padding: .45rem .6rem; border: 1px solid va
 .more { background: #ebfbee; border: 1px solid #8ce99a; border-radius: 10px; padding: .5rem .7rem; margin: .5rem 0; }
 .more .primary { margin-left: .4rem; font-size: .95rem; padding: .35rem .8rem; }
 .split-tag { background: #7048e8; color: #fff; border-radius: 6px; padding: 0 .4rem; font-size: .75rem; margin-left: .3rem; }
+@media (max-width: 1400px) {
+  .brand .sub { display: none; }
+  header { gap: .6rem; }
+  .tab { padding: .4rem .7rem; font-size: .95rem; }
+}
+@media (max-width: 1000px) { nav { flex-wrap: wrap; } .viewer { height: 70vh; } }
