@@ -117,6 +117,27 @@ function rangeHtml(a: Answer) {
   return `<span class="range" title="Calibrated 90% range: on held-out drawings the true count lies in this range 9 times in 10">90% range ${esc(m[1])}–${esc(m[2])}</span>`;
 }
 
+/** Why a yes/no answer is yes or no, in one line under it: the compared quantity and the threshold, read from the
+ * solver's own assumption or trace line (W1 ifc: "yes/no: is the model quantity (46 count) > 40"; agent/calc lines
+ * like "46 > 40 → yes"). Nothing is recomputed here; no line, no basis shown. */
+export function yesNoBasis(a: Answer): string {
+  if (typeof a.value !== "string" || !/^(yes|no|true|false|ja|nein|oui|non|kyllä|ei|si|sì)$/i.test(a.value.trim())) return "";
+  const OP = String.raw`(>=|<=|≥|≤|>|<|==|=|!=|≠)`;
+  const NUM = String.raw`(-?\d[\d,]*(?:\.\d+)?)`;
+  const lines = [...(a.assumptions ?? []), ...(a.trace ?? []).filter((l) => /yes|no\b|→/i.test(l))];
+  for (const l of lines) {
+    const m = l.match(new RegExp(String.raw`quantity\s*\(\s*${NUM}\s*([^)]*)\)\s*${OP}\s*${NUM}`, "i"))
+      ?? l.match(new RegExp(String.raw`${NUM}\s*(m2|m²|m3|m³|m|count|%)?\s*${OP}\s*${NUM}\s*(?:→|->|=>|:)\s*(?:yes|no|true|false)`, "i"));
+    if (!m) continue;
+    const [, x, u, op, y] = m;
+    const unit = !u || /^count$/i.test(u.trim()) ? (a.intent?.target && !/unknown/.test(a.intent.target) ? ` ${a.intent.target}s` : "")
+      : ` ${unitLabel(u.trim())}`;
+    const sym = ({ ">=": "≥", "<=": "≤", "==": "=", "!=": "≠" } as Record<string, string>)[op] ?? op;
+    return `<span class="range basis" title="${esc(l)}">${esc(x)}${esc(unit)} ${esc(sym)} ${esc(y)}</span>`;
+  }
+  return "";
+}
+
 /** One row per object: evidence items that share an ifc_guid (2D box + 3D element) are grouped. */
 export function groupEvidence(ev: Evidence[]): { idx: number[]; first: number }[] {
   const groups: { idx: number[]; first: number }[] = [];
@@ -419,7 +440,7 @@ export function renderCard(el: HTMLElement, a: Answer, opts: CardOpts) {
   el.innerHTML = `
     <div class="value-row${rich ? " rich" : ""}">
       ${rich ? `<span class="rich-lbl">Text answer · ${String(a.value).split(/\n+/).filter((l) => l.trim()).length} line(s)</span><div class="value text rich">${richText(String(a.value))}</div>`
-        : `<div class="value ${isText ? "text" : ""} ${isText && String(a.value).length > 40 ? "long" : ""}">${esc(fmtValue(a))}${unit ? `<span class="unit">${esc(unit)}</span>` : ""}${rangeHtml(a)}</div>`}
+        : `<div class="value ${isText ? "text" : ""} ${isText && String(a.value).length > 40 ? "long" : ""}">${esc(fmtValue(a))}${unit ? `<span class="unit">${esc(unit)}</span>` : ""}${rangeHtml(a)}${yesNoBasis(a)}</div>`}
       <div class="conf ${confClass}" title="Calibrated confidence">
         <div class="conf-num">${conf}%</div><div class="conf-bar"><i style="width:${conf}%"></i></div><div class="conf-lbl">confidence</div>
       </div>
@@ -432,7 +453,7 @@ export function renderCard(el: HTMLElement, a: Answer, opts: CardOpts) {
     ${opts.onSecondOpinion && /\.(png|jpe?g|pdf)$/i.test(opts.currentFile) && (tier !== "deterministic" || (a.confidence ?? 0) < 0.8)
       ? `<div class="second-slot"><button class="second-btn" title="Ask NVIDIA Nemotron 3.5 Super VL (hosted vision + reasoning model) the same question: one API call, only when you click">Second opinion · NVIDIA Nemotron</button></div>` : ""}
     <div class="cost">
-      <span title="Wall time">⏱ ${wall < 1 ? `${Math.round(wall * 1000)} ms` : `${wall.toFixed(1)} s`}</span>
+      <span title="${a.cached ? `Wall time when this question was first answered; this time it came from the API cache in ${Math.round(opts.roundTripMs)} ms` : "Wall time"}">⏱ ${wall < 1 ? `${Math.round(wall * 1000)} ms` : `${wall.toFixed(1)} s`}${a.cached && wall >= 1 ? " first time" : ""}</span>
       <span title="LLM tokens in / out">${tokens ? `${(c.llm_tokens_in ?? 0).toLocaleString()} / ${(c.llm_tokens_out ?? 0).toLocaleString()} tok` : "0 tokens"}</span>
       <span title="Estimated cost of this answer with the eval's rates (stoa/eval/runner.py): €${(costUsd({ ...c, wall_seconds: wall }) * EUR_PER_USD).toPrecision(2)} per question, i.e. this much per 1,000 questions like it (EUR at ${EUR_PER_USD} €/$)">${((x) => (x.startsWith("<") ? x : `≈ ${x}`))(fmtEur(costUsd({ ...c, wall_seconds: wall })))}</span>
       <span class="solver" title="Solver">${esc(a.solver || "?")}</span>

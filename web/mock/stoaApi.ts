@@ -234,11 +234,18 @@ function bench() {
     }
   });
   const full = (r: LbRow) => !r.limit && !r.sources && !r.types && !r.grep && !r.handled_only && !r.metrics.errors;
-  // The pipeline row comes from S0's integration runs on `night` when there is one (agents also log runs of
-  // uncommitted work); baselines take the latest full run of anyone.
+  // The pipeline rows come from the integration runs of S0 and F (both measure `night`-equivalent commits; other agents
+  // also log runs of uncommitted work), all on ONE commit when possible: the commit of the latest full S0/F dev run
+  // (since D14, S0 skips duplicate dev/hard runs and F's runs are the reference). Baselines: latest full run of anyone.
+  const integ = (r: LbRow) => r.agent === "S0" || r.agent === "F";
+  const anchor = rows.filter((r) => r.solver === "pipeline" && r.split === "dev" && r.n >= 1500 && full(r) && integ(r)).at(-1)?.commit;
+  const pickPipeline = (ok: LbRow[]) => {
+    const mine = ok.filter(integ);
+    return mine.filter((r) => anchor && r.commit === anchor).at(-1) ?? mine.at(-1) ?? ok.at(-1);
+  };
   const pick = (solver: string, split: string, minN: number) => {
     const ok = rows.filter((r) => r.solver === solver && r.split === split && r.n >= minN && full(r));
-    return (solver === "pipeline" ? ok.filter((r) => r.agent === "S0").at(-1) : undefined) ?? ok.at(-1);
+    return solver === "pipeline" ? pickPipeline(ok) : ok.at(-1);
   };
   const summary = (r: LbRow | undefined) => {
     if (!r) return null;
@@ -282,9 +289,8 @@ function bench() {
   // novel question kinds (operators no template covers): hard2 = developed on; hard2q = held-out rewording (D10, now
   // "worn"); hard2r = F's sealed fresh draw in a fourth wording (D12, the clean one). Aggregates only.
   for (const split of ["hard2", "hard2q", "hard2r"]) {
-    const r = rows.filter((x) => x.solver === "pipeline" && x.split === split && x.n >= 200 && full(x));
-    // S0's integration run on the night commit first; F's (often an experimental branch) only when S0 has none
-    out[split] = { pipeline: summary(r.filter((x) => x.agent === "S0").at(-1) ?? r.filter((x) => x.agent === "F").at(-1) ?? r.at(-1)) };
+    // the integration run on the same commit as dev/hard first (F logs a base and a candidate commit side by side)
+    out[split] = { pipeline: summary(pick("pipeline", split, 200)) };
   }
   return { from: "leaderboard", generated: new Date().toISOString(), runs: out };
 }
