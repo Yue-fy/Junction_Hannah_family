@@ -457,9 +457,17 @@ class IfcSolver(BaseSolver):
         storey, storey_name, rooms, model_named = None, None, [], False
         groups: list[tuple[str, list[Element]]] = []
         cands = []
+        def digits_ok(asked: str, label: str | None) -> bool:
+            # '7. Level' is not '1. Level', 'KORIDOR (219)' is not 'KORIDOR (119)' (Q red team 04:13)
+            return re.findall(r"\d+", asked) == re.findall(r"\d+", label or "") or not re.findall(r"\d+", asked)
+
         for n in it.names:
             ms = match_storey(idx, n)
+            if ms is not None and ms.method == "fuzzy" and not digits_ok(n, ms.label):
+                trace.append(f"'{n}': fuzzy storey match '{ms.label}' rejected (numbers differ)")
+                ms = None
             sp = match_space(idx, n) if it.kind == "space" or it.metric == "area" or it.attr == "room_height" else []
+            sp = [m_ for m_ in sp if m_.method != "fuzzy" or digits_ok(n, m_.label)]
             mm = match_model(idx, n)
             cands.append((n, ms, sp, mm))
         # storey: the best exact/normalised storey match, else the best fuzzy one that isn't a better room match
@@ -496,9 +504,19 @@ class IfcSolver(BaseSolver):
                 model_named = True
                 trace.append(f"'{n}' taken as the model's name" + (f" (~'{mm.label}')" if mm else
                              " (not in IfcProject/IfcBuilding names; the file is the model)"))
+                stem_words = set(re.findall(r"[a-z]{3,}", fold(" ".join([idx.path, path, idx.project_name or "",
+                                                                          idx.project_long_name or "",
+                                                                          *(idx.building_names or [])]))))
+                asked_words = set(re.findall(r"[a-z]{3,}", fold(n))) - {"the", "model", "building", "house", "project"}
+                if not (mm and mm.score >= 60) and asked_words and not (asked_words & stem_words):
+                    # 'Empire State Building' asked on smiley-west: a false premise, not a nickname (Q 04:13)
+                    conf = min(conf, 0.3)
+                    assumptions.append(f"the question names the model '{n}', which matches no project/building name; "
+                                       "answered for this file")
             else:
                 trace.append(f"'{n}': no storey, room or model of that name")
-                assumptions.append(f"could not resolve '{n}'")
+                assumptions.append(f"could not resolve '{n}'; the model's storeys are: "
+                                   + ", ".join(st_.name for st_ in idx.storeys[:12]))
                 conf = min(conf * 0.6, 0.3)
         if storey is None and not it.names and it.scope != "model" and getattr(it, "question", ""):
             i, why = storey_mention(it.question, [s.name for s in idx.storeys])
@@ -2168,6 +2186,9 @@ class IfcSolver(BaseSolver):
             elif it.asked_unit == "ft3" and unit == "m3":
                 val, unit = val * FT_PER_M ** 3, "ft3"
                 trace.append("converted m³ -> ft³ as asked")
+            elif it.asked_unit in ("mm", "cm") and unit == "m":
+                val, unit = val * (1000.0 if it.asked_unit == "mm" else 100.0), it.asked_unit
+                trace.append(f"converted m -> {unit} as asked")
             elif it.asked_unit == "l" and unit == "m3":
                 val, unit = val * 1000.0, "l"
                 trace.append("converted m³ -> litres as asked")
