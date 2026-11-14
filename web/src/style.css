@@ -614,3 +614,5 @@ body[data-view="customer"].answered .ask-more { display: inline-flex; }
 .conf-hint { font-size: 13.5px; color: var(--warn); align-self: center; }
 .hero-badges .conf, .hero-badges .agree { white-space: nowrap; }
 body[data-view="expert"] .ask-more { display: none !important; }
+.hero-intro { font-size: 15px; line-height: 1.5; color: #3d4a5c; }
+.hero-intro .tip { display: block; margin-top: 8px; color: var(--navy); }
