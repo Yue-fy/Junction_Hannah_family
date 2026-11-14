@@ -658,7 +658,9 @@ class IfcSolver(BaseSolver):
 
     _VDIST = re.compile(r"\b(floor[- ]to[- ]floor|vertical(ly)?|height difference|difference in (height|elevation|level)|"
                         r"elevation difference|level difference|how far apart|distance between|hohenunterschied|"
-                        r"hoogteverschil|korkeusero)\b")
+                        r"hoogteverschil|korkeusero|how far (?:is \S+ )?(?:above|below|over|under)|how (?:much )?(?:higher|"
+                        r"lower) (?:is|lies)|how high (?:is \S+ )?above|(?:height|elevation) of \S+ above)\b|"
+                        r"\bhow far\b.{0,30}\b(above|below)\b")
 
     def _storey_distance(self, model: str, idx: IfcIndex, question: str, trace: list[str]) -> Answer | None:
         """'Floor-to-floor height / vertical distance / height difference between storeys A and B' = |z_B - z_A|
@@ -686,6 +688,20 @@ class IfcSolver(BaseSolver):
         trace.append(f"vertical distance: '{b.name}' at {b.elevation:.3f} m - '{a.name}' at {a.elevation:.3f} m = {d:.3f} m")
         ev = [Evidence(file=model, ifc_guid=st.guid, note=f"IfcBuildingStorey {st.name} elevation {st.elevation:.3f} m")
               for st in (a, b)]
+        from stoa.solvers.ifc.arith import _AUX, _CMP, _LOWER, text_of
+
+        tq = text_of(question)
+        mc = _CMP.search(tq) if _AUX.match(tq) else None
+        if mc:
+            # "Is the floor-to-floor height between A and B more than 3 metres?" -> yes/no on the distance (Q v14 (4):
+            # answered '3.35 m' at 0.3)
+            thr = float(mc.group(2).replace(",", "."))
+            low = any(mc.group(1).startswith(x) for x in _LOWER)
+            res = d < thr if low else d > thr
+            trace.append(f"{d:.3f} m {'<' if low else '>'} {thr:g} m? -> {'yes' if res else 'no'}")
+            return Answer(value=f"{'yes' if res else 'no'} ({d:.2f} m)", unit=None, confidence=0.85, evidence=ev,
+                          trace=trace, solver=self.name,
+                          assumptions=["vertical distance = difference of the IfcBuildingStorey elevations"])
         return Answer(value=round(d, 4), unit="m", confidence=0.85, evidence=ev, trace=trace, solver=self.name,
                       assumptions=["vertical distance = difference of the IfcBuildingStorey elevations (finished floor "
                                    "levels as modelled)"])
@@ -708,6 +724,12 @@ class IfcSolver(BaseSolver):
                                                                                     if n.startswith("rank:")), 1)}
         try:
             ans = self._storey_distance(model, idx, question, trace)
+            if ans is not None and isinstance(ans.value, str):
+                from stoa.solvers.ifc.arith import _CMP, text_of
+
+                mc_ = _CMP.search(text_of(question))
+                if mc_:  # the yes/no threshold was used: not a leftover number
+                    ctx["outer"], ctx["outer_spans"] = True, [mc_.span()]
             if ans is None:
                 ans = self._relation(path, model, idx, it, question, trace, ctx)
             if ans is None:

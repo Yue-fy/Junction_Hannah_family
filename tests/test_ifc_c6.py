@@ -190,3 +190,11 @@ def test_unquoted_room_label(solver):
     assert a.value == pytest.approx(25.27, abs=0.05)
     a = solver.solve(WARM1, "On 1. Level, how large is the room called Living (414B-19-001-002)?")
     assert a.value == pytest.approx(25.27, abs=0.05)
+
+
+@pytest.mark.skipif(not abspath(SMILEY).exists(), reason="dataset not available")
+def test_storey_distance_wordings(solver):
+    q = "Is the floor-to-floor height between '1.korrus' and '2.korrus' more than 3 metres?"
+    a = solver.solve(ESPL, q)
+    assert a.value.startswith("yes") and a.confidence > 0.8
+    assert solver.solve(SMILEY, "How far is '2.OG' above 'KG', in metres?").value == pytest.approx(8.04, abs=0.01)
