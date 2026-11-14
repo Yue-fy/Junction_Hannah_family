@@ -4,7 +4,7 @@ Hardware: 1× RTX PRO 6000 Blackwell 96 GB. Shared server budget ≈ 45 GB (`--g
 **Bandwidth is the real constraint tonight:** this machine downloads from Hugging Face at only ~2.5 MB/s total
 (Wi-Fi; measured with 8 parallel range requests), i.e. ~2 h per 19 GB. Every download must be chosen carefully.
 
-## TL;DR for the captain (10:45, end of night)
+## TL;DR for the captain (11:00, end of night)
 - **Small fine-tuned beats big general.** A LoRA on our own 8B (cc-v2, 2 output tokens per answer) is the night's largest gain on
   SEALED test: CubiCasa +8.8 [+6.0, +11.9], weighted 73.8 → 79.8, at ~$0.02 per 1k questions. A 4× bigger base VLM (Qwen3.6-35B-A3B)
   and hosted Nemotron 3.5 Super VL both count WORSE (35B base: −21 vs cc-v2 on dev CubiCasa; Nemotron: below even the base 8B on smoke).
@@ -17,7 +17,9 @@ Hardware: 1× RTX PRO 6000 Blackwell 96 GB. Shared server budget ≈ 45 GB (`--g
   uploads have 47 confident misses vs 24 on the dataset path. Tonight: W4's confidence cap (D23). Day team: file the upload by
   its image-guessed style (`stoa/style.py`, CubiCasa only): 47 → 31, evidence 0 → 32%, 586/588 touched answers = dataset path.
 - **Gemini** (key from Sat 10:50): `backend="gemini"` in stoa.llm with the no-abuse rules in code (daily cap, purpose log, rpm);
-  for visible steps only. Not yet run live.
+  for visible steps only. Not yet run live. First measurement = noon: `experiments/r2/noon_models.sh EXAMPLES.jsonl 40 40`.
+- **Servers during the day:** :8001 (8B + LoRAs) and :8002 (35B) run detached; nothing restarts them if they die — recipe and an
+  opt-in `serving/watchdog.sh` under "Serving now".
 - **Cost honesty:** every local call is billed from tokens at measured GPU throughput (not wall time, which includes queueing).
 - Negative results are listed under each section and in board/R2.md ("don't repeat").
 
@@ -323,3 +325,7 @@ pretrained CC5K net never saw them) minus drawings in the LoRA's training data m
 12. Files outside our folders (uploads, a hidden set in new folders): `stoa/style.py` guesses the reader family from the
     image (p≥0.8 → 96.7% right); filing an upload under the guess (stoa/data.py hook; day team, D23) restores the CubiCasa gate, boxes and the
     cheap path: confident misses 47 → 31 on 800 dev Qs as uploads, 586/588 touched answers = the dataset path.
+13. Hosted Gemini (`backend="gemini"`, from Sat 10:50): **unmeasured** (no key in the night agents' sessions). Candidate slot = the
+    same as Nemotron's (visible demo step, general agent on question kinds we have no reader for, unsure answers), never a bulk tier
+    (~200 calls per agent per day). Before wiring it anywhere: `noon_models.sh EXAMPLES.jsonl 40 40` puts it next to the pipeline,
+    the local 8B and Nemotron on the same ≤ 40 Stoa examples, with cost per run; wire it only on a kind where it wins clearly.
