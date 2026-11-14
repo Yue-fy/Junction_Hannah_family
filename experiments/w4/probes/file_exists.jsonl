@@ -1,0 +1,14 @@
+{"qid": "r1v6_f1", "path": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf", "question": "Is there an IFC model for this floor plan?", "answer": "no", "unit": null, "type": "text", "meta": {"kind": "files", "gold_how": "swiss_dwellings has pdf/dxf/png per floor, no IFC"}}
+{"qid": "r1v6_f2", "path": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf", "question": "Is there a DXF file that goes with this sheet?", "answer": "yes", "unit": null, "type": "text", "meta": {"kind": "files", "gold_how": "site1000_bldg2082_floor9385.dxf exists"}}
+{"qid": "r1v6_f3", "path": "data/cubicasa5k/colorful-4539.png", "question": "Is there a 3D model or IFC file for this apartment?", "answer": "no", "unit": null, "type": "text", "meta": {"kind": "files", "gold_how": "cubicasa5k: one png per plan"}}
+{"qid": "r1v6_f4", "path": "data/cubicasa5k/high_quality-12496.png", "question": "Is there a BIM model of this flat?", "answer": "no", "unit": null, "type": "text", "meta": {"kind": "files", "gold_how": "cubicasa5k: one png per plan"}}
+{"qid": "r1v6_f5", "path": "data/cubicasa5k/high_quality-12496.png", "question": "Is there a CAD file (DXF or DWG) for this plan?", "answer": "no", "unit": null, "type": "text", "meta": {"kind": "files", "gold_how": "cubicasa5k: one png per plan"}}
+{"qid": "r1v6_f6", "path": "data/swiss_dwellings/site1000_bldg2082_floor9385.png", "question": "Gibt es ein IFC-Modell zu diesem Grundriss?", "answer": "no", "unit": null, "type": "text", "meta": {"kind": "files", "gold_how": "swiss: no IFC"}}
+{"qid": "w4f_1", "path": "data/swiss_dwellings/site1000_bldg2082_floor9385.png", "question": "Is there a CAD file for this drawing?", "answer": "yes", "unit": null, "type": "text"}
+{"qid": "w4f_2", "path": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf", "question": "Is there a 3D model of this building?", "answer": "no", "unit": null, "type": "text"}
+{"qid": "w4f_3", "path": "data/swiss_dwellings/site1000_bldg2082_floor9385.dxf", "question": "Is there a BIM model for this floor?", "answer": "no", "unit": null, "type": "text"}
+{"qid": "w4f_4", "path": "data/cubicasa5k/colorful-10052.png", "question": "Is there a DXF file for this plan?", "answer": "no", "unit": null, "type": "text"}
+{"qid": "w4f_5", "path": "data/habs/ak0003_sheet_00019.jpg", "question": "Is there an IFC model for this drawing?", "answer": "no", "unit": null, "type": "text"}
+{"qid": "w4f_6", "path": "data/cubicasa5k/colorful-10062.png", "question": "Finns det en IFC-modell för den här planen?", "answer": "no", "unit": null, "type": "text"}
+{"qid": "w4f_7", "path": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf", "question": "Y a-t-il un DXF pour ce plan ?", "answer": "yes", "unit": null, "type": "text"}
+{"qid": "w4f_8", "path": "data/ifc_models/bimspeed-barlad_ro-arc-m3-e-pth-0000_plan-02-ground-level.pdf", "question": "Is there an IFC model for this drawing?", "answer": "yes", "unit": null, "type": "text"}

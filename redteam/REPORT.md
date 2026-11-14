@@ -6,7 +6,10 @@ Builds on F's `hard` (translations/paraphrases/compositions/ft²) and `hard2` (n
 don't. The first 205 rows start from dev questions the pipeline had **right at conf ≥ 0.8**, so a failure there is
 caused by the perturbation, not by the drawing.
 
-## Now (10:46) — the short version
+## Now (10:54) — the short version
+- **Pre-merge check #10 (10:47, all owner heads on 6025963 — what S0 merges at 11:15): 4 won / 1 lost (0.50), v1–v18
+  398/398 at ≥ 0.8, renamed-file IFC rows 240/251 with kg_qa answering again (2 → 27); confident misses on the newest
+  families 18 → 10** (left: relative storeys ×4 — bug 28, CubiCasa uploads ×4, one ranking, one agent flake).
 - **Night 6025963 (S0 cycle 42): v1–v18 402/402 at conf ≥ 0.8 right, 0 false premises at ≥ 0.8; v1–v20 437/437; all
   992 rows v1–v25 585/599; 9 won / 2 lost vs 41188a4 (both ≤ 0.65).** The v23 link misses are fixed (R1 a07af69);
   left at ≥ 0.8: 10 CubiCasa upload rows (bug 26) and 4 IFC rankings (bug 27). v27 *links round 4* (23 Qs):
@@ -968,6 +971,21 @@ v21 "3rd floor level" (21.92 at 0.85 → 22'-5" at 0.65), the plan-without-IFC "
 201/210), 3 won / 0 lost — still 2 link answers of the wrong shape on hashed names ("Is the door count … the same …?"
 → 50 at 0.97; Italian "Quante finestre … non sono disegnate …?" → 55 at 0.88), both caught by W4's 87eaf64 shape guard
 or not (pre-merge check #10 below).
+
+## Pre-merge check #10 (10:47): 6025963 + W1 bbd2544 + W2 19c25d4 + W3 88eb185 + W4 c2b0fad + R1 c8d67d0 + R2 d6ce0dd + F 8aef6b2
+Scratch snapshot, all 1015 rows v1–v27 (`20261114-104643-pipeline-all-snap11-83bd`) + v26 hashed
+(`-104643-…-v26_hash-snap11-5d98`), both `--no-leaderboard`. **vs 6025963: 4 won / 1 lost (studio units 7 → 6 at
+0.50); v26 6 won / 1 lost (the known height-difference agent flake 6.7 → 0.30). v1–v18 398/398 at ≥ 0.8 right, 0
+false premises; v1–v20 433/433; 1015 rows 598/612; v26 hashed 240/251 (6025963: 235), 212/213 at ≥ 0.8, kg_qa answers
+27 of the renamed-sheet link questions (was 2: R1 4d9e901).** Chart bar (experiments/q/bar_count.py) 18 → 10. Fixed:
+'no MAGAMISTUBA' → 1.korrus, 'Of the floors that have rooms, which one has the fewest?' → 1.korrus, German top-3, IT
+'Quale piano …' (W1 bbd2544); renamed-sheet link shapes (W4 87eaf64 guard + R1). Left at ≥ 0.8: bug 28 (4 relative
+storeys, W1), 4 CubiCasa upload rows (bug 26), 'Which floor has the biggest room?' → a list of the largest rooms
+(0.80), and an agent flake with a real mechanism: "How many windows does the floor with the most doors have?" → **297
+at 0.95** — the agent asked invented storeys ('Ground Floor' … → 0.14 each), then the whole model (0.97); its
+confidence follows the last step, and "agent 297 = ifc 297 ✓" agrees with ifc's own *unsure* 297 (0.30). On 6025963
+the same path ended on a 0.14 step → 0.145. Sent to W4 10:53 (agent conf = min over the steps used; a ✓ with an answer
+< 0.5 must not lift).
 
 ## v25 (10:20): rankings and top-k lists from the IFC — 35 Qs (W1 882630f / 23ada76 are new code)
 Written before any run. Gold: storey counts by IFC containment / aggregation (ifcopenshell; matches the dataset's

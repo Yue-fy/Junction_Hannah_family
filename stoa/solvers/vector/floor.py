@@ -80,7 +80,10 @@ class Room:
         """Net area: the printed area when the DXF polygon disagrees with it by > 2%, else the polygon (W2 10:25: the
         reference totals follow the printed labels, e.g. a Treppenhaus polygon 35.38 m² printed 29.03; dev 'all
         numbered rooms' totals 31 -> 34/35, train 207 -> 209/216, 0 lost). Single-room answers did this already."""
-        if self.printed_area is not None and abs(self.printed_area - self.area) > 0.02 * self.printed_area:
+        if self.printed_area is not None and abs(self.printed_area - self.area) > 0.02 * self.printed_area and \
+                0.7 <= self.printed_area / max(self.area, 1e-9) <= 1.43:
+            # outside that band the printed number belongs to another label (F 10:53: a 6.06 m² 'Balkon' polygon
+            # picked up a printed 86.23): keep the polygon
             return self.printed_area
         return self.area
 

@@ -338,3 +338,16 @@ def test_shape_guard():
                  ("Which spaces have supply air?", "No spaces are explicitly linked"),
                  ("Quelle est la surface nette de la pièce 3.03 ?", "10.48"), ("Mikä on asunnon B pinta-ala?", 80.83)]:
         assert c(q, v) == 0.9, q
+
+
+def test_file_subject_gate():
+    """R1 10:47: on drawings with no project graph the link route admits only questions whose subject is a file."""
+    from stoa.pipeline import _FILE_SUBJECT
+
+    for q in ("Is there an IFC model for this floor plan?", "Gibt es ein IFC-Modell zu diesem Grundriss?",
+              "Finns det en IFC-modell för den här planen?", "Is there a DXF file that goes with this sheet?",
+              "Y a-t-il un DXF pour ce plan ?", "Is there a 3D model or IFC file for this floor plan?"):
+        assert _FILE_SUBJECT.search(q), q
+    for q in ("Are there doors in the IFC model?", "Are there more windows in the plan than in the IFC model?",
+              "How many windows does the IFC model have on this storey?", "Is there a balcony?"):
+        assert not _FILE_SUBJECT.search(q), q

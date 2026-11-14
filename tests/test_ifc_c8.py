@@ -172,3 +172,24 @@ def test_greatest_number_of_is_a_floor_ranking(q, want):
     from stoa.solvers.ifc.solver import IfcSolver
 
     assert IfcSolver(plan2d="0", llm="0").solve(FRIG, q).value == want
+
+
+@need
+@pytest.mark.parametrize("q,want", [
+    ("How many windows does the storey directly above this one have?", 60),  # Q bug 28: the sheet's 55 @ 0.88
+    ("How many rooms are on the storey above?", 60),
+    ("Quante finestre del modello IFC non sono disegnate in questa pianta?", 3),  # W4 10:49: 55 @ 0.875
+    ("Wie viele Fenster des IFC-Modells sind in diesem Grundriss nicht eingezeichnet?", 3),
+])
+def test_relative_storey_wordings_and_not_drawn_languages(q, want):
+    from stoa.solvers.ifc.solver import IfcSolver
+
+    assert IfcSolver(plan2d="0", llm="0").solve(ESPL, q).value == want
+
+
+@need
+def test_above_ground_level_on_a_sheet_is_not_confident():
+    from stoa.solvers.ifc.solver import IfcSolver
+
+    a = IfcSolver(plan2d="0", llm="0").solve(ESPL, "How many windows are on the floors above ground level?")
+    assert a.confidence <= 0.5

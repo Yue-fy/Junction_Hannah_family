@@ -826,3 +826,12 @@ model.' — the IFC route answers first, the estimate only as the sentence fallb
 No accuracy number exists for these (no gold); what it buys is Stoa's 'no bare refusal' + cost. Wiring = ~10 lines
 in Pipeline._solve_question after the link route (W4); deliberately not before the 11:10 freeze (D22: no new
 subsystems). Decide after the noon reveal if Stoa's hidden kinds include out-of-drawing questions.
+**8l addendum (10:58, night-R1 c1bcf5c): uploads, file existence, Q v27.** (a) A renamed/uploaded sheet next to its
+model ('A101.pdf', F's hashed copies) was no plan node in stoa.kg (it globs '{model stem}_*.pdf'), so kg_qa had no C
+rows; facts() now adds one with W1's plan_storey (title, else GUID tags) + W1's _cut_compare → Q v26_hash 4 W / 0 L,
+kg_qa answers 28 link Qs instead of 2 (runs -103316-…-531d → -103800-…-989b). (b) 'Is there an IFC / 3D / DXF model
+for this drawing?' on files with no project graph → yes/no from the linked files (r1v6_files 6/6 @ 0.85 standalone;
+no pipeline effect yet: _link_question admits only IFC sources). (c) Q v27 (Q's wordings, Q's scorer): comparatives
+9/9 held; imperative second parts ('… and say how many …') split; 'how many X does the model have there' read from
+the storey's C row; 'fewer doors drawn here than the model' and it/es/sv/nl/et 'not drawn' fire → 2 W / 0 L
+(-103938-…-b9d0 → -105146-…-58c1). Every trigger change re-checked: 0 / 128,535 dataset questions.

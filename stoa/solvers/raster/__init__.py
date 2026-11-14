@@ -126,7 +126,7 @@ class RasterSolver(BaseSolver):
 
     def __init__(self, gate: str = "", backend: str = "local", target_px: int | str = 2_000_000,
                  text: int | str = 1, offdomain: int | str = 1, twins: int | str = 1, doors: int | str = 1,
-                 windows: int | str = 1, **kwargs):
+                 windows: int | str = 1, prescan: int | str = 1, **kwargs):
         super().__init__(**kwargs)
         self.backend = backend
         self.target_px = int(target_px)
@@ -135,6 +135,7 @@ class RasterSolver(BaseSolver):
         self.twins = bool(int(twins))  # 0 = act as if no vector twin existed (simulates an unseen PNG-only plan)
         self.doors = bool(int(doors))  # off-domain door counts from drawn swing arcs (doorarcs.py); 0 = abstain
         self.windows = bool(int(windows))  # off-domain window counts from 4-line wall symbols (windows.py); 0 = abstain
+        self.prescan = bool(int(prescan))  # scale-free window pre-scan before the text layer; 0 = always read the bar
         self.gate = load_gate()
         for part in filter(None, (gate or "").split(",")):
             c, m = part.split(":")
@@ -366,6 +367,10 @@ class RasterSolver(BaseSolver):
 
         img_path = self._raster_file(path)
         if img_path is None or not self._clean(img_path, trace, "window symbols"):
+            return None
+        if self.prescan and not WS.prescan(T._abspath(img_path)):  # before the text layer: no symbol, no tokens
+            trace.append("window symbols: no 4-line window symbol at any common scale (this drawing draws windows "
+                         "another way)")
             return None
         bar = self._metric_bar(img_path, trace, "window symbols", "the wall/window sizes in pixels are unknown")
         if bar is None:

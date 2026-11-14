@@ -44,6 +44,16 @@ def clean_render(png: str) -> tuple[bool, float, float]:
     return pure >= CLEAN_WHITE and top >= CLEAN_TOP8, pure, top
 
 
+PRESCAN_PX_PER_M = (50, 80, 120)  # 1:100-ish renders at common resolutions; stops at the first scale with a hit
+
+
+def prescan(png: str) -> bool:
+    """Any 4-line window symbol at a guessed scale (no scale bar needed, ~0.1-0.6 s CPU)? Run BEFORE the text layer:
+    a clean render without a single such symbol (most CubiCasa-style plans: 16 of 21 clean uploads) then costs no
+    tokens. Swiss dev: see experiments/w3/doorwin/prescan_check.py."""
+    return any(detect(png, s) for s in PRESCAN_PX_PER_M)
+
+
 def _runs(prof: np.ndarray):
     """Non-white runs along a 1-D profile: (start, end_exclusive, min value, ink mass = sum(255 - v))."""
     nw = prof < WHITE
