@@ -529,11 +529,13 @@ class Pipeline(BaseSolver):
             total = total.add(_cost_of(a))
             if a.value is None:
                 continue
-            if derived and not (a.cost.llm_calls or 0) and a.confidence >= self.raw_accept:
+            if derived and not any(str(t).startswith("table QA code") for t in a.trace) and \
+                    a.confidence >= self.raw_accept:
                 # a rate / price / given constant (W5 01:49: "if each door costs 450 €, how much do the doors cost?"
-                # -> ifc 46 doors at 0.97): rules that read no LLM may have answered the measured quantity, not the
-                # derived one. Keep it as a capped second opinion; the agent computes (a table-QA solver that read
-                # the question with an LLM, e.g. schedule's pandas code, is trusted as before)
+                # -> ifc 46 doors at 0.97): rules may have answered the measured quantity, not the derived one (an
+                # LLM that only NAMES the operation does not help: dxf 'one value' -> 30 doors for "painting one
+                # door takes 1.5 h, how many hours ...?"). Keep it as a capped second opinion; the agent computes.
+                # Only table-QA code written for the whole question (schedule/dxf pandas) is trusted as before.
                 a = a.model_copy(deep=True)
                 a.confidence = round(min(a.confidence, DERIVED_CAP), 3)
                 a.missing = [*a.missing, f"{name} answered by rules ({a.value} {a.unit or ''}); the question's "

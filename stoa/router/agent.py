@@ -350,7 +350,8 @@ class Agent:
             else:
                 n_res = len(results)
                 obs = self._run(tool, inp, path, evidence, results, cost_box := [Cost()])
-                if tool == "ask" and names and len(results) > n_res and not any(n in inp.lower() for n in names):
+                if tool == "ask" and names and len(results) > n_res and not any(
+                        re.search(r"(?<![\w.\-])" + re.escape(n) + r"(?![\w.\-])", inp.lower()) for n in names):
                     # scope drift: the question names '1.korrus', the sub-question none of its names (the 8B model
                     # asked the whole-model door count for "doors per 100 m² on '1.korrus'": 211 instead of 46)
                     v, c, e, w = results[-1]
@@ -437,6 +438,11 @@ class Agent:
         itself (thresholds, room numbers) or a unit constant. -> (asks used, table used?, ungrounded numbers)."""
         num = re.compile(r"\d+(?:\.\d+)?")
         in_q = {float(t) for t in num.findall(question)}
+        # numbers as people write them: "1,200 €" (thousands), "2,40 €" / "1 500" (decimal comma, spaced thousands)
+        for t in re.findall(r"\d{1,3}(?:[,\u00a0\u202f ]\d{3})+(?!\d)", question):
+            in_q.add(float(re.sub(r"[,\u00a0\u202f ]", "", t)))
+        for t in re.findall(r"(?<![\d,])\d+,\d{1,2}(?![\d])", question):
+            in_q.add(float(t.replace(",", ".")))
         table = {float(t) for v, c, _, _ in results if c == -2.0 for t in num.findall(str(v))}
         asks = [r for r in results if r[1] >= 0 and _num(r[0]) is not None]
         calcs = [r for r in results if r[1] == -1.0]

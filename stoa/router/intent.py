@@ -132,7 +132,13 @@ _OPS = [
              r"\d\s*\S+\s+(?:kohden|kohta)\b"),  # fi/et postposition: "100 neliömetriä kohden"
     ("cost", r"\b(?:cost\w*|price[sd]?|pricing|kost(?:et|en|ar|er)?|preis\w*|co[uû]t\w*|prix|prezz\w*|maksa\w*|hinta\w*|"
              r"euros?|eur|dollars?|usd|chf|franken|francs?|kronor|kroner|pounds?|budget)\b|[€$£]"),
-    ("given", r"\b(?:if|assuming|assume|suppose|supposing|given that|wenn|falls|angenommen|jos|hvis|ifall|indien|se)\b"
+    ("given", r"\d+(?:[.,]\d+)?\s*(?:hours?|hrs?|h|days?|minutes?|mins?|weeks?|months?|litres?|liters?|kg|kilos?|tonnes?|"
+              r"tons?|workers?|stunden|std|tage?n?|minuten|wochen|liter|heures?|jours?|semaines?|ore|giorni|minuti|"
+              r"tuntia?|p[äa]iv[äa][äa]?|minuuttia|litraa?|timmar|dagar|minuter|uur|dagen|timer|dage)\b|"
+              r"\b(?:how many|wie viele|combien d['e]|quant[ie]|montako|kuinka monta|hur m[åa]nga|hoeveel|hvor mange)\s+"
+              r"(?:hours|days|minutes|weeks|months|litres|liters|kilos|tonnes|workers|stunden|tage|minuten|liter|heures|"
+              r"jours|ore|giorni|tuntia|p[äa]iv[äa][äa]|litraa|timmar|dagar|uur|dagen|timer|dage)\b|"
+              r"\b(?:if|assuming|assume|suppose|supposing|given that|wenn|falls|angenommen|jos|hvis|ifall|indien|se)\b"
               r"[^?.;]*(?:\d|" + _NUMWORD + r")|\bsi\s+(?:une?|le|la|les|l'|chaque|on|el|cada)\b[^?.;]*(?:\d|" + _NUMWORD + r")"),
 ]
 DERIVED = ("rate", "cost", "given")

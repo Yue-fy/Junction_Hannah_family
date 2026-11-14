@@ -121,7 +121,94 @@ def build(seed: int = SEED) -> list[dict]:
     return out
 
 
+def build2(seed: int = SEED) -> list[dict]:
+    """`derived2`: NEW wordings and recipes written before any run on them (generality check for derived.jsonl's
+    fixes): 'apiece', thousands separators, 'each X needs', 'pro m²' in German, Finnish 'jos', 'per 10 m²', no 'if'."""
+    rng = random.Random(seed + 13)
+    sog = split_of_group()
+    dev_groups = {g for g, s in sog.items() if s == "dev"}
+    cm = concept_map()
+    all_qs = load_questions()
+    by_qid = {q.qid: q for q in all_qs}
+    facts = collections.defaultdict(dict)
+    for q in all_qs:
+        if q.source not in ("cubicasa5k", "swiss_dwellings", "ifc_models") or drawing_group(q.path) not in dev_groups:
+            continue
+        if by_qid.get(cm.get(q.qid, q.qid), q).qid != q.qid:
+            continue
+        f = parse(q)
+        if f and isinstance(q.answer, (int, float)):
+            facts[q.path][f] = q.answer
+    cands = collections.defaultdict(list)
+    for path in sorted(facts):
+        F = facts[path]
+        g = lambda *k: F.get(tuple(k))  # noqa: E731
+        if "cubicasa5k" in path:
+            b, sk = g("cubi", "bedrooms"), g("cubi", "sinks")
+            if b:
+                cands["fi-beds"].append(_row(path, "Jos jokaiseen makuuhuoneeseen tarvitaan kaksi sänkyä, montako "
+                                                   "sänkyä tarvitaan yhteensä?", 2 * b, "count", "count", "fi-beds",
+                                             "cubicasa5k"))
+            if sk:
+                cands["taps"].append(_row(path, "Each sink or wash basin on this plan needs one new tap costing 85 euros. "
+                                                "What do the taps cost altogether?", 85 * sk, "EUR", "area", "taps",
+                                          "cubicasa5k"))
+        elif "swiss_dwellings" in path:
+            apts = [(f[1], v) for f, v in F.items() if f[0] == "swiss_apt_area"]
+            if apts:
+                a, v = rng.choice(sorted(apts))
+                cands["de-rent"].append(_row(path, f"Wie hoch ist die Monatsmiete der Wohnung {a} (Nettofläche ohne "
+                                                   f"Balkone und Aussenflächen) bei 25 CHF pro m²?", round(25 * v, 2),
+                                             "CHF", "area", "de-rent", "swiss_dwellings"))
+            d = g("swiss", "doors")
+            if d:
+                cands["door-paint"].append(_row(path, "Painting one door takes 1.5 hours. How many hours does it take to "
+                                                      "paint all the doors drawn on this plan?", round(1.5 * d, 2), "h",
+                                                "area", "door-paint", "swiss_dwellings"))
+        else:
+            area = {f[1]: v for f, v in F.items() if f[0] == "ifc_storey_area"}
+            doors = {f[2]: v for f, v in F.items() if f[0] == "ifc_plan_count" and f[1] == "doors"}
+            wins = {f[2]: v for f, v in F.items() if f[0] == "ifc_plan_count" and f[1] == "windows"}
+            for st, n in wins.items():
+                if n:
+                    cands["window-apiece"].append(_row(path, f"What would it cost to replace every window on '{st}' at "
+                                                             f"1,200 € apiece?", 1200 * n, "EUR", "area",
+                                                       "window-apiece", "ifc_models"))
+            for st, n in doors.items():
+                if n and area.get(st):
+                    cands["doors-per-10"].append(_row(path, f"Doors on '{st}': how many are there per 10 m² of room "
+                                                            f"area?", round(10 * n / area[st], 4), "", "area",
+                                                      "doors-per-10", "ifc_models"))
+            for st, v in area.items():
+                if v:
+                    cands["fr-cleaning"].append(_row(path, f"Le nettoyage coûte 2,40 € par m². Combien coûte le "
+                                                           f"nettoyage de toutes les pièces de '{st}' ?",
+                                                     round(2.4 * v, 2), "EUR", "area", "fr-cleaning", "ifc_models"))
+    out = []
+    for recipe in sorted(cands):
+        rows = cands[recipe]
+        rng.shuffle(rows)
+        seen = collections.Counter()
+        for r in rows:
+            if seen[r["path"]] >= 2:
+                continue
+            seen[r["path"]] += 1
+            r["meta"]["kind"] = "derived2"
+            out.append(r)
+            if sum(seen.values()) >= 8:
+                break
+    return out
+
+
 if __name__ == "__main__":
+    import sys
+
+    if sys.argv[1:] == ["2"]:
+        rows = build2()
+        out2 = OUT.with_name("derived2.jsonl")
+        out2.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows))
+        print(len(rows), "rows ->", out2, collections.Counter(r["meta"]["recipe"] for r in rows))
+        sys.exit(0)
     rows = build()
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows))
