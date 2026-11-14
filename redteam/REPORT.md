@@ -20,7 +20,10 @@ caused by the perturbation, not by the drawing.
    Italian), a singular name matching 8 rooms (v5, open), a floor the building doesn't have (v8, open).
 3. **The owners fixed things fast and generally.** Every round was re-measured on the same rows (tables below):
    confident false-premise answers 7/24 → 0/24; "whole building" in SV/FR/ET/FI/PL 0/15 → 15/15 within an hour.
-4. **Still open on 753eccb (20 of 418 answered wrong at ≥ 0.8, all in v5–v8):** "basement" when the model calls it
+4. **Latest (05:13, night 753eccb + the owners' newest commits, pre-merge): 9 of 450 answered wrong at ≥ 0.8; 273 of
+   277 answers at ≥ 0.8 right.** Left: "1,200 euros" read as 1.2 by the IFC rules (bug 17, demo-visible), "the 7th
+   floor" of a 5-storey model, "how many floors" → 7, Finnish "kellarikerros", "whole building" on a one-floor plan.
+   *Before those commits, on 753eccb itself (20 of 418, all in v5–v8):* "basement" when the model calls it
    'KG' (6 languages → the sheet's storey at 0.88–0.98, W1), Italian "in tutto l'edificio" (3, W1), "How big is the
    Küche?" with several kitchens → silent sum at 0.98 (5, W2; fixed on night-W2 2254acb: 0.50 + "name the room"), "how many floors" → 7 incl. foundation and roof (W1),
    "whole building" on a one-floor plan and "the 7th floor" of a 5-storey model (5, W1/W2). On scans, unanswerable
@@ -473,6 +476,14 @@ many floors" → 7; v8 scope premises ×5.
 - **Fix:** a comma, dot, apostrophe or space followed by exactly three digits and then a non-digit is a thousands
   separator; one or two digits after a comma is a decimal. Same family as bug 9: the arithmetic is verified, the
   operand is not.
+
+## Pre-merge check #2 (05:13): night 753eccb + W1 cee4aa7 + W2 2254acb + W4 afc5be0 + R2 2db30c0 (scratch snapshot)
+All 450 rows, run `20261114-051156-pipeline-questions-ebdb` vs `98f0` (+ v11 `ccd8`): **0 answers lost, 11 won** —
+"basement" in EN/DE/NL/FR/SV → 'KG' 20 (at a deliberately modest 0.42), the Gdynia elevation sheet's basement 5 (0.80)
+and its room area 54.41; Italian "in tutto l'edificio" now the model total. Core 283: 96.5 %, 190/190 at ≥ 0.8, 0/24
+premises. All 450: **93.6 % scored, 273/277 right at ≥ 0.8**, $0.072 per 1,000. **9 confident-wrong left:** "1,200
+euros" / "€1,500" read as 1.2 / 1.5 (W1, bug 17), "7th / eighth floor" (W1), "how many floors" → 7 (W1), Finnish
+"kellarikerroksessa" (W1), one-floor "whole building" ×3 (W2).
 
 ## Cost under attack (05:12; bug 8 re-measured on run `20261114-050528-pipeline-questions-98f0`, 440 Qs)
 Overall $0.073 per 1,000 questions, but the **15 most expensive questions (3 % of rows) are 53 % of the cost**, and

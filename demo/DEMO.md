@@ -114,8 +114,9 @@ went to zero after each fix, and each new family found the same root cause somew
   the storey of the sheet on screen, confidently (12 of 20 storey rows, 12 of 12 SV/FR/IT/ET "whole building" rows).
   Same root cause, a new surface: the check verifies the number, not that it is about the place that was asked.
   **One round later** (night 753eccb, 05:00): a cross-language reading (as asked + translated, compared) fixed "whole
-  building" in 5 of 6 languages and half the storey words; 20 of 418 red-team answers are still confidently wrong
-  ("basement", Italian, ambiguous room names). Say the latest numbers; check they are in the test-2 build.
+  building" in 5 of 6 languages and half the storey words; with the owners' next commits (pre-merge check 05:13) the
+  basement, Italian and ambiguous-room cases are fixed too: **9 of 450 answers confidently wrong, 273 of 277 confident
+  answers right**. Say the latest numbers; check the commits are in the test-2 build.
 
 ### If a judge types their own question (measured 04:55 on dde6347, `redteam/REPORT.md` v6)
 - Esplanades IFC sheet — safe: "How many rooms / columns are on this floor?" (50 / 37), "How many doors are on the
