@@ -223,3 +223,26 @@ def test_eval_hides_gemini_key_on_bulk_runs(monkeypatch, capsys):
 
     assert "GEMINI_API_KEY" not in os.environ and "GOOGLE_API_KEY" not in os.environ
     assert "hidden from solvers" in capsys.readouterr().err
+
+
+def test_human_split_last_row_wins(tmp_path, monkeypatch):
+    """`--split human` reads agent H's append-only expert file; the last save per qid wins; sureness goes to meta."""
+    import json
+
+    from stoa.eval import splits
+
+    monkeypatch.setattr(splits, "shared_root", lambda: tmp_path)
+    (tmp_path / "human").mkdir()
+    rows = [
+        {"qid": "h-1", "path": "data/cubicasa5k/x.png", "question": "How many doors?", "answer": "3", "unit": "count",
+         "type": "count", "sureness": "fairly_sure"},
+        {"qid": "h-1", "path": "data/cubicasa5k/x.png", "question": "How many doors?", "answer": "4", "unit": "count",
+         "type": "count", "sureness": "certain"},
+        {"qid": "h-2", "path": "data/cubicasa5k/x.png", "question": "What is shown?", "answer": "a flat", "type": "text"},
+    ]
+    (tmp_path / "human" / "questions.jsonl").write_text("\n".join(json.dumps(r) for r in rows) + "\n")
+    qs = splits.load_split("human")
+    assert [q.qid for q in qs] == ["h-1", "h-2"]
+    assert qs[0].answer == 4.0 and qs[0].meta["kind"] == "human:certain"
+    assert qs[1].answer == "a flat" and qs[1].meta["kind"] == "human:unknown"
+    assert splits.split_hash("human")

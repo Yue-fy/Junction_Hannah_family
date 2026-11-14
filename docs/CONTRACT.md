@@ -144,7 +144,9 @@ $JUNCTION_VENV/bin/python -m stoa.eval --list        # registered solvers + impo
   confidence, solver, evidence, assumptions, missing, cost, trace; for gold-less files such as Stoa's examples;
   refuses held-out/sealed runs).
   Extra splits: `train_gate` (960 train Qs for choosing gates/thresholds), `cc5k_heldout` (CC5K-pretrained
-  models only), `hard` (generality), or any split file path.
+  models only), `hard` (generality), `human` (the expert's own questions from agent H's workbench,
+  `$JUNCTION_SHARED/human/questions.jsonl`; last save per qid wins; `meta.kind = "human:<sureness>"`; report it
+  separately from dev), or any split file path.
 - **Hosted Gemini guard** (COMMON.md, Sat 10:50: no bulk use of Google's hackathon key): a run of more than 200
   questions hides `GEMINI_API_KEY` / `GOOGLE_API_KEY` from every solver (printed on stderr) unless `--allow-gemini`.
   Solvers that call Gemini must therefore work (fall back) without the key. `experiments/F/probe_suite.py` always hides it.
@@ -158,8 +160,9 @@ $JUNCTION_VENV/bin/python -m stoa.eval --list        # registered solvers + impo
   this documents existing behaviour, F c226–c227):
   - `source_of()`: the `<source>` of a `.../data/<source>/...` folder in the path (known sources only); else an IFC plan
     sheet (`.pdf/.svg/.png/.jpg`) whose model sits in the same folder (`<model>_<view>.pdf` next to `<model>.ifc`, or the
-    only `.ifc` in the folder) is `ifc_models`; else `unknown` (routed by extension: CubiCasa readers, the LoRA's
-    per-concept gate and the DXF twin are not used).
+    only `.ifc` in the folder) is `ifc_models`; else `unknown` (routed by extension: the CubiCasa readers and the
+    LoRA's per-concept gate are not used; `dxf` still reads a same-stem DXF twin whose layer table uses the Swiss layer
+    names, W2 e461199).
   - `siblings()`: files with the same stem in the same folder (+ the IFC model of an `ifc_models` sheet).
   - `dataset_rel()`: an absolute path is cut to `data/<source>/<file>` only when the dataset holds the same file
     (same relative path and size), so a new drawing is never confused with a dataset file of the same name.
