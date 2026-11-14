@@ -161,7 +161,7 @@ class Pipeline(BaseSolver):
                  max_tries: int | str = 3, vlm_args: str | dict | None = None, use_gate: int | str = 1,
                  compose: int | str = 1, normalise: int | str = 1, crosscheck: int | str = 1, agent: int | str = 1,
                  raw_first: int | str = 1, raw_accept: float | str = 0.45, cc5k: int | str = 1, lora: int | str = 1,
-                 lora_second: int | str = 0, lora_conf: str = "gate", **kwargs):
+                 lora_second: int | str = 0, lora_conf: str = "own", **kwargs):
         super().__init__(**kwargs)
         self.accept = float(accept)
         self.agree = {"1": "cheap", "0": "never", "2": "always"}.get(str(agree), str(agree))  # cheap|never|always
@@ -182,8 +182,9 @@ class Pipeline(BaseSolver):
         # raster as a second reader of every LoRA count (503463a) cost x20 on cubicasa (S0 03:56: $0.021 -> $0.417/1k)
         # for no accuracy; off by default: boxes come on demand (W5's 'Show where'), cc5k=1 adds cached detector boxes
         self.lora_second = bool(int(lora_second))
-        # LoRA confidence: "gate" = its per-key train_gate hit rate (5760cce, measured); "own" = vlm_lora's own
-        # train_gate-calibrated p(answer digits) (R1 04:06: dev ECE 0.022 vs 0.035; awaiting F's held-out check)
+        # LoRA confidence: "own" = vlm_lora's own train_gate-calibrated p(answer digits) (R1 04:06: dev ECE 0.022 vs
+        # 0.035; F 04:12: safe on held-out only with the unseen-wording/structure cap on top, which _unseen_conf is);
+        # "gate" = its per-key train_gate hit rate (5760cce)
         self.lora_conf = str(lora_conf)
         self.vlm_args = json.loads(vlm_args) if isinstance(vlm_args, str) else dict(vlm_args or {})
         self._solvers: dict[str, object | None] = {}
@@ -210,6 +211,12 @@ class Pipeline(BaseSolver):
     # -- main -------------------------------------------------------------------------------------
     def solve(self, path: str, question: str) -> Answer:
         t0 = time.perf_counter()
+        try:  # caches, gates and the KG key on the dataset-relative path (F 03:49: absolute paths missed them)
+            from stoa.data import dataset_rel
+
+            path = dataset_rel(path)
+        except Exception:  # noqa: BLE001
+            pass
         plan = decompose(source_of(path), question) if self.compose else None
         if plan is None:
             ans = self._solve_atomic(path, question)
@@ -389,9 +396,11 @@ class Pipeline(BaseSolver):
                     # an unseen wording of a known kind: the VLM/LoRA rate was measured on the template wording
                     # (F hard2q: compounds read as one class went to the LoRA at its rate, 8 of 11 wrong)
                     conf = _unseen_conf(conf, question)
-                if ask == question and not known_template(question) and TIER.get(name) == "deterministic":
-                    # an unseen wording asked as is: the template's train rate does not vouch for how the solver
-                    # read it (F hard2: "how many times larger is B than A" -> apartment count at 0.976)
+                if TIER.get(name) == "deterministic":
+                    # the train rate vouches for the solver on that KIND, never above what the solver says about THIS
+                    # question: false premises in template wording ("columns on '05 Vijfde verdieping'", no such
+                    # storey) came back at 0.98 although ifc said 0.29 "could not resolve" (Q 04:13; dev cost 0: ifc's
+                    # own conf >= 0.95, dxf's >= 0.80 on dev). Also F hard2: unseen wordings asked as is.
                     conf = min(conf, ans.confidence)
             else:
                 conf = ans.confidence
