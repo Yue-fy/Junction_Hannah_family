@@ -363,22 +363,51 @@ KINDS_SYN = {
 }
 
 
+# v13 (c225, 09:12): quick-typing wordings (lower-case ids/labels, common misspellings, no punctuation).
+KINDS_TYPO = {
+    "typo_apt": (r"^What is the net floor area of apartment (?P<L>[A-Z]) in m², summing all its rooms except balconies", {
+        "lower_id": ("what is the net floor area of apartment {l} without balconies", False),
+        "appartment": ("What is the net floor area of appartment {L}, excluding balconies?", False),
+        "apartmnet": ("net floor area of apartmnet {L} excluding balconies?", False),
+        "flat_lower": ("how big is flat {l} without the balcony", False),
+        "caps": ("WHAT IS THE NET FLOOR AREA OF APARTMENT {L} EXCLUDING BALCONIES?", False),
+        "squ_meters": ("apartment {L} net area in sq m (no balconies)", False),
+    }),
+    "typo_room": (r"^What is the net floor area of room (?P<N>\d+\.\d+) \('(?P<S>[^']+)'\) in m²\?$", {
+        "lower_label": ("area of the {s} room {N}?", False),
+        "comma_no": ("what is the area of room {Nc}", False),
+        "roon": ("How big is roon {N}?", False),
+    }),
+    "typo_count_label": (r"^How many rooms labelled '(?P<S>[^']+)' are there on this floor\?$", {
+        "lower_label": ("how many {s} rooms are there", False),
+        "labeled_us": ("How many rooms labeled '{S}' are on this floor?", False),
+        "quoted_lower": ("how many rooms are labelled '{s}'", False),
+    }),
+    "typo_doors": (r"^How many doors \(interior doors and entrance doors together\) are drawn on this floor plan\?$", {
+        "dors": ("how many dors are on this floor", False),
+        "no_q": ("number of doors on this plan", False),
+    }),
+}
+
+
 def main():
     ml = "--ml" in sys.argv
     cc = "--cc" in sys.argv
     ifc8 = "--ifc" in sys.argv
     ml2 = "--ml2" in sys.argv
     syn = "--syn" in sys.argv
-    argv = [a for a in sys.argv[1:] if a not in ("--ml", "--cc", "--ifc", "--ml2", "--syn")]
+    typo = "--typo" in sys.argv
+    argv = [a for a in sys.argv[1:] if a not in ("--ml", "--cc", "--ifc", "--ml2", "--syn", "--typo")]
     n = int(argv[0]) if argv else 30
     dev_all = load_split("dev")
     out = os.path.join(os.environ["JUNCTION_SHARED"], "artifacts", "F",
                        "apt_wording_ml.jsonl" if ml else "apt_wording_cc.jsonl" if cc else
                        "apt_wording_ifc.jsonl" if ifc8 else "apt_wording_ml2.jsonl" if ml2 else
-                       "apt_wording_syn.jsonl" if syn else "apt_wording.jsonl")
+                       "apt_wording_syn.jsonl" if syn else
+                       "apt_wording_typo.jsonl" if typo else "apt_wording.jsonl")
     total = 0
     with open(out, "w", encoding="utf-8") as f:
-        for kind, (rx, wordings) in (KINDS_ML if ml else KINDS_CC if cc else KINDS_IFC if ifc8 else KINDS_ML2 if ml2 else KINDS_SYN if syn else KINDS).items():
+        for kind, (rx, wordings) in (KINDS_ML if ml else KINDS_CC if cc else KINDS_IFC if ifc8 else KINDS_ML2 if ml2 else KINDS_SYN if syn else KINDS_TYPO if typo else KINDS).items():
             bases, seen = [], collections.Counter()
             per_path = 4 if kind.startswith("ifc8") else 1
             source = ("ifc_models" if kind.startswith("ifc") else "cubicasa5k" if kind.startswith("cc")
@@ -391,6 +420,12 @@ def main():
                     if "K" in g:
                         g["N"] = g["K"].replace(" (spaces)", "")
                         g.update({f"N_{lang}": nouns[g["N"]] for lang, nouns in _NOUNS.items()})
+                    if "L" in g:
+                        g["l"] = g["L"].lower()
+                    if "S" in g:
+                        g["s"] = g["S"].lower()
+                    if "N" in g and "." in g["N"]:
+                        g["Nc"] = g["N"].replace(".", ",")
                     bases.append((q, g))
             random.Random(7).shuffle(bases)
             for q, g in bases[:n]:
