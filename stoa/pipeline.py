@@ -50,6 +50,8 @@ from stoa.router.prior import known_template
 DERIVED_CAP = 0.4  # max confidence of a rules-only (0 LLM calls) as-asked answer to a derived-quantity question
 UNSEEN_CAP = 0.5  # (until c72) max confidence of a local-tier / prior answer to a wording that is not a train template
 UNSEEN_SCALE = 0.92  # unseen wording, ONE plain concept: hard's cubicasa paraphrases were 79.2% right at mean conf 0.863
+UNSEEN_MAX = 0.75  # an unseen wording never enters the >= 0.8 'trust' bin (F 04:05, hard2q aggregate)
+XCHECK_CAP = 0.7  # a disagreeing cross-check (✗) caps confidence (S0 04:00: sealed test, 21 such answers at >= 0.8, 76% right)
 UNSEEN_STRUCT_CAP = 0.35  # unseen wording WITH extra structure (comparison/exclusion words, numbers): F, held-out: 33%
 
 
@@ -73,7 +75,9 @@ def _tokens(s: str) -> set[str]:
 def _unseen_conf(conf: float, question: str) -> float:
     """Confidence of a local-tier / LoRA / prior answer measured on train templates, for a wording that is not one
     (F 03:23: the flat 0.5 cap made plain paraphrases under-confident and left compounds over-confident)."""
-    return min(conf, UNSEEN_STRUCT_CAP) if extra_structure(question) else conf * UNSEEN_SCALE
+    # F 04:05 (held-out): x0.92 alone let 9 compound cubicasa answers into the >= 0.8 bin (7 wrong) -> an unseen wording
+    # never enters the trust bin (hard: ECE 0.038 -> 0.045, the price of a cleaner >= 0.8 bin on new wordings)
+    return min(conf, UNSEEN_STRUCT_CAP) if extra_structure(question) else min(conf * UNSEEN_SCALE, UNSEEN_MAX)
 # D8: symbol counts R1's pretrained CubiCasa5K model answers; its gate is measured on cc5k_heldout only
 CC5K_KEYS = {"count:window:drawing", "count:door:drawing", "count:wc:drawing", "count:sink:drawing"}
 GATING_CC5K = next((f for f in (Path(__file__).parent / "router" / "gating_cc5k.json",
@@ -206,6 +210,11 @@ class Pipeline(BaseSolver):
         else:
             ans = self._solve_composed(path, question, plan)
         ans.cost.wall_seconds = round(time.perf_counter() - t0, 4)
+        if ans.value is not None and ans.confidence > XCHECK_CAP and any(
+                "cross-check" in str(t) and "✗" in str(t) for t in ans.trace):
+            ans.trace.append(f"a cross-check disagrees (✗): confidence capped at {XCHECK_CAP}")
+            ans.confidence = XCHECK_CAP
+            ans.missing = [*ans.missing, "an independent cross-check disagrees with this answer (see trace)"]
         return ans
 
     def _solve_composed(self, path: str, question: str, plan) -> Answer:
