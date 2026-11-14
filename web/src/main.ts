@@ -305,6 +305,28 @@ const IFC_QUESTIONS = [
   "How tall is the building?",
   "How many windows are in this model?",
 ];
+// Harder question kinds (Stoa: the hidden set is harder than the dataset's templates), offered in the example menu.
+// Only kinds checked end to end through the API (W5 cycle 7: 4 ifc_models projects, 3 Swiss floors, every answer
+// right against the knowledge graph / the dataset's own counts): a set answer, plan-vs-model links, a given price,
+// sums and differences of counts. {S} = the plan's storey from the knowledge graph.
+const HARDER_IFC_PLAN = [
+  "Which rooms on '{S}' are larger than 20 m²?",
+  "Do the floor plan and the IFC model agree on the number of windows on '{S}'?",
+  "How many windows on '{S}' are in the model but not drawn on this plan?",
+  "If each door costs 450 euros, what do all the doors on '{S}' cost in total?",
+  "How many doors and windows are there on '{S}' together?",
+];
+const HARDER_SWISS = [
+  "How many more doors than windows are drawn on this floor plan?",
+  "Wie viele Türen und Fenster sind insgesamt auf diesem Grundriss eingezeichnet?",
+  "What is the total area of all rooms on this floor plan, in m²?",
+];
+async function harderQuestions(f: FileInfo): Promise<string[]> {
+  if (f.source === "swiss_dwellings" && f.ext === ".pdf") return HARDER_SWISS;
+  if (f.source !== "ifc_models" || f.ext !== ".pdf") return [];
+  const s = (await knowledgeGraph(f.path).catch(() => null))?.storey?.name;
+  return s ? HARDER_IFC_PLAN.map((q) => q.replace("{S}", s)) : [];
+}
 const uploads: FileInfo[] = [];
 
 async function refreshFiles() {
@@ -475,7 +497,7 @@ async function loadExamples(f: FileInfo) {
   sel.innerHTML = `<option value="">Example questions…</option>`;
   $("chips").innerHTML = "";
   try {
-    const qs = await exampleQuestions(f.path);
+    const [qs, harder] = await Promise.all([exampleQuestions(f.path), harderQuestions(f).catch(() => [] as string[])]);
     if (state.file?.path !== f.path) return;
     const chips = $("chips");
     const english = qs.filter((q) => /\b(how many|what|which|is there|are there)\b/i.test(q.question));
@@ -497,8 +519,11 @@ async function loadExamples(f: FileInfo) {
     }));
     // files without dataset questions (historical scans): the general questions, also in the menu (chips show ~2)
     const menu = qs.length ? qs : pick.map((q) => ({ ...q, has_fixture: false }));
-    sel.innerHTML = `<option value="">${qs.length ? "More example questions" : f.ext === ".ifc" ? "Questions for any model" : "Questions for any drawing"} (${menu.length})…</option>` + menu.map((q) =>
-      `<option value="${esc(q.question)}">${q.has_fixture ? "★ " : ""}${esc(q.question.length > 110 ? q.question.slice(0, 107) + "…" : q.question)}</option>`).join("");
+    const opt = (q: string, star = false) => `<option value="${esc(q)}">${star ? "★ " : ""}${esc(q.length > 110 ? q.slice(0, 107) + "…" : q)}</option>`;
+    const hard = harder.filter((q) => !menu.some((m) => m.question === q));
+    sel.innerHTML = `<option value="">${qs.length ? "More example questions" : f.ext === ".ifc" ? "Questions for any model" : "Questions for any drawing"} (${menu.length}${hard.length ? ` + ${hard.length} harder` : ""})…</option>`
+      + (hard.length ? `<optgroup label="Harder: lists, plan vs model, prices, sums (no dataset template)">${hard.map((q) => opt(q)).join("")}</optgroup><optgroup label="From the dataset">` : "")
+      + menu.map((q) => opt(q.question, q.has_fixture)).join("") + (hard.length ? "</optgroup>" : "");
   } catch {
     /* keep empty */
   }
