@@ -1,7 +1,7 @@
 """Room-graph probe: answer per-room / relational questions from graph_text(room_graph(path)) with the local LLM.
 
 Usage (repo root):
-  python experiments/r1/room_graph/probe/run.py answer PROBE.jsonl --mode graph|graph_img|img [--out OUT.jsonl]
+  python experiments/r1/room_graph/probe/run.py answer PROBE.jsonl --mode graph|graph_img|img|solve [--out OUT.jsonl]
   python experiments/r1/room_graph/probe/run.py score PROBE.jsonl PRED.jsonl [PRED.jsonl ...]
 
 `answer` writes one JSON line per question {qid, value, unit, room, raw, tokens_in, tokens_out, seconds}.
@@ -46,6 +46,15 @@ def _graph(path: str) -> str:
 
 def answer_one(row: dict, mode: str) -> dict:
     from stoa import llm
+    if mode == "solve":  # the wire-ready function (experiments/r1/room_graph/answer.py)
+        from experiments.r1.room_graph.answer import solve
+        t = time.time()
+        with llm.cost_meter() as c:
+            a = solve(row["path"], row["question"])
+        return {"qid": row["qid"], "value": a.value, "unit": a.unit, "confidence": a.confidence,
+                "evidence": len(a.evidence), "trace": a.trace, "assumptions": a.assumptions, "missing": a.missing,
+                "tokens_in": c.llm_tokens_in, "tokens_out": c.llm_tokens_out, "seconds": round(time.time() - t, 2),
+                "mode": mode}
     from stoa.data import abspath
     path = row["path"]
     t = time.time()
@@ -86,6 +95,9 @@ def correct(row: dict, value) -> bool:
         x = _num(value)
         return x is not None and abs(x - gold) <= 0.02 * abs(gold)
     s = " " + re.sub(r"[^a-zäöå0-9/.]+", " ", str(value or "").lower()) + " "
+    for a in row["meta"].get("reject", []):  # the answer names a different room that shares the type word
+        if re.search(r"(?<![a-zäöå])" + re.escape(a.lower()) + r"(?![a-zäöå])", s):
+            return False
     for a in row["meta"]["accept"]:
         if re.search(r"(?<![a-zäöå])" + re.escape(a.lower()) + r"(?![a-zäöå])", s):
             return True
@@ -111,7 +123,7 @@ def main() -> None:
     ap.add_argument("cmd", choices=["answer", "score"])
     ap.add_argument("probe")
     ap.add_argument("preds", nargs="*")
-    ap.add_argument("--mode", default="graph", choices=["graph", "graph_img", "img"])
+    ap.add_argument("--mode", default="graph", choices=["graph", "graph_img", "img", "solve"])
     ap.add_argument("--out")
     ap.add_argument("--workers", type=int, default=3)
     a = ap.parse_args()

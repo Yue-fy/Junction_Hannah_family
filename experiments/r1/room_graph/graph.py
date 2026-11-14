@@ -310,7 +310,7 @@ def room_graph(path: str, labels: list | None = None, live: bool = True, printed
         from experiments.r1.room_graph.validate import norm as _norm
         # codes validate.py leaves out because they are ambiguous for a label<->class check, but fine for naming
         extra = [(r"^(H|AH|HUONE|ASUINH(UONE)?|MAKUUHUONE\d*)$", "bedroom"), (r"^(HV|VAATEHUONE)$", "storage"),
-                 (r"^(L\.?H\.?|LOYLYHUONE)$", "sauna"), (r"^(SUIHKU|SUIHKUH(UONE)?|KHH|PH/KHH|KPH/KHH)$", "bath")]
+                 (r"^(L\.?H\.?|LOYLYHUONE)$", "sauna"), (r"^(SUIHKU|SUIHKUH(UONE)?|PH/KHH|KPH/KHH)$", "bath")]
 
         def kind(t):
             k = expected(t)
@@ -341,7 +341,8 @@ def room_graph(path: str, labels: list | None = None, live: bool = True, printed
                     printed_total.append({"m2": it["m2"], "text": it["text"], "box": b})
                 elif 0 <= cx < W and 0 <= cy < H and inst[cy, cx]:
                     mt = meta[int(inst[cy, cx])]
-                    mt.setdefault("printed", []).append({"m2": it["m2"], "text": it["text"], "box": b})
+                    mt.setdefault("printed", []).append({"m2": it["m2"], "text": it["text"], "box": b,
+                                                        "unitless": bool(it.get("unitless"))})
         except Exception as e:  # noqa: BLE001
             notes.append(f"printed areas not read: {type(e).__name__}")
         # labels often carry the area without a unit ('MAKUUHUONE 13,1', 'MH 9.5'): use it when the reader found none
@@ -353,7 +354,7 @@ def room_graph(path: str, labels: list | None = None, live: bool = True, printed
                 m = _re2.search(r"(?<![\d.,])(\d{1,3}[.,]\d)(?![\d.,])", t)
                 if m and 1.0 <= float(m.group(1).replace(",", ".")) <= 200:
                     mt.setdefault("printed", []).append({"m2": float(m.group(1).replace(",", ".")), "text": t,
-                                                        "box": None, "from": "label"})
+                                                        "box": None, "from": "label", "unitless": True})
         for mt in meta.values():  # two printed room areas in one region = a partition the segmentation missed
             if len(mt.get("printed", [])) >= 2 and not mt.get("merged"):
                 mt["merged"] = {mt["cls"]: len(mt["printed"])}
@@ -393,6 +394,8 @@ def graph_text(g: dict) -> str:
         fx = ", ".join(f"{len(v)} {k}{'s' if len(v) > 1 else ''}" for k, v in r["fixtures"].items())
         if r.get("printed"):
             area = " printed " + " + ".join(f"{p['m2']} m²" for p in r["printed"])
+            if any(p.get("unitless") for p in r["printed"]):
+                area += " (number printed without a unit)"
         else:
             area = f" ~{r['m2']} m² ({r['m2_80'][0]}–{r['m2_80'][1]}, estimated)" if "m2" in r else ""
         name = f" '{r['label']}'" if r.get("label") else ""

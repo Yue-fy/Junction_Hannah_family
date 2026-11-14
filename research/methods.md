@@ -575,3 +575,25 @@ parses windows + bedrooms = 6; "doors of the kitchen" → agent 2; "rooms that c
 at conf 0.75. Confidence was ≤ 0.48 on all but the last, so calibration mostly held; the scope was lost.
 How to use: an agent tool `room_graph(path)` → graph_text for cubicasa-style rasters whenever the question names a
 room or a relation (of the kitchen / entered from / next to / opens onto / largest room / area of the bedrooms).
+**Update (same cycle): wire-ready `solve()` and a third, untouched set.** `experiments/r1/room_graph/answer.py`
+`solve(path, question) -> stoa.contract.Answer` (value, unit, provisional confidence, evidence = boxes of the rooms
+used + the windows / doors / fixtures the question is about, image_px; trace; assumptions; missing). Changes after
+v1/v2: the LLM lists the numbers to add and Python adds them, only when its own value is within 10% of the sum (an
+arithmetic slip; a bigger gap = another basis such as a printed apartment total, kept); KHH is a utility room, not a
+bath (my naming map had it wrong); the area reader, when it finds no area with a unit, also tries unit-less numbers
+and the image turned 90° each way and keeps the orientation with the most areas (tie → turned), items flagged
+`unitless` (conf 0.6 instead of 0.85). Scoring made stricter for every method: an answer naming a different room that
+shares the type word ('bathroom (KHH)' when the sauna opens to PH) is wrong — this moved graph v2 from 11 to 10.
+| Set | solve() | pipeline | vlm_direct |
+|---|---:|---:|---:|
+| v1 (dev, 29) | 23 | 17 | 19 |
+| v2 (used to debug solve(), 14) | 11 | 6 | 6 |
+| **v3 (untouched confirmation, 11 Qs / 3 new plans)** | **8** | 4 | 4 |
+| all 54 Qs / 14 plans | **42 (78%)** | 27 (50%) | 29 (54%) |
+v3: 4 vs 0 discordant (p = 0.125). All 54: vs pipeline 18 vs 3 (McNemar p = 0.0015), **+27.8 pts, 95% plan-cluster
+bootstrap [+15.4, +41.4]**; vs vlm_direct 16 vs 3 (p = 0.004). v1/v2 were used for development, so the pooled gain is
+optimistic; v3 alone agrees in direction. Cost per question: one local 8B text call (~1.5k tokens in) + the plan's
+area reads (1 cached VLM call, 3 when nothing with a unit is printed) + CC5K on CPU; $0 hosted.
+v3 misses (all methods): the balcony door of a bedroom that also opens to the living room (all say living room); a
+closet entered from the hall (solve says bedroom); upper-floor bedroom areas on a two-storey sheet (graph has no
+floor split: 25.0 for 36.5).
