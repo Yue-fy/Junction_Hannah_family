@@ -180,7 +180,7 @@ function traceHtml(trace: string[], keep = 6) {
 }
 
 // --- general agent (stoa/router/agent.py): "think: <thought> → <tool>(<input>): <result>" / "think: … → answer <v> <unit>"
-export interface AgentStep { tool: string; input: string; result: string; thought: string; conf?: number; by?: string }
+export interface AgentStep { tool: string; input: string; result: string; thought: string; conf?: number; by?: string; warn?: string; refused?: boolean }
 export interface AgentRun { why?: string; calls?: number; steps: AgentStep[] }
 
 export function agentRun(trace: string[] | undefined): AgentRun | null {
@@ -193,14 +193,23 @@ export function agentRun(trace: string[] | undefined): AgentRun | null {
     const h = l.match(/^agent: general tool-using path \((\d+) steps?, (\d+) LLM calls?\)/);
     if (h) { calls = Number(h[2]); continue; }
     const a = l.match(/^think:\s*(.*?)\s*→\s*answer\s*(.*)$/);
-    if (a) { steps.push({ tool: "answer", input: "", result: a[2].trim(), thought: a[1] }); continue; }
+    // W4: "think: … → answer before any tool result: refused" = the loop rejected an answer with no tool evidence
+    if (a) {
+      const refused = /before any tool result.*refused/i.test(a[2]);
+      steps.push({ tool: "answer", input: "", result: refused ? "rejected: answered before using any tool, re-planned" : a[2].trim(), thought: a[1], refused });
+      continue;
+    }
     const t = l.match(/^think:\s*(.*?)\s*→\s*(ask|table|find_text|look|calc)\(/);
     if (!t) continue;
     const rest = l.slice(t[0].length);
     const cut = rest.indexOf("): ");
     const input = cut >= 0 ? rest.slice(0, cut) : rest;
     let result = cut >= 0 ? rest.slice(cut + 3) : "";
-    const s: AgentStep = { tool: t[2], input, result, thought: t[1] };
+    // W4: observations may end "-- WARNING: this sub-question names none of '<storey>' …" (scope drift; the agent re-asks)
+    const wi = result.search(/\s*--\s*WARNING:\s*/);
+    const warn = wi >= 0 ? result.slice(wi).replace(/^\s*--\s*WARNING:\s*/, "") : undefined;
+    if (wi >= 0) result = result.slice(0, wi);
+    const s: AgentStep = { tool: t[2], input, result, thought: t[1], warn };
     const r = result.match(/^(.*?)\s*\(confidence ([\d.]+), by ([\w/.-]+)\)\s*$/);
     if (r) { result = r[1]; s.conf = Number(r[2]); s.by = r[3].replace(/^pipeline\//, ""); s.result = result; }
     steps.push(s);
@@ -226,13 +235,14 @@ function reasoningHtml(run: AgentRun, a: Answer) {
   const li = (s: AgentStep, i: number) => {
     const n = `<span class="sn">${i + 1}</span>`;
     const tool = `<span class="tool t-${s.tool}" title="${esc(TOOL_TIP[s.tool] ?? s.tool)}">${esc(TOOL_LBL[s.tool] ?? s.tool)}</span>`;
-    const th = s.thought ? `<div class="th">${esc(s.thought)}</div>` : "";
+    const th = (s.thought ? `<div class="th">${esc(s.thought)}</div>` : "") + (s.warn ? `<div class="warn">⚠ ${esc(s.warn)}</div>` : "");
     if (s.tool === "ask") {
       const k = evCount(s.input);
       const meta = [s.conf !== undefined ? `${Math.round(s.conf * 100)}%` : "", s.by ?? "", k ? `${k} evidence` : ""].filter(Boolean).join(" · ");
       return `<li>${n}${tool}<span role="button" tabindex="0" class="subq" data-q="${esc(s.input)}" title="Ask this sub-question on its own">${esc(s.input)}</span><span class="res">→ <b>${fmtRes(s.result)}</b>${meta ? ` <small>${esc(meta)}</small>` : ""}</span>${th}</li>`;
     }
     if (s.tool === "calc") return `<li>${n}${tool}<code>${esc(s.input.replace(/\*/g, "×").replace(/\//g, "÷"))}</code><span class="res">= <b>${fmtRes(s.result)}</b></span>${th}</li>`;
+    if (s.tool === "answer" && s.refused) return `<li class="refused">${n}${tool}<span class="res">${esc(s.result)}</span>${th}</li>`;
     if (s.tool === "answer") return `<li class="fin">${n}${tool}<span class="res"><b>${fmtRes(s.result)}</b></span>${th}</li>`;
     return `<li>${n}${tool}<span class="inp">${esc(s.input)}</span><span class="res">→ ${fmtRes(s.result.slice(0, 160))}</span>${th}</li>`;
   };
