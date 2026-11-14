@@ -377,12 +377,21 @@ def _has(text: str, words) -> bool:
     return any(w in text for w in words)
 
 
+# a stem that starts another word of the same lexicon languages: the slab stem 'platte' (German Platte) is the start
+# of Dutch 'plattegrond' (floor plan): "Toont deze plattegrond minder ramen …" counted slabs (W1 c8 probe)
+_STEM_NOT = {"platte": "plattegrond"}
+
+
+def _stem_rx(st: str) -> str:
+    return r"(?<![a-z])" + re.escape(st) + (f"(?!{re.escape(_STEM_NOT[st][len(st):])})" if st in _STEM_NOT else "")
+
+
 def _kind_hits(text: str) -> list[tuple[int, int, str]]:
     """All (start, end, kind) lexicon hits, first hit per kind, sorted by position."""
     hits: dict[str, tuple[int, int, int]] = {}
     for prio, (kind, stems) in enumerate(_LEX):
         for st in stems:
-            m = re.search(r"(?<![a-z])" + re.escape(st), text)
+            m = re.search(_stem_rx(st), text)
             if m:
                 end = m.start() + len(re.match(r"[\w-]*", text[m.start():]).group(0) or st)
                 key = (m.start(), prio, end)
@@ -414,7 +423,7 @@ def _find_kind(text: str) -> str | None:
     best = None
     for prio, (kind, stems) in enumerate(_LEX):
         for st in stems:
-            for m in re.finditer(r"(?<![a-z])" + re.escape(st), text):
+            for m in re.finditer(_stem_rx(st), text):
                 key = (m.start(), prio)
                 if best is None or key < best[0]:
                     best = (key, kind)
