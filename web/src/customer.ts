@@ -126,12 +126,16 @@ function headline(a: Answer, ctx: HeroCtx): { big: string; unit: string; sentenc
   const notDrawn = ctx.question.match(/how many (\w+) on '?([^'?]+?)'? are in the (?:3D )?model but not drawn/i);
   if (notDrawn) return { big: fmtValue(a), unit: "", sentence: `${notDrawn[1]} on ${floorName(notDrawn[2])} are in the 3D model but not drawn on the plan` };
   if (a.unit === "count" || (!a.unit && Number.isInteger(v))) {
-    const noun = n ? n[Number(v) === 1 ? 0 : 1] : "";
+    const parts = (a.plan?.parts ?? []).map((x) => NOUN[x]?.[1] ?? "").filter(Boolean);
+    const noun = parts.length > 1 ? `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}${a.plan?.op === "sum" ? " together" : ""}`
+      : n ? n[Number(v) === 1 ? 0 : 1] : "";
+    if (!noun && a.intent?.task !== "count") return { big: fmtValue(a), unit: "", sentence: "" }; // a year, an id
     return { big: fmtValue(a), unit: "", sentence: [noun, where].filter(Boolean).join(" ") };
   }
   if (unit === "€" || unit === "$") return { big: `${unit}${fmtValue(a)}`, unit: "", sentence: costSentence(ctx.question) };
   const room = a.intent?.filters?.room ? String(a.intent.filters.room) : "";
-  const what = a.intent?.task === "area" ? (room ? `floor area of ${room}` : "floor area") : a.intent?.task === "length" ? "length" : a.intent?.task === "volume" ? "volume" : "";
+  const apt = a.intent?.filters?.apartment ? `apartment ${a.intent.filters.apartment}` : "";
+  const what = a.intent?.task === "area" ? (room ? `floor area of ${room}` : apt ? `floor area of ${apt}` : "floor area") : a.intent?.task === "length" ? "length" : a.intent?.task === "volume" ? "volume" : "";
   return { big: fmtValue(a), unit, sentence: [what, where].filter(Boolean).join(" ") };
 }
 const plainify = (s: string) => s.replace(/'?(\d+)\.korrus'?/g, (_, n) => `floor ${n}`).replace(/\bstorey\b/g, "floor").replace(/\bIFC model\b/g, "3D model").replace(/\bplan draws\b/g, "the drawing shows")
@@ -149,7 +153,8 @@ function agreement(a: Answer, file: string): { ok: boolean; text: string; detail
   if (bad) return { ok: false, text: "Two sources disagree: check the marked spots", detail: bad.text };
   const t = xs[0].text;
   const sheet = /\.(pdf|png|jpe?g)$/i.test(file);
-  const text = /\bIFC\b|3D model|model:/i.test(t) && sheet ? "Drawing and 3D model agree"
+  const both = /\bIFC\b|3D model|model/i.test(t) && /\b(plan|drawing|drawn|symbols?|sheet)\b/i.test(t);
+  const text = both && sheet ? "Drawing and 3D model agree"
     : /\bIFC\b|model/i.test(t) ? "Checked against the 3D model"
     : /\bDXF\b|CAD/i.test(t) ? "The drawing's CAD file agrees"
     : /sheet's own text labels/i.test(t) ? "The drawing's labels agree"
@@ -165,7 +170,8 @@ function evidenceLabel(note: string): string {
   s = s.replace(/^(label reader|CubiCasa5K detector|door-swing reader):\s*/i, "")
     .replace(/^named in the answer:\s*/i, "").replace(/^sheet label '([^']+)'.*$/i, "$1")
     .replace(/\bIfc(Door|Window|Space|Wall|WallStandardCase|Slab|Column|Stair|Beam|Railing|SanitaryTerminal|FlowTerminal)\b/g, (_, k) => k === "WallStandardCase" ? "Wall" : k === "Space" ? "Room" : k)
-    .replace(/\s*\(GlobalId[^)]*\)/i, "").replace(/\s+/g, " ");
+    .replace(/\s*\(GlobalId[^)]*\)/i, "").replace(/\s*\((CubiCasa5K|pretrained)[^)]*\)/i, "")
+    .replace(/^(\w+):\s*(?=\1\b)/i, "").replace(/\s+/g, " ").replace(/^\w/, (c) => c.toUpperCase());
   return s.length > 60 ? s.slice(0, 57).replace(/\s+\S*$/, "") + "…" : s || "marked spot";
 }
 

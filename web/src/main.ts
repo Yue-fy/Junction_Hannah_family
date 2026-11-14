@@ -7,6 +7,7 @@ import type { Answer, FileInfo, KgRoom, RoomGraph } from "./types";
 import { roomKind, roomName, roomShown, Viewer2D } from "./viewer2d";
 import type { Viewer3D } from "./viewer3d"; // loaded lazily: web-ifc + three are ~4 MB
 import tourSteps from "../fixtures/tour.json";
+import tourCustomer from "../fixtures/tour-customer.json";
 import { diffQuestion, diffsHtml, heroHtml, heroLoadingHtml, initialView, landingHtml, numbered, projectDifferences, projectOf, PROJECTS, saveView, type Difference, type View } from "./customer";
 import type { Project } from "./projects";
 
@@ -905,6 +906,9 @@ function focusEvidence(i: number) {
 // Steps live in fixtures/tour.json (one source for this tour and fixtures/record.py, which pre-records its answers):
 // {file, q, note, bench?, second? (ask NVIDIA Nemotron too), locate? (click "Show where")}. Add a step = add a line there.
 const TOUR: { file: string; q: string; note: string; bench?: boolean; second?: boolean; locate?: boolean; rooms?: boolean }[] = tourSteps;
+// the customer view tells the customer story (question → answer → where → differences → time saved → accuracy)
+const TOUR_C: typeof TOUR = tourCustomer;
+const tourList = () => (isCustomer() ? TOUR_C : TOUR);
 let tourStep = -1;
 let tourBack = false;
 // presenter keys: → next step, ← previous step (not while typing a question)
@@ -919,13 +923,13 @@ document.addEventListener("keydown", (e) => {
 });
 $("tourBtn").addEventListener("click", async () => {
   $("landing").hidden = true;
-  tourStep = tourBack ? Math.max(0, tourStep - 1) : (tourStep + 1) % TOUR.length;
+  tourStep = tourBack ? Math.max(0, tourStep - 1) : (tourStep + 1) % tourList().length;
   tourBack = false;
-  const t = TOUR[tourStep];
-  $("tourBtn").textContent = `Demo ${tourStep + 1}/${TOUR.length} ▸`;
+  const t = tourList()[tourStep];
+  $("tourBtn").textContent = `Demo ${tourStep + 1}/${tourList().length} ▸`;
   const note = $("tourNote");
   note.hidden = false;
-  note.innerHTML = `<b>${tourStep + 1}/${TOUR.length}</b> ${esc(t.note)}`;
+  note.innerHTML = `<b>${tourStep + 1}/${tourList().length}</b> ${esc(t.note)}`;
   $("bench").hidden = true;
   if (t.bench) return $("benchBtn").click();
   if (state.file?.path !== t.file) {
@@ -946,6 +950,7 @@ $("tourBtn").addEventListener("click", async () => {
 let view: View = initialView();
 const isCustomer = () => view === "customer";
 function applyView(v: View) {
+  if (v !== view) tourStep = -1; // each view has its own tour
   view = v;
   saveView(v);
   document.body.dataset.view = v;
