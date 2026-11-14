@@ -289,6 +289,14 @@ const UPLOAD_QUESTIONS = [
   "What is the scale of this drawing?",
   "How many windows are shown on this floor plan?",
 ];
+const APARTMENT_QUESTIONS = [
+  "How many doors are shown on this floor plan?",
+  "How many bedrooms are there?",
+  "How many windows are shown on this floor plan?",
+  "How many bathrooms are there?",
+  "Is there a sauna?",
+  "What is the total floor area in m²?",
+];
 const IFC_QUESTIONS = [
   "How many doors are in this model?",
   "How many storeys does this building have?",
@@ -336,7 +344,8 @@ async function uploadFile(file: File) {
   box.classList.remove("err");
   msg.textContent = `uploading ${file.name} (${(file.size / 1e6).toFixed(1)} MB)…`;
   try {
-    const f = await upload(file);
+    const style = /\.(png|jpe?g)$/i.test(file.name) ? $<HTMLSelectElement>("uploadStyle").value : "";
+    const f = await upload(file, style);
     if (!uploads.some((u) => u.path === f.path)) uploads.unshift(f);
     msg.textContent = `${file.name} · ask it anything below`;
     $<HTMLSelectElement>("source").value = "";
@@ -391,7 +400,7 @@ async function openFile(f: FileInfo, question = "", keep: Answer | null = null, 
   history.replaceState(null, "", url);
   document.querySelectorAll("#files li").forEach((li) => li.classList.toggle("on", state.files[Number((li as HTMLElement).dataset.i)]?.path === f.path));
   $("fileTitle").textContent = f.path.split("/").pop()!;
-  $("fileMeta").textContent = f.source === "upload" ? "your upload · not in the dataset" : `${f.source} · ${f.n_questions} questions`;
+  $("fileMeta").textContent = f.source === "upload" ? `your upload${f.style ? " · Nordic apartment plan" : ""} · not in the dataset` : `${f.source} · ${f.n_questions} questions`;
   $("credit").innerHTML = creditLine(f);
   if (!keep) {
     markAnswerCheck($("linked"), undefined, undefined);
@@ -401,7 +410,7 @@ async function openFile(f: FileInfo, question = "", keep: Answer | null = null, 
     $("card").innerHTML = `<p class="hint">Ask about this ${f.ext === ".ifc" ? "model" : "drawing"} in any language, or pick an example. Every answer
       shows how sure we are, what it cost and how it was worked out, and points at where it came from (${f.ext === ".ifc" ? "elements in the 3D model" : "boxes on the drawing"}),
       checked against a second source when there is one.</p>${f.source === "upload" ? `<p class="hint">This file is new to the system: no template,
-      no CAD or IFC twin, nothing cached. It goes the general way (${f.ext === ".ifc" ? "the IFC rules, then the reasoning agent" : f.ext === ".pdf" ? "the PDF's own lines and text, then the local vision model" : "printed text and scale read from the image, then the local vision model"}),
+      no CAD or IFC twin, nothing cached. It goes the general way (${f.ext === ".ifc" ? "the IFC rules, then the reasoning agent" : f.ext === ".pdf" ? "the PDF's own lines and text, then the local vision model" : f.style ? "as a Nordic apartment plan: the counter fine-tuned on CubiCasa5K plans, with the pretrained symbol detector to mark what it counts" : "printed text and scale read from the image, then the local vision model"}),
       so expect lower confidence, said honestly, and a first answer that takes longer.</p>` : ""}`;
   }
   $("pick").hidden = true;
@@ -478,7 +487,7 @@ async function loadExamples(f: FileInfo) {
     const interleaved: typeof uniq = [];
     for (let k = 0; interleaved.length < uniq.length; k++)
       for (const l of byType.values()) if (l[k]) interleaved.push(l[k]);
-    const general = f.source === "upload" ? (f.ext === ".ifc" ? IFC_QUESTIONS : UPLOAD_QUESTIONS) : GENERIC_QUESTIONS;
+    const general = f.source === "upload" ? (f.ext === ".ifc" ? IFC_QUESTIONS : f.style ? APARTMENT_QUESTIONS : UPLOAD_QUESTIONS) : GENERIC_QUESTIONS;
     const pick = qs.length ? [...english.filter((q) => q.has_fixture), ...interleaved.filter((q) => !q.has_fixture)].slice(0, 4)
       : general.map((question) => ({ question, type: "", unit: null }));
     chips.innerHTML = pick.map((q) => `<button type="button" class="chip" title="${esc(q.question)}">${esc(q.question.length > 64 ? q.question.slice(0, 61) + "…" : q.question)}</button>`).join("");

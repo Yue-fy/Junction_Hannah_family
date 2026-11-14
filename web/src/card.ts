@@ -101,7 +101,8 @@ export function crossChecks(a: Answer, asks: string[] = []): { text: string; ok:
   // "label reader (raster) finds 1 …" already says what the pipeline's "vlm_lora 0 ≠ raster 1" says: keep one line
   const same = (t: string) => fromEv.some((e) => {
     const m = e.text.match(/\((\w+)\) finds (\d+)/);
-    return m && new RegExp(`\\b${m[1]} ${m[2]}\\b`).test(t);
+    // ("CubiCasa5K detector (raster_cc5k) finds 8 doors" = the pipeline's own "detector (pretrained CubiCasa5K) counts 8 ≠ 7")
+    return m && (new RegExp(`\\b${m[1]} ${m[2]}\\b`).test(t) || (/detector/i.test(e.text) && new RegExp(`\\bdetector\\b.*\\bcounts ${m[2]}\\b`).test(t)));
   });
   const extra = located ? fromTrace.filter((t) => !same(t.text) && !fromEv.some((e) => t.text.startsWith(key(e.text)) || e.text.startsWith(key(t.text)))) : [];
   // the agent's final answer checked against another solver's own reading of the whole question ("agent 20700 = ifc
@@ -534,12 +535,13 @@ const ROOM_WORDS: [RegExp, string][] = [
 export const roomKindsIn = (q: string) => ROOM_WORDS.filter(([re]) => re.test(q)).map(([, k]) => k);
 
 export function locatorFor(a: Answer, file: string, question = ""): Locator | null {
-  if (a.value === null || (a.evidence ?? []).length || !/^data\/cubicasa5k\/.*\.(png|jpe?g)$/i.test(file)) return null;
+  if (a.value === null || (a.evidence ?? []).length || !/^(data|upload\/[0-9a-f]{12})\/cubicasa5k\/[^/]*\.(png|jpe?g)$/i.test(file)) return null;
   const t = a.intent?.target ?? (a.trace ?? []).map((l) => l.match(/^intent: count (\w+)/)?.[1]).find((x) => x) ?? "";
   // "where is the kitchen?", "which room is the sauna entered from?", room areas…: not a count of labels or symbols, but
   // the question names a room: R1's room graph (cached CubiCasa5K segmentation, no model call) boxes the rooms named
   const kinds = roomKindsIn(question);
   if (kinds.length && (a.intent?.task !== "count" || !(ROOM_TARGETS.has(t) || SYMBOL_TARGETS.has(t)))) {
+    if (file.startsWith("upload/")) return null; // the room graph reads R1's cached segmentation: dataset plans only
     return { solver: "rooms", name: "room graph", button: "Show where · room graph", noun: kinds.join(" / "),
       title: "Mark the rooms this question names, from the room graph of the plan (pretrained CubiCasa5K segmentation + printed labels; cached, no model call)" };
   }

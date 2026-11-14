@@ -44,6 +44,10 @@
             <input id="uploadInput" type="file" accept=".pdf,.png,.jpg,.jpeg,.ifc" hidden />
             <b>＋ Your own drawing</b><small id="uploadMsg">PDF, PNG, JPG, IFC · or drop it here</small>
           </label>
+          <select id="uploadStyle" class="upload-style" aria-label="Drawing style of your upload" title="Optional, for images: say it is a Nordic apartment plan (room codes like MH, OH, KPH) so the readers trained on CubiCasa5K plans may answer and mark what they count (fine-tuned counter, symbol detector)">
+            <option value="">Style: any drawing</option>
+            <option value="cubicasa5k">Style: Nordic apartment plan (CubiCasa-like)</option>
+          </select>
         </section>
 
         <section class="panel" id="ask">

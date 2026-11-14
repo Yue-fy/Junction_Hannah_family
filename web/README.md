@@ -46,6 +46,14 @@ set's "different" drawings get: e.g. a Swiss plan PDF alone → 36 doors with 36
 3D, 0 LLM calls); a Swiss PNG alone → apartments 4 (LoRA), apartment B 77.79 m² at 0.5 with the room labels and
 the unit outline boxed. Needs the Python env (no mock answers for uploads). The example chips switch to general
 questions (floor-plan ones for drawings, model ones for IFC).
+Optional **style** under the upload box, for images: "Nordic apartment plan (CubiCasa-like)" stores the file under
+`<id>/data/cubicasa5k/` (virtual path `upload/<id>/cubicasa5k/<name>`), so `stoa.data.source_of()` says cubicasa5k
+and the readers trained on those plans may answer: the LoRA counter's per-concept gate, and **Show where · symbol
+detector**, which runs the pretrained CubiCasa5K model live on the new image (~2 s, no cache needed). Example: a
+CubiCasa plan uploaded with this style → doors 7 (LoRA, 90% range 6–13, conf 0.61); Show where → 8 door boxes,
+"✗ detector finds 8 (answer 7)". Without the style the same file gets vlm_lora 7 at 0.45 and the detector declines
+("does not transfer to this drawing style"). The room graph (Rooms & doors) needs R1's cached segmentation: dataset
+plans only.
 
 Deep links: `/?file=<dataset-relative path>&q=<question>` opens a file and asks right away, e.g.
 `/?file=data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf&q=How many doors are shown on the floor plan of '1.korrus'?`

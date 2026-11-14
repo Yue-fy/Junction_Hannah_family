@@ -392,27 +392,34 @@ const UPLOADS = process.env.STOA_UPLOADS ?? path.join(os.tmpdir(), "stoa-uploads
 const UPLOAD_EXT = new Set([".pdf", ".png", ".jpg", ".jpeg", ".ifc"]);
 const UPLOAD_MAX = 200 << 20;
 const isUpload = (p: string | null | undefined) => !!p && p.startsWith("upload/");
+// A declared drawing style (optional): the file is stored under ".../data/<style>/" so stoa.data.source_of() gives that
+// source and the pipeline may use the readers trained on it (CubiCasa5K: the LoRA counter's gate, the symbol detector).
+// The virtual path carries it: upload/<id>/cubicasa5k/<name>.
+const UPLOAD_STYLES = new Set(["cubicasa5k"]);
 function uploadAbs(virtual: string): string | null {
-  const m = virtual.match(/^upload\/([0-9a-f]{12})\/([^/\\]+)$/);
-  if (!m || m[2].startsWith(".")) return null;
-  const abs = path.join(UPLOADS, m[1], m[2]);
+  const m = virtual.match(/^upload\/([0-9a-f]{12})\/(?:([a-z0-9_]+)\/)?([^/\\]+)$/);
+  if (!m || m[3].startsWith(".") || (m[2] && !UPLOAD_STYLES.has(m[2]))) return null;
+  const abs = m[2] ? path.join(UPLOADS, m[1], "data", m[2], m[3]) : path.join(UPLOADS, m[1], m[3]);
   return fs.existsSync(abs) ? abs : null;
 }
 function uploadInfo(virtual: string) {
   const ext = path.extname(virtual).toLowerCase();
-  return { path: virtual, source: "upload", ext, siblings: { [ext]: virtual }, n_questions: 0, license: "your file",
+  const style = virtual.split("/").length > 3 ? virtual.split("/")[2] : "";
+  return { path: virtual, source: "upload", ext, siblings: { [ext]: virtual }, n_questions: 0, license: "your file", style,
     credit: "your upload: not in the dataset, kept only on this machine (temp folder)", title: path.basename(virtual), source_url: "" };
 }
-async function saveUpload(name: string, body: Buffer) {
+async function saveUpload(name: string, body: Buffer, style = "") {
   const safe = path.basename(name).replace(/[^\w.\- ()]+/g, "_").replace(/^\.+/, "").slice(-120) || "upload";
   const ext = path.extname(safe).toLowerCase();
   if (!UPLOAD_EXT.has(ext)) throw Object.assign(new Error(`only ${[...UPLOAD_EXT].join(", ")} files`), { status: 415 });
   if (!body.length || body.length > UPLOAD_MAX) throw Object.assign(new Error(`file is empty or over ${UPLOAD_MAX >> 20} MB`), { status: 413 });
-  const id = createHash("sha256").update(body).digest("hex").slice(0, 12);
-  fs.mkdirSync(path.join(UPLOADS, id), { recursive: true });
-  const abs = path.join(UPLOADS, id, safe);
+  if (style && (!UPLOAD_STYLES.has(style) || ![".png", ".jpg", ".jpeg"].includes(ext))) style = "";
+  const id = createHash("sha256").update(style).update(body).digest("hex").slice(0, 12);
+  const dir = style ? path.join(UPLOADS, id, "data", style) : path.join(UPLOADS, id);
+  fs.mkdirSync(dir, { recursive: true });
+  const abs = path.join(dir, safe);
   if (!fs.existsSync(abs)) fs.writeFileSync(abs, body);
-  return uploadInfo(`upload/${id}/${safe}`);
+  return uploadInfo(style ? `upload/${id}/${style}/${safe}` : `upload/${id}/${safe}`);
 }
 const ASK_UPLOAD = path.resolve(__dirname, "../server/ask_upload.py");
 const uploadAnswers = new Map<string, Promise<Record<string, unknown>>>();
@@ -440,7 +447,7 @@ function askUpload(b: { path: string; question?: string; solver?: string; solver
 async function handleUpload(req: Connect.IncomingMessage, res: http.ServerResponse, route: string, url: URL): Promise<boolean> {
   if (route === "/upload" && req.method === "POST") {
     try {
-      const info = await saveUpload(url.searchParams.get("name") ?? "upload", await readBody(req));
+      const info = await saveUpload(url.searchParams.get("name") ?? "upload", await readBody(req), url.searchParams.get("style") ?? "");
       send(res, 200, info, "disk");
     } catch (e) {
       send(res, (e as { status?: number }).status ?? 500, { detail: (e as Error).message }, "disk");
