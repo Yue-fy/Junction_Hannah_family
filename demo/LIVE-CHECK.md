@@ -4,9 +4,9 @@ Run `20261114-050105-pipeline-live_questions-d116` on **night 753eccb** (via nig
 dde6347 at 04:51, same answers except step 5's solver).
 21 rows = the 3-minute script's questions, their "typed live" variants, and every question of W5's 13-step tour
 (`web/fixtures/tour.json`; step 13 is the bench, no question). Previous check: 04:09 on 0589ce3 (14/16 as expected).
-Re-run before the pitch (from the frozen worktree's root; ~1 min once the scans' text layers are cached), then
-`python3 $JUNCTION_SHARED/artifacts/Q/live_table.py <run>` renders this table:
-`$JUNCTION_VENV/bin/python -m stoa.eval --solver pipeline --split demo/live_questions.jsonl --no-leaderboard --workers 4`
+Re-run before the pitch (from the frozen worktree's root; ~1 min once the scans' text layers are cached):
+`$JUNCTION_VENV/bin/python -m stoa.eval --solver pipeline --split demo/live_questions.jsonl --no-leaderboard --workers 4`,
+then `python3 $JUNCTION_SHARED/artifacts/Q/live_table.py <run>` renders this table.
 
 | tour step | kind | question | answer | gold | ok | conf | solver | boxes | latency |
 |---|---|---|---|---|---|---:|---|---:|---:|
