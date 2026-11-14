@@ -203,8 +203,31 @@ def _fold(s: str) -> str:
     return unicodedata.normalize("NFKC", s)
 
 
+# "how many square feet of ...", "wie viele Quadratmeter ...": a count cue followed by a UNIT is a quantity question
+_QTY_AFTER_COUNT = re.compile(
+    r"\b(?:how many|how much|wie viele?|wieviel\w*|combien de|quant[ie]|hoeveel|hur m[aå]nga|kuinka (?:monta|paljon)|"
+    r"ile|hvor mange|cu[aá]nt[oa]s)\s+(?:of\s+)?(?P<u>cubic (?:metres|meters|feet|foot)|m³|m3\b|kubikmeter\w*|"
+    r"square (?:metres|meters|feet|foot)|sq\.? ?(?:ft|m)\b|m²|m2\b|ft²|ft2\b|quadratmeter\w*|qm\b|quadratfu(?:ß|ss)|"
+    r"m[eè]tres? carr[ée]s|pieds? carr[ée]s|metri quadr\w*|piedi quadr\w*|vierkante (?:meter|voet)\w*|"
+    r"kvadratmeter\w*|neli[öo]\w*|metres|meters|feet|foot|ft\b|meter\b|metern?\b|fu(?:ß|ss)\b|m[eè]tres?\b|pieds\b|"
+    r"metri\b|piedi\b|metri[äa]\b|metres? of)", re.I)
+
+
+def _qty_unit(u: str) -> tuple[str, str]:
+    u = u.lower()
+    feet = bool(re.search(r"feet|foot|ft|fu(?:ß|ss)|pied|piedi|voet", u))
+    if re.search(r"cubic|³|m3|kubik", u):
+        return "volume", "ft3" if feet else "m3"
+    if re.search(r"square|sq|²|m2|ft2|quadrat|qm|carr|quadr|vierkant|kvadrat|neli", u):
+        return "area", "ft2" if feet else "m2"
+    return "length", "ft" if feet else "m"
+
+
 def infer_task(q: str) -> tuple[str, str | None]:
     """-> (task, unit). Unit follows the question's own unit words (m² vs ft² etc.)."""
+    mq = _QTY_AFTER_COUNT.search(q)
+    if mq:
+        return _qty_unit(mq.group("u"))
     if _VOLUME.search(q) and not _COUNT.search(q):
         return "volume", ("ft3" if re.search(r"ft³|ft3|cubic f", q, re.I) else "m3")
     if _COUNT.search(q):

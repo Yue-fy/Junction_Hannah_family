@@ -316,6 +316,33 @@ Expected cost = Σ_k P(reach k) · cost_k. Pick τ_k from the risk–coverage cu
 (`experiments/r1/stats/compare.py RUN`): the smallest τ at which accuracy-when-answered ≥ the next stage's
 accuracy on the same questions. Escalating only then can't lower accuracy, and it cuts cost.
 
+### 8d. Calibrated count ranges from two counters (measured)
+`experiments/r1/count_interval/interval.py`; live in `stoa/solvers/raster_cc5k/crosscheck.py` (`interval()`, and
+`check()` adds it to LoRA answers). Stoa wants "a best estimate with a calibrated confidence" instead of a refusal.
+For a count, the natural form is an integer range that holds the true count with a stated probability.
+
+Two independent counters answer every cubicasa count: the LoRA (L) and the CubiCasa5K detector (C). Rule:
+`[min(L, C) − lo, max(L, C) + hi]`, with margins per group (openings = windows, doors; fixtures = WC seats, sinks;
+rooms) × (agree | disagree). The margins are split-conformal: on the calibration run, take the narrowest (lo, hi)
+whose coverage is at least ⌈(n+1)(1−α)⌉/n. That is the finite-sample level that guarantees ≥ 1−α on
+exchangeable new drawings. Calibration run: the LoRA on train_gate (320 answers; it never trained there).
+
+| 90% nominal | lo, hi when agree | lo, hi when disagree | dev coverage (width) | leak-free-for-both coverage (width) |
+|---|---|---|---|---|
+| fixtures, rooms | 0, 0 | 0, 0 (the two counts' range) | 87–100% (1.1–1.8) | 88–100% (1.3–1.7) |
+| windows, doors | 1, 4 | 1, 5 | windows 89% (9.4), doors 100% (9.2) | 100% (8.9), 100% (8.1) |
+| all | | | **93% (3.9)**; through `check()` on dev run feec: 91.9% (4.3) | **97% (3.2)** |
+
+Compared with the same margins around the single arbitrated answer (`point`: dev 90%, width 4.3) and relative
+margins (`rel`: 92%, 4.1), the two-counter range is both narrower and better covered. It also needs no extra model
+call. At 80% nominal: dev 89% (3.2), leak-free 92% (2.6). Window ranges are wide (about 9 values) because both
+counters miss windows on large plans (dev residuals up to +28). That is the honest answer, and it shows where the
+method is weak.
+
+How to use it: show `7 windows (90%: 6–12)`. A comparison ("more bedrooms than bathrooms?") is sure only when the
+two ranges don't overlap. A sum of two counts has the range [lo₁+lo₂, hi₁+hi₂], which covers the true sum at
+least 1−2α of the time (union bound). The ranges were fitted for LoRA answers only, so other solvers get none.
+
 ### 8c. Linked data as a cross-check
 - Swiss (measured, `experiments/r1/link_dxf_pdf/fit_affine.py`): DXF → PDF is one affine map per floor,
   fitted by least squares on room numbers that occur once in both the DXF `ROOM_TEXT` and the PDF words

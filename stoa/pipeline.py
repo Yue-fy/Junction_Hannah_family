@@ -47,9 +47,12 @@ from stoa.router.compose import combine, decompose
 from stoa.router.intent import Intent, modifiers, parse
 from stoa.router.prior import known_template
 
+UNSEEN_CAP = 0.5  # max confidence of a local-tier / prior answer to a wording that is not a known train template
 # D8: symbol counts R1's pretrained CubiCasa5K model answers; its gate is measured on cc5k_heldout only
 CC5K_KEYS = {"count:window:drawing", "count:door:drawing", "count:wc:drawing", "count:sink:drawing"}
-GATING_CC5K = Path(__file__).parent / "router" / "gating_cc5k.json"
+GATING_CC5K = next((f for f in (Path(__file__).parent / "router" / "gating_cc5k.json",
+                                 Path(__file__).parent / "solvers" / "raster_cc5k" / "gating_cc5k.json") if f.exists()),
+                   Path(__file__).parent / "router" / "gating_cc5k.json")
 IMG_EXT = (".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp", ".gif")
 # tier of each solver (cost order); unknown names count as "local"
 TIER = {"dxf": "deterministic", "ifc": "deterministic", "schedule": "deterministic", "pdf_vector": "deterministic",
@@ -274,7 +277,7 @@ class Pipeline(BaseSolver):
             order, gate = cands, None
         rates: dict[str, tuple[float, int]] = {}  # solver -> (hit rate, n) when not from the train gate
         if self.cc5k and src == "cubicasa5k" and intent.key in CC5K_KEYS:
-            order = self._cc5k_order(intent.key, order, rates, trace)
+            order = self._cc5k_order(intent.key, order, rates, trace, gate)
         acc = (gate or {}).get("acc", {})
         if gate:
             skipped = [c for c in cands if c in acc and c not in order]
@@ -285,7 +288,11 @@ class Pipeline(BaseSolver):
             trace.append("no train gate for this kind of question: general path by file type")
 
         canon = None
-        if self.normalise and not known_template(question) and not modifiers(question):
+        op_flag = unsure is not None and any(re.search(r"operat|not appl|did not apply", m, re.I)
+                                             for m in unsure[1].missing)
+        if op_flag:
+            trace.append(f"{unsure[0]} flagged an operation it did not apply: no canonical rewrite")
+        if self.normalise and not known_template(question) and not modifiers(question) and not op_flag:
             # the canonical template drops operators ("average", "share", "not in apartment A"): never for those
             canon = canonical(src, intent)
         total = Cost()
@@ -330,6 +337,10 @@ class Pipeline(BaseSolver):
                 conf = (rates[name][0] * rates[name][1] + 1) / (rates[name][1] + 2)
             elif gate and name in acc:  # train hit rate for this key, smoothed (k+1)/(n+2): 40/40 -> 0.976, not 1.0
                 conf = (acc[name] * gate["n"] + 1) / (gate["n"] + 2)
+                if not known_template(question) and TIER.get(name) != "deterministic":
+                    # an unseen wording of a known kind: the VLM/LoRA rate was measured on the template wording
+                    # (F hard2q: compounds read as one class went to the LoRA at its rate, 8 of 11 wrong)
+                    conf = min(conf, UNSEEN_CAP)
                 if ask == question and not known_template(question) and TIER.get(name) == "deterministic":
                     # an unseen wording asked as is: the template's train rate does not vouch for how the solver
                     # read it (F hard2: "how many times larger is B than A" -> apartment count at 0.976)
@@ -340,6 +351,8 @@ class Pipeline(BaseSolver):
                          + (", held-out hit rate" if name in rates else ", train hit rate" if name in acc else "") + ")")
             if name == "vlm_lora" and gate and gate.get("lora_vs_raster"):
                 conf, extra = self._lora_vs_raster(path, ask, ans, gate["lora_vs_raster"], trace, conf)
+                if not known_template(question):
+                    conf = min(conf, UNSEEN_CAP)
                 total = total.add(extra)
                 answers.append((name, ans, conf))
                 break  # the LoRA's count stands; raster only sets the confidence and lends its boxes
@@ -352,6 +365,13 @@ class Pipeline(BaseSolver):
                 break
             trace.append(f"unsure (conf {conf:.2f} < {self.accept}): asking {rest[0]} for a cross-check")
         best = self._combine(answers, intent, trace)
+        if best is not None and canon and unsure is not None and unsure[1].value is not None and \
+                not _agree(best.value, unsure[1].value, intent.task):
+            cap = min(best.confidence, unsure[1].confidence)
+            trace.append(f"the canonical form gave {best.value}, the question as asked {unsure[1].value} "
+                         f"({unsure[0]}): confidence capped at {cap:.2f}")
+            best.confidence = round(cap, 3)
+            best.missing = [*best.missing, f"{unsure[0]} on the question as asked: {unsure[1].value} {unsure[1].unit or ''}"]
         if unsure is not None and not reused:
             total = total.add(_cost_of(unsure[1]))
         if unsure is not None and _fits(intent.task, unsure[1]) and (best is None or best.confidence < unsure[1].confidence):
@@ -362,7 +382,10 @@ class Pipeline(BaseSolver):
             best = a_u.model_copy(deep=True)
             best.solver = n_u
         if best is None:
-            best = self._prior_answer(src, intent, trace, gate)
+            best = self._prior_answer(src, intent, trace, gate, question)
+        if self.cc5k and src == "cubicasa5k" and intent.key in CC5K_KEYS and best.value is not None and \
+                best.solver != "raster_cc5k":
+            self._cc5k_evidence(path, canon or question, best, trace)
         if self.crosscheck and best.value is not None:
             self._kg_crosscheck(path, intent, best, trace)
         if why and best.value is not None:  # the agent failed on an operator question: the template answer may ignore it
@@ -403,7 +426,7 @@ class Pipeline(BaseSolver):
         trace.append(f"{note} → conf {c:.2f} (LoRA right {k}/{n} on train_gate when raster {'agreed' if same else 'disagreed'})")
         return c, _cost_of(ra)
 
-    def _cc5k_order(self, key: str, order: list[str], rates: dict, trace: list[str]) -> list[str]:
+    def _cc5k_order(self, key: str, order: list[str], rates: dict, trace: list[str], gate: dict | None = None) -> list[str]:
         """D8: R1's pretrained CubiCasa5K model for symbol counts, gated on cc5k_heldout (never train_gate: the
         model's pretraining saw 84% of our cubicasa drawings, so dev/test numbers with it are inflated)."""
         if self._get("raster_cc5k") is None:
@@ -418,10 +441,41 @@ class Pipeline(BaseSolver):
         if a <= p + self.margin:
             trace.append(f"raster_cc5k: held-out {100 * a:.0f}% vs prior {100 * p:.0f}% (n={n}); skipped")
             return order
+        # vs the best leak-free gated solver (the LoRA on train_gate): compare LIFTS over each split's own prior, and
+        # only move the detector first on a clear win (different splits; S0 01:44)
+        g_acc = (gate or {}).get("acc", {})
+        lifts = [g_acc[c] - g_acc.get("prior", 0.0) for c in order if c in g_acc and c != "prior"]
+        best_lift = max(lifts) if lifts else 0.0
+        if a - p <= best_lift + 0.05:
+            trace.append(f"raster_cc5k: held-out lift {100 * (a - p):+.0f} pts ≤ gated solver's {100 * best_lift:+.0f}: "
+                         "kept as a cross-check")
+            return order
         rates["raster_cc5k"] = (a, n)
         trace.append(f"raster_cc5k (pretrained CubiCasa5K, CC BY-NC 4.0): held-out {100 * a:.0f}% vs prior "
                      f"{100 * p:.0f}% (cc5k_heldout n={n}) → first")
         return ["raster_cc5k"] + [c for c in order if c != "raster_cc5k"]
+
+    def _cc5k_evidence(self, path: str, ask: str, best: Answer, trace: list[str]) -> None:
+        """The pretrained CubiCasa5K detector as a cross-check: agreement lends its symbol boxes (image_px) as evidence.
+        No confidence change: its pretraining saw most of our cubicasa drawings (D8), so agreement is not independent."""
+        d = self._get("raster_cc5k")
+        if d is None:
+            return
+        try:
+            a = d.solve(path, ask) if d.can_handle(path, ask) else None
+        except Exception:  # noqa: BLE001
+            return
+        if a is None or a.value is None:
+            return
+        if _agree(best.value, a.value, "count"):
+            note = f"cross-check: detector (pretrained CubiCasa5K) counts {a.value} too ✓"
+            best.evidence = [*best.evidence, *[e.model_copy(update={"note": (e.note + "; " if e.note else "") + note})
+                                               for e in (a.evidence or [])[:40]]]
+        else:
+            note = f"cross-check: detector (pretrained CubiCasa5K) counts {a.value} ≠ {best.value}"
+            best.missing = [*best.missing, f"the CubiCasa5K detector counted {a.value}"]
+        trace.append(note)
+        best.cost = _cost_of(best).add(_cost_of(a))
 
     def _raw_deterministic(self, path: str, question: str, intent: Intent, cands: list[str], trace: list[str],
                            t0: float) -> Answer | None:
@@ -445,7 +499,7 @@ class Pipeline(BaseSolver):
             total = total.add(_cost_of(a))
             if a.value is None:
                 continue
-            if a.confidence < self.raw_accept or not _fits(intent.task, a):
+            if a.confidence < self.raw_accept:
                 trace.append(f"{name} (question as asked): {a.value} {a.unit or ''} at conf {a.confidence:.2f}, unsure"
                              + ("" if _fits(intent.task, a) else f" (a {a.unit} answer to a {intent.task} question)")
                              + (" → general agent" if self._agent_reason(path, question, intent, cands) else ""))
@@ -453,6 +507,9 @@ class Pipeline(BaseSolver):
             best = a.model_copy(deep=True)
             trace.append(f"{name} (question as asked): {a.value} {a.unit or ''} (conf {a.confidence:.2f}; the solver "
                          "read the question itself, no LLM needed)")
+            if not _fits(intent.task, a):  # the solver's own reading wins over the router's guess of the kind
+                best.missing = [*best.missing, f"the router read this as a {intent.task} question; {name} answered "
+                                               f"in {a.unit} with confidence {a.confidence:.2f}"]
             if self.crosscheck:
                 self._kg_crosscheck(path, intent, best, trace)
             best.cost = total
@@ -540,7 +597,8 @@ class Pipeline(BaseSolver):
             out.missing = [*out.missing, "no located evidence from this solver"]
         return out
 
-    def _prior_answer(self, src: str, intent: Intent, trace: list[str], gate: dict | None) -> Answer:
+    def _prior_answer(self, src: str, intent: Intent, trace: list[str], gate: dict | None,
+                      question: str | None = None) -> Answer:
         pa = prior.lookup(src, intent)
         if pa is None:
             trace.append("no prior for this question type")
@@ -553,7 +611,8 @@ class Pipeline(BaseSolver):
         if gate:
             missing.append("solvers tried did not beat this prior on training data for this question type")
         trace.append(f"prior[{pa.level}]: {pa.value} {pa.unit or ''} (train hit rate {100 * pa.hit_rate:.0f}%, n={pa.n})")
-        return Answer(value=pa.value, unit=pa.unit, confidence=round(pa.hit_rate, 3), solver="prior",
+        conf = pa.hit_rate if (question is None or known_template(question)) else min(pa.hit_rate, UNSEEN_CAP)
+        return Answer(value=pa.value, unit=pa.unit, confidence=round(conf, 3), solver="prior",
                       assumptions=assumptions, missing=missing, trace=[])
 
 
