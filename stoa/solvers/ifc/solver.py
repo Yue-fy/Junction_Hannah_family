@@ -677,6 +677,14 @@ class IfcSolver(BaseSolver):
                "(high windows, skylights, elements of split levels) are not drawn",
                "drawn = the sheet's elements tagged with the element's IFC GlobalId"]
         ev = [self._ev(model, e, f"{e.eff_cls} {e.name or ''} | not drawn on {Path(plan).name}") for e in missing_els]
+        if notdrawn and not agree and re.match(r"\s*(which|what|list|name|show)\b", qf) and not re.search(r"\bhow many\b", qf):
+            # 'Which doors of the model does this plan not show?': name them (or say none)
+            txt = (f"none: all {len(on)} {word} of the model on '{storey.name}' are drawn on {Path(plan).name}" if not missing_els
+                   else f"{len(missing_els)} of the {len(on)} {word} on '{storey.name}' are not drawn: "
+                        + "; ".join(f"{e.name or e.eff_cls} ({e.guid})" for e in missing_els[:20])
+                        + (" ..." if len(missing_els) > 20 else "") + f" ({why_nd})")
+            return Answer(value=txt, unit=None, confidence=0.85, evidence=(ev or [self._ev(model, e, e.eff_cls) for e in drawn])[:MAX_EVIDENCE],
+                          trace=trace, solver=self.name, assumptions=asm, missing=[])
         if notdrawn and not agree:
             return Answer(value=len(missing_els), unit="count", confidence=0.85, evidence=ev[:MAX_EVIDENCE],
                           trace=trace + [f"in the model but not drawn: {len(on)} - {len(drawn)} = {len(missing_els)}; "
@@ -2415,9 +2423,12 @@ class IfcSolver(BaseSolver):
         # "the ground floor / ground level" with no storey NAMED so (parse.storey_mention knows 'EG', 'Erdgeschoss', 'GF',
         # '00 Begane grond', '0'): the used storey nearest elevation 0 (esplanades '1.korrus', clinic 'First Floor',
         # warmond '1. Level'). F 09:24: the role never became a storey -> whole model at 0.97 (smiley walls 281 vs 81)
-        from stoa.solvers.ifc.parse import _GROUND_Q
+        from stoa.solvers.ifc.parse import _GROUND_Q, ground_reference
 
-        mg_ = _GROUND_Q.search(fold(_QUOTED_RX.sub(" ", question)))
+        qg_ = fold(_QUOTED_RX.sub(" ", question))
+        mg_ = _GROUND_Q.search(qg_)
+        if mg_ and ground_reference(qg_, mg_.start()):
+            mg_ = None  # 'storeys above ground level': a reference height, not the storey asked about
         if mg_ and not it.names and idx.storeys and \
                 storey_mention(question, [s_.name for s_ in idx.storeys])[0] is None:
             pool = [st for st in used_storeys(idx, own_storeys(idx)) if st.elevation is not None]

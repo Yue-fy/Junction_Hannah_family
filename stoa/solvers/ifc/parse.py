@@ -312,6 +312,12 @@ _GROUND_NAME = re.compile(r"^\s*(eg|gf|bg|rdc|pt|e0+)(?![a-z0-9])|\b(erdgeschoss
                           r"rez[- ]de[- ]chaussee|parter|pohjakerros|piano terra|planta baja|bottenvaning|stueetage)\b")
 
 
+def ground_reference(t: str, start: int) -> bool:
+    """'above / below ground level', 'from the ground floor', 'than the ground floor': the ground is a reference
+    height there, not the storey asked about ('How many storeys are above ground level?')."""
+    return bool(re.search(r"\b(above|below|under|over|beneath|from|than|to)\s+(the\s+)?$", t[:start]))
+
+
 def storey_mention(question: str, storey_names: list[str]) -> tuple[int | None, str]:
     """Index into storey_names of an UNQUOTED storey mention ("on the 1.OG floor", "level 4", "second floor"),
     or (None, why). Names are matched as whole words (folded), numbers via the storey name's own number."""
@@ -331,8 +337,10 @@ def storey_mention(question: str, storey_names: list[str]) -> tuple[int | None, 
         num = int(m.group(1))
     else:
         m = re.search(r"\b(" + "|".join(_ORD) + r")\s+(?:floor|level|storey|story)\b", t) or _GROUND_Q.search(t)
-        if m:
+        if m and not ground_reference(t, m.start()):
             num = _ORD.get(m.group(1), 0)
+        else:
+            m = None
     if num is None:
         return None, "no storey mentioned"
     lead = [i for i, n in enumerate(storey_names) if (mm := re.match(r"\s*(-?\d+)", n or "")) and int(mm.group(1)) == num]
