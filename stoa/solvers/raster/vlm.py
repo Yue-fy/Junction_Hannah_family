@@ -60,12 +60,10 @@ def _cached(key: tuple, fn):
 
 
 def _charge(r: llm.ChatResult) -> None:
-    # Charged as if computed, even on a disk-cache hit (the cache is a dev convenience; the cost score should
-    # reflect a cold run). Latency under a shared, busy server overstates GPU time: an upper bound.
-    record_cost(llm_tokens_in=r.prompt_tokens or 0, llm_tokens_out=r.completion_tokens or 0, llm_calls=1,
-                gpu_seconds=r.latency_s if r.backend == "local" else 0.0,
-                **({"api_calls": 1, "api_tokens_in": r.prompt_tokens or 0,
-                    "api_tokens_out": r.completion_tokens or 0} if r.backend != "local" else {}))
+    """No-op: since night cac7ef8 (23:52) `llm.chat` itself reports every call (cache hits included, billed as
+    computed, GPU time from the token estimate) to the caller's CostMeter. Recording here as well billed every raster
+    call twice (measured 03:40: a 2,055-token call metered as 4,110 tokens and 2 calls)."""
+    return None
 
 
 def upscaled(img: Image.Image, target_px: int) -> tuple[Image.Image, float]:

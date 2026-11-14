@@ -141,6 +141,13 @@ Tried and not adopted:
 - A per-class probability threshold instead of argmax (P(window) ≥ τ, τ = 0.15–0.45; 227 val drawings):
   never better (windows 44.1% argmax vs 43.6%). The missed windows are not near-misses in probability.
 
+- 2× upscaling with the maps KEPT at 2× (`dense2x.py`; `infer.py --scale 2 --keep-res`, so neighbouring symbols
+  don't merge again on the way back to 1×), for all 688 val+test plans ≤ 1500 px, min_frac × kernel grid on val.
+  Always-2×: windows val 40.1 → 34.7, test 33.9 → 32.5; doors val 46.3 → 40.6, test 39.6 → 36.0. The best gated
+  rule from val (2× only on small, dense plans) gives test windows +0.5 [−2.1, +3.4] and doors +1.1 [−1.4, +3.6],
+  which is selection noise (800 rules tried). The worst misses, such as 29 windows on a 785×355 plan, are not
+  caused by low resolution.
+
 **Memorisation check (D3).** Accuracy on drawings from the model's original *train* list is about the
 same as on held-out *test* drawings of the same style, so there is little memorisation:
 
@@ -164,6 +171,11 @@ paired IFC's IfcWindow/IfcDoor counts as ground truth (`resbim_check.py`):
 
 Windows transfer to an unseen style; doors don't (Revit draws thin swing arcs). `predict.py` now resizes
 images whose long side is over 3000 px to 2000 px and maps the boxes back to original pixels.
+
+**Second unseen style: swiss PNG twins** (A3 at 150 dpi, gold from the DXF; 145 plans in R2's count splits;
+`swiss_png_check.py`). Windows: 26% exact, 43% within ±1, against the LoRA's 12% and the base VLM's 8% on the same
+dev questions. Sinks: 34% (LoRA 46%). WC seats: 7%. Doors: 0%, because the model finds about 3% of them. Across both
+unseen styles, the detector transfers for windows only.
 
 **Room segmentation as a cross-check (Stoa point 4).** Room-type regions = components of room class
 (Bed Room 5, Bath 6, Kitchen 3, Outdoor 1) ≥ min_frac·H·W (val-chosen: 1.2e-2, 1.2e-2, 1.6e-2, 2.4e-2;
@@ -315,6 +327,122 @@ deterministic geometry (DXF/IFC/PDF text, ~0 cost) → OCR/CV → small local VL
 Expected cost = Σ_k P(reach k) · cost_k. Pick τ_k from the risk–coverage curve of stage k on dev
 (`experiments/r1/stats/compare.py RUN`): the smallest τ at which accuracy-when-answered ≥ the next stage's
 accuracy on the same questions. Escalating only then can't lower accuracy, and it cuts cost.
+
+### 8d. Calibrated count ranges from two counters (measured)
+`experiments/r1/count_interval/interval.py`; live in `stoa/solvers/raster_cc5k/crosscheck.py` (`interval()`, and
+`check()` adds it to LoRA answers). Stoa wants "a best estimate with a calibrated confidence" instead of a refusal.
+For a count, the natural form is an integer range that holds the true count with a stated probability.
+
+Two independent counters answer every cubicasa count: the LoRA (L) and the CubiCasa5K detector (C). Rule:
+`[min(L, C) − lo, max(L, C) + hi]`, with margins per group (openings = windows, doors; fixtures = WC seats, sinks;
+rooms) × (agree | disagree). The margins are split-conformal: on the calibration run, take the narrowest (lo, hi)
+whose coverage is at least ⌈(n+1)(1−α)⌉/n. That is the finite-sample level that guarantees ≥ 1−α on
+exchangeable new drawings. Calibration run: the LoRA on train_gate (320 answers; it never trained there).
+
+| 90% nominal | lo, hi when agree | lo, hi when disagree | dev coverage (width) | leak-free-for-both coverage (width) |
+|---|---|---|---|---|
+| fixtures, rooms | 0, 0 | 0, 0 (the two counts' range) | 87–100% (1.1–1.8) | 88–100% (1.3–1.7) |
+| windows, doors | 1, 4 | 1, 5 | windows 89% (9.4), doors 100% (9.2) | 100% (8.9), 100% (8.1) |
+| all | | | **93% (3.9)**; through `check()` on dev run feec: 91.9% (4.3) | **97% (3.2)** |
+
+Compared with the same margins around the single arbitrated answer (`point`: dev 90%, width 4.3) and relative
+margins (`rel`: 92%, 4.1), the two-counter range is both narrower and better covered. It also needs no extra model
+call. At 80% nominal: dev 89% (3.2), leak-free 92% (2.6). Window ranges are wide (about 9 values) because both
+counters miss windows on large plans (dev residuals up to +28). That is the honest answer, and it shows where the
+method is weak.
+
+How to use it: show `7 windows (90%: 6–12)`. A comparison ("more bedrooms than bathrooms?") is sure only when the
+two ranges don't overlap. A sum of two counts has the range [lo₁+lo₂, hi₁+hi₂], which covers the true sum at
+least 1−2α of the time (union bound). The ranges were fitted for LoRA answers only, so other solvers get none.
+
+**Detector alone (leak-safe).** When the pipeline sends a count to `raster_cc5k` first (windows on cc5k=1), no
+second counter exists. Then the range is `[C − lo, C + hi]`, with margins per class × count bucket. The margins are
+fitted on the original CC5K **val** list and checked on the original **test** list
+(`experiments/r1/count_interval/det_interval.py`, D8-clean). raster_cc5k's answers carry it automatically
+("interval90: [lo, hi]").
+
+| 90% nominal | test coverage | mean width | margins (bucket: −lo/+hi) |
+|---|---|---|---|
+| windows (n 368) | 89.7% | 10.2 | ≤4: −1/+3, ≤8: −3/+5, >8: −3/+13 |
+| doors (264) | 93.2% | 10.7 | ≤4: −1/+9, ≤8: −2/+9, >8: −3/+5 |
+| WC seats (367) | 91.3% | 2.0 | ≤1: −0/+1, >1: −1/+0 |
+| sinks (363) | 92.8% | 3.5 | ≤2: −0/+2, >2: −2/+1 |
+
+With a second independent counter, the fixture ranges are narrower at the same coverage: 1.4–1.7 values wide
+instead of 2.0–3.5. That is the measurable value of linking two sources (Stoa point 4).
+
+**Yes/no threshold questions ("at least two toilets?").** The answer comes from one count, but its confidence
+should come from whether the second counter is on the same side of N. LoRA + CC5K, pooled over N = 1..10, fitted
+on train_gate (`threshold_side.py`, `crosscheck.threshold_confidence()`):
+
+| group | same side: conf (dev right) | straddling N: conf (dev right) |
+|---|---|---|
+| openings (windows, doors) | 0.94 (95%, n 1124) | 0.53 (59%, n 249) |
+| fixtures (WC, sinks) | 0.97 (96%, n 562) | 0.68 (69%, n 121) |
+| rooms | 0.97 (98%, n 302) | 0.80 (90%, n 40) |
+
+The pipeline today gives "at least two WC seats?" 0.82 whether the answer is right or wrong (hard2: 0.82 vs 0.79).
+
+### 8e. Area on a raster plan with no scale: printed areas first, then door widths (measured)
+Stoa's own example of "a best estimate, not a refusal" is a plan with no scale ("assumed standard door width 0.9 m").
+Today the pipeline sends a cubicasa area question to the base VLM. It reads a printed area correctly, but at
+confidence 0.32 and with no evidence. With nothing printed, it guesses (74 m², conf 0.05) with no assumptions.
+
+**Ground truth without dataset labels.** Many cubicasa plans print areas: a room's ("MH 13.0 m²") or the
+apartment's ("3h+k+s 85 m2"). One local VLM call per plan reads them with boxes (`find_areas.py`, __PREV__ of
+__NSAMP__ TRAIN plans print at least one). A printed room area inside one CC5K room region gives that plan's true
+px/m (median over ≥ 2 consistent rooms); a printed apartment total over all interior regions gives it too. Rule: any
+area ≥ 40 m² or "NhK…" text is a total (no room is that big; several apartment totals are summed).
+
+**Estimators, 2-fold cross-fit by plan** (`raster_scale.py`; constant and band fitted on one half, errors on the other):
+
+__TABLE__
+
+The implied door opening is __DOOR__ m (IQR), i.e. Finnish 8M–9M interior doors, so the constant is physical, not
+just fitted. Wall thickness and a "typical plan resolution" are much worse: plan resolutions vary 3–4× (true px/m
+p10–p90 __RES__).
+
+**Shrinkage helps the apartment total.** A log-blend of the door estimate with the typical training apartment
+(__TYP__ m²), weighted by the two error variances (no grid search), lowers the cross-fit median error from __D16__ to
+__BL__. The helper uses the blend for whole-apartment areas and states it in `assumptions`.
+
+**Single rooms are harder.** A room's area from its CC5K region errs by __ROOM__ (median), and the 80% band covers
+only __RCOV__: regions are fragments or merges of the printed room. Rooms get their own constant (__W0R__ m;
+regions are smaller than printed net areas) and a wide band, so state the band.
+
+**Within the 2% scoring tolerance:** ~2% of plans. A door-derived area is an honest estimate, not a scored answer.
+The value is in the interval, the assumptions and the evidence (doors measured, regions summed).
+
+**Use** (`experiments/r1/raster_scale/scale.py`, CC5K caches, no torch; D8: cc5k=1 path; CC BY-NC):
+1. `printed_areas(path)` (one VLM call): if the asked room or apartment prints its area, answer that number, with
+   the text box as evidence and the CC5K region class under it. Cross-check it with step 2: inside the band → ✓.
+2. Otherwise `estimate_area(path, "apartment" | "kitchen" | …)` → value, `interval80`, confidence = P(within 2%),
+   assumptions ("no scale printed; assumed the median door opening is 0.81 m, 7 doors measured", shrinkage), missing
+   ("a scale bar, dimension strings or printed room areas"), door boxes and region boxes as evidence.
+Doors do not transfer to other raster styles (swiss PNG 3%, Revit 0–12%), so this is for cubicasa-style plans only.
+Leak note (D8): the CC5K maps on our TRAIN plans are from a model that saw most of them in pretraining; the truth is
+printed text, not CC5K labels. Error on the few plans from CC5K's own val/test lists: __LEAK__.
+
+### 8f. What the cubicasa second reader is worth (measured; cost cascade, 8b)
+The pipeline runs raster (VLM label reader) as a second opinion on every LoRA count and moves the confidence by
+agreement. That made cubicasa ~20× more expensive (S0 03:56: $0.02 → $0.42 per 1k). The values never change, so
+the reader can only help through confidence and evidence. `experiments/r1/cost_gate/second_reader.py RUN [--boot]`
+replays a run: today's confidence (the key's train hit rate, moved by agreement) vs vlm_lora's own per-question
+confidence (answer-digit probability mapped on train_gate, already in the trace, free).
+
+| split (LoRA answers) | own conf: ECE / AUROC / Brier | after cross-check | conf ≥ 0.8: own vs today |
+|---|---|---|---|
+| dev bb98 (662) | 0.022 / **0.899** / **0.112** | 0.035 / 0.881 / 0.122 | 60% @ 93.5% vs 47% @ 94.5% |
+| leak-free cc5k_heldout_notLoRA 7ec6 (152) | 0.051 / **0.941** / **0.076** | 0.067 / 0.861 / 0.102 | 72% @ 98% vs 66% @ 95% |
+| hard 8d9d (141) | 0.079 / 0.824 / 0.133 | 0.076 / 0.828 / 0.135 | 72% @ 92% vs 55% @ 92% |
+
+Drawing-cluster bootstrap on dev: the cross-check makes Brier worse by +0.009 [+0.0005, +0.018], and AUROC
+−0.018 [−0.039, +0.002]. Per kind, agreement helps only windows (AUROC 0.55 → 0.64); it hurts sinks, storeys,
+saunas, bedrooms and bathrooms. The reader's real value is evidence: it gives the only boxes on 159 of 662 LoRA
+answers (labels of bedrooms, saunas, WC rooms, balconies; kitchens for sinks; bedrooms for WC seats), and none for
+windows, doors, storeys or bathrooms. So use the LoRA's own confidence, and call the reader only to attach
+evidence for label kinds, or lazily on "Show where". Gating it by confidence band saves little, because the read is
+per drawing and 64–97% of drawings have at least one question in any useful band.
 
 ### 8c. Linked data as a cross-check
 - Swiss (measured, `experiments/r1/link_dxf_pdf/fit_affine.py`): DXF → PDF is one affine map per floor,

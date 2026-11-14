@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import math
 import re
+from pathlib import Path
 import statistics
 
 import pandas as pd
@@ -101,22 +102,50 @@ WHICH = re.compile(r"^\s*(which|welche[rs]?|quel(?:le)?s?\s+(?:appartement|pièc
                    r"in\s+which|welk[e]?|vilk(?:en|et)|cu[áa]l|kumpi|kt[óo]r[ey])\b", re.I)
 
 
-def _render(tables: dict[str, pd.DataFrame], max_rows: int = 160) -> str:
+def _render(tables: dict[str, pd.DataFrame], max_rows: int = 160, sep: str = ",") -> str:
+    """sep="|": values are shown as printed, without CSV quote doubling (a 14"x6" cell is not shown doubled)."""
     out = []
     for name, df in tables.items():
         if df.empty:
             out.append(f"{name}: (empty)")
             continue
-        out.append(f"{name} ({len(df)} rows):\n" + df.head(max_rows).to_csv(index=False))
+        if sep == ",":
+            body = df.head(max_rows).to_csv(index=False)
+        else:  # by hand: csv.QUOTE_NONE would still escape quotes (14\"x6\")
+            def cell(v):
+                return "" if v is None or (isinstance(v, float) and v != v) else str(v).replace(sep, "/").replace("\n", " ")
+            body = "\n".join([sep.join(map(str, df.columns))] +
+                             [sep.join(cell(v) for v in r) for r in df.head(max_rows).itertuples(index=False)]) + "\n"
+        out.append(f"{name} ({len(df)} rows{', columns separated by ' + repr(sep) if sep != ',' else ''}):\n" + body)
     return "\n".join(out)
 
 
 def _extract_code(text: str) -> str:
     m = re.search(r"```(?:python)?\s*(.*?)```", text, re.S)
+    if m is None:  # an unclosed fence (reply cut at max_tokens): drop the opening fence line
+        m = re.search(r"```(?:python)?[^\n]*\n(.*)", text, re.S)
     return (m.group(1) if m else text).strip()
 
 
 HARDCODED = re.compile(r"^\s*answer\s*=\s*[-+*/().\d\s]+(?:#.*)?$", re.M)
+TYPED_TEXT = re.compile(r"""^\s*answer\s*=\s*(?P<q>["'])(?P<v>(?:(?!(?P=q)).|\\.)*)(?P=q)\s*(?:#.*)?$""", re.M)
+
+
+def _typed_cell(code: str, tables: dict[str, pd.DataFrame]) -> str | None:
+    """`answer = "AL-1/GL-1"` where that string is a cell of a table: the model copied it from the rendered CSV
+    (an 8B model often reads the neighbouring row). Returns the literal, or None."""
+    m = TYPED_TEXT.search(code)
+    if m is None:
+        return None
+    lit = m.group("v").replace('\\"', '"').replace("\\'", "'").strip()
+    norm = re.sub(r"\s+", "", lit).upper()
+    if not norm:
+        return None
+    for df in tables.values():
+        for c in df.columns:
+            if (df[c].dtype == object or pd.api.types.is_string_dtype(df[c])) and (df[c].astype(str).str.replace(r"\s+", "", regex=True).str.upper() == norm).any():
+                return lit
+    return None
 
 
 def _run(code: str, tables: dict[str, pd.DataFrame]) -> dict:
@@ -144,30 +173,104 @@ def _run(code: str, tables: dict[str, pd.DataFrame]) -> dict:
     return {"value": ans, "unit": env.get("unit"), "used": [int(u) for u in list(used)[:200] if str(u).lstrip("-").isdigit()]}
 
 
+LITERAL_RE = re.compile(r"""(?:contains|startswith|endswith|==|match)\(?\s*r?(["'])(.{2,40}?)\1""")
+
+
+def _where(code: str, tables: dict[str, pd.DataFrame]) -> str:
+    """For an empty selection: where do the strings the code searched for actually occur? ("'Casement' is in
+    t2.Family (4 rows)"), so the retry can pick the right column."""
+    hints = []
+    for _, lit in LITERAL_RE.findall(code)[:4]:
+        words = [w for w in re.split(r"[^A-Za-z0-9]+", lit) if len(w) >= 3] or [lit]
+        pat = "|".join(re.escape(w) for w in words[:3])
+        found = []
+        for name, df in tables.items():
+            for c in df.columns:
+                if df[c].dtype == object or pd.api.types.is_string_dtype(df[c]):
+                    n = int(df[c].astype(str).str.contains(pat, case=False, regex=True, na=False).sum())
+                    if n:
+                        found.append(f"{name}[{c!r}] ({n} rows)")
+        hints.append(f"{lit!r}: " + (", ".join(found[:4]) if found else "not found in any table"))
+    return ("; where those words occur (case-insensitive): " + "; ".join(hints)) if hints else ""
+
+
+ID_TOKEN = re.compile(r"\b(?=[A-Z0-9.-]*\d)[A-Z]{0,4}-?\d{1,4}(?:\.[A-Z0-9]{1,3})?\b")
+
+
+DIM_OR_QTY = re.compile(r"\d+\s*'\s*-?\s*\d*(?:\s+\d+/\d+)?\"?|\d+(?:[.\s]\d+/?\d*)?\s*\"|"
+                        r"\d+(?:\.\d+)?\s*(?:sf|sq\.?\s*ft|ft2|ft²|m2|m²|cfm|gpm|mm|cm|m|ft|in(?:ch(?:es)?)?|%)(?![\w-])", re.I)
+
+
+PREAMBLE = re.compile(r"^\s*(?:on|in|from)\s+(?:sheet|drawing|page)\s+\S+\s+of\s+.*?(?:drawings?|set|plans?)\b"
+                      r"(?:\s*\([^)]*\))?\s*,?", re.I)
+
+
+def id_tokens(question: str, path: str = "") -> set[str]:
+    """Identifiers named in a question (P13, RAG-09, 115.A, room 201), not dimensions or quantities (12'-0", 24"x6"),
+    not the sheet/drawing named in an "On sheet A700 of the ... drawings (address)," preamble or in the file name."""
+    q = DIM_OR_QTY.sub(" ", PREAMBLE.sub(" ", question))
+    in_path = {t.upper().replace("-", "") for t in ID_TOKEN.findall(Path(path).name.upper())} if path else set()
+    return {t.upper() for t in ID_TOKEN.findall(q) if t.upper().replace("-", "") not in in_path}
+
+
+def _rows_mention_ids(question: str, used: list, tables: dict[str, pd.DataFrame], id_col: str,
+                      path: str = "") -> bool | None:
+    """Do the rows a lookup used contain an identifier from the question ("RAG-09", "115.A", "201")? None = the
+    question names no identifier."""
+    ids = id_tokens(question, path)
+    if not ids:
+        return None
+    for df in tables.values():
+        if id_col not in df.columns:
+            continue
+        for _, r in df[df[id_col].isin(used)].iterrows():
+            cells = {str(v).strip().upper() for v in r.values}
+            if ids & cells or any(i in c.split() for i in ids for c in cells):
+                return True
+    return False
+
+
 def ask(question: str, tables: dict[str, pd.DataFrame], backend: str = "local", tries: int = 3, doc: str = DOC,
-        id_col: str = "room_id", units: str = '"count", "m2"') -> dict:
+        id_col: str = "room_id", units: str = '"count", "m2"', lookup_text: bool = False, sep: str = ",") -> dict:
+    """lookup_text: a typed-in string that is a table cell is sent back once ("look it up"); if the lookup fails,
+    the typed answer is kept (res["typed"] = True)."""
     from stoa.llm import chat
 
     names = ", ".join(f"`{k}`" for k in tables)
-    msgs = [{"role": "user", "content": PROMPT.format(doc=doc, data=_render(tables), question=question, names=names,
+    msgs = [{"role": "user", "content": PROMPT.format(doc=doc, data=_render(tables, sep=sep), question=question, names=names,
                                                       id_col=id_col, units=units)}]
     last = {"value": None, "unit": None, "used": [], "code": "", "error": "no attempt"}
+    typed = None  # the first typed-in cell answer, kept as the fallback
     for attempt in range(tries):
-        r = chat(msgs, backend=backend, max_tokens=500, temperature=0.0)
+        r = chat(msgs, backend=backend, max_tokens=700, temperature=0.0)
         code = _extract_code(r.text)
         try:
             res = _run(code, tables)
+            lit = _typed_cell(code, tables) if lookup_text and typed is None and attempt < tries - 1 else None
+            if lit is not None and res["value"] == lit:
+                typed = dict(res, code=code, error=None, typed=True)
+                raise ValueError(f"`answer` is the typed-in string {lit!r}; look the cell up in the DataFrame instead "
+                                 "(e.g. df.loc[df[\"<id column>\"] == \"<id>\", \"<column>\"].iloc[0]) so it comes "
+                                 "from the right row, and set `used` to that row's id")
             v = res["value"]
+            if isinstance(v, float) and v != v:
+                raise ValueError("the query returned NaN (an empty selection or a non-numeric column); check the "
+                                 "filter against the cell values shown above")
             if v is None or (isinstance(v, str) and not v.strip()) or (v == 0 and not res["used"] and attempt < tries - 1):
                 raise ValueError(f"the query returned {v!r} (no matching rows). Look at the actual cell values and "
-                                 "column contents shown above (headers may be misaligned) and fix the filter")
+                                 "column contents shown above (headers may be misaligned) and fix the filter"
+                                 + _where(code, tables))
             if WHICH.search(question) and not isinstance(res["value"], str):
                 raise ValueError(f"the question asks WHICH one, but answer = {res['value']!r}; set answer to the "
                                  "identifier string (apartment letter / room number / name)")
             res.update(code=code, error=None)
+            if typed is not None and res["value"] != typed["value"] and \
+                    _rows_mention_ids(question, res["used"], tables, id_col) is False:
+                return typed  # the lookup read a row that is not the one the question names: keep the typed value
             return res
         except Exception as e:  # noqa: BLE001 - feed the error back once
             last = {"value": None, "unit": None, "used": [], "code": code, "error": f"{type(e).__name__}: {e}"}
             msgs += [{"role": "assistant", "content": r.text},
-                     {"role": "user", "content": f"That code failed: {last['error']}. Fix it; reply with code only."}]
-    return last
+                     {"role": "user", "content": f"That code failed: {last['error']}. Fix it; reply with short code only "
+                                                     "(no comments, no helper functions)."}]
+    return typed if typed is not None else last

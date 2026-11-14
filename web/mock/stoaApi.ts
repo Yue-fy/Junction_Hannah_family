@@ -234,11 +234,18 @@ function bench() {
     }
   });
   const full = (r: LbRow) => !r.limit && !r.sources && !r.types && !r.grep && !r.handled_only && !r.metrics.errors;
-  // The pipeline row comes from S0's integration runs on `night` when there is one (agents also log runs of
-  // uncommitted work); baselines take the latest full run of anyone.
+  // The pipeline rows come from the integration runs of S0 and F (both measure `night`-equivalent commits; other agents
+  // also log runs of uncommitted work), all on ONE commit when possible: the commit of the latest full S0/F dev run
+  // (since D14, S0 skips duplicate dev/hard runs and F's runs are the reference). Baselines: latest full run of anyone.
+  const integ = (r: LbRow) => r.agent === "S0" || r.agent === "F";
+  const anchor = rows.filter((r) => r.solver === "pipeline" && r.split === "dev" && r.n >= 1500 && full(r) && integ(r)).at(-1)?.commit;
+  const pickPipeline = (ok: LbRow[]) => {
+    const mine = ok.filter(integ);
+    return mine.filter((r) => anchor && r.commit === anchor).at(-1) ?? mine.at(-1) ?? ok.at(-1);
+  };
   const pick = (solver: string, split: string, minN: number) => {
     const ok = rows.filter((r) => r.solver === solver && r.split === split && r.n >= minN && full(r));
-    return (solver === "pipeline" ? ok.filter((r) => r.agent === "S0").at(-1) : undefined) ?? ok.at(-1);
+    return solver === "pipeline" ? pickPipeline(ok) : ok.at(-1);
   };
   const summary = (r: LbRow | undefined) => {
     if (!r) return null;
@@ -266,15 +273,24 @@ function bench() {
       prior: summary(pick("prior", split, minN)) };
   // S0's sealed test (experiments/s0/run_test.sh): only the CLEAN run counts (cc5k=0, or the single run when the
   // pipeline has no cc5k switch); the cc5k=1 run is labelled inflated (D8) and never shown as the headline.
-  const clean = (r: LbRow) => String(r.solver_args?.cc5k ?? "") === "0" || /test-cc5k0\b/.test(r.note ?? "")
-    || (r.solver_args?.cc5k === undefined && !/cc5k/i.test(r.note ?? ""));
+  // Ablations (e.g. test-lora0: cc5k=0 + lora=0) are not the headline either: exactly {cc5k: 0}, or no args at all.
+  const clean = (r: LbRow) => {
+    const args = Object.keys(r.solver_args ?? {});
+    if (/test-(lora|cc5k1)/i.test(r.note ?? "")) return false;
+    if (/test-cc5k0\b/.test(r.note ?? "")) return true;
+    return (args.length === 1 && String(r.solver_args?.cc5k) === "0") || (args.length === 0 && !/cc5k|lora/i.test(r.note ?? ""));
+  };
   const test = rows.filter((r) => r.solver === "pipeline" && r.split === "test" && r.agent === "S0" && r.n >= 500 && full(r) && clean(r)).at(-1);
-  out.test = { pipeline: summary(test) };
-  // novel question kinds (operators no template covers): hard2 = developed on; hard2q = clean held-out rewording,
-  // reported as an aggregate only (D10)
-  for (const split of ["hard2", "hard2q"]) {
-    const r = rows.filter((x) => x.solver === "pipeline" && x.split === split && x.n >= 200 && full(x));
-    out[split] = { pipeline: summary(r.filter((x) => x.agent === "S0" || x.agent === "F").at(-1) ?? r.at(-1)) };
+  // the same sealed test without R2's counting LoRA (run_test.sh "test-lora0": cc5k=0 + lora=0, same commit): shows what the
+  // small fine-tuned model adds on data nobody has seen
+  const lora0 = test && rows.filter((r) => r.solver === "pipeline" && r.split === "test" && r.agent === "S0" && full(r)
+    && r.commit === test.commit && (/test-lora0\b/.test(r.note ?? "") || String(r.solver_args?.lora ?? "") === "0")).at(-1);
+  out.test = { pipeline: summary(test), ...(lora0 ? { no_lora: summary(lora0) } : {}) };
+  // novel question kinds (operators no template covers): hard2 = developed on; hard2q = held-out rewording (D10, now
+  // "worn"); hard2r = F's sealed fresh draw in a fourth wording (D12, the clean one). Aggregates only.
+  for (const split of ["hard2", "hard2q", "hard2r"]) {
+    // the integration run on the same commit as dev/hard first (F logs a base and a candidate commit side by side)
+    out[split] = { pipeline: summary(pick("pipeline", split, 200)) };
   }
   return { from: "leaderboard", generated: new Date().toISOString(), runs: out };
 }

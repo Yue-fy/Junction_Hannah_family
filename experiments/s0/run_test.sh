@@ -27,23 +27,29 @@ run() {  # name split extra-args...
 }
 
 run test-cc5k0 test --allow-test --solver-arg cc5k=0 --judge local   # clean headline (D8, D11)
-if [ "$HAS_LORA" -gt 0 ]; then
+# Sealed generality first (D12, D15): these are the numbers the hidden set cares about most.
+run hard2r hard2r --judge local   # D12: sealed fresh draw (F), milestones only, aggregates only
+run hard3 hard3 --judge local    # D15: sealed derived quantities (F), milestones only, aggregates only
+# Ablations (test 1 measured them: LoRA +6.0 weighted, cc5k=1 boxes only). ABLATIONS=0 skips them (D16).
+if [ "${ABLATIONS:-1}" = "1" ] && [ "$HAS_LORA" -gt 0 ]; then
   run test-lora0 test --allow-test --solver-arg cc5k=0 --solver-arg lora=0   # ablation: without R2's counting LoRA
 fi
-if [ "$HAS_CC5K" = "1" ]; then
+if [ "${ABLATIONS:-1}" = "1" ] && [ "$HAS_CC5K" = "1" ]; then
   run test-cc5k1 test --allow-test --solver-arg cc5k=1   # labelled INFLATED (CC5K pretraining saw these images)
 else
-  echo "cc5k=1 is a no-op at $C (raster_cc5k gate not found by the pipeline): skipped"
+  echo "cc5k=1 skipped (ABLATIONS=${ABLATIONS:-1}, HAS_CC5K=$HAS_CC5K)"
 fi
 run dev dev
 run hard hard
 run hard2 hard2
 run hard2q hard2q   # held out: aggregates only, never quote wordings (D10)
 run hard2p hard2p   # partly seen
-run hard2r hard2r --judge local   # D12: sealed fresh draw (F), milestones only, aggregates only
-pred() { tr '\r' '\n' < "$L/test-$STAMP-$1.log" | sed -n 's/^predictions: //p' | tail -1; }
+pred() { [ -f "$L/test-$STAMP-$1.log" ] && tr '\r' '\n' < "$L/test-$STAMP-$1.log" | sed -n 's/^predictions: //p' | tail -1; }
 CLEAN=$(pred test-cc5k0)
 DEV=$(pred dev)
 echo "scorecard: test=$CLEAN dev=$DEV"
-"$P" -m stoa.eval.scorecard "$CLEAN" --hard "$(pred hard)" --gen "$(pred hard2)" --gen "$(pred hard2q)" --gen "$(pred hard2r)" --out "$L/scorecard-$STAMP.md" 2>&1 | tail -40
+# Only pass runs that produced a predictions file (runs killed by skip_dup_runs.sh leave none; F 04:01 crash).
+ARGS=(); H=$(pred hard); [ -n "$H" ] && [ -f "$H" ] && ARGS+=(--hard "$H")
+for s in hard2 hard2q hard2r hard3; do G=$(pred $s); [ -n "$G" ] && [ -f "$G" ] && ARGS+=(--gen "$G"); done
+"$P" -m stoa.eval.scorecard "$CLEAN" "${ARGS[@]}" --out "$L/scorecard-$STAMP.md" 2>&1 | tail -40
 echo "done $C; scorecard in $L/scorecard-$STAMP.md"

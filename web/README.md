@@ -29,7 +29,7 @@ npm run dev          # http://localhost:5173 (Vite, port 5173)
 Deep links: `/?file=<dataset-relative path>&q=<question>` opens a file and asks right away, e.g.
 `/?file=data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf&q=How many doors are shown on the floor plan of '1.korrus'?`
 
-## Demo script (30 s)
+## Demo script (12 steps, ~2 min; steps 1–3 + 6 + 10 + 12 for a short pitch)
 
 Click **Demo tour ▸** (top left), or press → / ← (when not typing). Each step opens a file, asks one question
 and shows a one-line note:
@@ -42,26 +42,62 @@ and shows a one-line note:
    is a cut at floor + 1.2 m; 3 windows lie entirely above/below it) and the matching knowledge-graph pill is
    highlighted ("windows plan 52 · IFC 52 at the cut (55 on storey) ✓").
 4. Model-wide doors → 211 with evidence on 5 sheets (chips; click one to open that plan, same answer).
-5. A question no template covers ("what share of the total room area on '1.korrus' does 'KORIDOR (119)'
-   take?") → 7.34 %. The card's **Reasoning** section shows W4's agent chain: ask (total area, 870.29 m², ifc)
-   → ask (KORIDOR, 63.84 m², ifc) → calc `63.841 ÷ 870.288 × 100` → answer. Sub-questions are clickable, each
-   evidence row says which step it came from, and the cross-check is labelled "step 2".
-6. Swiss floor plan: doors counted on the DXF layer, boxed on the PDF (36).
-7. Same floor, asked in German, doors and windows together → 64. The card shows "Understood as: count · door +
+5. A question no template covers, with a number in it ("if each door costs 450 euros, what do all the doors on
+   '1.korrus' cost in total?") → 20,700 €. The card says "Understood as: factor 450 EUR per door · not a template: ifc
+   read the question itself and computed it in code"; "Why" shows `46 count x 450 = 20700.00 EUR` (green = arithmetic
+   done in code), and the 46 doors are the evidence in 2D and 3D. No model call. Same path: "what share of the total
+   room area on '1.korrus' does 'KORIDOR (119)' take?" → 7.34 %. Questions no solver can read go to W4's planning
+   agent (ask → ask → calc → answer; sub-questions clickable, evidence rows labelled by step).
+6. A free-text question about a model (4351_arc.ifc, "what plumbing fixtures are in this building and their counts?"):
+   the solver's text cites no elements, so the browser checks it against the loaded IFC model by element name
+   (`findNamed` in `src/viewer3d.ts`, no model call). With the 03:29 answer ("Toilet-Domestic-3D: 9, Urinal-Wall-3D: 4")
+   the named fixtures turn orange, both counts ✓, and "the model also has Sink Vanity-Round ×6, Sink Kitchen-Double ×2
+   … not mentioned ✗" (purple) — exactly what the gold adds. With night 8f02b13's answer ("no plumbing fixtures are
+   listed", a fact-card regression, told W1) the card shows "✗ the model has Urinal-Wall-3D ×4, Toilet-Domestic-3D ×9,
+   Sink Vanity-Round ×6, Sink Kitchen-Double ×2 of the kind the question asks about" and all 21 in purple.
+7. Swiss floor plan: doors counted on the DXF layer, boxed on the PDF (36).
+8. Same floor, asked in German, doors and windows together → 64. The card shows "Understood as: count · door +
    window · German" and the plan (sum of 2 sub-questions, each clickable); both parts are cross-checked.
-8. CubiCasa scan (colorful-4539), asked in Finnish: bedrooms → 3, each counted 'MH' label boxed on the image
-   (W3's raster label reader, one local-VLM call per drawing, shared by all its questions).
-9. HAER historical scan (vi0026 sheet 3, Creque Marine Railway, 1977; no questions in the dataset): "what kind
-   of drawing is this?" → the local VLM says "elevation" at 20 %, and the tour clicks **Second opinion · NVIDIA
-   Nemotron**: the hosted Nemotron 3.5 Super VL agrees (time, tokens and € shown; its reasoning folded). The
+9. CubiCasa scan (colorful-4539), asked in Finnish: bedrooms → 3 from the fine-tuned 8B vision model (LoRA cc-v2);
+   W3's raster label reader (one local-VLM call per drawing, shared by all its questions) reads 3 'MH' labels, so the
+   pipeline cross-checks "vlm_lora 3 = raster 3 ✓", raises the confidence (86 %) and boxes each counted label.
+10. CubiCasa scan (high_quality_architectural-14797): "how many saunas?" → the fine-tuned LoRA says 0 (78 %), the label
+   reader read 1, so the card shows "✗ Sources disagree" and no boxes. The tour clicks **Show where · read the room
+   labels**: the reader's box lands on "LH 2,7" (löylyhuone = sauna room) — one glance shows the sauna (gold: 1). For
+   symbol counts (windows, doors, WC seats, sinks) the same button asks R1's CubiCasa5K detector (`raster_cc5k`, cached,
+   no GPU) and the credit line adds its weights' licence (CC BY-NC 4.0); e.g. high_quality_architectural-816 doors:
+   answer 7, detector marks 9 (gold 9; that drawing is in CC5K's training list).
+11. HAER historical scan (vi0026 sheet 3, Creque Marine Railway, 1977; no questions in the dataset): "what kind
+   of drawing is this?" → "elevation" at 70 %, read from the scan's own printed text: W3's text layer
+   (`stoa/solvers/raster/textlayer.py`, the local VLM reading the sheet tile by tile) finds 59 texts and the
+   scale note (1/4" = 1'-0", 1:48), and the answer cites the title lines "HEAD HOUSE AND RESIDENCE" / "NORTH
+   ELEVATION", boxed on the scan (first read ~3 min on a busy GPU, then cached; the card says "first time").
+   The tour then clicks **Second opinion · NVIDIA Nemotron**: the hosted Nemotron 3.5 Super VL agrees (time,
+   tokens and € shown; its reasoning folded). The
    knowledge-graph strip links the other sheets of the same survey, named from the Library of Congress titles
    ("West Elevation", "South Elevation", "Machinery, North Elevation"). Finna scans link the drawings filed
    under the same address ("drawing 2 of 13").
-10. "How well it works": accuracy per source on held-out drawings against "just ask the VLM" and the template
+12. "How well it works": accuracy per source on held-out drawings against "just ask the VLM" and the template
    prior, the hard (generality) split, new question kinds (hard2, plus the clean held-out rewording hard2q as an
    aggregate), cost per 1,000 questions, the share answered by rules alone, and calibration. Read live from the
    stoa.eval leaderboard (`STOA_LEADERBOARD`; pipeline rows from S0's integration runs), else
    `fixtures/bench.json`.
+
+**Show where** (CubiCasa count answers that carry no boxes; `locatorFor` in `src/card.ts`): room counts (bedroom,
+kitchen, bathroom, sauna, WC room, balcony) ask the label reader (`raster`) and box the labels it counted; symbol
+counts (windows, doors, WC seats, sinks) ask the CubiCasa5K detector (`raster_cc5k`) and box each symbol. The card
+adds "✓/✗ <reader> finds N …" next to the pipeline's own cross-check; on ✗ the boxes show the reader's count, and an
+assumption says so. Hidden when the pipeline already asked the label reader and it found none.
+
+**Compared candidates** (ranked answers such as "which storey has the most doors?"): when the trace has one value
+per candidate and an "argmax/argmin over …" line, the card shows a bar per candidate with the chosen one highlighted.
+
+**Named elements** (free-text answers on an .ifc with no element evidence): element types the text names are
+matched in the model by family/type name, highlighted, and their counts checked against the numbers the text gives;
+for fixture kinds (sanitary, furniture, lighting), families of that kind that the text leaves out are listed as a ✗
+check and under "What would make it certain" (purple in 3D). A kind is checked when the answer names one of its
+families or the question asks about it ("plumbing fixtures"; not for questions about rooms/spaces). An assumption
+line says the solver did not cite them.
 
 **Second opinion** (any answer from a model tier, or below 80 % confidence, on an image or PDF): one click
 asks hosted NVIDIA Nemotron the same question (`POST /ask {solver: "vlm_direct", solver_args: {backend:
@@ -90,6 +126,18 @@ five match the dataset answers. Regenerate:
 ```bash
 $JUNCTION_VENV/bin/python web/fixtures/make_fixtures.py
 ```
+
+**Tour and recorded answers.** The demo tour's steps are in `fixtures/tour.json` (`{file, q, note, bench?,
+second?, locate?}`; add a step = add an entry, no code change). `fixtures/record.py` asks the running API every
+tour question (plus a few extras, the Nemotron second opinions and the "Show where" readers) and writes
+`fixtures/recorded.json`, which the mock replays when the API is down:
+
+```bash
+$JUNCTION_VENV/bin/python web/fixtures/record.py --api http://127.0.0.1:8100
+```
+
+An entry with `"pinned": true` in `recorded.json` is kept instead of the fresh recording (use it to hold a
+known-good answer while a solver regression is fixed, and say why in a `"note"`).
 
 ## Coordinates (docs/CONTRACT.md)
 
