@@ -672,6 +672,18 @@ All 609 rows (v1–v18), run `20261114-085112-pipeline-questions-v18-6fe8` vs 62
 code multiplies the price by all objects; it flipped in 2 of 5 runs tonight — a flake, not noise to ignore). Left at
 ≥ 0.8: one-floor "whole building" ×3 (W2) and bug 21 ("windows in the model but not drawn on this plan" → 297, W1/W4).
 
+## Cost under attack, re-measured (08:57; same 440 rows: run `98f0` at 05:05 vs `6fe8` = pre-merge #7 at 08:52)
+**$0.073 → $0.110 per 1,000 questions (+51 %)**; the top 3 % of questions are still ~50 % of the cost. By family
+($ per 1,000): surface perturbations 0.071 → 0.230 (prompt injections now take more steps: the Swiss door count with an
+injection 1 → 9 LLM calls; A700 schedule perturbations 2 → 3 calls of ~17k tokens), false premises 0.19 → 0.25,
+unanswerable 0.42 → 0.39, absent objects 0.39 → 0.31, scans 0.85 → 0.90, storey questions 0.016 (=). "How big is this
+apartment?" on a CubiCasa plan: 1 → 11 LLM calls (agent, 36.7k tokens) for the same honest "no scale" answer at 0.05.
+Latency in that run (4 workers on the shared server, other agents running): p50 0.3 s, p95 2.9 → 7.4 s, 6 rows over
+30 s, worst 148 s (a Finnish typo "Kunika monta saunaa pohjapiiurstuksessa on?" on a CubiCasa plan → no intent → raster
+text layer → "2" from no text lines at 0.30). Still cheap in absolute terms; the rise comes from guards that add
+steps on adversarial wordings (W4 told). Dollar cost is computed from tokens, so it does not depend on server load;
+latency does.
+
 ## For Saturday noon: red-team Stoa's example questions in one command (`redteam/from_examples.py`)
 Put Stoa's examples in a jsonl (`path`, `question`, and `answer` / `unit` when known; a path may be absolute), then
 ```
