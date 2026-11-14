@@ -975,6 +975,61 @@ def main():
             r_["meta"]["reject_re"] = r"does not contain|no (sheet |drawing )?information|not include|cannot (be )?determine|no plan sheet"
         out.append(r_)
 
+    # ===== v21 (09:20): non-schedule sheets (life safety, general notes, site plans, elevations) asked naturally ======
+    # W2's 51 verified probe rows (snapshot of night-W2 454e8bb: artifacts/Q/v21_src_w2_454e8bb.jsonl; none of these
+    # sheets is in any split) all start "On sheet A020 (Life Safety) of the Cannery Trail Residences drawings, …". A
+    # person types the question without that hint; here the hint is removed, and 6 rows are also asked in DE/FI/SV.
+    # Numbers: count / ft2 rows scored by the eval; other numbers and text by a regex on W2's gold.
+    def strip_hint(q):
+        m = re.match(r"On sheet .*? drawings, (.*)$", q)
+        return (m.group(1)[0].upper() + m.group(1)[1:]) if m else q
+
+    def gold_re(g):
+        if isinstance(g, (int, float)) or re.fullmatch(r"[\d.]+", str(g)):
+            return rf"(?<![\d.]){re.escape(str(g))}(?!\d)"
+        quote = {"'": "['’′]", '"': "[\"”″]"}
+        alts = ["".join(quote.get(c, re.escape(c)) + r"\s*" for c in str(g) if not c.isspace())]
+        m = re.fullmatch(r"(\d+)'\s*-?\s*(\d+)?(?:\s+(\d+)/(\d+))?\"?", str(g).strip())
+        if m and m.group(2):  # feet-inches: the same length in decimal feet is right too
+            ft = int(m.group(1)) + (int(m.group(2)) + (int(m.group(3)) / int(m.group(4)) if m.group(3) else 0)) / 12
+            alts.append(rf"(?<![\d.]){ft:.2f}|(?<![\d.]){ft:.1f}(?!\d)")
+        m = re.fullmatch(r"(\d+)'", str(g).strip())
+        if m:  # bare feet: "32 ft" / "32 feet" is right too
+            alts.append(rf"(?<![\d.]){m.group(1)}(\.0+)?\s*(ft|feet|foot)\b")
+        return "|".join(alts)
+    src = [json.loads(line) for line in open(SHARED / "artifacts/Q/v21_src_w2_454e8bb.jsonl")]
+    for r0 in src:
+        g, u = r0["gold"], r0.get("unit")
+        q = strip_hint(r0["question"])
+        if u == "count":
+            out.append(row(r0["path"], q, g, "count", "count", "sheet21:count", "same", note=r0.get("verified", "")[:120]))
+        elif u == "ft2":
+            out.append(row(r0["path"], q, g, "ft2", "area", "sheet21:area", "same", note=r0.get("verified", "")[:120]))
+        else:
+            r_ = row(r0["path"], q, str(g), None, "text", "sheet21:text", "same", note=r0.get("verified", "")[:120])
+            r_["meta"]["accept_re"] = gold_re(g)
+            out.append(r_)
+    byq = {strip_hint(r0["question"]).lower(): r0 for r0 in src}
+    for en, tr, kind in [
+        ("who is the structural engineer of record?", "Wer ist der verantwortliche Tragwerksplaner?", "sheet21:de"),
+        ("what 28-day compressive strength is required for the slabs-on-grade?",
+         "Welche 28-Tage-Druckfestigkeit wird für die Bodenplatten gefordert?", "sheet21:de"),
+        ("what is the maximum building height?", "Mikä on rakennuksen suurin sallittu korkeus?", "sheet21:fi"),
+        ("how many parking stalls are there in total according to the project data?",
+         "Montako pysäköintipaikkaa hankkeessa on yhteensä?", "sheet21:fi"),
+        ("who is the general contractor?", "Vem är generalentreprenör?", "sheet21:sv"),
+        ("what occupancy classification is the basement parking garage?",
+         "Welche Nutzungsklasse hat die Tiefgarage im Untergeschoss?", "sheet21:de"),
+    ]:
+        r0 = byq[en]
+        g = r0["gold"]
+        if r0.get("unit") == "count":
+            out.append(row(r0["path"], tr, g, "count", "count", kind, "same", note=f"= '{en}'"))
+        else:
+            r_ = row(r0["path"], tr, str(g), None, "text", kind, "same", note=f"= '{en}'")
+            r_["meta"]["accept_re"] = gold_re(g)
+            out.append(r_)
+
     with open(OUT, "w", encoding="utf-8") as f:
         for r in out:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
