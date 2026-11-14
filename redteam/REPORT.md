@@ -830,7 +830,16 @@ front yard setback?" 30'-0" at 0.85 → "FRONT YARD SETBACK" at 0.20, Swedish "V
 Builders" at 0.85 → "General Contractor" at 0.65. Not confident but wrong on #9 as well: "How many accessible parking
 stalls are provided in total?" 1 at 0.65 (gold 6), "Which first-floor unit has the largest area?" U111 at 0.55 (gold
 U120). One gold corrected: W2's "maximum building height" gold is 32', the sheet prints "BUILDING HEIGHT (MAX) = 32' -
-9"" (W2 told). The hinted wordings (W2's own) on #9 are the paired control: see below once run `…-v21_hint-cf82` ends.
+9"" (W2 told). **Paired control on #9 (W2's hinted wordings, run `…-v21_hint-cf82`, 51 English rows): with the hint 44/51 (7 of 8
+at ≥ 0.8 right), without it 40/51 (9 of 11) — the hint is worth 4 rows (6 right only with it, 2 only without).** Both
+confident misses appear only without the hint, and the hinted answers are right at lower confidence: fence 56' at
+0.65 vs 870'-5 1/2" at 0.85; clapboard "IRON GREY - SMOOTH" at 0.70 vs "FIBER CEMENT CLAPBOARD -" at 0.85. Mechanism
+(from the traces): the hint words ("On sheet A-100-A (Site Plan) …") steer the question to the sheet-text reader (cited
+rows, 0.55–0.70); without them it goes to table-QA code over whatever table the text layer yields (0.85). Also lost
+without the hint: parking-stall size 9'x18' → 9'-5 1/2" (0.20), labelled stalls 5 → 0, accessible stalls 6 → 1, largest
+unit U120 → U111. The hinted version has its own confident miss: "elevation of the 3rd floor level" 21.92 at 0.85
+(gold 22'-5" = 22.42 ft; no hint: right). A judge will not type the sheet title, so the no-hint numbers are the ones
+that count.
 
 ## "You know what you don't know — but refusing is not useful" (Stoa point 3), audited on be57171 (09:15)
 All 622 answers of run `…-090509-…-v19b-a85a` (+ 25 v19b/v20 rows: same picture), by confidence band:
