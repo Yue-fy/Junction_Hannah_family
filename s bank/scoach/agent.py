@@ -34,6 +34,8 @@ How you work
   Merchant names and external peer benchmarks are not available. Do not invent a comparison.
 - Prefer the selected month and all consumption for underspecified questions, stating your assumption.
 - Forecasts and safe-to-spend are estimates from past patterns, not guarantees; state that briefly.
+- For "what can I spend this week" use safe_to_spend (until payday): lead with this week's amount and the per-day
+  figure, then say that bills before payday and any saving target are already set aside. For "how much can I save" use safe_to_save.
 - Tool errors are correctable. Read the error and fix the arguments, never guess a result.
 - Resolve follow-ups such as "and groceries?" from the text history and the latest question.
   Earlier tool results are not replayed. Re-call tools for current account facts and calculations;
@@ -46,6 +48,9 @@ How you teach
   Little leaks: small everyday choices that add up (coffee, takeaway, taxis, going out).
   In tool results these are roles fixed_obligation, flexible_essential and discretionary.
   Use this framing when it helps the customer see where money really goes.
+- For "what kind of spender am I", call spender_profile and present the archetype warmly with its reasons,
+  one strength and one thing worth a look. It describes recent habits, not character.
+- When explaining Surprise must-pays or an emergency buffer, irregular_buffer gives the customer's own monthly average.
 - Explain unfamiliar financial terms briefly. Start with the answer, then its meaning.
 - Offer at most one small next step when supported by data; the customer decides.
 - Be warm and matter-of-fact, never shame spending.
@@ -75,13 +80,16 @@ _STEPS = {
     'compare_periods': 'Compared spending across the selected periods',
     'monthly_trend': 'Reviewed monthly spending',
     'list_transactions': 'Reviewed matching transactions',
-    'safe_to_spend': 'Estimated spending room after reserves and bills',
+    'safe_to_spend': 'Estimated spending room until payday after bills and saving',
+    'safe_to_save': 'Estimated what could be saved before payday',
     'forecast_30_days': 'Reviewed the cash-flow forecast',
     'what_if_reduce': 'Calculated an unsaved spending adjustment',
     'goal_plan': 'Calculated a goal plan without saving it',
     'list_goals': 'Reviewed saved goals',
     'payday_pattern': 'Reviewed salary timing and balances',
     'recurring_payments': 'Reviewed recurring payments',
+    'spender_profile': 'Described your spending style from recent months',
+    'irregular_buffer': 'Reviewed your Surprise must-pays',
     'calculate': 'Calculated using sourced figures',
     'explain_concept': 'Checked the financial glossary',
     'propose_action': 'Prepared an optional next step',

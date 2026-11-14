@@ -180,3 +180,308 @@ def backtest_preview(conn,customer_id,as_of):
     preview=preview_30_days(conn,customer_id,as_of)
     actual=transactions(conn,customer_id,end=horizon.isoformat())[-1]; end=preview['projected'][-1]
     return {'customer_id':customer_id,'account_id':actual['account_id'],'as_of':as_of,'horizon_days':30,'actual_end_date':horizon.isoformat(),'actual_balance_date':actual['date'],'actual_end_balance_cents':actual['balance_after_cents'],'preview_end_balance_cents':end['balance_cents'],'confirmed_end_balance_cents':end['confirmed_balance_cents'],'ending_balance_error_cents':end['balance_cents']-actual['balance_after_cents'],'absolute_ending_balance_error_cents':abs(end['balance_cents']-actual['balance_after_cents']),'actual_transaction_ref':actual['transaction_ref'],'label':'Historical backtest error — not forecast confidence','fact_id':fact_id('backtest',preview['fact_id'],actual['transaction_ref'])}
+
+
+# ---------------------------------------------------------------------------
+# WP-D: safe to spend until payday, safe to save (added; existing functions
+# above are unchanged).
+
+PROFILE_COACHING_MODES = ('normal', 'steady')
+DECLARED_MATCH_TOLERANCE = Decimal('0.10')
+
+
+def _euro(cents):
+    sign = '-' if cents < 0 else ''
+    return sign + '€' + format(Decimal(abs(cents)) / 100, ',.2f')
+
+
+def _scheduled_date(reference, offset, day):
+    month = shift_month(reference.strftime('%Y-%m'), offset)
+    y, m = map(int, month.split('-'))
+    return date(y, m, min(day, calendar.monthrange(y, m)[1]))
+
+
+def _next_payday(reference, recurring):
+    """Return (payday date or None, salary recurring item or None)."""
+    salaries = [r for r in recurring if r['transaction_type'] == 'salary' and r['amount_cents'] > 0]
+    if not salaries:
+        return None, None
+    # Several salary groups are unusual; the largest one sets the pay cycle.
+    salary = max(salaries, key=lambda r: (r['amount_cents'], r['id']))
+    day = int(salary['median_day'])
+    for offset in range(3):
+        candidate = _scheduled_date(reference, offset, day)
+        # A payday on the reference date counts as already paid (balance includes it).
+        if candidate > reference:
+            return candidate, salary
+    return None, salary
+
+
+def _validate_profile(profile):
+    if profile is None:
+        profile = {}
+    if not isinstance(profile, dict):
+        raise ValueError('profile must be a dict or None')
+    def number(value, name):
+        if isinstance(value, bool) or not isinstance(value, (int, float, Decimal)):
+            raise ValueError(name + ' must be a number')
+        return value
+    def cents(value, name):
+        if type(value) is not int or value < 0:
+            raise ValueError(name + ' must be nonnegative integer cents')
+        return value
+    clean = {}
+    pct = profile.get('saving_rate_target_pct')
+    if pct is not None:
+        pct = Decimal(str(number(pct, 'saving_rate_target_pct')))
+        if not pct.is_finite() or not 0 <= pct <= 100:
+            raise ValueError('saving_rate_target_pct must be between 0 and 100')
+        clean['saving_rate_target_pct'] = pct
+    debts = profile.get('debts') or []
+    if not isinstance(debts, list):
+        raise ValueError('debts must be a list')
+    clean['debts'] = []
+    for debt in debts:
+        if not isinstance(debt, dict):
+            raise ValueError('each debt must be a dict')
+        clean['debts'].append({'type': str(debt.get('type') or 'debt'), 'monthly_payment_cents': cents(debt.get('monthly_payment_cents'), 'debt monthly_payment_cents')})
+    investing = profile.get('regular_investing')
+    if investing is not None:
+        if not isinstance(investing, dict):
+            raise ValueError('regular_investing must be a dict')
+        if investing.get('active'):
+            clean['regular_investing'] = cents(investing.get('monthly_cents'), 'regular_investing monthly_cents')
+    mode = profile.get('coaching_mode') or 'normal'
+    if mode not in PROFILE_COACHING_MODES:
+        raise ValueError('coaching_mode must be normal or steady')
+    clean['coaching_mode'] = mode
+    if profile.get('must_pays_monthly_cents') is not None:
+        clean['must_pays_monthly_cents'] = cents(profile['must_pays_monthly_cents'], 'must_pays_monthly_cents')
+    return clean
+
+
+def _last_salary(conn, customer_id, reference):
+    """Total salary of the most recent calendar month with salary, up to reference."""
+    rows = [r for r in transactions(conn, customer_id, end=reference.isoformat(), filters={'transaction_type': 'salary'}) if r['amount_cents'] > 0]
+    if not rows:
+        return None, None, []
+    month = rows[-1]['date'][:7]
+    selected = [r for r in rows if r['date'][:7] == month]
+    return sum(r['amount_cents'] for r in selected), month, [r['transaction_ref'] for r in selected]
+
+
+def _must_pays_monthly(conn, customer_id, reference):
+    """Average monthly Must-pays (fixed_obligation consumption) over the last 3 complete months."""
+    scope = account_scope(conn, customer_id)
+    month = reference.strftime('%Y-%m')
+    if reference.isoformat() < month_bounds(month)[1]:
+        month = shift_month(month, -1)
+    months = [shift_month(month, i) for i in range(-2, 1)]
+    months = [m for m in months if scope['observed_start'][:7] <= m <= scope['observed_end'][:7]]
+    if not months:
+        return 0, [], []
+    rows = transactions(conn, customer_id, month_bounds(months[0])[0], month_bounds(months[-1])[1], filters={'role': 'fixed_obligation', 'consumption_only': 'true'})
+    total = -sum(r['amount_cents'] for r in rows)
+    return rounded(Decimal(total) / len(months)), months, [r['transaction_ref'] for r in rows]
+
+
+def safe_until_payday(conn, customer_id, as_of=None, reserve_floor_cents=None, profile=None):
+    """Estimate what is safe to spend until the next payday, and what is safe to save.
+
+    A historical scenario, not a promise or credit decision. Unlike
+    ``safe_to_spend(days=7)`` every scheduled bill before payday is held back.
+
+    Args:
+        conn: sqlite3 connection with the ledger schema.
+        customer_id: customer in scope.
+        as_of: ISO date (YYYY-MM-DD) of the reference day; default = last observed day.
+        reserve_floor_cents: nonnegative int cents kept untouched; default 50_000
+            (the same demo default as ``safe_to_spend``).
+        profile: optional plain dict (money profile) with optional keys
+            ``saving_rate_target_pct`` (number 0-100),
+            ``debts`` (list of {type, monthly_payment_cents}),
+            ``regular_investing`` ({active, monthly_cents}),
+            ``coaching_mode`` ('normal'|'steady'),
+            ``must_pays_monthly_cents`` (int, overrides the computed Must-pays month).
+            Unknown keys are ignored.
+
+    Method (all integer cents):
+        1. next_payday = next occurrence (strictly after as_of) of the salary
+           recurring item's median_day, clamped to month length; no salary ->
+           as_of + 30 days, payday_source 'fallback_30_days'.
+        2. committed = scheduled recurring outflows in (as_of, next_payday]
+           (same qualified recurring items and day rule as preview_30_days)
+           + declared monthly debt payments and regular investing, each counted
+           once for the cycle. De-duplication: a declared item is skipped when
+           a not-yet-matched recurring outflow exists whose amount is within
+           +-10 % of the declared amount (each recurring item matches at most one
+           declared item).
+        3. planned_saving = saving_rate_target_pct x last salary month total
+           (salary rows of the most recent month with salary); 0 if unset.
+        4. free = balance - reserve - committed - planned_saving (may be negative;
+           shortfall_cents reports the raw gap, derived spendables clamp at 0).
+        5. per_day = max(free, 0) // days_until_payday (days >= 1);
+           this_week = per_day x min(7, days_until_payday).
+        6. safe_to_save = max(0, free - p75 30-day unscheduled spending x days/30),
+           same historical buffer as safe_to_spend; 0 with
+           safe_to_save_available False when history is too short.
+        7. steady mode: reserve = max(reserve, one month of Must-pays
+           (fixed_obligation consumption, average of last 3 complete months, or
+           must_pays_monthly_cents)); planned_saving = 0; steady_mode True.
+
+    Returns:
+        dict with scope fields, reference_date, next_payday (ISO),
+        days_until_payday, payday_source ('detected'|'fallback_30_days'),
+        starting_balance_cents, reserve_floor_cents, reserve_floor_source,
+        committed_cents, committed_items (list of {date, label, amount_cents
+        (positive outflow), source ('recurring'|'declared'), transaction_type}),
+        skipped_declared_items, planned_saving_cents, planned_saving_basis,
+        free_cents (raw, may be negative), spendable_cents, shortfall_cents,
+        per_day_cents, this_week_cents, this_week_days, everyday_buffer_cents,
+        safe_to_save_cents, safe_to_save_available, steady_mode,
+        must_pays_monthly_cents, components (list of {key, label, amount_cents,
+        amount}), assumptions (list of str), transaction_refs,
+        comparison_transaction_refs, chart ({kind:'runway', title, series:
+        [{label: ISO date, value_cents}]}, projected p50 balance up to payday),
+        label, scenario True, observed False, fact_id.
+    """
+    clean = _validate_profile(profile)
+    reserve_floor_source = 'demo_default' if reserve_floor_cents is None else 'explicit_request'
+    if reserve_floor_cents is None:
+        reserve_floor_cents = 50_000
+    if type(reserve_floor_cents) is not int or reserve_floor_cents < 0:
+        raise ValueError('reserve_floor_cents must be nonnegative integer cents')
+    scope = account_scope(conn, customer_id)
+    reference = _reference(conn, customer_id, as_of)
+    if reference.isoformat() > scope['observed_end']:
+        raise ValueError('reference date is outside observed history')
+    preview = preview_30_days(conn, customer_id, reference.isoformat())
+    recurring = preview['recurring_items']
+    assumptions = ['Expected income is excluded until it arrives', 'Taxes or obligations not present in the transaction history or your profile are not inferred']
+
+    # 1. Payday.
+    payday, salary_item = _next_payday(reference, recurring)
+    if payday is None:
+        payday = reference + timedelta(days=30); payday_source = 'fallback_30_days'
+        assumptions.append('No regular salary found, so a 30-day horizon is used instead of payday')
+    else:
+        payday_source = 'detected'
+        assumptions.append('Next payday uses the usual salary day (' + str(salary_item['median_day']) + '), moved to the month end in shorter months')
+    days = max((payday - reference).days, 1)
+
+    # 2. Committed outflows up to and including payday.
+    committed_items = []; refs = [preview['starting_transaction_ref']]
+    recurring_outflows = [r for r in recurring if r['amount_cents'] < 0]
+    for item in recurring_outflows:
+        for offset in range(3):
+            when = _scheduled_date(reference, offset, int(item['median_day']))
+            if reference < when <= payday:
+                committed_items.append({'date': when.isoformat(), 'label': item['category'] or item['transaction_type'], 'amount_cents': -item['amount_cents'], 'source': 'recurring', 'transaction_type': item['transaction_type'], 'recurring_id': item['id']})
+                refs.extend(item['transaction_refs'])
+    unmatched = list(recurring_outflows); skipped = []
+    declared = [('Debt payment (' + d['type'] + ')', d['monthly_payment_cents'], 'debt') for d in clean['debts'] if d['monthly_payment_cents'] > 0]
+    if clean.get('regular_investing'):
+        declared.append(('Regular investing', clean['regular_investing'], 'regular_investing'))
+    for label, amount, kind in declared:
+        match = next((r for r in unmatched if abs(Decimal(-r['amount_cents'] - amount)) <= DECLARED_MATCH_TOLERANCE * amount), None)
+        if match is not None:
+            unmatched.remove(match)
+            skipped.append({'label': label, 'amount_cents': amount, 'matched_recurring_id': match['id'], 'matched_amount_cents': -match['amount_cents']})
+            continue
+        committed_items.append({'date': None, 'label': label, 'amount_cents': amount, 'source': 'declared', 'transaction_type': kind, 'recurring_id': None})
+    if declared:
+        assumptions.append('Declared debts and investing count once this pay cycle; one is skipped when a recurring payment within 10% of its amount is already held back')
+    committed_items.sort(key=lambda i: (i['date'] or '9999', i['label']))
+    committed = sum(i['amount_cents'] for i in committed_items)
+
+    # 3. Planned saving / 7. steady mode.
+    steady = clean['coaching_mode'] == 'steady'
+    must_pays = None; salary_refs = []
+    pct = clean.get('saving_rate_target_pct')
+    planned_saving = 0; planned_basis = 'No saving target set, so nothing is set aside for saving'
+    if steady:
+        if 'must_pays_monthly_cents' in clean:
+            must_pays = clean['must_pays_monthly_cents']; source = 'from your profile'
+        else:
+            must_pays, months, must_refs = _must_pays_monthly(conn, customer_id, reference); source = 'average of ' + str(len(months)) + ' complete months'
+        if must_pays > reserve_floor_cents:
+            reserve_floor_cents = must_pays; reserve_floor_source = 'steady_mode_must_pays'
+        planned_basis = 'Steady mode: no saving is planned this pay cycle'
+        assumptions.append('Steady mode: the reserve covers at least one month of Must-pays (' + source + ') and no saving is planned')
+    elif pct is not None and pct > 0:
+        last_salary, salary_month, salary_refs = _last_salary(conn, customer_id, reference)
+        if last_salary is None:
+            planned_basis = 'Saving target set, but no salary was found to apply it to'
+        else:
+            planned_saving = rounded(Decimal(last_salary) * pct / 100)
+            planned_basis = format(pct.normalize(), 'f') + '% saving target of your last salary (' + salary_month + ', ' + _euro(last_salary) + ')'
+            refs.extend(salary_refs)
+    assumptions.append(planned_basis)
+
+    # 4-5. Free money and pacing.
+    balance = preview['starting_balance_cents']
+    free = balance - reserve_floor_cents - committed - planned_saving
+    spendable = max(free, 0); shortfall = max(-free, 0)
+    per_day = spendable // days; week_days = min(7, days); this_week = per_day * week_days
+
+    # 6. Safe to save.
+    band = preview['scenario_band']
+    available = band['observed_span_days'] >= 30 and band['complete_window_count'] >= 1
+    everyday = rounded(Decimal(band['spending_cents']['p75']) * days / 30) if available else None
+    safe_to_save = max(0, free - everyday) if available else 0
+    if not available:
+        assumptions.append('Safe to save needs at least thirty days of history, so it is shown as zero')
+    else:
+        assumptions.append('Safe to save keeps back a busy (upper-quartile) month of everyday spending, scaled to the days until payday')
+
+    components = [
+        ('balance', 'Money in your account now', balance),
+        ('reserve', 'Kept aside as a safety cushion', reserve_floor_cents),
+        ('committed', 'Bills and payments due before payday', committed),
+        ('planned_saving', 'Your planned saving', planned_saving),
+        ('free', 'Free to use until payday', free),
+        ('per_day', 'About this much a day', per_day),
+        ('this_week', 'About this much this week', this_week),
+        ('everyday_buffer', 'Usual everyday spending until payday (busy month)', everyday if everyday is not None else 0),
+        ('safe_to_save', 'Could move to savings now', safe_to_save),
+    ]
+    series = [{'label': p['date'], 'value_cents': p['balance_cents']} for p in preview['projected'] if p['date'] <= payday.isoformat()]
+    result = {
+        **scope,
+        'reference_date': reference.isoformat(),
+        'next_payday': payday.isoformat(),
+        'days_until_payday': days,
+        'payday_source': payday_source,
+        'salary_recurring_id': salary_item['id'] if salary_item else None,
+        'starting_balance_cents': balance,
+        'starting_transaction_ref': preview['starting_transaction_ref'],
+        'reserve_floor_cents': reserve_floor_cents,
+        'reserve_floor_source': reserve_floor_source,
+        'committed_cents': committed,
+        'committed_items': committed_items,
+        'skipped_declared_items': skipped,
+        'planned_saving_cents': planned_saving,
+        'planned_saving_basis': planned_basis,
+        'free_cents': free,
+        'spendable_cents': spendable,
+        'shortfall_cents': shortfall,
+        'per_day_cents': per_day,
+        'this_week_cents': this_week,
+        'this_week_days': week_days,
+        'everyday_buffer_cents': everyday,
+        'historical_flexible_p75_30_day_cents': band['spending_cents']['p75'] if available else None,
+        'safe_to_save_cents': safe_to_save,
+        'safe_to_save_available': available,
+        'steady_mode': steady,
+        'must_pays_monthly_cents': must_pays,
+        'components': [{'key': k, 'label': label, 'amount_cents': v, 'amount': _euro(v)} for k, label, v in components],
+        'assumptions': assumptions,
+        'transaction_refs': list(dict.fromkeys(refs)),
+        'comparison_transaction_refs': band['comparison_transaction_refs'],
+        'chart': {'kind': 'runway', 'title': 'Expected balance until payday', 'basis': 'Scheduled items plus typical (median) everyday spending', 'series': series},
+        'label': 'Estimated safe to spend until payday — not a guarantee',
+        'scenario': True,
+        'observed': False,
+    }
+    result['fact_id'] = fact_id('safe-until-payday', customer_id, reference.isoformat(), payday.isoformat(), reserve_floor_cents, reserve_floor_source, balance, committed, planned_saving, everyday, steady, band['comparison_transaction_refs'])
+    return result

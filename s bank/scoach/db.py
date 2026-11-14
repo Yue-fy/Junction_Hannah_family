@@ -20,8 +20,39 @@ def connect(path):
     return conn
 
 
+PROFILE_SCHEMA_SQL = '''
+    CREATE TABLE IF NOT EXISTS profile_entries(
+      id TEXT PRIMARY KEY, customer_id TEXT NOT NULL REFERENCES customers,
+      key TEXT NOT NULL,
+      value_json TEXT NOT NULL,
+      source TEXT NOT NULL,
+      note TEXT,
+      active INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS profile_entries_scope ON profile_entries(customer_id,key,active);
+'''
+
+
+def ensure_profile_schema(conn):
+    """Idempotently add the money-profile table to an existing database.
+
+    Existing demo databases were built before WP-I and the API opens them with
+    connect() only, so callers that touch profile_entries (state.mutate and
+    scoach.money_profile) call this first. Safe to call on every request.
+    Returns None.
+    """
+    if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='profile_entries'").fetchone():
+        return
+    for statement in PROFILE_SCHEMA_SQL.split(';'):
+        if statement.strip():
+            conn.execute(statement)
+    if not conn.in_transaction:
+        conn.commit()
+
+
 def initialize_schema(conn):
-    conn.executescript('''
+    conn.executescript(PROFILE_SCHEMA_SQL + '''
     CREATE TABLE IF NOT EXISTS customers(customer_id TEXT PRIMARY KEY, postal_code TEXT, age INTEGER, raw_json TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS transactions(transaction_ref TEXT PRIMARY KEY, customer_id TEXT NOT NULL REFERENCES customers, account_id TEXT NOT NULL, date TEXT NOT NULL, timestamp TEXT NOT NULL, category TEXT NOT NULL, amount_cents INTEGER NOT NULL, balance_after_cents INTEGER NOT NULL, transaction_type TEXT NOT NULL, merchant_id TEXT, mcc_code TEXT, source_line INTEGER NOT NULL, row_hash TEXT NOT NULL, raw_json TEXT NOT NULL);
     CREATE INDEX IF NOT EXISTS tx_scope ON transactions(customer_id,date,timestamp,source_line);

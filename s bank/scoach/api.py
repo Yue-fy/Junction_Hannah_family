@@ -49,6 +49,20 @@ def _previous_month(month):
     return f'{value.year - (value.month == 1):04d}-{12 if value.month == 1 else value.month - 1:02d}'
 
 
+def planning_profile(conn, customer_id, as_of):
+    """Money-profile planning inputs for forecasts, or None when no profile exists."""
+    try:
+        from . import money_profile
+    except ImportError:
+        return None
+    try:
+        money_profile.ensure_schema(conn) if hasattr(money_profile, 'ensure_schema') else None
+        inputs = money_profile.planning_inputs(money_profile.get_profile(conn, customer_id), as_of) if money_profile.planning_inputs.__code__.co_argcount > 1 else money_profile.planning_inputs(money_profile.get_profile(conn, customer_id))
+    except (ValueError, KeyError, TypeError):
+        return None
+    return inputs or None
+
+
 def _bounded_materiality(cents):
     """Map absolute change to 0–1; changes of at least EUR 100 reach the cap."""
     if type(cents) is not int:
@@ -87,7 +101,7 @@ class Application:
             raise ValueError('Repeated query parameters are not supported')
         query = {key: values[0] for key, values in query.items()}
         get_routes = {'/api/health', '/api/personas', '/api/overview', '/api/comparison', '/api/transactions', '/api/trends', '/api/forecast', '/api/safe-to-spend', '/api/investments', '/api/financing', '/api/statistics', '/api/statistics/compare', '/api/taxes', '/api/vat', '/api/goals'}
-        post_routes = {'/api/scenarios', '/api/scenarios/exclude', '/api/rules', '/api/goals', '/api/goals/link', '/api/coach', '/api/agent', '/api/tax-plan', '/api/undo', '/api/reset'}
+        post_routes = {'/api/scenarios', '/api/scenarios/exclude', '/api/rules', '/api/goals', '/api/goals/link', '/api/goals/update', '/api/goals/delete', '/api/coach', '/api/agent', '/api/tax-plan', '/api/undo', '/api/reset'}
         if path not in get_routes | post_routes:
             raise APIError(404, 'not_found', 'Unknown API endpoint')
         if (method == 'GET' and path not in get_routes) or (method == 'POST' and path not in post_routes) or method not in {'GET', 'POST'}:
@@ -165,6 +179,10 @@ class Application:
                     from .forecast import safe_to_spend
                     reference_date = query.get('as_of') or min(end, scope['observed_end'])
                     reserve = int(query['reserve_floor_cents']) if 'reserve_floor_cents' in query else None
+                    if query.get('horizon') == 'until_payday':
+                        from .forecast import safe_until_payday
+                        return safe_until_payday(conn, customer_id, as_of=reference_date, reserve_floor_cents=reserve,
+                                                 profile=planning_profile(conn, customer_id, reference_date))
                     return safe_to_spend(
                         conn,
                         customer_id,
@@ -257,6 +275,8 @@ class Application:
             '/api/rules': {'type', 'transaction_ref', 'role', 'category', 'merchant_id', 'label'},
             '/api/goals': {'name', 'target_cents', 'target_date', 'current_saved_cents', 'reserve_floor_cents', 'template'},
             '/api/goals/link': {'goal_id', 'scenario_id'},
+            '/api/goals/update': {'goal_id', 'fields'},
+            '/api/goals/delete': {'goal_id'},
             '/api/tax-plan': {'amount_cents', 'due_date', 'reference_date', 'already_set_aside_cents', 'current_balance_cents', 'reserve_floor_cents', 'set_aside_location', 'label'},
             '/api/coach': {'message', 'locale', 'previous_query'}, '/api/undo': set(), '/api/reset': set(),
             '/api/agent': {'message', 'locale', 'history'},
@@ -574,6 +594,15 @@ class Application:
             response['tool_source'] = 'deterministic_money_map'
             response['source_refs'] = {'transaction_refs': result['transaction_refs']}
             response['explanation_blocks'] = explanation(copy[locale]['profile'], result['fact_id'])
+            # Lead the offline answer with a described habit pattern, not only basket totals.
+            from .spender import spender_profile, offline_summary
+            try:
+                profile = spender_profile(conn, customer_id, end_month=params['period'])
+            except ValueError:
+                profile = None
+            if profile and profile.get('available'):
+                response['spender_summary'] = offline_summary(profile, locale)
+                response['spender_archetype'] = profile['archetype']
         elif intent == 'safe_to_spend':
             from .forecast import safe_to_spend
             result = safe_to_spend(
@@ -655,6 +684,12 @@ class Application:
             result = self._mutation_result('goal', goals.link_scenario_to_goal(conn, customer_id, body['goal_id'], body['scenario_id'], provenance=provenance))
             result['host_action'] = {'type': 'attach_modeled_contribution', 'goal_ref': body['goal_id'], 'cents': result['goal']['modeled_scenario_contribution_cents'], 'scenario_ref': body['scenario_id'], 'requires_host_confirmation': True, 'creates_transfer': False}
             return result
+        if path == '/api/goals/update':
+            if not isinstance(body.get('fields'), dict):
+                raise ValueError('fields must be an object')
+            return self._mutation_result('goal', goals.update_goal(conn, customer_id, body['goal_id'], body['fields'], provenance=provenance))
+        if path == '/api/goals/delete':
+            return self._mutation_result('goal', goals.delete_goal(conn, customer_id, body['goal_id'], provenance=provenance))
         if path == '/api/undo':
             return state.undo_last(conn, customer_id)
         if path == '/api/reset':

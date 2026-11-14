@@ -21,12 +21,19 @@ def _months_remaining(as_of,target):
     return (target.year-as_of.year)*12+target.month-as_of.month
 
 
-def create_goal(conn,customer_id,name,target_cents,target_date,current_saved_cents=0,reserve_floor_cents=0,template='custom',as_of=None,provenance='user'):
-    reference=_reference(conn,customer_id,as_of); target=date.fromisoformat(target_date)
+def _validate_goal_fields(reference,name,target_cents,target_date,current_saved_cents,reserve_floor_cents,template,check_target_date=True):
+    """Shared create/update validation; raises ValueError with the user-facing reason."""
+    if not isinstance(target_date,str): raise ValueError('Goal target date must be an ISO date')
+    target=date.fromisoformat(target_date)
     if not isinstance(name,str) or not name.strip() or len(name)>120: raise ValueError('Goal name required, up to 120 characters')
     if template not in TEMPLATES: raise ValueError('Unknown template')
     if any(type(v) is not int for v in (target_cents,current_saved_cents,reserve_floor_cents)) or target_cents<=0 or min(current_saved_cents,reserve_floor_cents)<0: raise ValueError('Goal inputs must be nonnegative integer cents, target positive')
-    if target<=reference or _months_remaining(reference,target)<1: raise ValueError('Goal target must be at least one calendar month ahead')
+    if check_target_date and (target<=reference or _months_remaining(reference,target)<1): raise ValueError('Goal target must be at least one calendar month ahead')
+
+
+def create_goal(conn,customer_id,name,target_cents,target_date,current_saved_cents=0,reserve_floor_cents=0,template='custom',as_of=None,provenance='user'):
+    reference=_reference(conn,customer_id,as_of)
+    _validate_goal_fields(reference,name,target_cents,target_date,current_saved_cents,reserve_floor_cents,template)
     goal={'id':new_id('goal'),'customer_id':customer_id,'name':name.strip(),'target_cents':target_cents,'target_date':target_date,'current_saved_cents':current_saved_cents,'reserve_floor_cents':reserve_floor_cents,'template':template,'created_at':now()}
     def apply(): conn.execute('INSERT INTO goals VALUES(?,?,?,?,?,?,?,?,?)',tuple(goal.values()))
     _,audit=mutate(conn,customer_id,'create_goal',goal['id'],apply,provenance)
@@ -65,3 +72,75 @@ def link_scenario_to_goal(conn,customer_id,goal_id,scenario_id,as_of=None,proven
             raise ValueError('Scenario is already linked to a goal; undo its link first')
     _,audit=mutate(conn,customer_id,'link_scenario_to_goal',goal_id,apply,provenance)
     return {**goal_plan(conn,customer_id,goal_id,as_of),'audit_event':audit}
+
+
+UPDATABLE_GOAL_FIELDS=('name','target_cents','target_date','current_saved_cents','reserve_floor_cents')
+
+
+def _goal_row(conn,customer_id,goal_id):
+    raw=conn.execute('SELECT * FROM goals WHERE id=? AND customer_id=?',(goal_id,customer_id)).fetchone()
+    if raw is None: raise ValueError('Unknown goal in customer scope')
+    return dict(raw)
+
+
+def update_goal(conn,customer_id,goal_id,fields,provenance='user',as_of=None):
+    """Change fields of an existing goal, audited and undoable via state.undo_last (/api/undo).
+
+    Args:
+        conn: sqlite3 connection.
+        customer_id: owner; a goal of another customer is rejected as unknown.
+        goal_id: goal id (e.g. 'goal:...').
+        fields: non-empty dict with any of name (str, 1-120 chars), target_cents
+            (int > 0), target_date (ISO date at least one calendar month after the
+            reference date), current_saved_cents (int >= 0), reserve_floor_cents
+            (int >= 0). Same validation as create_goal; target_date is only
+            date-checked when it is being changed. Unknown keys raise ValueError.
+        provenance: 'user' | 'deterministic' | 'gemini_proposed_user_confirmed'.
+        as_of: optional ISO reference date (default: last observed day).
+
+    Returns:
+        goal_plan(...) dict for the updated goal plus 'changed_fields' (list of
+        field names whose value changed), 'previous' (the goal row before the
+        change) and 'audit_event' (the audit_events row; action 'update_goal',
+        scope goal_id, before/after JSON snapshots).
+    Raises ValueError without writing anything (no goal change, no audit row).
+    """
+    if not isinstance(fields,dict) or not fields: raise ValueError('fields must be a non-empty dict')
+    unknown=set(fields)-set(UPDATABLE_GOAL_FIELDS)
+    if unknown: raise ValueError('Unsupported goal field: '+', '.join(sorted(unknown)))
+    current=_goal_row(conn,customer_id,goal_id); reference=_reference(conn,customer_id,as_of)
+    merged={**current,**fields}
+    _validate_goal_fields(reference,merged['name'],merged['target_cents'],merged['target_date'],merged['current_saved_cents'],merged['reserve_floor_cents'],merged['template'],check_target_date='target_date' in fields)
+    merged['name']=merged['name'].strip()
+    changed=[k for k in UPDATABLE_GOAL_FIELDS if merged[k]!=current[k]]
+    def apply():
+        conn.execute('UPDATE goals SET name=?,target_cents=?,target_date=?,current_saved_cents=?,reserve_floor_cents=? WHERE id=? AND customer_id=?',(merged['name'],merged['target_cents'],merged['target_date'],merged['current_saved_cents'],merged['reserve_floor_cents'],goal_id,customer_id))
+    _,audit=mutate(conn,customer_id,'update_goal',goal_id,apply,provenance)
+    return {**goal_plan(conn,customer_id,goal_id,as_of),'changed_fields':changed,'previous':current,'audit_event':audit}
+
+
+def delete_goal(conn,customer_id,goal_id,provenance='user'):
+    """Delete a goal and unlink its scenarios in one audited transaction (undoable via /api/undo).
+
+    Scenarios linked to the goal are kept but get goal_id = NULL. The audit
+    before-state (full coach-state snapshot) contains the goal and the linked
+    scenarios, so state.undo_last restores both the goal and the links.
+
+    Args:
+        conn, customer_id, goal_id: as update_goal; unknown or other customer's
+            goal raises ValueError without writing.
+        provenance: 'user' | 'deterministic' | 'gemini_proposed_user_confirmed'.
+
+    Returns:
+        {'deleted_goal_id': str, 'goal': dict (row before deletion),
+         'unlinked_scenario_ids': [str], 'audit_event': dict (action
+         'delete_goal', scope goal_id)}.
+    """
+    goal=_goal_row(conn,customer_id,goal_id)
+    linked=[r[0] for r in conn.execute('SELECT id FROM scenarios WHERE goal_id=? AND customer_id=? ORDER BY created_at,id',(goal_id,customer_id))]
+    def apply():
+        conn.execute('UPDATE scenarios SET goal_id=NULL WHERE goal_id=? AND customer_id=?',(goal_id,customer_id))
+        if conn.execute('DELETE FROM goals WHERE id=? AND customer_id=?',(goal_id,customer_id)).rowcount!=1:
+            raise ValueError('Unknown goal in customer scope')
+    _,audit=mutate(conn,customer_id,'delete_goal',goal_id,apply,provenance)
+    return {'deleted_goal_id':goal_id,'goal':goal,'unlinked_scenario_ids':linked,'audit_event':audit}

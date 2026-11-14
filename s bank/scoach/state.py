@@ -3,10 +3,11 @@ import json
 from datetime import datetime, timezone
 from uuid import uuid4
 from .classification import ROLES
+from .db import ensure_profile_schema
 from .ledger import account_scope, transactions
 
 PROVENANCE={'user','deterministic','gemini_proposed_user_confirmed'}
-STATE_TABLES=('user_rules','goals','scenarios','scenario_exclusions')
+STATE_TABLES=('user_rules','goals','scenarios','scenario_exclusions','profile_entries')
 
 
 def now(): return datetime.now(timezone.utc).isoformat()
@@ -20,8 +21,11 @@ def _snapshot(conn,customer_id):
 
 
 def _restore(conn,customer_id,snapshot):
-    for table in reversed(STATE_TABLES): conn.execute(f'DELETE FROM {table} WHERE customer_id=?',(customer_id,))
-    for table in STATE_TABLES:
+    # Snapshots written before a table joined STATE_TABLES do not mention it;
+    # leave such a table untouched instead of wiping it.
+    tables=[table for table in STATE_TABLES if table in snapshot]
+    for table in reversed(tables): conn.execute(f'DELETE FROM {table} WHERE customer_id=?',(customer_id,))
+    for table in tables:
         for row in snapshot[table]:
             keys=list(row); conn.execute(f"INSERT INTO {table}({','.join(keys)}) VALUES({','.join('?' for _ in keys)})",[row[k] for k in keys])
 
@@ -29,6 +33,7 @@ def _restore(conn,customer_id,snapshot):
 def mutate(conn,customer_id,action,scope,operation,provenance='user',reverses=None):
     account_scope(conn,customer_id)
     if provenance not in PROVENANCE: raise ValueError('Invalid provenance')
+    ensure_profile_schema(conn)
     with conn:
         before=_snapshot(conn,customer_id); value=operation(); after=_snapshot(conn,customer_id)
         cur=conn.execute('INSERT INTO audit_events(customer_id,timestamp,action,scope,before_json,after_json,provenance,reverses_event_id) VALUES(?,?,?,?,?,?,?,?)',(customer_id,now(),action,scope,json.dumps(before),json.dumps(after),provenance,reverses))

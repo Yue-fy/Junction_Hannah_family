@@ -1,0 +1,72 @@
+{
+  "country": "FI",
+  "calendar_year": 2026,
+  "tax_year": 2025,
+  "description": "Finnish personal income tax cycle dates in 2026 for the 2025 tax year. Dates on the customer's own tax decision always override this calendar.",
+  "retrieved_at": "2026-11-15",
+  "verified": true,
+  "verification_note": "Refund dates and back-tax instalment dates were checked against the two source pages on 2026-11-15 and matched. The return check due dates are not listed on those pages and were not re-verified.",
+  "return_check_due_dates": [
+    "2026-04-01",
+    "2026-04-14",
+    "2026-04-21",
+    "2026-04-28"
+  ],
+  "return_check_due_dates_verified": false,
+  "revised_decision_by": "2026-10-31",
+  "refund_dates_by_assessment_end_month": {
+    "2026-05": "2026-07-03",
+    "2026-06": "2026-08-03",
+    "2026-07": "2026-09-03",
+    "2026-08": "2026-10-05",
+    "2026-09": "2026-11-03",
+    "2026-10": "2026-12-03"
+  },
+  "back_tax_instalments_by_assessment_end_month": {
+    "2026-05": [
+      "2026-07-01",
+      "2026-09-01"
+    ],
+    "2026-06": [
+      "2026-08-03",
+      "2026-10-01"
+    ],
+    "2026-07": [
+      "2026-09-01",
+      "2026-11-02"
+    ],
+    "2026-08": [
+      "2026-10-01",
+      "2026-12-01"
+    ],
+    "2026-09": [
+      "2026-11-02",
+      "2027-01-04"
+    ],
+    "2026-10": [
+      "2026-12-01",
+      "2027-02-01"
+    ]
+  },
+  "back_tax_two_instalments_above_cents": 17000,
+  "back_tax_not_collected_below_cents": 1000,
+  "sources": [
+    {
+      "title": "Tax refund amount and dates of payment",
+      "url": "https://vero.fi/en/individuals/payments/refunds/tax-refund-amount-and-dates-of-payment/",
+      "covers": [
+        "refund_dates_by_assessment_end_month",
+        "revised_decision_by"
+      ]
+    },
+    {
+      "title": "Back taxes: payment instructions",
+      "url": "https://vero.fi/en/individuals/payments/back-taxes/payment-instructions/",
+      "covers": [
+        "back_tax_instalments_by_assessment_end_month",
+        "back_tax_two_instalments_above_cents",
+        "back_tax_not_collected_below_cents"
+      ]
+    }
+  ]
+}

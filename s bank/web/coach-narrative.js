@@ -263,7 +263,8 @@ export function coachNarrative(response = {}, options = {}) {
       'Dina registrerade utgifter var ' + amount(result.total_consumption_cents) + ' ' + during(period) + '.')];
     const baskets = (result.baskets || []).filter(row => integer(row.amount_cents)).map(row => amount(row.amount_cents) + ' (' + flow(row.role) + ')');
     if (baskets.length) answer[0] += ' ' + l('The breakdown is ', 'Jakauma on ', 'Fördelningen är ') + list(baskets) + '.';
-    answer.push(l('These groups describe payments, not a personality or a spender score.',
+    if (typeof response.spender_summary === 'string' && response.spender_summary.trim()) answer.unshift(response.spender_summary.trim());
+    else answer.push(l('These groups describe payments, not a personality or a spender score.',
       'Ryhmät kuvaavat maksuja, eivät persoonallisuuttasi tai rahankäyttäjän pisteytystä.',
       'Grupperna beskriver betalningar, inte din personlighet eller ett betyg på dig som spenderare.'));
   } else if (response.tool_kind === 'safe_to_spend') {

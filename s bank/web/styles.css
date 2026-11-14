@@ -813,3 +813,6 @@ html[data-current-view="coach"] .persona-panel { position: absolute; top: 56px; 
 #insight-description .recap-lead{display:block;font-size:18px;line-height:1.35;margin-bottom:8px}
 #insight-description .recap-line{display:block;margin-top:4px;line-height:1.45}
 #insight-description .recap-line b{font-weight:650}
+/* V3: safe to spend until payday */
+.safe-save{margin:10px 0 0;padding:10px 12px;border-radius:14px;background:var(--mint);color:var(--deep-green);font-size:14px}
+.safe-warning{margin:8px 0 0;padding:10px 12px;border-radius:14px;background:var(--peach);font-size:14px}

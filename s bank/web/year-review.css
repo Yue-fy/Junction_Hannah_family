@@ -1,0 +1,240 @@
+/* Year in review story player (WP-L). Pairs with web/year-review.js. */
+.yr-story {
+  --yr-duration: 6000ms;
+  --yr-bg: #06442f;
+  --yr-fg: #ffffff;
+  --yr-soft: rgba(255, 255, 255, .78);
+  --yr-track: rgba(255, 255, 255, .28);
+  --yr-accent: #d8ee9b;
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  height: 100dvh;
+  background: rgba(8, 22, 16, .72);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+.yr-story:focus { outline: none; }
+.yr-frame {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--yr-bg);
+  color: var(--yr-fg);
+  padding: calc(12px + env(safe-area-inset-top, 0px)) calc(20px + env(safe-area-inset-right, 0px)) calc(24px + env(safe-area-inset-bottom, 0px)) calc(20px + env(safe-area-inset-left, 0px));
+  transition: background-color .35s ease;
+}
+/* Soft decorative shapes, CSS only. */
+.yr-frame::before, .yr-frame::after {
+  content: "";
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  background: var(--yr-accent);
+  opacity: .22;
+}
+.yr-frame::before { width: 70vmin; height: 70vmin; max-width: 340px; max-height: 340px; right: -22%; top: 12%; }
+.yr-frame::after { width: 44vmin; height: 44vmin; max-width: 220px; max-height: 220px; left: -18%; bottom: 8%; opacity: .14; }
+
+@media (min-width: 560px) {
+  .yr-frame {
+    max-width: 420px;
+    height: min(860px, calc(100dvh - 48px));
+    border-radius: 28px;
+    box-shadow: 0 24px 80px rgba(0, 0, 0, .35);
+    padding: 14px 24px 28px;
+  }
+}
+
+/* Top bar: progress + buttons */
+.yr-top { position: relative; z-index: 3; display: flex; flex-direction: column; gap: 6px; }
+.yr-progress { display: flex; gap: 4px; }
+.yr-progress-bar { flex: 1; height: 4px; border-radius: 2px; background: var(--yr-track); overflow: hidden; }
+.yr-progress-bar i { display: block; height: 100%; width: 0; background: var(--yr-fg); border-radius: inherit; }
+.yr-progress-bar[data-state="filled"] i { width: 100%; }
+.yr-progress-bar[data-state="current"] i { animation: yr-fill var(--yr-duration) linear forwards; }
+.yr-paused .yr-progress-bar[data-state="current"] i { animation-play-state: paused; }
+.yr-reduced .yr-progress-bar[data-state="current"] i { animation: none; width: 100%; opacity: .7; }
+@keyframes yr-fill { from { width: 0; } to { width: 100%; } }
+.yr-top-buttons { display: flex; justify-content: flex-end; gap: 4px; }
+.yr-close, .yr-toggle {
+  display: inline-grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
+  padding: 10px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--yr-fg);
+  cursor: pointer;
+}
+.yr-close:hover, .yr-toggle:hover { background: var(--yr-track); }
+.yr-close svg, .yr-toggle svg { width: 24px; height: 24px; }
+.yr-story button:focus-visible { outline: 3px solid var(--yr-fg); outline-offset: 2px; box-shadow: 0 0 0 6px var(--yr-bg); }
+
+/* Tap zones: left third = previous, right two thirds = next. */
+.yr-tap {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 1;
+  min-height: 44px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.yr-tap:disabled { cursor: default; opacity: 1; }
+.yr-tap-prev { left: 0; width: 33.333%; }
+.yr-tap-next { right: 0; width: 66.667%; }
+.yr-tap:focus-visible { outline-offset: -6px; box-shadow: none; }
+
+/* Card */
+.yr-card { position: relative; z-index: 2; flex: 1; display: flex; flex-direction: column; justify-content: center; pointer-events: none; min-height: 0; }
+.yr-content { display: flex; flex-direction: column; gap: 16px; animation: yr-in .45s ease both; }
+.yr-content .yr-actions, .yr-content .yr-actions * { pointer-events: auto; }
+@keyframes yr-in { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+.yr-eyebrow { margin: 0; font-size: 14px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--yr-soft); }
+.yr-headline { display: flex; flex-direction: column; gap: 6px; margin: 0; font-weight: 700; }
+.yr-big {
+  display: block;
+  font-size: clamp(44px, 14vw, 68px);
+  line-height: 1.02;
+  letter-spacing: -.03em;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.yr-label { font-size: 22px; line-height: 1.25; font-weight: 600; letter-spacing: -.01em; }
+.yr-caption { margin: 0; font-size: 20px; line-height: 1.4; font-weight: 500; max-width: 32ch; }
+.yr-support { margin: 0; font-size: 16px; line-height: 1.45; color: var(--yr-soft); }
+.yr-sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+/* money_in_out: two proportional bars */
+.yr-inout { display: flex; flex-direction: column; gap: 12px; }
+.yr-bar-row { display: grid; grid-template-columns: 6.5em 1fr; grid-template-areas: "label value" "track track"; gap: 4px 10px; font-size: 15px; }
+.yr-bar-label { grid-area: label; font-weight: 600; }
+.yr-bar-value { grid-area: value; justify-self: end; font-variant-numeric: tabular-nums; font-weight: 600; }
+.yr-bar-track { grid-area: track; height: 18px; border-radius: 9px; background: var(--yr-track); overflow: hidden; }
+.yr-bar-fill { display: block; height: 100%; border-radius: inherit; transform-origin: left; animation: yr-grow .8s ease-out both; }
+.yr-bar-in .yr-bar-fill { background: var(--yr-accent); }
+.yr-bar-out .yr-bar-fill { background: var(--yr-fg); }
+@keyframes yr-grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+
+/* baskets: three-segment bar */
+.yr-seg-bar { display: flex; height: 26px; border-radius: 13px; overflow: hidden; gap: 3px; }
+.yr-seg { display: block; min-width: 4px; flex-shrink: 1; flex-basis: 0; }
+.yr-seg-must { background: #1d5c45; }
+.yr-seg-surprise { background: #c06a1f; }
+.yr-seg-leaks { background: #e8b23d; }
+.yr-legend { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; font-size: 15px; }
+.yr-legend li { display: grid; grid-template-columns: 14px 1fr auto; align-items: center; gap: 10px; }
+.yr-legend b { font-variant-numeric: tabular-nums; }
+.yr-dot { width: 14px; height: 14px; border-radius: 50%; display: block; }
+
+/* Last-card actions */
+.yr-actions { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+.yr-btn {
+  min-height: 52px;
+  padding: 12px 20px;
+  border-radius: 999px;
+  font-size: 17px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.yr-btn-primary { border: 0; background: var(--yr-fg); color: var(--yr-bg); }
+.yr-btn-secondary { border: 2px solid var(--yr-fg); background: transparent; color: var(--yr-fg); }
+
+/* Palette per card kind. Text colours meet WCAG AA (>= 4.5:1) on each background. */
+.yr-kind-intro { --yr-bg: #06442f; --yr-fg: #ffffff; --yr-soft: #d3eadb; --yr-accent: #d8ee9b; }
+.yr-kind-money_in_out { --yr-bg: #006b3c; --yr-fg: #ffffff; --yr-soft: #e1f3e8; --yr-accent: #d8ee9b; }
+.yr-kind-saved { --yr-bg: #d8ee9b; --yr-fg: #0e3324; --yr-soft: #2e4d3c; --yr-track: rgba(14, 51, 36, .18); --yr-accent: #006b3c; }
+.yr-kind-top_category { --yr-bg: #a63d2a; --yr-fg: #ffffff; --yr-soft: #fde3da; --yr-accent: #ffb59b; }
+.yr-kind-baskets { --yr-bg: #fff1dc; --yr-fg: #3a2414; --yr-soft: #5e4330; --yr-track: rgba(58, 36, 20, .16); --yr-accent: #e8b23d; }
+.yr-kind-little_leaks { --yr-bg: #f2b84b; --yr-fg: #2b1d05; --yr-soft: #4a3611; --yr-track: rgba(43, 29, 5, .18); --yr-accent: #fff1dc; }
+.yr-kind-peak_month { --yr-bg: #4a2d5e; --yr-fg: #ffffff; --yr-soft: #e7dcef; --yr-accent: #f2b84b; }
+.yr-kind-busiest_day { --yr-bg: #0f5a63; --yr-fg: #ffffff; --yr-soft: #d6eef0; --yr-accent: #9fe0c4; }
+.yr-kind-favourite_weekday_or_mcc { --yr-bg: #ffd8c2; --yr-fg: #4a1d0c; --yr-soft: #6b3420; --yr-track: rgba(74, 29, 12, .16); --yr-accent: #a63d2a; }
+.yr-kind-archetype { --yr-bg: #bfe6cf; --yr-fg: #0b3b28; --yr-soft: #24523d; --yr-track: rgba(11, 59, 40, .16); --yr-accent: #006b3c; }
+.yr-kind-closing { --yr-bg: #06442f; --yr-fg: #ffffff; --yr-soft: #d3eadb; --yr-accent: #f2b84b; background: linear-gradient(160deg, #0b6b45 0%, #06442f 70%); }
+.yr-kind-generic { --yr-bg: #163e30; --yr-fg: #ffffff; --yr-soft: #d3eadb; }
+
+/* Home banner */
+.yr-banner {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 16px;
+  align-items: center;
+  padding: 18px 56px 18px 18px;
+  border-radius: 24px;
+  background: linear-gradient(135deg, #06442f 0%, #0b6b45 100%);
+  color: #ffffff;
+  overflow: hidden;
+}
+.yr-banner-art {
+  display: grid;
+  place-items: center;
+  width: 72px;
+  height: 72px;
+  border-radius: 20px;
+  background: #d8ee9b;
+  color: #06442f;
+  font-weight: 800;
+  font-size: 20px;
+  letter-spacing: -.02em;
+  transform: rotate(-6deg);
+  box-shadow: 10px 8px 0 #f2b84b;
+}
+.yr-banner-text { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+.yr-banner-eyebrow { margin: 0; font-size: 13px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #d3eadb; }
+.yr-banner h3 { margin: 0; font-size: 19px; line-height: 1.25; }
+.yr-banner p { margin: 0; font-size: 15px; color: #e1f3e8; }
+.yr-banner-open {
+  margin-top: 8px;
+  min-height: 44px;
+  padding: 10px 18px;
+  border: 0;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #06442f;
+  font-weight: 650;
+  cursor: pointer;
+}
+.yr-banner-dismiss {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
+  padding: 10px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #ffffff;
+  cursor: pointer;
+}
+.yr-banner-dismiss svg { width: 22px; height: 22px; }
+.yr-banner button:focus-visible { outline: 3px solid #ffffff; outline-offset: 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .yr-frame, .yr-content, .yr-bar-fill { transition: none; animation: none; }
+  .yr-progress-bar[data-state="current"] i { animation: none; width: 100%; opacity: .7; }
+}

@@ -65,9 +65,20 @@ class AgentToolsTests(AgentFixture):
         self.assertEqual(set(result['transactions'][0]), {'date', 'weekday', 'category', 'transaction_type', 'amount_cents', 'amount', 'merchant_id', 'mcc_code'})
 
     def test_forecast_safe_recurring_and_payday_match_existing_engines(self):
-        safe = self.tool('safe_to_spend', days=7, reserve_floor_cents=50000)
+        safe = self.tool('safe_to_spend', horizon='week', days=7, reserve_floor_cents=50000)
         raw = forecast.safe_to_spend(self.conn, self.customer, '2026-09-28', 7, 50000)
         self.assertEqual(safe['safe_to_spend_cents'], raw['safe_to_spend_cents'])
+        # The default horizon holds back every bill until payday and reports a weekly and daily amount.
+        payday = self.tool('safe_to_spend')
+        raw_payday = forecast.safe_until_payday(self.conn, self.customer, '2026-09-28')
+        self.assertEqual(payday['this_week_cents'], raw_payday['this_week_cents'])
+        self.assertEqual(payday['per_day_cents'], raw_payday['per_day_cents'])
+        save = self.tool('safe_to_save')
+        self.assertEqual(save['safe_to_save_cents'], raw_payday['safe_to_save_cents'])
+        # An explicit day count keeps the older seven-day horizon; it cannot combine with until_payday.
+        self.assertIn('safe_to_spend_cents', self.tool('safe_to_spend', days=7))
+        with self.assertRaises(ValueError):
+            self.tool('safe_to_spend', horizon='until_payday', days=7)
         preview = self.tool('forecast_30_days')
         raw_preview = forecast.preview_30_days(self.conn, self.customer, '2026-09-28')
         self.assertEqual(preview['ending_balance_cents'], raw_preview['projected'][-1]['balance_cents'])

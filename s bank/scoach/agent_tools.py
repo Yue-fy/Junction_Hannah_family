@@ -5,7 +5,7 @@ import re
 from datetime import date
 from decimal import Decimal, DecimalException, localcontext
 
-from . import analytics, forecast, goals, scenarios, statistics
+from . import analytics, forecast, goals, scenarios, spender, statistics
 from .agent_numbers import allowed_numbers
 from .ledger import account_scope, month_bounds, shift_month, transactions
 from .money import cents_to_euros, rounded
@@ -23,13 +23,16 @@ _SPECS = {
     'compare_periods': ('Compare consumption in two periods with a precomputed percentage change.', {**_DATES, 'comparison_start': _field(), 'comparison_end': _field(), 'category': _field()}, ['start', 'end', 'comparison_start', 'comparison_end']),
     'monthly_trend': ('Observed consumption trend, up to 24 months; missing history is null, never zero.', {'months': _field('INTEGER', minimum=1, maximum=24), 'category': _field(), 'end_month': _field()}, ['months']),
     'list_transactions': ('Read at most 20 consumption rows, with private identifiers removed.', {**_DATES, 'category': _field(), 'limit': _field('INTEGER', minimum=1, maximum=20), 'sort': _field(enum=['newest', 'oldest', 'largest'])}, ['start', 'end']),
-    'safe_to_spend': ('Pattern-based safe-to-spend estimate; not a guarantee.', {'days': _field('INTEGER', minimum=1, maximum=30), 'reserve_floor_cents': _field('INTEGER', minimum=0)}, []),
+    'safe_to_spend': ('What the customer can spend this week and per day until next payday, after holding back every bill due before payday, a reserve and any saving target. Default horizon until_payday; week gives the older seven-day estimate. Not a guarantee.', {'horizon': _field(enum=['until_payday', 'week']), 'days': _field('INTEGER', minimum=1, maximum=30), 'reserve_floor_cents': _field('INTEGER', minimum=0)}, []),
+    'safe_to_save': ('How much could be moved to savings now while still covering bills and typical everyday spending until next payday. Not a guarantee.', {'reserve_floor_cents': _field('INTEGER', minimum=0)}, []),
     'forecast_30_days': ('Pattern-based scheduled payments and lowest/ending balances over the next 30 days.', {}, []),
     'what_if_reduce': ('Unsaved preview of reducing an eligible discretionary category, with monthly and annual amounts.', {'category': _field(), 'percent': _field('NUMBER', minimum=0, maximum=100), 'month': _field()}, ['category', 'percent']),
     'goal_plan': ('Read-only target-date arithmetic, not an affordability assessment. Use a customer-selected target.', {'name': _field(maxLength=120), 'target_cents': _field('INTEGER', minimum=1), 'target_date': _field(), 'monthly_cents': _field('INTEGER', minimum=1)}, ['name', 'target_cents', 'target_date']),
     'list_goals': ('Read saved goal progress without changing any goal.', {}, []),
     'payday_pattern': ('Read observed salary changes and low balances before salary; not a future prediction.', {}, []),
     'recurring_payments': ('Read qualified recurring outflows, including saving transfers labelled separately.', {}, []),
+    'spender_profile': ('Describe what kind of spender the customer is: one archetype for the last N complete months with reasons, one strength and one thing worth a look. Percentages are precomputed. Describes habits, not character.', {'end_month': _field(), 'months': _field('INTEGER', minimum=2, maximum=24)}, []),
+    'irregular_buffer': ('Surprise must-pays (necessary but unpredictable costs) over the last months: count, total, monthly average and a suggested monthly set-aside, with the largest items.', {'end_month': _field(), 'months': _field('INTEGER', minimum=1, maximum=24)}, []),
     'calculate': ('Calculate with numbers already returned by tools, using + - * / and parentheses. Constants 0–12 and 100 are allowed for unit conversions.', {'expression': _field(maxLength=256)}, ['expression']),
     'explain_concept': ('Vetted glossary: emergency fund, safe-to-spend, fixed vs variable costs, three baskets, interest, compound interest, budget, VAT, net vs gross income, MCC.', {'topic': _field()}, ['topic']),
     'propose_action': ('Record a confirmation button, never execute it. Goal/scenario params must equal a preceding preview proposal.', {'kind': _field(enum=['create_goal', 'save_scenario', 'open_view']), 'params': _field('OBJECT', properties={'view': _field(), 'name': _field(), 'target_cents': _field('INTEGER'), 'target_date': _field(), 'category': _field(), 'percent': _field(), 'month': _field()})}, ['kind', 'params']),
@@ -40,7 +43,7 @@ DECLARATIONS = [{'name': name, 'description': description,
 
 GLOSSARY = {
     'emergency fund': 'An emergency fund is money set aside for necessary, unexpected costs. Its size depends on your essential expenses and circumstances, so an account history alone cannot determine the right target.',
-    'safe-to-spend': 'Safe-to-spend is an estimate of money left after protecting a reserve, expected bills and a spending buffer. It uses past patterns and can miss obligations that are not recorded in the account.',
+    'safe-to-spend': 'Safe-to-spend is an estimate of what you can use for everyday life until your next payday, after setting aside every bill due before then, a small reserve and any saving you planned. It uses past patterns and can miss obligations that are not recorded in the account.',
     'fixed vs variable costs': 'Fixed costs recur with fairly predictable amounts, while variable costs change with use or choices. Both can be essential, so variable does not mean unnecessary.',
     'three baskets': 'The three baskets are Must-pays (bills that come every month, such as rent and electricity), Surprise must-pays (necessary but hard to predict, such as a broken washing machine) and Little leaks (small everyday choices that add up, such as coffee and takeaway). Seeing which basket money falls into helps you plan for it.',
     'interest': 'Interest is the cost of borrowing money or the payment for holding savings. The actual terms depend on the agreement, which transaction data alone does not establish.',
@@ -287,7 +290,22 @@ def dispatch(conn, customer_id, ctx, name, args):
         period = (shift_month(end_month, 1 - args['months']) + '-01', month_bounds(end_month)[1])
         query = {'start': period[0], 'end': period[1], **filters}
         basis = 'Monthly consumption; missing history is unavailable. Charts retain up to 24 exact monthly points.'
+    elif name in {'safe_to_spend', 'safe_to_save'} and args.get('horizon', 'week' if 'days' in args else 'until_payday') == 'until_payday':
+        from .api import planning_profile
+        if 'days' in args:
+            raise ValueError('days applies only to horizon week')
+        raw = forecast.safe_until_payday(conn, customer_id, as_of=ctx.reference_date,
+                                         reserve_floor_cents=args.get('reserve_floor_cents'),
+                                         profile=planning_profile(conn, customer_id, ctx.reference_date))
+        result = {key: value for key, value in raw.items() if key not in {'comparison_transaction_refs'}}
+        if name == 'safe_to_save':
+            result['highlight'] = {'label': 'Safe to save now', 'value': '€' + cents_to_euros(raw['safe_to_save_cents']), 'caption': 'Until payday ' + raw['next_payday']}
+        else:
+            result['highlight'] = {'label': 'Safe to spend this week', 'value': '€' + cents_to_euros(raw['this_week_cents']), 'caption': '€' + cents_to_euros(raw['per_day_cents']) + ' a day until ' + raw['next_payday']}
+        period = (ctx.reference_date, raw['next_payday'])
+        query = {'start': ctx.scope['observed_start'], 'end': ctx.reference_date}
     elif name == 'safe_to_spend':
+        args = {key: value for key, value in args.items() if key != 'horizon'}
         result = forecast.safe_to_spend(conn, customer_id, as_of=ctx.reference_date, **args)
         period = (ctx.reference_date, result['horizon_end'])
         query = {'start': ctx.scope['observed_start'], 'end': ctx.reference_date}
@@ -338,6 +356,19 @@ def dispatch(conn, customer_id, ctx, name, args):
         result = {'items': rows, 'count': len(rows)}
         period = (min((r['history_start'] for r in rows), default=ctx.start), max((r['history_end'] for r in rows), default=ctx.reference_date))
         query = {'start': period[0], 'end': period[1]}
+    elif name in {'spender_profile', 'irregular_buffer'}:
+        end_month = args.get('end_month')
+        if end_month is not None:
+            _month(ctx, end_month)
+        elif analytics.latest_complete_month(conn, customer_id) > ctx.month:
+            end_month = ctx.month
+        function = spender.spender_profile if name == 'spender_profile' else spender.irregular_buffer
+        result = function(conn, customer_id, end_month=end_month, **({'months': args['months']} if 'months' in args else {}))
+        if name == 'spender_profile':
+            result = {key: value for key, value in result.items() if key not in {'archetype_labels', 'thresholds', 'rule'}}
+        if result.get('period'):
+            period = (result['period']['start'], result['period']['end'])
+            query = {'start': period[0], 'end': period[1]}
     elif name == 'calculate':
         result = _calculate(args['expression'], ctx)
     elif name == 'explain_concept':

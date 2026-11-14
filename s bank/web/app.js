@@ -453,9 +453,19 @@ function supportingEvidence(data){
   const assumptions=(data.assumptions||[]).map((item,index)=>t(`safe.assumption.${index}`)===`safe.assumption.${index}`?item:t(`safe.assumption.${index}`));
   return `<details><summary>${esc(t('safe.evidence'))}</summary>${assumptions.length?`<h3>${esc(t('evidence.assumptions'))}</h3><ul>${assumptions.map(item=>`<li>${esc(item)}</li>`).join('')}</ul>`:''}<h3>${esc(t('evidence.calculationSources'))}</h3>${sourceButton(calculationRefs)}${historyRefs.length?`<h3>${esc(t('evidence.historySources'))}</h3>${sourceButton(historyRefs)}`:''}</details>`;
 }
+// Until-payday view: everything due before payday and any planned saving are already set aside.
+function safeUntilPaydayHTML(safe){
+  const rows=[['v3.safe.balance',safe.starting_balance_cents],['v3.safe.bills',safe.committed_cents],['v3.safe.reserve',safe.reserve_floor_cents],['v3.safe.saving',safe.planned_saving_cents]].filter(([key,cents])=>Number.isSafeInteger(cents)&&!(key==='v3.safe.saving'&&cents===0));
+  const values=rows.map(([key,cents])=>`<dt>${esc(t(key))}</dt><dd>${money(cents)}</dd>`).join('');
+  const shortfall=Number.isSafeInteger(safe.shortfall_cents)&&safe.shortfall_cents>0?`<p class="safe-warning">${esc(t('v3.safe.shortfall',{amount:money(safe.shortfall_cents)}))}</p>`:'';
+  const steady=safe.steady_mode?`<p class="small-text">${esc(t('v3.safe.steady'))}</p>`:'';
+  const save=Number.isSafeInteger(safe.safe_to_save_cents)&&safe.safe_to_save_available!==false?`<p class="safe-save">${esc(t('v3.safe.save',{amount:money(safe.safe_to_save_cents)}))}</p>`:'';
+  return `<p class="support-period">${esc(t('v3.safe.week'))}</p><p class="support-amount">${money(safe.this_week_cents)}</p><p class="small-text">${esc(t('v3.safe.perDay',{amount:money(safe.per_day_cents),date:dateLabel(safe.next_payday),days:safe.days_until_payday}))}</p>${shortfall}<dl class="support-values">${values}</dl>${save}${steady}<p class="small-text">${esc(t(safe.payday_source==='fallback_30_days'?'v3.safe.noPayday':'v3.safe.note'))}</p>${supportingEvidence(safe)}`;
+}
 function renderSupport(){
   const safe=state.safeToSpend;
-  $('safe-content').innerHTML=!safe?`<p class="empty-state">${esc(t('support.unavailable'))}</p>`:!safe.available?`<p class="empty-state">${esc(t(safe.needs_history?'support.needsHistory':'support.unavailable'))}</p>`:`<p class="support-period">${esc(t('safe.amount',{days:safe.horizon_days}))}</p><p class="support-amount">${money(safe.safe_to_spend_cents)}</p><p class="small-text">${esc(t('safe.horizon',{date:dateLabel(safe.horizon_end)}))}</p><dl class="support-values"><dt>${esc(t('safe.reserve'))}</dt><dd>${money(safe.reserve_floor_cents)}</dd><dt>${esc(t('safe.obligations'))}</dt><dd>${money(safe.scheduled_outflows_cents)}</dd><dt>${esc(t('safe.everydayAllowance'))}</dt><dd>${money(safe.historical_flexible_buffer_cents)}</dd></dl><p class="small-text">${esc(t('safe.demoReserve'))}</p>${supportingEvidence(safe)}`;
+  if(safe&&safe.next_payday){$('safe-content').innerHTML=safeUntilPaydayHTML(safe);}
+  else $('safe-content').innerHTML=!safe?`<p class="empty-state">${esc(t('support.unavailable'))}</p>`:!safe.available?`<p class="empty-state">${esc(t(safe.needs_history?'support.needsHistory':'support.unavailable'))}</p>`:`<p class="support-period">${esc(t('safe.amount',{days:safe.horizon_days}))}</p><p class="support-amount">${money(safe.safe_to_spend_cents)}</p><p class="small-text">${esc(t('safe.horizon',{date:dateLabel(safe.horizon_end)}))}</p><dl class="support-values"><dt>${esc(t('safe.reserve'))}</dt><dd>${money(safe.reserve_floor_cents)}</dd><dt>${esc(t('safe.obligations'))}</dt><dd>${money(safe.scheduled_outflows_cents)}</dd><dt>${esc(t('safe.everydayAllowance'))}</dt><dd>${money(safe.historical_flexible_buffer_cents)}</dd></dl><p class="small-text">${esc(t('safe.demoReserve'))}</p>${supportingEvidence(safe)}`;
   const investment=state.investments;
   $('investment-content').innerHTML=!investment?`<p class="empty-state">${esc(t('support.unavailable'))}</p>`:`<p class="support-period">${monthLabel(investment.start_month||state.selectedMonth)} — ${monthLabel(investment.end_month||state.selectedMonth)}</p><dl class="support-values"><dt>${esc(t('investment.contributions'))}</dt><dd>${money(investment.total_contributions_cents)}</dd><dt>${esc(t('investment.withdrawals'))}</dt><dd>${money(investment.withdrawals_cents)}</dd><dt>${esc(t('investment.consistency'))}</dt><dd>${esc(t('investment.monthsCount',{count:investment.contribution_months,total:investment.period_months}))}</dd></dl>${investment.coverage_limited?`<p class="small-text">${esc(t('investment.coverageLimited',{count:investment.period_months}))}</p>`:''}${supportingEvidence(investment)}`;
 }
@@ -808,7 +818,7 @@ async function load(context=captureContext()){
     request(context,'get','/api/comparison',comparisonQuery(context.month)),
     request(context,'get','/api/trends',{month:context.month,months:context.trendMonths}),
     request(context,'get','/api/forecast',{as_of:asOf}),request(context,'get','/api/goals'),
-    request(context,'get','/api/safe-to-spend',{as_of:asOf,days:7,reserve_floor_cents:50000}),
+    request(context,'get','/api/safe-to-spend',{as_of:asOf,horizon:'until_payday',reserve_floor_cents:50000}),
     request(context,'get','/api/investments',{month:context.month,months:context.trendMonths}),
     request(context,'get','/api/vat',{month:context.month}),
     request(context,'get','/api/transactions',{month:context.month})
