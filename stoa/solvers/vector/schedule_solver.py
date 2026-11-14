@@ -393,6 +393,27 @@ class ScheduleSolver(BaseSolver):
                 value, unit = d.replace("' - ", "'-"), None
         if unit not in ("count", "ft2", "m2", "ft", "m", None):
             unit = None
+        if isinstance(value, (int, float)) and not isinstance(value, bool) and unit in ("ft", None) and \
+                not COMPLEX_Q.search(question) and not re.search(r"how many|number of|count", question, re.I):
+            # a plain lookup whose number is not printed in its cited rows but sits within a foot of a printed
+            # feet-inch dimension there: the code converted/shifted it (Q/W4 v21: "22' - 5\"" -> 21.92 = 22.42 - 0.5
+            # in some runs); answer the printed dimension
+            texts = []
+            for u in res.get("used", []):
+                for df in tables.values():
+                    hit = df[df["row_id"] == u] if "row_id" in df.columns else df.iloc[0:0]
+                    if len(hit):
+                        texts.append(" | ".join(str(v) for k, v in hit.iloc[0].items() if k != "row_id"))
+                        break
+            dims = {re.sub(r"(\d+')\s*-\s*(\d)", r"\1-\2", m.group(0).strip()): sheettext._ftin(m.group(0))
+                    for t in texts for m in sheettext.DIM_IN_ROW.finditer(t)}
+            dims = {d: v for d, v in dims.items() if v is not None}
+            if dims and all(abs(v - float(value)) > 0.005 for v in dims.values()):
+                near = sorted((abs(v - float(value)), d) for d, v in dims.items() if abs(v - float(value)) < 1.0)
+                if len(near) == 1 or (len(near) > 1 and near[0][0] < near[1][0] - 0.1):
+                    trace.append(f"lookup check: {value} is not printed in the cited rows; the printed dimension "
+                                 f"{near[0][1]!r} is -> answered it")
+                    value, unit = near[0][1], None
         row_label = {}
         if "text" in tables:
             for _, row in tables["text"].iterrows():
