@@ -412,7 +412,7 @@ assert.equal(JSON.stringify(app.state.categoryRows),rowsBefore);
 assert.equal(get('home-coach-question').textContent,get('home-coach-question').dataset.directQuestion+' ↗');
 assert.ok(get('home-coach-question').dataset.directQuestion.includes('Lifestyle'));
 assert.ok(!get('home-coach-question').dataset.directQuestion.includes('Restaurants'));
-assert.ok(get('insight-headline').textContent.toLowerCase().includes('eating out'));
+assert.ok(get('home-coach-title').textContent.toLowerCase().includes('eating out'));
 assert.ok(get('personalization-card').innerHTML.includes('id="personalization-title"'));
 assert.ok(get('personalization-card').innerHTML.includes('this visit only'));
 const question=get('home-coach-question').dataset.directQuestion;

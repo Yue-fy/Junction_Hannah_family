@@ -95,7 +95,7 @@ class WebContractTests(unittest.TestCase):
 
     def node_app(self, body):
         """Execute the real app with a small DOM boundary and scoped API fixtures."""
-        sources = {name: self.read(name) for name in ('app.js', 'api.js', 'state.js', 'charts.js', 'i18n.js', 'experience.js', 'presentation.js', 'coach-narrative.js', 'coach-chat.js')}
+        sources = {name: self.read(name) for name in ('app.js', 'api.js', 'state.js', 'charts.js', 'i18n.js', 'experience.js', 'presentation.js', 'coach-narrative.js', 'coach-chat.js', 'monthly-recap.js')}
         harness = r'''
 import assert from 'node:assert/strict';
 const elements = new Map(), documentListeners = {}, calls=[];

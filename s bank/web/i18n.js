@@ -1671,6 +1671,23 @@ const AGENT_MESSAGES = {
 };
 for (const [key, values] of Object.entries(AGENT_MESSAGES)) { EN['agent.'+key]=values[0]; FI['agent.'+key]=values[1]; SV['agent.'+key]=values[2]; }
 
+const RECAP_MESSAGES = {
+  label:['Monthly recap','Kuukauden yhteenveto','Månadssammanfattning'],
+  title:['Your month · {period}','Kuukautesi · {period}','Din månad · {period}'],
+  income:['Recorded income was {amount}.','Kirjatut tulot olivat {amount}.','Registrerade inkomster var {amount}.'],
+  spending:['Spending came to {amount}.','Menot olivat {amount}.','Utgifterna uppgick till {amount}.'],
+  saving:['Transfers to savings totaled {amount}.','Säästöihin siirrettiin yhteensä {amount}.','Överföringar till sparande var totalt {amount}.'],
+  noFacts:['Monthly figures are not available yet.','Kuukauden luvut eivät ole vielä saatavilla.','Månadens siffror är inte tillgängliga ännu.'],
+  unavailable:["We couldn't load this month's figures.",'Kuukauden lukuja ei voitu ladata.','Det gick inte att läsa in månadens siffror.'],
+  pending:['Writing your monthly recap…','Kirjoitetaan kuukausiyhteenvetoa…','Skriver din månadssammanfattning…'],
+  ai:['AI recap · based on recorded transactions','Tekoälykooste · perustuu kirjattuihin tapahtumiin','AI-sammanfattning · baserad på registrerade transaktioner'],
+  recorded:['Account summary · based on recorded figures','Tiliyhteenveto · perustuu kirjattuihin lukuihin','Kontosammanfattning · baserad på registrerade siffror'],
+  open:['Explore with Coach','Tutki valmentajan kanssa','Utforska med coachen'],
+  question:['Help me understand my income, spending and savings transfers in {period}.','Auta ymmärtämään tulojani, menojani ja säästösiirtojani: {period}.','Hjälp mig förstå mina inkomster, utgifter och överföringar till sparande under {period}.'],
+  followup:['Where did most of my spending go in {period}?','Mihin suurin osa menoistani meni: {period}?','Vad gick största delen av mina utgifter till under {period}?'],
+};
+for (const [key, values] of Object.entries(RECAP_MESSAGES)) { EN['home.recap.'+key]=values[0]; FI['home.recap.'+key]=values[1]; SV['home.recap.'+key]=values[2]; }
+
 export const MESSAGES = Object.freeze({
   en: Object.freeze(EN),
   fi: Object.freeze(FI),

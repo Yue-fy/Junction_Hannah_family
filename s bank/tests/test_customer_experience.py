@@ -164,6 +164,7 @@ globalThis.fetch=async(url,options)=>{
  return {ok:true,json:async()=>({ok:true,data:offlineAnswer({source:'deterministic',intent:'transaction_statistics',explanation_blocks:[{text:attempts===1?'First verified answer':'Retried verified answer'}]},new URL(url,'http://local').pathname)})};
 };
 const submit=message=>{get('coach-input').value=message;get('coach-form').listeners.submit({preventDefault(){},submitter:new Element('send')});};
+calls.length=0;
 submit('Show my spending');await settle();
 const successful=get('coach-response').innerHTML;
 submit('What changed in August?');await settle();
@@ -214,8 +215,10 @@ get('ask-coach').listeners.click();
 assert.equal(get('coach-input').value,'A private question about Alex','Ordinary navigation keeps an unfinished question');
 await select('CUST00676');
 assert.equal(get('coach-input').value,'','A draft cannot carry over to another customer');
+const requestsBeforeEmptySubmit=calls.filter(call=>call.path==='/api/agent').length;
 get('coach-form').listeners.submit({preventDefault(){},submitter:new Element('send')});await settle();
-assert.equal(calls.filter(call=>call.path==='/api/agent').length,0,'The old draft must not submit in the new customer context');
+assert.equal(calls.filter(call=>call.path==='/api/agent').length,requestsBeforeEmptySubmit,'The old draft must not submit in the new customer context');
+assert.ok(calls.every(call=>call.body.message!=='A private question about Alex'));
 get('coach-input').value='What about this month?';
 get('selected-month').value='2026-08';get('selected-month').listeners.change();await settle();
 assert.equal(get('coach-input').value,'','A period change clears a question tied to the old scope');
@@ -247,7 +250,9 @@ for(const change of ['persona','month','language','language-round-trip','new-con
   if(change==='language-round-trip'){get('language').value=initialLanguage;get('language').listeners.change();}
  }
  delayed.release();await settle();pending=null;
- assert.equal(calls.filter(call=>call.path==='/api/agent').length,0,'An obsolete story must not send a question after '+change+' changes');
+ const agentRequests=calls.filter(call=>call.path==='/api/agent');
+ assert.ok(agentRequests.every(call=>call.body.message.startsWith('Write a monthly recap for ')),'Only automatic Home recaps may run after '+change+' changes, never the obsolete story question');
+ assert.ok(agentRequests.every(call=>call.body.history.length===0));
  assert.deepEqual(app.state.conversation,[]);
 }
 ''')

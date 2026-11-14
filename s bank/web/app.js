@@ -6,6 +6,7 @@ import { createExperienceStore, suggestedMemory, ux, buildJournal } from './expe
 import { spendingCategories, forecastSummary, toolScope, milestoneFor } from './presentation.js';
 import { coachNarrative } from './coach-narrative.js';
 import { agentTurnHTML } from './coach-chat.js';
+import { createMonthlyRecapCache, monthlyRecapPrompt } from './monthly-recap.js';
 
 const state = createState();
 let api = createAPI(state.customerId);
@@ -23,6 +24,8 @@ function experience(){if(!experienceStores.has(state.customerId))experienceStore
 const evidenceRegistry=new Map();let evidenceSequence=0;
 let memoryProposal=null, noteEditing=null, tourStep=0, coachSequence=0;
 let coachPending=null, coachTimer=null, agentProposal=null, actionSequence=0;
+const monthlyRecaps=createMonthlyRecapCache();
+let homeRecap=null,homeDataState='loading';
 function sourceButton(refs=[],scope={}){
   if(!refs.length)return '';
   const key='source-'+(++evidenceSequence);
@@ -123,6 +126,7 @@ function renderHandoffProgress(pending){
 }
 function clearScopedViews({preserveLoading=false}={}){
   clearCoachPending(true);agentProposal=null;
+  homeRecap=null;homeDataState='loading';
   closeDialogs();clearFilter();clearHandoff();state.transactionEvidence=null;
   state.queryScope=null;state.conversation=[];memoryProposal=null;evidenceRegistry.clear();coachSequence++;
   if(!preserveLoading)for(const button of document.querySelectorAll('[data-loading-label]')){button.disabled=false;button.textContent=button.dataset.loadingLabel;delete button.dataset.loadingLabel;}
@@ -139,7 +143,7 @@ function clearScopedViews({preserveLoading=false}={}){
   // Clear rendered account data before any request for the new scope can fail.
   text('current-balance','—');text('account-caption',t('loading.account'));text('balance-date-caption','');
   $('balance-month-summary').replaceChildren();$('flow-legend').replaceChildren();$('money-flow').replaceChildren();
-  text('insight-headline',t('loading.account'));text('insight-description','');
+  renderMonthlyRecap();
   renderComparison();renderForecast();renderTrends();renderGoals();renderSupport();renderVat();renderSpending();
 }
 function navigate(view) {
@@ -155,6 +159,35 @@ function navigate(view) {
   document.querySelectorAll('[data-view]').forEach(button=>{if(button.dataset.view===view)button.setAttribute('aria-current','page');else button.removeAttribute('aria-current');});
   window.scrollTo({top:0,behavior:'instant'});
   $('main-content').focus({preventScroll:true});
+  if(view==='home')refreshMonthlyRecap();
+}
+function renderMonthlyRecap(){
+  const ready=homeDataState==='ready'&&state.overview;
+  const active=ready&&homeRecap&&isCurrent(homeRecap.context)&&homeRecap.context.month===state.selectedMonth&&homeRecap.context.locale===i18n.locale?homeRecap.entry:null;
+  const result=active?.result,overview=state.overview,facts=[];
+  const period=state.selectedMonth?monthLabel(state.selectedMonth):t('loading.account');
+  text('priority-title',t('home.recap.label'));text('insight-headline',t('home.recap.title',{period}));
+  if(ready){
+    if(Number.isSafeInteger(overview.salary_cents)&&Number.isSafeInteger(overview.other_income_cents))facts.push(t('home.recap.income',{amount:money(overview.salary_cents+overview.other_income_cents)}));
+    if(Number.isSafeInteger(overview.consumption_cents))facts.push(t('home.recap.spending',{amount:money(overview.consumption_cents)}));
+    if(Number.isSafeInteger(overview.committed_saving_transfers_cents))facts.push(t('home.recap.saving',{amount:money(overview.committed_saving_transfers_cents)}));
+  }
+  $('insight-description').innerHTML=esc(result?.text||(ready?(facts.join(' ')||t('home.recap.noFacts')):t(homeDataState==='loading'?'loading.account':'home.recap.unavailable')));
+  text('home-recap-status',ready?t(active?.pending?'home.recap.pending':result?'home.recap.ai':'home.recap.recorded'):'');
+  $('home-coach-card').setAttribute('aria-busy',String(Boolean(active?.pending)));
+  text('open-story',t('home.recap.open')+' ↗');$('open-story').disabled=!ready;
+  const profile=experience().load(),protectedCategory=profile.protected_category;
+  const alternative=spendingCategories(state.categoryRows||[]).find(row=>['Restaurants','Lifestyle','Entertainment','Travel'].includes(row.category)&&row.category!==protectedCategory&&!(profile.focus==='travel'&&row.category==='Travel'));
+  const question=protectedCategory==='Restaurants'&&alternative?`${copy('Show my spending on','Näytä menoni luokassa','Visa mina utgifter för')} ${alternative.category}`:profile.focus==='buffer'?t('coach.question.safe'):protectedCategory==='none'&&result?.question?result.question:t('home.recap.followup',{period});
+  const starter=$('home-coach-question');starter.dataset.directQuestion=question;starter.textContent=question+' ↗';starter.disabled=!ready;
+}
+function refreshMonthlyRecap(){
+  if(homeDataState!=='ready'||!state.overview||state.view!=='home'){renderMonthlyRecap();return;}
+  const context=captureContext(),key=JSON.stringify([context.customerId,context.month,context.locale,state.overview]);
+  const entry=monthlyRecaps.get(key,()=>context.api.agent(monthlyRecapPrompt(context.month,context.locale),{month:context.month,locale:context.locale,conversation:[]}));
+  if(homeRecap?.entry===entry&&isCurrent(homeRecap.context)&&homeRecap.context.locale===context.locale){renderMonthlyRecap();return;}
+  const current={context,entry};homeRecap=current;renderMonthlyRecap();
+  entry.promise.then(()=>{if(homeRecap===current&&isCurrent(context)&&context.locale===i18n.locale)renderMonthlyRecap();});
 }
 function renderCoachContext(){
   const period=state.selectedMonth?monthLabel(state.selectedMonth):copy('Loading records','Ladataan tietoja','Läser in uppgifter');
@@ -202,11 +235,6 @@ function renderComparison() {
   text('show-transactions',t('story.transactions',{count:c.after.count,period:labels.current})+' ↗');
   $('clarification-card').hidden=!isDemoStory();
   text('clarification-question',t('story.oneOffQuestion',{amount:money(3647)}));
-  if(isDemoStory()){
-    text('insight-headline',t('home.demoHeadline',{amount:money(c.delta_cents)}));text('insight-description',t('home.demoDescription'));
-  }else if(!state.overview?.priority||state.overview.priority.id==='restaurant_change'){
-    text('insight-headline',t('home.genericHeadline',{amount:money(c.delta_cents),period:labels.current}));text('insight-description',t('home.genericDescription'));
-  }
 }
 function renderOverview() {
   const o=state.overview;if(!o)return;
@@ -225,14 +253,6 @@ function renderOverview() {
   $('money-flow').innerHTML='';$('money-flow').setAttribute('aria-busy','false');
   const flows=(o.flows||[]).filter(row=>row.role!=='needs_review'||row.transaction_refs?.length||row.amount_cents);
   $('flow-legend').innerHTML=flows.map(row=>`<button class="flow-filter" data-role="${esc(row.role)}" aria-pressed="${state.filter===row.role}"><span>${esc(flowName(row.role))}</span><strong>${money(row.role==='saving_or_transfer'?row.amount_cents:Math.abs(row.amount_cents))}<span class="flow-arrow" aria-hidden="true">↗</span></strong><span class="flow-help">${esc(t(flowHelp[row.role]||'basket.review.help'))}</span></button>`).join('');
-  text('open-story',t('home.priority.open')+' ↗');$('open-story').disabled=false;
-  if(!state.comparison){text('insight-headline',t('home.noComparison'));text('insight-description',t('home.noComparisonHelp'));}
-  const candidate=o.priority;
-  if(candidate&&candidate.id!=='restaurant_change'&&!isDemoStory()){
-    const copy=priorityCopy(candidate);
-    text('insight-headline',copy?.title||t('home.priority.title'));
-    text('insight-description',copy?.description||t('home.priority.description'));
-  }
   $('coach-home-history').hidden=!(o.candidates||[]).some(item=>item.kind==='home_financing_history');
   const taxReference=o.latest_balance_date||state.observedEnd;
   if(taxReference){$('tax-plan-date').min=shiftMonth(taxReference.slice(0,7),1)+'-01';if(!$('tax-plan-date').value)$('tax-plan-date').value=monthEnd(shiftMonth(taxReference.slice(0,7),6));}
@@ -281,17 +301,12 @@ function renderPersonalization(){
   const alternative=spendingCategories(state.categoryRows||[]).find(row=>['Restaurants','Lifestyle','Entertainment','Travel'].includes(row.category)&&row.category!==protectedCategory&&!(profile.focus==='travel'&&row.category==='Travel'));
   $('home-personal-plan').innerHTML='';
   const hasPersonalPlan=profile.onboarding_complete&&profile.focus!=='flexibility'&&alternative;
-  text('home-coach-title',u(hasPersonalPlan?'focus.'+profile.focus:'home.coach.title'));
+  text('home-coach-title',protectedCategory!=='none'?u('memory.protect',{category:categoryName(protectedCategory)}):hasPersonalPlan?u('focus.'+profile.focus):'');
   if(hasPersonalPlan){
     $('home-personal-plan').insertAdjacentHTML('beforeend',`<div class="personal-plan"><p>${esc(protectedCategory!=='none'?u('memory.protect',{category:categoryName(protectedCategory)}):u('focus.'+profile.focus))}</p><button type="button" class="secondary-button" data-personal-plan="${esc(alternative.category)}">${esc(copy(`Try 20% less on ${categoryName(alternative.category)}`,`Kokeile 20 % pienempiä menoja: ${categoryName(alternative.category)}`,`Prova 20 % mindre på ${categoryName(alternative.category)}`))} ↗</button><p class="small-text">${esc(copy('Preview a change, then choose whether to connect it to your goal.','Kokeile muutosta ja päätä sitten, liitätkö sen tavoitteeseesi.','Prova en förändring och välj sedan om du vill koppla den till ditt mål.'))}</p></div>`);
   }
-  const starter=protectedCategory==='Restaurants'&&alternative?`${copy('Show my spending on','Näytä menoni luokassa','Visa mina utgifter för')} ${alternative.category}`:profile.focus==='buffer'?t('coach.question.safe'):copy('How much did I spend on groceries?','Paljonko käytin ruokaostoksiin?','Hur mycket spenderade jag på matinköp?');
-  const starterNode=$('home-coach-question');if(starterNode){starterNode.hidden=Boolean(hasPersonalPlan);starterNode.dataset.directQuestion=starter;starterNode.textContent=starter+' ↗';}
-  if(protectedCategory==='Restaurants'&&state.overview?.priority?.id==='restaurant_change'){
-    text('insight-headline',u('memory.protect',{category:categoryName(protectedCategory)}));
-    text('insight-description',copy('Your preference comes first. Explore another category or plan a goal at your own pace.','Toiveesi on etusijalla. Tutki toista luokkaa tai suunnittele tavoite omaan tahtiin.','Ditt önskemål kommer först. Utforska en annan kategori eller planera ett mål i din egen takt.'));
-    text('open-story',u('home.coachAction')+' ↗');
-  }
+  $('home-coach-question').hidden=Boolean(hasPersonalPlan);
+  renderMonthlyRecap();
 }
 
 function experienceDialog(id,title){
@@ -742,12 +757,12 @@ async function askCoach(message,context=captureContext(),wish=null){
 }
 function unavailableAccount(error){explainError(error);text('current-balance','—');text('account-caption',t('error.account'));$('current-balance').classList.remove('skeleton');$('money-flow').innerHTML=`<p class="empty-state">${esc(t('error.database'))}</p>`;text('insight-headline',t('error.account'));if(!state.overview){$('home-baskets-content').innerHTML=`<p class="empty-state">${esc(t('support.unavailable'))}</p>`;$('spending-donut').innerHTML=`<p class="empty-state">${esc(t('support.unavailable'))}</p>`;$('spending-donut').setAttribute('aria-busy','false');}}
 async function load(context=captureContext()){
-  assertCurrent(context);const loadSequence=++state.loadSequence;notify(t('loading.account'));$('open-story').disabled=true;
+  assertCurrent(context);const loadSequence=++state.loadSequence;notify(t('loading.account'));homeRecap=null;homeDataState='loading';renderMonthlyRecap();
   let initialOverview=null;
   if(!context.month){
     const [initial]=await Promise.allSettled([request(context,'get','/api/overview')]);
     if(!isCurrent(context)||loadSequence!==state.loadSequence)return;
-    if(initial.status==='rejected'){unavailableAccount(initial.reason);renderSupport();return;}
+    if(initial.status==='rejected'){homeDataState='unavailable';unavailableAccount(initial.reason);renderMonthlyRecap();renderSupport();return;}
     initialOverview=initial.value;context.month=initialOverview.month||initialOverview.latest_balance_date?.slice(0,7);
     state.selectedMonth=context.month;state.observedStart=initialOverview.observed_start;state.observedEnd=initialOverview.observed_end;
   }
@@ -768,7 +783,7 @@ async function load(context=captureContext()){
   state.categoryRowsAvailable=categoryRows.status==='fulfilled';
   state.categoryRows=state.categoryRowsAvailable?(categoryRows.value.transactions||[]):[];
   state.comparison=comparison.status==='fulfilled'?normalizeComparison(comparison.value,context.month):null;
-  if(overview.status==='fulfilled'){state.overview=overview.value;renderOverview();notify('');}else unavailableAccount(overview.reason);
+  if(overview.status==='fulfilled'){state.overview=overview.value;homeDataState='ready';renderOverview();notify('');}else{homeDataState='unavailable';unavailableAccount(overview.reason);}
   renderComparison();
   state.trends=trends.status==='fulfilled'?trends.value:null;renderTrends();
   state.forecast=forecast.status==='fulfilled'?forecast.value:null;state.forecastAssumptions={};renderForecast();
@@ -777,6 +792,7 @@ async function load(context=captureContext()){
   const persisted=state.overview?.scenarios?.filter(item=>item.category==='Restaurants'&&(!item.start||item.start.slice(0,7)===context.month)).at(-1);
   state.scenario=persisted||null;state.exclusion=persisted?.excluded_transaction_refs?.[0]||null;renderScenario();
   renderSpending();renderPersonalization();
+  refreshMonthlyRecap();
 }
 function changePeriod(selectedMonth,trendMonths=state.trendMonths){
   if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(selectedMonth)||!['3','6','12','24'].includes(String(trendMonths)))return explainError(new Error(t('error.period')));
@@ -803,7 +819,7 @@ function applyLanguage(){
 }
 $('persona-button').addEventListener('click',()=>{const panel=$('persona-panel');panel.hidden=!panel.hidden;$('persona-button').setAttribute('aria-expanded',String(!panel.hidden));if(!panel.hidden)$('persona').focus();});
 $('persona').addEventListener('change',()=>{selectPersona(state,$('persona').value);api=createAPI(state.customerId);clearScopedViews();navigate('home');load();});
-$('open-story').addEventListener('click',event=>perform(event.currentTarget,showStory));
+$('open-story').addEventListener('click',event=>perform(event.currentTarget,context=>askCoach(t('home.recap.question',{period:monthLabel(context.month)}),context)));
 $('show-transactions').addEventListener('click',event=>perform(event.currentTarget,context=>showTransactions({category:'Restaurants'},context)));
 $('mark-one-off').addEventListener('click',event=>perform(event.currentTarget,markOneOff));
 $('link-goal').addEventListener('click',()=>{if(state.scenario)beginGoalHandoff(state.scenario);});
@@ -929,7 +945,7 @@ document.addEventListener('click',event=>{
 document.addEventListener('keydown',event=>{const segment=event.target.closest?.('[data-spending-category]');if(segment?.dataset?.spendingCategory&&segment.tagName?.toLowerCase()!=='button'&&['Enter',' '].includes(event.key)){event.preventDefault();selectSpending(segment.dataset.spendingCategory,segment);}});
 // Native dialogs provide Escape, focus trapping and restoration to the opener.
 for(const dialog of document.querySelectorAll('dialog')) dialog.addEventListener('click',event=>{if(event.target===dialog){const box=dialog.getBoundingClientRect();if(event.clientY<box.top||event.clientY>box.bottom||event.clientX<box.left||event.clientX>box.right)dialog.close();}});
-$('language').addEventListener('change',()=>{clearCoachPending(true);agentProposal=null;const retry=Boolean($('status-message').querySelector('button'));i18n.setLocale($('language').value);clearCoachEvidence();state.queryScope=null;state.conversation=[];memoryProposal=null;coachSequence++;text('coach-response','');text('coach-live-status','');$('coach-response').setAttribute('aria-busy','false');$('coach-input').value='';resizeCoachInput();text('coach-debug-content','');$('coach-debug').hidden=true;$('tax-plan-result').replaceChildren();notify(retry?t('error.generic'):'',retry);applyLanguage();});
+$('language').addEventListener('change',()=>{clearCoachPending(true);agentProposal=null;const retry=Boolean($('status-message').querySelector('button'));i18n.setLocale($('language').value);clearCoachEvidence();state.queryScope=null;state.conversation=[];memoryProposal=null;coachSequence++;text('coach-response','');text('coach-live-status','');$('coach-response').setAttribute('aria-busy','false');$('coach-input').value='';resizeCoachInput();text('coach-debug-content','');$('coach-debug').hidden=true;$('tax-plan-result').replaceChildren();notify(retry?t('error.generic'):'',retry);applyLanguage();refreshMonthlyRecap();});
 $('selected-month').addEventListener('change',()=>changePeriod($('selected-month').value));
 $('trend-range').addEventListener('change',()=>changePeriod(state.selectedMonth,Number($('trend-range').value)));
 document.addEventListener('invalid',event=>event.target.setCustomValidity?.(t('error.validation')),true);
