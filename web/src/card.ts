@@ -1,0 +1,774 @@
+import type { Answer, Cost, Evidence } from "./types";
+
+// Same rates as stoa/eval/runner.py:RATES (USD). Keep in sync.
+const RATES = {
+  gpu_usd_per_s: 0.0006, cpu_usd_per_s: 0.000014, api_usd_per_mtok_in: 0.4, api_usd_per_mtok_out: 1.6,
+  local_usd_per_mtok_in: 0.05, local_usd_per_mtok_out: 0.2,
+};
+const EUR_PER_USD = 0.86; // display only; fixed rate, not live
+
+// Local-LLM GPU time is billed from tokens at the shared server's measured throughput, as the eval does
+// (stoa/eval/runner.py gpu_seconds_billed): reported HTTP latency includes queueing behind other jobs.
+const PREFILL_TPS = 25_000;
+const DECODE_TPS = 1_000;
+
+export function gpuSecondsBilled(c: Cost): number {
+  const g = (k: string) => Number(c[k] ?? 0);
+  const localIn = Math.max(0, g("llm_tokens_in") - g("api_tokens_in"));
+  const localOut = Math.max(0, g("llm_tokens_out") - g("api_tokens_out"));
+  const gpu = g("gpu_seconds");
+  return (localIn || localOut) && gpu ? Math.min(gpu, localIn / PREFILL_TPS + localOut / DECODE_TPS) : gpu;
+}
+
+export function costUsd(c: Cost): number {
+  const g = (k: string) => Number(c[k] ?? 0);
+  const localIn = Math.max(0, g("llm_tokens_in") - g("api_tokens_in"));
+  const localOut = Math.max(0, g("llm_tokens_out") - g("api_tokens_out"));
+  let usd = gpuSecondsBilled(c) * RATES.gpu_usd_per_s + g("wall_seconds") * RATES.cpu_usd_per_s;
+  usd += (g("api_tokens_in") * RATES.api_usd_per_mtok_in + g("api_tokens_out") * RATES.api_usd_per_mtok_out) / 1e6;
+  if (!g("gpu_seconds")) usd += (localIn * RATES.local_usd_per_mtok_in + localOut * RATES.local_usd_per_mtok_out) / 1e6;
+  return usd;
+}
+
+export function costTier(c: Cost): "deterministic" | "local" | "api" {
+  if ((c.api_calls ?? 0) > 0 || (c.api_tokens_in ?? 0) > 0) return "api";
+  if ((c.llm_calls ?? 0) > 0 || (c.llm_tokens_in ?? 0) > 0 || (c.gpu_seconds ?? 0) > 0) return "local";
+  return "deterministic";
+}
+
+const UNIT_LABEL: Record<string, string> = { m2: "m²", m3: "m³", ft2: "ft²", count: "", m: "m", EUR: "€", eur: "€", USD: "$", usd: "$" };
+/** Unit for display: known units from the table, free-text ones (W4: "m2/door", "CHF", "h") with m2/m3/ft2 prettified. */
+export const unitLabel = (u: string | null | undefined) => !u ? "" : UNIT_LABEL[u] ?? u.replace(/\b(m|ft|cm|mm)([23])\b/g, (_, b, e) => b + (e === "2" ? "²" : "³")).replace(/\bEUR\b/g, "€");
+
+const esc = (s: unknown) => String(s ?? "").replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+
+/** Per-question cost as "€X per 1,000 questions like this" (µ-euros per question mean nothing to a jury). */
+function fmtEur(usd: number) {
+  const per1k = usd * EUR_PER_USD * 1000;
+  if (per1k === 0) return "€0 / 1k Qs";
+  if (per1k < 0.01) return "< €0.01 / 1k Qs";
+  return `€${per1k < 10 ? per1k.toFixed(2) : per1k.toFixed(0)} / 1k Qs`;
+}
+
+export function fmtValue(a: Answer) {
+  if (a.value === null || a.value === undefined) return "—";
+  if (typeof a.value === "boolean") return a.value ? "yes" : "no"; // Python bool (int subclass) arrives as true/false
+  if (typeof a.value === "number") {
+    // thousands separators only from 10,000 up (years and model ids like 2011 stay as they are)
+    const v = Math.abs(a.value) >= 10000 ? a.value.toLocaleString("en", { maximumFractionDigits: 2 })
+      : Number.isInteger(a.value) ? String(a.value) : a.value.toLocaleString("en", { maximumFractionDigits: 2 });
+    return v;
+  }
+  return String(a.value);
+}
+
+/** "cross-check: … ✓/✗" lines from evidence notes and trace (D4: no contract change). */
+/** W4's room-segmentation reading on CubiCasa count answers (trace "room segmentation (pretrained CubiCasa5K): 3 bedroom
+ *  region(s) = the answer ✓"; when it differs: "…: 1 sauna region(s); no boxes attached"): an independent second count. */
+function segChecks(a: Answer): { text: string; ok: boolean }[] {
+  return (a.trace ?? []).flatMap((l) => {
+    const m = l.match(/^room segmentation \(([^)]+)\):\s*(\d+) ([\w -]+?) region\(s\)\s*(=\s*the answer)?/i);
+    if (!m || /cross-?check/i.test(l)) return [];
+    const n = Number(m[2]);
+    const what = `${n} ${m[3]} region${n === 1 ? "" : "s"} in the room segmentation (${m[1]})`;
+    return [m[4] ? { text: `${what} = the answer`, ok: true } : { text: `${what}; the answer says ${a.value}`, ok: String(n) === String(a.value) }];
+  });
+}
+
+/** The API caps some strings at a fixed length: stoa/pipeline.py "… as asked says {value[:60]}", R1's kg_qa
+ * "why: {…[:160]}" and its evidence notes (100 / 120 / 160). A piece of exactly that length was cut, often mid-word
+ * ("the plan dra"): cut it back to the last whole word and mark it "…". Other lengths pass unchanged. */
+export function uncut(s: string, caps: number[]): string {
+  if (!caps.includes(s.length)) return s;
+  const sp = s.lastIndexOf(" ");
+  const t = /\w$/.test(s) && sp > s.length / 2 ? s.slice(0, sp) : s;
+  return `${t.replace(/[\s,;:—–-]+$/, "")}…`;
+}
+/** Capped pieces inside a trace line (cross-check value, kg_qa's "why"). */
+export function tidyCut(l: string): string {
+  return l.replace(/(\bwhy: )(.+)$/, (_, a, b) => a + uncut(b, [160]))
+    .replace(/(\bas asked(?: says|:) )(.*?)(?=\s*\((?:conf|another)\b| [✓✗]|$)/, (_, a, b) => a + uncut(b, [60]))
+    .replace(/(\banswered )(.*?)(?= to the same question)/, (_, a, b) => a + uncut(b, [60]));
+}
+const ASKED_WHO: Record<string, string> = { ifc: "the IFC rules", dxf: "the CAD (DXF) reader", raster: "the label reader",
+  schedule: "the schedule reader", pdf_vector: "the vector PDF reader", agent: "the agent" };
+/** W4's link route: "ifc as asked says no: the IFC model has 55 …" → "The IFC rules, asked the same question directly,
+ * also say no" (the answer above already gives the numbers; a disagreement keeps the other reading). */
+function askedCheck(t: string, ok: boolean): string {
+  const m = t.match(/^(\w+) as asked says (.*?)(\s*\(conf [\d.]+\).*)?$/);
+  if (!m) return t;
+  const who = ASKED_WHO[m[1]] ?? m[1];
+  const v = uncut(m[2], [60]);
+  const yn = v.match(/^(yes|no)\b/i)?.[1].toLowerCase();
+  const head = `${who[0].toUpperCase()}${who.slice(1)}, asked the same question directly,`;
+  const say = /rules$/.test(who) ? "say" : "says";
+  // "(conf 0.97) ✗: confidence capped at 0.5" (the ✗ already stripped) → " (at 0.97); confidence capped at 0.5"
+  const rest = (m[3] ?? "").replace(/^\s*\(conf ([\d.]+)\)\s*:?\s*/, " (at $1); ").replace(/;\s*$/, "");
+  return ok ? `${head} also ${say} ${yn ?? v}` : `${head} ${say} ${v}${rest}`;
+}
+
+export function crossChecks(a: Answer, asks: string[] = []): { text: string; ok: boolean }[] {
+  // Compound answers prefix each evidence note with its part ("door: door 1; cross-check: answer 36 vs …").
+  const parts = new Set(a.plan?.parts ?? []);
+  const parse = (lines: string[]) => lines.flatMap((l) => {
+    const m = l.match(/cross-?check:?\s*(.*)$/i);
+    // a comparison with the training prior is a sanity note, not a second source: keep it in the trace only
+    // (a route line "… ifc as asked as a cross-check" names a check without its result: not one)
+    if (!m || !m[1].replace(/[✓✗\s.]/g, "") || /^vs\.? prior\b/i.test(m[1].trim())) return [];
+    const part = l.match(/^([^:;]+):\s/)?.[1];
+    const k = asks.length ? evStep(l, asks) : -1;
+    const text = (k >= 0 ? `step ${k + 1}: ` : part && parts.has(part) ? `${part}: ` : "") + m[1].trim();
+    // numbers as the value shows them: "20700.0" → "20,700" (integers lose ".0"; separators from 10,000 up)
+    const pretty = text.replace(/\s*[✓✗]\s*/g, " ").trim().replace(/(?<![\w.])(\d+)\.0(?![\d.])/g, "$1")
+      .replace(/(?<![\w.,])\d{5,}(?![\d.,]|\w)/g, (n) => Number(n).toLocaleString("en"));
+    const ok = !/✗|≠|!=|disagree|differs?\b|mismatch|conflict/i.test(text);
+    return [{ text: askedCheck(pretty, ok), ok }];
+  });
+  // Evidence notes carry the specific check; the trace usually repeats it, so use the trace only as fallback.
+  // Exception: boxes added by "Show where" (notes start with the locator's name) carry the locator's check only;
+  // the solver's own check (e.g. "vlm_lora 4 = raster 4") is then in the trace, so keep it next to it.
+  const fromEv = parse(a.evidence.map((e) => e.note ?? ""));
+  const fromTrace = [...parse(a.trace ?? []), ...segChecks(a)];
+  const located = a.evidence.some((e) => LOCATED_NOTE.test(e.note ?? ""));
+  const key = (t: string) => t.split("→")[0].replace(/\s+/g, " ").trim().slice(0, 24);
+  // "label reader (raster) finds 1 …" already says what the pipeline's "vlm_lora 0 ≠ raster 1" says: keep one line
+  const same = (t: string) => fromEv.some((e) => {
+    const m = e.text.match(/\((\w+)\) finds (\d+)/);
+    // ("CubiCasa5K detector (raster_cc5k) finds 8 doors" = the pipeline's own "detector (pretrained CubiCasa5K) counts 8 ≠ 7")
+    return m && (new RegExp(`\\b${m[1]} ${m[2]}\\b`).test(t) || (/detector/i.test(e.text) && new RegExp(`\\bdetector\\b.*\\bcounts ${m[2]}\\b`).test(t)));
+  });
+  const extra = located ? fromTrace.filter((t) => !same(t.text) && !fromEv.some((e) => t.text.startsWith(key(e.text)) || e.text.startsWith(key(t.text)))) : [];
+  // the agent's final answer checked against another solver's own reading of the whole question ("agent 20700 = ifc
+  // 20700", W4) verifies the answer itself, not a sub-step, so it always shows, first
+  const final = fromEv.length ? fromTrace.filter((t) => /^agent\b/i.test(t.text)) : [];
+  const out = fromEv.length ? [...final, ...fromEv, ...extra] : fromTrace;
+  // a failed check is never the one cut off: failures first (stable), then the cap
+  const uniq = out.filter((x, i) => out.findIndex((y) => y.text === x.text) === i);
+  return [...uniq.filter((x) => !x.ok), ...uniq.filter((x) => x.ok)].slice(0, Math.max(2, parts.size));
+}
+
+/** Ranked answers ("which storey has the most doors?"): the solver logs one value per candidate and "argmax over …";
+ * show them as bars with the chosen one marked, so the answer can be checked against the alternatives at a glance. */
+function compareHtml(a: Answer) {
+  const tr = a.trace ?? [];
+  const arg = tr.map((l) => l.match(/\barg(max|min) over (\w+)/)).find((x) => x);
+  if (!arg || typeof a.value !== "string") return "";
+  const rows = tr.map((l) => l.match(/^\[\w+\]\s*([^:\[\]]{1,60}?):\s*(-?\d+(?:\.\d+)?)\s*(count|m2|m²|m3|m³|m|%|EUR)\b/))
+    .filter((m): m is RegExpMatchArray => !!m).map((m) => ({ name: m[1].trim(), v: Number(m[2]), unit: m[3] === "count" ? "" : unitLabel(m[3]) }));
+  const pick = String(a.value).trim();
+  if (rows.length < 2 || !rows.some((r) => r.name === pick)) return "";
+  const max = Math.max(...rows.map((r) => Math.abs(r.v)), 1e-9);
+  return `<div class="compare" title="Value per candidate from the solver's trace; the answer is the ${arg[1] === "max" ? "largest" : "smallest"}">
+    <div class="compare-h">Compared ${rows.length} ${esc(arg[2])} · ${arg[1] === "max" ? "largest" : "smallest"} wins</div>
+    ${rows.slice(0, 12).map((r) => `<div class="crow${r.name === pick ? " win" : ""}"><span>${esc(r.name)}</span><span class="bar"><i style="width:${Math.max(2, (Math.abs(r.v) / max) * 100).toFixed(1)}%"></i></span><b>${esc(r.v.toLocaleString("en", { maximumFractionDigits: 2 }))}${r.unit ? ` ${esc(r.unit)}` : ""}</b></div>`).join("")}
+  </div>`;
+}
+
+/** R1's calibrated 90% range for counts ("interval90: [lo, hi]" in the trace): shown under the value when lo < hi. */
+function rangeHtml(a: Answer) {
+  // "interval90: [lo, hi]" (R1's count range) or any other level, e.g. "interval80: [58.7, 121.5]" (area estimate)
+  const m = (a.trace ?? []).map((l) => l.match(/interval(\d{2}):\s*\[\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*\]/)).find((x) => x);
+  if (!m || typeof a.value !== "number" || Number(m[2]) >= Number(m[3])) return "";
+  const lvl = Number(m[1]);
+  return `<span class="range" title="Calibrated ${lvl}% range: on held-out drawings the true value lies in this range ${lvl}% of the time">${lvl}% range ${esc(m[2])}–${esc(m[3])}</span>`;
+}
+
+/** Why a yes/no answer is yes or no, in one line under it: the compared quantity and the threshold, read from the
+ * solver's own assumption or trace line (W1 ifc: "yes/no: is the model quantity (46 count) > 40"; agent/calc lines
+ * like "46 > 40 → yes"). Nothing is recomputed here; no line, no basis shown. */
+/** Multi-part answers (W1 ifc: "154 (How many rooms…); 2451.41 m2 (What is the total area…)"): one row per part, the
+ *  value big and the sub-question it answers small, instead of one long sentence. null when the value is not that shape. */
+export function multiPart(a: Answer): { v: string; u: string; q: string }[] | null {
+  if (typeof a.value !== "string") return null;
+  // W4 compose 'list' ("How many doors and how many windows …?"): "door: 46; window: 55"
+  const named = a.value.split(/;\s+/).map((x) => x.match(/^\s*([A-Za-z][\w ()'.-]{0,40}?):\s*(-?\d[\d,]*(?:\.\d+)?)\s*([A-Za-z²³%€/]{0,12})\s*$/));
+  if (named.length >= 2 && named.every((m) => m)) {
+    // "door" → "doors" for plain class words (counts other than 1)
+    const pl = (w: string, v: string) => (/^[a-z ]+$/.test(w) && !/s$/.test(w) && Number(v) !== 1 ? `${w}s` : w);
+    return named.map((m) => ({ v: m![2], u: /^count$/i.test(m![3]) ? "" : m![3], q: pl(m![1].replace(/_/g, " "), m![2]) }));
+  }
+  const parts = a.value.split(/\);\s+/).map((x, i, all) => (i < all.length - 1 ? `${x})` : x));
+  if (parts.length < 2) return null;
+  const rows = parts.map((x) => x.match(/^\s*(-?\d[\d,]*(?:\.\d+)?|yes|no)\s*([A-Za-z²³%€/0-9]{0,12})\s*\((.{3,200})\)\s*$/i));
+  if (rows.some((m) => !m)) return null;
+  return rows.map((m) => {
+    const n = Number(m![1].replace(/,/g, ""));
+    const v = Number.isFinite(n) && Math.abs(n) >= 10000 ? n.toLocaleString("en") : m![1];
+    return { v, u: /^count$/i.test(m![2]) ? "" : m![2], q: m![3].trim() };
+  });
+}
+
+/** Split at `sep` outside parentheses ("2.korrus (MAGAMISTUBA (23-2)); 3.korrus (…)" → 2 items; "no (…; …)" → 1). */
+function splitTop(s: string, sep: string): string[] {
+  const out: string[] = [];
+  let depth = 0, cur = "";
+  for (const ch of s) {
+    if (ch === "(") depth++;
+    else if (ch === ")") depth = Math.max(0, depth - 1);
+    if (ch === sep && depth === 0) { out.push(cur); cur = ""; } else cur += ch;
+  }
+  return [...out, cur].map((x) => x.trim()).filter(Boolean);
+}
+const normKey = (s: string) => ` ${s.toLowerCase().normalize("NFC").replace(/[^\p{L}\p{N}]+/gu, " ").trim()} `;
+
+export interface SetRow { name: string; detail: string; ev: number; where: string; other: boolean }
+/** Set answers (W1's IFC lists, kg_qa lookups): "4 rooms with area > 50 m2: KORIDOR (119) (63.84 m2); …",
+ * "2.korrus (60 rooms); 3.korrus (60 rooms)", "2.korrus (MAGAMISTUBA (23-2)); …" → an optional header and one row
+ * per item, each linked to the evidence that names it (room label / storey in the note, or the storey's sheet), so a
+ * click shows that item. Needs ≥ 2 items of the form "name (detail)"; other text answers return null. */
+export function setAnswer(a: Answer, currentFile = ""): { head: string; rows: SetRow[] } | null {
+  if (typeof a.value !== "string" || a.value.includes("\n")) return null;
+  let v = a.value.trim();
+  let head = "";
+  const h = v.match(/^([^:;()]{3,80}):\s+(.+)$/);
+  if (h) { head = h[1].trim(); v = h[2]; }
+  const items = splitTop(v, ";");
+  if (items.length < 2 || items.length > 60) return null;
+  const parsed = items.map((it) => it.match(/^(.{1,60}?)\s*\(((?:[^()]|\([^()]*\))+)\)$/));
+  if (parsed.some((m) => !m)) return null;
+  const ev = a.evidence ?? [];
+  const hay = ev.map((e) => normKey(`${e.note ?? ""} ${e.file.split("/").pop() ?? ""}`));
+  const m2 = (s: string) => s.replace(/\bm2\b/g, "m²").replace(/\bm3\b/g, "m³");
+  const rows = parsed.map((m) => {
+    const name = m![1].trim(), detail = m![2].trim();
+    const keys = [normKey(name), normKey(detail)].filter((k) => k.trim().length >= 2);
+    const hits = keys.map((k) => ev.map((_, i) => i).filter((i) => hay[i].includes(k))).find((x) => x.length) ?? [];
+    const pick = hits.find((i) => ev[i].bbox && ev[i].file === currentFile) ?? hits.find((i) => ev[i].bbox) ?? hits[0] ?? -1;
+    const has2D = hits.some((i) => ev[i].bbox), has3D = hits.some((i) => ev[i].ifc_guid)
+      || hits.some((i) => ev[i].bbox && ev.some((e) => e.ifc_guid && !e.bbox && e.ifc_guid === ev[i].ifc_guid));
+    return { name: m2(name), detail: m2(detail), ev: pick, where: has2D && has3D ? "2D + 3D" : has2D ? "2D" : has3D ? "3D" : "",
+      other: pick >= 0 && !!ev[pick].bbox && ev[pick].file !== currentFile };
+  });
+  return { head: m2(head), rows };
+}
+
+function setHtml(s: { head: string; rows: SetRow[] }) {
+  const linked = s.rows.filter((r) => r.ev >= 0).length;
+  return `<span class="rich-lbl"${linked ? ` title="Click an item to see it on the drawing / in the model"` : ""}>List · ${s.rows.length} item${s.rows.length === 1 ? "" : "s"}${linked ? " · click to see" : ""}</span>
+    <div class="value set">${s.head ? `<div class="set-head">${esc(s.head)}</div>` : ""}
+    ${s.rows.map((r) => `<div class="set-row${r.ev >= 0 ? " linked" : ""}"${r.ev >= 0 ? ` data-i="${r.ev}"` : ""} title="${r.ev >= 0 ? `${esc(r.name)}: ${esc(r.detail)}. Click to show it${r.other ? " (opens the sheet that draws it)" : ""}` : "No evidence names this item"}"><span class="sn">${esc(r.name)}</span><span class="sd">${esc(r.detail)}</span><span class="w">${r.where}${r.other ? " ↗" : ""}</span></div>`).join("")}</div>`;
+}
+
+export function yesNoBasis(a: Answer): string {
+  if (typeof a.value !== "boolean" && (typeof a.value !== "string" || !/^(yes|no|true|false|ja|nein|oui|non|kyllä|ei|si|sì)$/i.test(a.value.trim()))) return "";
+  const OP = String.raw`(>=|<=|≥|≤|>|<|==|=|!=|≠)`;
+  const NUM = String.raw`(-?\d[\d,]*(?:\.\d+)?)`;
+  const lines = [...(a.assumptions ?? []), ...(a.trace ?? []).filter((l) => /yes|no\b|→/i.test(l))];
+  for (const l of lines) {
+    // W4's composer: "combine: bedroom 2 > bathroom 1 → yes"
+    const c = l.match(new RegExp(String.raw`combine:\s*([A-Za-z_ ]{2,30}?)\s+${NUM}\s*${OP}\s*([A-Za-z_ ]{2,30}?)\s+${NUM}\s*(?:→|->)\s*(?:yes|no)`, "i"));
+    if (c) {
+      const [, wa, xa, op, wb, xb] = c;
+      const pl = (w: string, n: string) => `${n} ${w.trim().replace(/_/g, " ")}${Number(n) === 1 ? "" : "s"}`;
+      const sym = ({ ">=": "≥", "<=": "≤", "==": "=", "!=": "≠" } as Record<string, string>)[op] ?? op;
+      return `<span class="range basis" title="${esc(l)}">${esc(pl(wa, xa))} ${esc(sym)} ${esc(pl(wb, xb))}</span>`;
+    }
+    const m = l.match(new RegExp(String.raw`quantity\s*\(\s*${NUM}\s*([^)]*)\)\s*${OP}\s*${NUM}`, "i"))
+      ?? l.match(new RegExp(String.raw`${NUM}\s*(m2|m²|m3|m³|m|count|%)?\s*${OP}\s*${NUM}\s*(?:→|->|=>|:)\s*(?:yes|no|true|false)`, "i"));
+    if (!m) continue;
+    const [, x, u, op, y] = m;
+    const sym = ({ ">=": "≥", "<=": "≤", "==": "=", "!=": "≠" } as Record<string, string>)[op] ?? op;
+    // dxf: "[dxf] apartment B: 7 numbered indoor rooms … = 80.83 m²" … "[dxf] comparison: 80.83 > 80.34 -> yes": take
+    // the unit (and the name before the colon) from the line that computed each number
+    const UNIT = String.raw`(m2|m²|m3|m³|m|%|EUR|€|CHF)`;
+    const src = (n: string) => {
+      const re = new RegExp(String.raw`^(?:\[\w+\]\s*)?([^:\[\]]{2,40}?):.*?(?:=|is)\s*${n.replace(/[.]/g, "\\.")}\s*${UNIT}(?![\w²³])`, "i");
+      for (const t of a.trace ?? []) {
+        const k = t.match(re);
+        if (k && t !== l) return { name: k[1].trim(), unit: unitLabel(k[2]) };
+      }
+      return null;
+    };
+    const sx = !u || /^count$/i.test(u.trim()) ? src(x) : null;
+    const sy = sx ? src(y) : null;
+    if (sx && sy) {
+      return `<span class="range basis" title="${esc(l)}">${esc(sx.name)} ${esc(x)} ${esc(sx.unit)} ${esc(sym)} ${esc(sy.name)} ${esc(y)} ${esc(sy.unit)}</span>`;
+    }
+    const unit = !u || /^count$/i.test(u.trim()) ? (a.intent?.target && !/unknown/.test(a.intent.target) ? ` ${a.intent.target}s` : "")
+      : ` ${unitLabel(u.trim())}`;
+    return `<span class="range basis" title="${esc(l)}">${esc(x)}${esc(unit)} ${esc(sym)} ${esc(y)}</span>`;
+  }
+  // ifc: "[ifc] window=55, door=46" (the two counts compared, no operator logged): show both, ordered by the numbers
+  for (const l of a.trace ?? []) {
+    const k = l.match(/^(?:\[\w+\]\s*)?([a-z_]{2,30})=(-?\d+(?:\.\d+)?),\s*([a-z_]{2,30})=(-?\d+(?:\.\d+)?)\s*$/i);
+    if (!k) continue;
+    const [, wa, xa, wb, xb] = k;
+    const pl = (w: string, n: string) => `${n} ${w.replace(/_/g, " ")}${Number(n) === 1 ? "" : "s"}`;
+    const sym = Number(xa) > Number(xb) ? ">" : Number(xa) < Number(xb) ? "<" : "=";
+    return `<span class="range basis" title="${esc(l)}">${esc(pl(wa, xa))} ${sym} ${esc(pl(wb, xb))}</span>`;
+  }
+  return "";
+}
+
+/** A name in the question the solver could not find (W1 ifc: assumption "could not resolve 'KORIDOR (119)'"): the answer
+ * then covers something broader (the sheet's storey, the model), possibly at high confidence after a rewrite. Shown
+ * right under the value so a reader catches the scope change before trusting the number. */
+export function scopeWarning(a: Answer): string {
+  const all = [...(a.assumptions ?? []), ...(a.missing ?? [])];
+  const names = [...new Set(all.flatMap((l) => [...l.matchAll(/could not resolve '([^']+)'/gi)].map((m) => m[1])))];
+  if (!names.length || a.value === null || a.value === undefined) return "";
+  const scope = all.map((l) => l.match(/\b(storey '[^']+'|the whole model|model-wide)/i)).find((m) => m)?.[1];
+  const hi = (a.confidence ?? 0) >= 0.8 ? " The confidence above is for that broader question." : "";
+  return `<div class="xcheck bad scope-warn"><b>⚠ Not matched</b>the solver could not match ${names.map((n) => `'${esc(n)}'`).join(", ")} to a storey, room or model for this question, so this answer covers ${scope ? esc(scope) : "a broader scope"}.${hi} Check that this is what was asked.</div>`;
+}
+
+/** One row per object: evidence items that share an ifc_guid (2D box + 3D element) are grouped. */
+export function groupEvidence(ev: Evidence[]): { idx: number[]; first: number }[] {
+  const groups: { idx: number[]; first: number }[] = [];
+  const byGuid = new Map<string, { idx: number[]; first: number }>();
+  ev.forEach((e, i) => {
+    const g = e.ifc_guid ? byGuid.get(e.ifc_guid) : undefined;
+    if (g) return void g.idx.push(i);
+    const ng = { idx: [i], first: i };
+    if (e.ifc_guid) byGuid.set(e.ifc_guid, ng);
+    groups.push(ng);
+  });
+  return groups;
+}
+
+function evLabel(ev: Evidence[], g: { idx: number[]; first: number }, n: number, describe: (g: string) => string, asks: string[] = [], caps: number[] = []) {
+  const items = g.idx.map((i) => ev[i]);
+  const has2D = items.some((e) => e.bbox);
+  const has3D = items.some((e) => e.ifc_guid);
+  const e = items.find((x) => x.bbox) ?? items[0];
+  let note = uncut(items.map((x) => x.note).find((x) => x) || (e.ifc_guid ? describe(e.ifc_guid) : "evidence"), caps);
+  // agent answers: "<sub-question> — KORIDOR 63.84 m²" → "step 2 · KORIDOR 63.84 m²"
+  const stepNo = asks.length ? items.map((x) => evStep(x.note ?? "", asks)).find((k) => k >= 0) : undefined;
+  let step = "";
+  if (stepNo !== undefined && stepNo >= 0) {
+    note = note.replace(/^.{10,60}? — /, "");
+    step = `<span class="stepref" title="From reasoning step: ${esc(asks[stepNo])}">step ${stepNo + 1}</span>`;
+  }
+  const where = has2D && has3D ? "2D + 3D" : has3D ? "3D" : has2D ? "2D" : "";
+  const projected = items.some((x) => /projected: not drawn/i.test(x.note ?? ""));
+  const files = new Set(items.map((x) => x.file.split("/").pop()));
+  const notIn = items.some((x) => /^NOT in the answer:/.test(x.note ?? ""));
+  return `<li class="ev-item${notIn ? " contrast" : ""}" data-i="${g.idx.find((i) => ev[i].bbox) ?? g.first}" title="${esc([...files].join(" · "))}"><span class="n">${n}</span><span class="t">${step}${esc(note.replace(/\s*\|\s*projected: not drawn on this plan\s*$/i, ""))}${projected ? `<span class="proj" title="Not drawn on this plan (cut at 1.2 m): box = the element's footprint from the IFC model">projected</span>` : ""}</span><span class="w">${where}</span></li>`;
+}
+
+/** A free-text answer about an IFC model whose element types were counted in the browser (main.ts sets a.checked):
+ *  the counts the model itself gives, each checked against the answer. Shown before the language model's wording,
+ *  which is folded when every count matches (it may hedge, e.g. "not listed in the model facts", while the counts
+ *  it then gives are right). */
+function checkedHtml(a: Answer, text: string) {
+  const rows = a.checked ?? [];
+  const lines = text.split(/\n+/).filter((l) => l.trim()).length;
+  const ok = (r: (typeof rows)[number]) => !r.notInAnswer && (r.said === null || r.said === r.model);
+  const allOk = rows.every(ok);
+  const named = rows.filter((r) => !r.notInAnswer);
+  const counted = named.filter((r) => r.said !== null);
+  const mark = (r: (typeof rows)[number]) => (r.notInAnswer ? `<span class="bad">✗ not in the answer</span>`
+    : r.said === null ? `<span class="muted">named, no count</span>`
+      : r.said === r.model ? `<span class="ok">✓ answer says ${r.said}</span>` : `<span class="bad">✗ answer says ${r.said}</span>`);
+  const total = rows.reduce((s, r) => s + r.model, 0);
+  const said = counted.reduce((s, r) => s + (r.said ?? 0), 0);
+  const foot = rows.length > 1 ? `<tfoot><tr><td>Total</td><td class="num">${total}</td><td>${counted.length === rows.length
+    ? (said === total ? `<span class="ok">✓ answer says ${said}</span>` : `<span class="bad">✗ answer says ${said}</span>`) : ""}</td></tr></tfoot>` : "";
+  return `<span class="rich-lbl">Counted in the IFC model · ${rows.length} type${rows.length > 1 ? "s" : ""}</span>
+    <div class="rich-body">
+      <table class="checked"><tbody>${rows.map((r) => `<tr class="${r.notInAnswer ? "contrast" : ""}"><td>${esc(r.name)}</td><td class="num">${r.model}</td><td>${mark(r)}</td></tr>`).join("")}</tbody>${foot}</table>
+      <div class="checked-src">${allOk && counted.length ? `Every count in the answer matches the model.` : allOk ? "" : "The model and the answer differ (✗)."} Counted in your browser from the loaded model: no model call.</div>
+      <details class="llm-words"${allOk ? "" : " open"}><summary>${(a.cost?.llm_tokens_in ?? 0) > 0 ? "The language model's" : "The solver's"} text answer · ${lines} line${lines === 1 ? "" : "s"}</summary><div class="value text rich">${richText(text)}</div></details>
+    </div>`;
+}
+
+/** Long text answers (often "- item" lists from the model fact card): a compact list, folded after 8 lines. */
+function richText(v: string) {
+  const lines = v.split(/\n+/).map((l) => l.trim()).filter(Boolean);
+  const isList = lines.length > 1 && lines.filter((l) => /^[-*•]\s/.test(l)).length >= lines.length * 0.6;
+  const fmt = (l: string) => esc(l.replace(/^[-*•]\s+/, "")).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");
+  const block = (ls: string[]) => (isList ? `<ul>${ls.map((l) => `<li>${fmt(l)}</li>`).join("")}</ul>` : ls.map((l) => `<p>${fmt(l)}</p>`).join(""));
+  const KEEP = 8;
+  return block(lines.slice(0, KEEP)) + (lines.length > KEEP
+    ? `<details class="more-lines"><summary>${lines.length - KEEP} more line${lines.length - KEEP > 1 ? "s" : ""}</summary>${block(lines.slice(KEEP))}</details>` : "");
+}
+
+/** Trace lines: "[solver] text" → tag + text; long traces show the first steps and fold the rest. */
+const CALC = /\d(?:\s+[a-z]+)?\s*[x×*/÷+−-]\s*\d[^=]*=\s*-?\d/;
+function traceHtml(trace: string[], keep = 6) {
+  const li = (raw: string, n: number) => {
+    const full = tidyCut(raw);
+    const t = full.length > 260 ? `${full.slice(0, 240).replace(/\s*\n\s*/g, " ")} …` : full;
+    const m = t.match(/^\[([\w:/-]+)\]\s*(.*)$/);
+    const cc = /cross-?check/i.test(t) ? " class=\"cc\"" : CALC.test(t) ? " class=\"calc\"" : "";
+    return m ? `<li value="${n}"${cc}><span class="tag">${esc(m[1])}</span>${esc(m[2])}</li>` : `<li value="${n}"${cc}>${esc(t)}</li>`;
+  };
+  // the first steps, plus any arithmetic line further down (the jury should see "46 count x 450 = 20700" unfolded)
+  const shown = trace.map((t, i) => i).filter((i) => i < keep || (CALC.test(trace[i]) && !/cross-?check/i.test(trace[i])));
+  const rest = trace.map((t, i) => i).filter((i) => !shown.includes(i));
+  return `<ol class="trace">${shown.map((i) => li(trace[i], i + 1)).join("")}</ol>` + (rest.length
+    ? `<details class="more-steps"><summary>${rest.length} more step${rest.length > 1 ? "s" : ""}</summary><ol class="trace">${rest.map((i) => li(trace[i], i + 1)).join("")}</ol></details>`
+    : "");
+}
+
+// --- general agent (stoa/router/agent.py): "think: <thought> → <tool>(<input>): <result>" / "think: … → answer <v> <unit>"
+export interface AgentStep { tool: string; input: string; result: string; thought: string; conf?: number; by?: string; warn?: string; refused?: boolean }
+export interface AgentRun { why?: string; calls?: number; steps: AgentStep[] }
+
+export function agentRun(trace: string[] | undefined): AgentRun | null {
+  const steps: AgentStep[] = [];
+  let why: string | undefined;
+  let calls: number | undefined;
+  for (const l of trace ?? []) {
+    const w = l.match(/^general agent first:\s*(.*)$/);
+    if (w) { why = w[1]; continue; }
+    const h = l.match(/^agent: general tool-using path \((\d+) steps?, (\d+) LLM calls?\)/);
+    if (h) { calls = Number(h[2]); continue; }
+    const a = l.match(/^think:\s*(.*?)\s*→\s*answer\s*(.*)$/);
+    // W4: "think: … → answer before any tool result: refused" = the loop rejected an answer with no tool evidence
+    if (a) {
+      const refused = /before any tool result.*refused/i.test(a[2]);
+      steps.push({ tool: "answer", input: "", result: refused ? "rejected: answered before using any tool, re-planned" : a[2].trim(), thought: a[1], refused });
+      continue;
+    }
+    const t = l.match(/^think:\s*(.*?)\s*→\s*(ask|table|find_text|look|calc)\(/);
+    if (!t) continue;
+    const rest = l.slice(t[0].length);
+    const cut = rest.indexOf("): ");
+    const input = cut >= 0 ? rest.slice(0, cut) : rest;
+    let result = cut >= 0 ? rest.slice(cut + 3) : "";
+    // W4: observations may end "-- WARNING: this sub-question names none of '<storey>' …" (scope drift; the agent re-asks)
+    const wi = result.search(/\s*--\s*WARNING:\s*/);
+    const warn = wi >= 0 ? result.slice(wi).replace(/^\s*--\s*WARNING:\s*/, "") : undefined;
+    if (wi >= 0) result = result.slice(0, wi);
+    const s: AgentStep = { tool: t[2], input, result, thought: t[1], warn };
+    const r = result.match(/^(.*?)\s*\(confidence ([\d.]+), by ([\w/.-]+)\)\s*$/);
+    if (r) { result = r[1]; s.conf = Number(r[2]); s.by = r[3].replace(/^pipeline\//, ""); s.result = result; }
+    steps.push(s);
+  }
+  return steps.length ? { why, calls, steps } : null;
+}
+
+const TOOL_LBL: Record<string, string> = { ask: "ask", calc: "calc", table: "table", find_text: "find text", look: "look", answer: "answer" };
+const TOOL_TIP: Record<string, string> = {
+  ask: "Asked a simple question to the solver cascade (rules / geometry first); its number and evidence come back",
+  calc: "Arithmetic done in code (safe expression evaluator), never by the model",
+  table: "Read the drawing's data table (rooms with areas, or the model's fact card)",
+  find_text: "Searched the drawing's text layer; hits become evidence boxes",
+  look: "Asked the vision model directly (unverified, low confidence)",
+  answer: "Final answer; every number in it is traced back to a tool result",
+};
+
+/** The agent's chain: one row per tool call, the ask sub-questions clickable, arithmetic shown as code. */
+function reasoningHtml(run: AgentRun, a: Answer) {
+  const fmtRes = (s: string) => esc(s.replace(/\bm2\b/g, "m²").replace(/\bm3\b/g, "m³").replace(/\s+count\b/, ""))
+    .replace(/^(-?\d+\.\d{3,})/, (m) => String(Math.round(Number(m) * 100) / 100));
+  const evCount = (input: string) => (a.evidence ?? []).filter((e) => evStep(e.note ?? "", [input]) === 0).length;
+  const li = (s: AgentStep, i: number) => {
+    const n = `<span class="sn">${i + 1}</span>`;
+    const tool = `<span class="tool t-${s.tool}" title="${esc(TOOL_TIP[s.tool] ?? s.tool)}">${esc(TOOL_LBL[s.tool] ?? s.tool)}</span>`;
+    const th = (s.thought ? `<div class="th">${esc(s.thought)}</div>` : "") + (s.warn ? `<div class="warn">⚠ ${esc(s.warn)}</div>` : "");
+    if (s.tool === "ask") {
+      const k = evCount(s.input);
+      const cnt = askCount(s);
+      const meta = [s.conf !== undefined ? `${Math.round(s.conf * 100)}%` : "", s.by ?? "",
+        k ? (cnt && cnt > k ? `${k} of ${cnt} passed as evidence` : `${k} evidence`) : ""].filter(Boolean).join(" · ");
+      return `<li>${n}${tool}<span role="button" tabindex="0" class="subq" data-q="${esc(s.input)}" title="Ask this sub-question on its own">${esc(s.input)}</span><span class="res">→ <b>${fmtRes(s.result)}</b>${meta ? ` <small>${esc(meta)}</small>` : ""}</span>${th}</li>`;
+    }
+    if (s.tool === "calc") return `<li>${n}${tool}<code>${esc(s.input.replace(/\*/g, "×").replace(/\//g, "÷"))}</code><span class="res">= <b>${fmtRes(s.result)}</b></span>${th}</li>`;
+    if (s.tool === "answer" && s.refused) return `<li class="refused">${n}${tool}<span class="res">${esc(s.result)}</span>${th}</li>`;
+    if (s.tool === "answer") return `<li class="fin">${n}${tool}<span class="res"><b>${fmtRes(s.result)}</b></span>${th}</li>`;
+    return `<li>${n}${tool}<span class="inp">${esc(s.input)}</span><span class="res">→ ${fmtRes(s.result.slice(0, 160))}</span>${th}</li>`;
+  };
+  const head = run.why ? `<div class="why-agent">Not a known question template (${esc(run.why.replace(/;\s*not a known template$/, ""))}), so a small local model plans the steps; every number comes from a tool, never from the model.</div>` : "";
+  return `${head}<ol class="steps">${run.steps.map(li).join("")}</ol>`;
+}
+
+/** The count an ask step returned ("46 count (confidence 0.99, …)" → 46), else null. */
+function askCount(s: AgentStep): number | null {
+  const m = s.result.match(/^\s*(\d+)\s*(?:count\b|$|\()/);
+  return m ? Number(m[1]) : null;
+}
+
+/** Agent answers pass on only part of a counted sub-answer's evidence (W4: the first 6): say so, and how to see all. */
+function partialEvidence(run: AgentRun | null, a: Answer): string {
+  if (!run) return "";
+  const asks = run.steps.map((s, i) => ({ s, i })).filter(({ s }) => s.tool === "ask");
+  for (const { s, i } of asks) {
+    const n = askCount(s);
+    const k = (a.evidence ?? []).filter((e) => evStep(e.note ?? "", [s.input]) === 0).length;
+    if (n && k && n > k) return ` · first ${k} of the ${n} from step ${i + 1}; click its question to see all`;
+  }
+  return "";
+}
+
+/** Which ask step an agent evidence note came from: notes are "<ask input[:55]> — <note>". -1 = none. */
+function evStep(note: string, inputs: string[]): number {
+  const m = note.match(/^(.{10,60}?) — /);
+  if (!m) return -1;
+  const p = m[1].trim();
+  return inputs.findIndex((q) => q.length > 0 && (q.startsWith(p) || p.startsWith(q.slice(0, 50))));
+}
+
+const LANG: Record<string, string> = { de: "German", fi: "Finnish", sv: "Swedish", fr: "French", it: "Italian", nl: "Dutch", et: "Estonian", es: "Spanish", da: "Danish", pl: "Polish" };
+const OP: Record<string, string> = { sum: "sum of", diff: "difference of", argmax: "largest of", argmin: "smallest of", max: "max of", min: "min of", exists: "any of" };
+
+/** "Understood as" (W4's intent) and, for compound questions, the plan of sub-questions answered one by one. */
+function intentHtml(a: Answer, run: AgentRun | null) {
+  const it = a.intent;
+  if (!it && !a.plan && !run) return "";
+  const bits: string[] = [];
+  // "operator question (modifier share …)" + "<solver> (question as asked): …": the template intent was not used
+  const op = !run && (a.trace ?? []).find((l) => /^operator question \(modifiers? /.test(l))?.match(/modifiers? ([\w+]+)/)?.[1];
+  const raw = !run && (a.trace ?? []).find((l) => /^\w+ \(question as asked\):/.test(l))?.match(/^(\w+)/)?.[1];
+  // the solver's own operation line, e.g. "[ifc] outer operation: factor 450 EUR per door" (numbers given in the question)
+  const outer = !run && (a.trace ?? []).map((l) => l.match(/^(?:\[\w+\]\s*)?outer operation:\s*(.+)$/)?.[1]).find((x) => x);
+  // ranked answers: "[ifc] argmax over storeys -> 1.korrus"
+  const arg = !run && (a.trace ?? []).map((l) => l.match(/\barg(max|min) over (\w+)/)).find((x) => x);
+  if ((op || outer || arg) && raw) {
+    if (op && !/^compare$/.test(op)) bits.push(op.split("+").map((m) => `<b>${esc(m.replace(/_/g, " "))}</b>`).join(" + "));
+    if (arg) {
+      const u = (a.trace ?? []).map((l) => l.match(/^\[\w+\]\s*[^:\[\]]{1,60}?:\s*-?\d+(?:\.\d+)?\s*(count|m2|m²|m3|m³|m|%|EUR)\b/)?.[1]).find((x) => x);
+      const by = u === "count" ? (it?.target && it.target !== "unknown" ? `${it.target} count` : "count")
+        : u && /^m(2|²)$/.test(u) ? "area" : u && /^m(3|³)$/.test(u) ? "volume" : u === "m" ? "length" : "";
+      bits.push(`<b>${arg[1] === "max" ? "largest" : "smallest"} of the ${esc(arg[2])}</b>${by ? ` by ${esc(by)}` : ""}`);
+    }
+    if (outer) bits.push(`<b>${esc(outer)}</b>`);
+    bits.push(`not a template: ${esc(raw)} read the question itself and computed it in code`);
+  } else if (run) {
+    // the template intent was NOT used (it misreads operators); say what the agent did instead
+    const mods = run.why?.match(/^modifiers?\s+([\w+]+)/)?.[1]?.split("+") ?? [];
+    bits.push(mods.length ? mods.map((m) => `<b>${esc(m.replace(/_/g, " "))}</b>`).join(" + ") : "<b>open question</b>");
+    const n = run.steps.filter((s) => s.tool !== "answer").length;
+    bits.push(`reasoning agent · ${n} tool step${n === 1 ? "" : "s"}`);
+  } else if (it) {
+    bits.push(`<b>${esc(it.task)}</b>`);
+    const target = a.plan?.parts?.length ? a.plan.parts.join(a.plan.op === "sum" ? " + " : ", ") : it.target;
+    // free-text questions: the template parser often guesses a target nobody used (Finnish "Mikä on piirustuksen
+    // mittakaava?" → 'door'); show it only when the solver's trace mentions it beyond the intent line itself
+    const used = it.task !== "text" || a.plan?.parts?.length || !target
+      || (a.trace ?? []).some((l) => !/^intent:/.test(l) && new RegExp(`\\b${target.replace(/_/g, " ").replace(/[^\w ]/g, "")}`, "i").test(l));
+    if (target && target !== it.task && target !== "unknown" && used) bits.push(esc(target.replace(/_/g, " ")));
+    const f = Object.entries(it.filters ?? {}).filter(([, v]) => v !== null && v !== "" && v !== false)
+      .map(([k, v]) => `${esc(k.replace(/_/g, " "))} <i>${esc(v === true ? "yes" : v)}</i>`);
+    bits.push(...(f.length ? f : it.scope ? [`scope <i>${esc(it.scope)}</i>`] : []));
+    if (it.unit && it.unit !== "count") bits.push(`in ${esc(unitLabel(it.unit))}`);
+  }
+  const lang = it?.lang && it.lang !== "en" ? `<span class="lang" title="The question was parsed into the same language-neutral intent as its English twin">${esc(LANG[it.lang] ?? it.lang)}</span>` : "";
+  const plan = a.plan && a.plan.sub_questions?.length
+    ? `<details class="plan"><summary><b>${esc(OP[a.plan.op] ?? a.plan.op)}</b> ${a.plan.parts.map((p) => `<span class="part">${esc(p)}</span>`).join(a.plan.op === "sum" ? " + " : a.plan.op === "diff" ? " − " : ", ")}
+        <small>${a.plan.sub_questions.length} sub-questions, arithmetic in code</small></summary>
+        <ol>${a.plan.sub_questions.map((q) => `<li><span role="button" tabindex="0" class="subq" data-q="${esc(q)}" title="Ask this sub-question on its own">${esc(q)}</span></li>`).join("")}</ol></details>`
+    : "";
+  return `<div class="intent"><span class="lbl">Understood as</span>${bits.join(" · ")}${lang}${a.cached ? `<span class="cached" title="Same question answered before; served from the API cache">cached</span>` : ""}</div>${plan}`;
+}
+
+/** The ask inputs of an agent answer, aligned with its steps ("" for non-ask steps). */
+export function agentAsks(a: Answer): string[] {
+  const run = agentRun(a.trace);
+  return run ? run.steps.map((s) => (s.tool === "ask" ? s.input : "")) : [];
+}
+
+// --- second opinion from the hosted model (button in the card; only for model-tier or unsure answers on images/PDFs)
+function sameAnswer(a: Answer, b: Answer): boolean | null {
+  if (a.value === null || a.value === undefined || b.value === null || b.value === undefined) return null;
+  if (typeof a.value === "number") {
+    const y = Number(b.value);
+    if (!Number.isFinite(y)) return false;
+    const x = a.value;
+    return a.unit === "count" || (Number.isInteger(x) && Number.isInteger(y)) ? x === y : Math.abs(x - y) <= 0.02 * Math.abs(x);
+  }
+  const s = String(a.value).toLowerCase().trim();
+  const t = String(b.value).toLowerCase().trim();
+  return s === t || (t.length > 2 && s.includes(t)) || (s.length > 2 && t.includes(s));
+}
+
+function modelName(b: Answer) {
+  const m = (b.trace ?? []).map((l) => l.match(/^(nvidia|local):(\S+)/)).find((x) => x);
+  const id = m?.[2] ?? "";
+  if (/nemotron-3\.5-super/i.test(id)) return "NVIDIA Nemotron 3.5 Super VL (hosted)";
+  return id ? `${id.split("/").pop()} (${m![1] === "nvidia" ? "hosted" : "local"})` : "hosted model";
+}
+
+export function secondOpinionHtml(a: Answer, b: Answer, ms: number) {
+  const same = sameAnswer(a, b);
+  const unit = unitLabel(b.unit);
+  const c: Cost = b.cost ?? {};
+  const wall = c.wall_seconds && c.wall_seconds > 0 ? c.wall_seconds : ms / 1000;
+  const raw = (b.trace ?? []).find((l) => /^raw:/.test(l))?.replace(/^raw:\s*/, "") ?? "";
+  const verdict = b.value === null || b.value === undefined ? `<b>No answer</b> from ${esc(modelName(b))}`
+    : `<b>${same ? "✓ Second opinion agrees" : "≠ Second opinion differs"}</b> ${esc(modelName(b))} says <b>${esc(fmtValue(b))}${unit ? ` ${esc(unit)}` : ""}</b>`;
+  return `<div class="xcheck second ${same ? "ok" : "bad"}">${verdict}
+    ${b.replayed ? `<small class="replayed" title="${esc(b.replayed)}">⟲ recorded ${esc(b.recorded_at ?? "")} · hosted API busy right now</small>` : ""}
+    <small>${wall.toFixed(1)} s · ${((c.api_tokens_in ?? c.llm_tokens_in ?? 0) + (c.api_tokens_out ?? c.llm_tokens_out ?? 0)).toLocaleString()} tok · ${esc(fmtEur(costUsd({ ...c, wall_seconds: wall })))}</small>
+    ${raw ? `<details><summary>its reasoning</summary><p>${esc(raw.replace(/\s*\|\s*/g, " ").slice(0, 900))}</p></details>` : ""}</div>`;
+}
+
+/** Who can mark what a CubiCasa count counted when the answer itself carries no boxes: room names → the label
+ * reader (raster, local VLM, cached per drawing); symbols → R1's pretrained CubiCasa5K detector (cached, no GPU). */
+const ROOM_TARGETS = new Set(["bedroom", "kitchen", "bathroom", "sauna", "wc_room", "balcony"]);
+const SYMBOL_TARGETS = new Set(["window", "door", "wc", "sink"]);
+/** `missing` without "no located evidence …" when the answer does carry located evidence (boxes or GUIDs). */
+const missingNow = (a: Answer) => (a.missing ?? []).filter((t) => !(/^no located evidence\b/i.test(t) && a.evidence.some((e) => e.bbox || e.ifc_guid))).map(tidyCut);
+
+export const LOCATED_NOTE = /^(label reader|CubiCasa5K detector|door-swing reader): /;
+export interface Locator { solver: string; name: string; button: string; title: string; noun: string; args?: Record<string, unknown> }
+const NOUNS: Record<string, string> = { window: "windows", door: "doors", wc: "WC seats", sink: "sinks", wc_room: "WC room labels" };
+/** Room words (EN/FI/SV/DE) and the Finnish plan codes printed on CubiCasa plans → R1's room-graph classes. */
+const ROOM_WORDS: [RegExp, string][] = [
+  [/\b(kitchens?|keitti[öo]\w*|kök\w*|küche\w*|kitchenette)\b|\(K\)|'K'/i, "kitchen"],
+  [/\b(bed ?rooms?|makuuhuone\w*|sovrum\w*|schlafzimmer\w*)\b|\((MH|H)\)|'(MH|H)'/i, "bedroom"],
+  [/\b(living ?rooms?|lounge|olohuone\w*|vardagsrum\w*|wohnzimmer\w*)\b|\(OH\)|'OH'/i, "living"],
+  [/\b(bath ?rooms?|wash ?rooms?|toilets?|wcs?|kylpyhuone\w*|pesuhuone\w*|badrum\w*)\b|\((KH|PH|PESUH|WC)\)|'(KH|PH|WC)'/i, "bath"],
+  [/\b(saunas?|löylyhuone\w*|bastu\w*)\b|\((S|LH|SAUNA)\)|'(LH|S)'/i, "sauna"],
+  [/\b(hall(way)?s?|entr(y|ance|ies)|corridors?|lobby|eteinen|etei\w+|tuulikaappi\w*|hall)\b|\((ET|TK)\)|'(ET|TK)'/i, "entry"],
+  [/\b(storage|store ?rooms?|closets?|walk-in|pantry|varasto\w*|vaatehuone\w*|förråd\w*)\b|\((VAR|VH)\)|'(VAR|VH)'/i, "storage"],
+  [/\b(balcon(y|ies)|terraces?|patio|parveke\w*|terassi\w*|balkong\w*)\b|\((PAR|TER)\)/i, "outdoor"],
+  [/\b(garages?|carport|autotalli\w*)\b/i, "garage"],
+];
+/** The room-graph classes a question names (empty: none). */
+export const roomKindsIn = (q: string) => ROOM_WORDS.filter(([re]) => re.test(q)).map(([, k]) => k);
+
+export function locatorFor(a: Answer, file: string, question = ""): Locator | null {
+  if (a.value === null || (a.evidence ?? []).length) return null;
+  const t = a.intent?.target ?? (a.trace ?? []).map((l) => l.match(/^intent: count (\w+)/)?.[1]).find((x) => x) ?? "";
+  // an uploaded image that is not a CubiCasa-style plan: W3's door-swing reader (raster, twins=0) marks one box per
+  // swing arc it finds (W5 c8: lone Swiss PNG upload, answer 26 @0.11, reader 35 boxes, gold 36; ~18 s, no model call)
+  if (/^upload\/[0-9a-f]{12}\/[^/]*\.(png|jpe?g)$/i.test(file) && t === "door" && a.intent?.task !== "area")
+    return { solver: "raster", args: { twins: 0 }, name: "door-swing reader", button: "Show where · door swings", noun: "doors",
+      title: "Find the door swing arcs on the image (geometry, no model call, ~20 s) and mark each one; doors on an apartment boundary count twice, like the source data" };
+  if (!/^(data|upload\/[0-9a-f]{12})\/cubicasa5k\/[^/]*\.(png|jpe?g)$/i.test(file)) return null;
+  // "where is the kitchen?", "which room is the sauna entered from?", room areas…: not a count of labels or symbols, but
+  // the question names a room: R1's room graph (cached CubiCasa5K segmentation, no model call) boxes the rooms named
+  const kinds = roomKindsIn(question);
+  if (kinds.length && (a.intent?.task !== "count" || !(ROOM_TARGETS.has(t) || SYMBOL_TARGETS.has(t)))) {
+    if (file.startsWith("upload/")) return null; // the room graph reads R1's cached segmentation: dataset plans only
+    return { solver: "rooms", name: "room graph", button: "Show where · room graph", noun: kinds.join(" / "),
+      title: "Mark the rooms this question names, from the room graph of the plan (pretrained CubiCasa5K segmentation + printed labels; cached, no model call)" };
+  }
+  const noun = NOUNS[t] ?? (ROOM_TARGETS.has(t) ? `${t} labels` : "symbols");
+  // the pipeline already asked the label reader and it found none: nothing to mark
+  if (ROOM_TARGETS.has(t) && (a.trace ?? []).some((l) => /cross-check:.*\braster 0\b/.test(l))) return null;
+  if (ROOM_TARGETS.has(t)) return { solver: "raster", name: "label reader", button: "Show where · read the room labels", noun,
+    title: "Read the room labels on the drawing (local vision model, once per drawing, cached) and mark the ones this answer counts" };
+  if (SYMBOL_TARGETS.has(t)) return { solver: "raster_cc5k", name: "CubiCasa5K detector", button: "Show where · symbol detector", noun,
+    title: "Mark every symbol the pretrained CubiCasa5K model finds (Kalervo et al. 2019, weights CC BY-NC 4.0; cached, no GPU)" };
+  return null;
+}
+
+export interface CardOpts {
+  /** CubiCasa answers without located evidence: ask a locator (see locatorFor) to mark what was counted. */
+  onLocate?: (loc: Locator) => Promise<void>;
+  onSecondOpinion?: () => Promise<{ answer: Answer; ms: number }>;
+  onAsk?: (question: string) => void;
+  roundTripMs: number;
+  onEvidence: (i: number) => void;
+  describeGuid: (g: string) => string;
+  currentFile: string;
+  /** the question as asked (locatorFor: which rooms a "where is …" question names) */
+  currentQuestion?: string;
+  onOpenSheet: (path: string) => void;
+}
+
+/** Which files carry 2D evidence (model-wide answers box elements on several sheets). */
+function sheetsHtml(ev: Evidence[], current: string) {
+  const counts = new Map<string, number>();
+  for (const e of ev) if (e.bbox) counts.set(e.file, (counts.get(e.file) ?? 0) + 1);
+  if (counts.size === 0 || (counts.size === 1 && counts.has(current))) return "";
+  const short = (p: string) => p.split("/").pop()!.replace(/^.*?_(plan|section|elevation)-/, "$1-").replace(/\.[^.]+$/, "");
+  const chips = [...counts.entries()].sort((a, b) => (a[0] === current ? -1 : b[0] === current ? 1 : a[0].localeCompare(b[0])))
+    .map(([f, n]) => `<button class="sheet ${f === current ? "on" : ""}" data-file="${esc(f)}" title="${esc(f)}">${esc(f === current ? "this sheet" : short(f))} <b>${n}</b></button>`).join("");
+  return `<div class="sheets"><span>Evidence on ${counts.size} sheet${counts.size > 1 ? "s" : ""}:</span>${chips}</div>`;
+}
+
+const CASCADE: ["deterministic" | "local" | "api", string][] = [["deterministic", "rules / geometry"], ["local", "local model"], ["api", "hosted model"]];
+function cascadeHtml(tier: "deterministic" | "local" | "api") {
+  const reached = CASCADE.findIndex(([t]) => t === tier);
+  return `<div class="cascade" title="Cost-aware cascade: the cheapest step that is sure enough answers">${CASCADE.map(([t, label], i) =>
+    `<span class="${i < reached ? "passed" : i === reached ? `on ${t}` : ""}">${label}</span>`).join("<i>›</i>")}</div>`;
+}
+
+export function renderCard(el: HTMLElement, a: Answer, opts: CardOpts) {
+  const c: Cost = a.cost ?? {};
+  const tier = costTier(c);
+  const wall = c.wall_seconds && c.wall_seconds > 0 ? c.wall_seconds : opts.roundTripMs / 1000;
+  const tokens = (c.llm_tokens_in ?? 0) + (c.llm_tokens_out ?? 0);
+  const conf = Math.round((a.confidence ?? 0) * 100);
+  const confClass = conf >= 85 ? "hi" : conf >= 55 ? "mid" : "lo";
+  const run = agentRun(a.trace);
+  const asks = agentAsks(a);
+  const checks = crossChecks(a, asks);
+  const unit = unitLabel(a.unit);
+  const isText = typeof a.value === "string";
+  const rich = isText && (String(a.value).length > 120 || String(a.value).includes("\n"));
+  const set = isText && !multiPart(a) && !a.checked?.length ? setAnswer(a, opts.currentFile) : null;
+  const ev = a.evidence ?? [];
+  const groups = groupEvidence(ev);
+  const shown = groups.slice(0, 80);
+  const loc = locatorFor(a, opts.currentFile, opts.currentQuestion ?? "");
+
+  el.className = `card answer ${a.value === null ? "refused" : ""}`;
+  el.innerHTML = `
+    <div class="value-row${rich || set ? " rich" : ""}">
+      ${set ? setHtml(set)
+        : rich && a.checked?.length ? checkedHtml(a, String(a.value))
+        : rich ? `<span class="rich-lbl">Text answer · ${String(a.value).split(/\n+/).filter((l) => l.trim()).length} line(s)</span><div class="value text rich">${richText(String(a.value))}</div>`
+        : multiPart(a) ? `<div class="value parts">${multiPart(a)!.map((r) => `<div class="part"><span class="pv">${esc(r.v)}${r.u ? `<span class="unit">${esc(unitLabel(r.u))}</span>` : ""}</span><span class="pq">${esc(r.q)}</span></div>`).join("")}</div>`
+        : `<div class="value ${isText ? "text" : ""} ${isText && String(a.value).length > 40 ? "long" : ""}">${esc(fmtValue(a))}${unit ? `<span class="unit">${esc(unit)}</span>` : ""}${rangeHtml(a)}${yesNoBasis(a)}</div>`}
+      <div class="conf ${confClass}" title="${a.checked?.length ? "The pipeline's calibrated confidence in its text answer, before the browser counted the types it names in the model (table)" : "Calibrated confidence"}">
+        <div class="conf-num">${conf}%</div><div class="conf-bar"><i style="width:${conf}%"></i></div><div class="conf-lbl">${a.checked?.length ? "before the check" : "confidence"}</div>
+      </div>
+    </div>
+    ${scopeWarning(a)}
+    ${intentHtml(a, run)}
+    ${compareHtml(a)}
+    ${checks.map((x) => `<div class="xcheck ${x.ok ? "ok" : "bad"}"><b>${x.ok ? "✓ Cross-checked" : "✗ Sources disagree"}</b> ${esc(x.text)}</div>`).join("")}
+    ${cascadeHtml(tier)}
+    ${opts.onLocate && loc ? `<div class="locate-slot"><button class="locate-btn" title="${esc(loc.title)}">${esc(loc.button)}</button></div>` : ""}
+    ${opts.onSecondOpinion && /\.(png|jpe?g|pdf)$/i.test(opts.currentFile) && (tier !== "deterministic" || (a.confidence ?? 0) < 0.8)
+      ? `<div class="second-slot"><button class="second-btn" title="Ask NVIDIA Nemotron 3.5 Super VL (hosted vision + reasoning model) the same question: one API call, only when you click">Second opinion · NVIDIA Nemotron</button></div>` : ""}
+    <div class="cost">
+      <span title="${a.cached ? `Wall time when this question was first answered; this time it came from the API cache in ${Math.round(opts.roundTripMs)} ms` : "Wall time"}">⏱ ${wall < 1 ? `${Math.round(wall * 1000)} ms` : `${wall.toFixed(1)} s`}${a.cached && wall >= 1 ? " first time" : ""}</span>
+      <span title="LLM tokens in / out">${tokens ? `${(c.llm_tokens_in ?? 0).toLocaleString()} / ${(c.llm_tokens_out ?? 0).toLocaleString()} tok` : "0 tokens"}</span>
+      <span title="Estimated cost of this answer with the eval's rates (stoa/eval/runner.py): €${(costUsd({ ...c, wall_seconds: wall }) * EUR_PER_USD).toPrecision(2)} per question, i.e. this much per 1,000 questions like it (EUR at ${EUR_PER_USD} €/$)">${((x) => (x.startsWith("<") ? x : `≈ ${x}`))(fmtEur(costUsd({ ...c, wall_seconds: wall })))}</span>
+      <span class="solver" title="Solver">${esc(a.solver || "?")}</span>
+    </div>
+    ${run ? `<details class="sec reason" open><summary>Reasoning <small>${run.steps.length} steps${run.calls ? ` · ${run.calls} LLM calls (local)` : ""} · numbers from tools only</small></summary>
+      ${reasoningHtml(run, a)}</details>`
+    : `<details class="sec" open><summary>Why <small>${(a.trace ?? []).length} steps</small></summary>
+      ${traceHtml(a.trace ?? [])}</details>`}
+    ${(a.assumptions ?? []).length ? `<details class="sec" open><summary>Assumptions</summary><ul class="assume">${a.assumptions!.map((t) => `<li>${esc(t)}</li>`).join("")}</ul></details>` : ""}
+    ${missingNow(a).length ? `<details class="sec" open><summary>What would make it certain</summary><ul class="missing">${missingNow(a).map((t) => `<li>${esc(t)}</li>`).join("")}</ul></details>` : ""}
+    ${sheetsHtml(ev, opts.currentFile)}
+    <details class="sec" open><summary>Evidence <small>${groups.length} item${groups.length === 1 ? "" : "s"}${groups.length < ev.length ? ` (${ev.length} boxes/elements)` : ""} · click to zoom${esc(partialEvidence(run, a))}</small></summary>
+      <ul class="evidence">${shown.map((g, n) => evLabel(ev, g, n + 1, opts.describeGuid, asks, /kg_qa/.test(a.solver ?? "") ? [100, 120, 160] : [])).join("")}${groups.length > shown.length ? `<li class="more">+ ${groups.length - shown.length} more</li>` : ""}</ul></details>
+  `;
+  el.querySelectorAll<HTMLElement>(".ev-item").forEach((li) => li.addEventListener("click", () => opts.onEvidence(Number(li.dataset.i))));
+  el.querySelectorAll<HTMLElement>(".set-row[data-i]").forEach((r) => r.addEventListener("click", () => {
+    el.querySelectorAll(".set-row").forEach((x) => x.classList.toggle("sel", x === r));
+    opts.onEvidence(Number(r.dataset.i));
+  }));
+  el.querySelectorAll<HTMLElement>(".subq").forEach((b) => {
+    b.addEventListener("click", () => opts.onAsk?.(b.dataset.q!));
+    b.addEventListener("keydown", (e) => e.key === "Enter" && opts.onAsk?.(b.dataset.q!));
+  });
+  const lb = el.querySelector<HTMLButtonElement>(".locate-btn");
+  if (lb && opts.onLocate && loc) {
+    const go = opts.onLocate;
+    lb.addEventListener("click", async () => {
+      lb.disabled = true;
+      lb.textContent = loc.solver === "raster" ? "Reading the labels…" : "Detecting symbols…";
+      try {
+        await go(loc);
+      } catch (e) {
+        lb.parentElement!.innerHTML = `<div class="xcheck bad"><b>${esc(loc.name)} failed</b> ${esc(e)}</div>`;
+      }
+    });
+  }
+  const sb = el.querySelector<HTMLButtonElement>(".second-btn");
+  if (sb && opts.onSecondOpinion) {
+    const go = opts.onSecondOpinion;
+    sb.addEventListener("click", async () => {
+      const slot = sb.parentElement!;
+      sb.disabled = true;
+      sb.textContent = "Asking NVIDIA Nemotron…";
+      try {
+        const r = await go();
+        slot.innerHTML = secondOpinionHtml(a, r.answer, r.ms);
+      } catch (e) {
+        slot.innerHTML = `<div class="xcheck bad"><b>Second opinion failed</b> ${esc(e)}</div>`;
+      }
+    });
+  }
+  el.querySelectorAll<HTMLButtonElement>(".sheet").forEach((b) => b.addEventListener("click", () => b.dataset.file !== opts.currentFile && opts.onOpenSheet(b.dataset.file!)));
+}

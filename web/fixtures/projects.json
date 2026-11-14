@@ -1,0 +1,169 @@
+[
+  {
+    "id": "esplanades",
+    "name": "Maleva 18 apartment building",
+    "place": "Tallinn, Estonia",
+    "facts": [
+      "5 floors + basement",
+      "285 rooms",
+      "211 doors"
+    ],
+    "contents": "5 floor plans + 3D model",
+    "sheets": [
+      {
+        "label": "Floor 1",
+        "path": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf"
+      },
+      {
+        "label": "Floor 2",
+        "path": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-02-2-korrus.pdf"
+      },
+      {
+        "label": "Floor 3",
+        "path": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-03-3-korrus.pdf"
+      },
+      {
+        "label": "Floor 4",
+        "path": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-04-4-korrus.pdf"
+      },
+      {
+        "label": "Floor 5",
+        "path": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-05-5-korrus.pdf"
+      },
+      {
+        "label": "3D model",
+        "path": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc"
+      }
+    ],
+    "chips": [
+      "How many doors are on this floor?",
+      "How big is room 119?",
+      "Which is the biggest room on this floor?",
+      "Do the plan and the 3D model agree on the windows on this floor?"
+    ],
+    "credit": "Drawings and model: Esplan (esplan.ee), CC BY 4.0",
+    "kind": "building",
+    "modelChips": [
+      "How many doors are in the whole building?",
+      "How many rooms are on each floor?",
+      "How many windows in the whole building?"
+    ]
+  },
+  {
+    "id": "swiss",
+    "name": "Apartment floor",
+    "place": "Switzerland",
+    "facts": [
+      "4 apartments",
+      "36 doors",
+      "341 m² of rooms"
+    ],
+    "contents": "1 floor plan (2nd floor)",
+    "sheets": [
+      {
+        "label": "2nd floor",
+        "path": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf"
+      }
+    ],
+    "chips": [
+      "How many doors on this floor?",
+      "How big is apartment B?",
+      "How many apartments are on this floor?",
+      "Wie viele Türen und Fenster sind insgesamt auf diesem Grundriss eingezeichnet?"
+    ],
+    "credit": "Drawing: Swiss Dwellings v3.0.0 (Archilyse AG), rendered by us, CC BY 4.0",
+    "kind": "floor"
+  },
+  {
+    "id": "duplex",
+    "name": "Duplex apartment",
+    "place": "Sample building, US",
+    "facts": [
+      "2 floors",
+      "21 rooms",
+      "14 doors"
+    ],
+    "contents": "3D model",
+    "sheets": [
+      {
+        "label": "3D model",
+        "path": "data/ifc_models/bsc-duplex_duplex-a-20110907.ifc"
+      }
+    ],
+    "chips": [
+      "How many doors are in this model?",
+      "How many rooms are on each floor?",
+      "Which storey has the most doors?",
+      "How tall is the building?"
+    ],
+    "credit": "Model: buildingSMART Duplex Apartment sample, CC BY-ND 3.0",
+    "kind": "model"
+  },
+  {
+    "id": "sports",
+    "name": "Xcel Sports Complex",
+    "place": "Wisconsin, US",
+    "facts": [
+      "24 drawing sheets",
+      "door & finish schedules"
+    ],
+    "contents": "door schedule sheet",
+    "sheets": [
+      {
+        "label": "Door schedule (A-801)",
+        "path": "data/opening_design/Sports_Complex/Sheets - Current Set/A-801 - Door and Finish Schedules & Wall Types.pdf"
+      }
+    ],
+    "chips": [
+      "How many doors are in the door schedule?"
+    ],
+    "credit": "Drawings: OpeningDesign and the project team in the title block, CC BY-SA 4.0",
+    "kind": "schedule"
+  },
+  {
+    "id": "flat",
+    "name": "Apartment floor plan",
+    "place": "Finland",
+    "facts": [
+      "scanned plan",
+      "Finnish room codes"
+    ],
+    "contents": "1 plan image",
+    "sheets": [
+      {
+        "label": "Plan",
+        "path": "data/cubicasa5k/colorful-4539.png"
+      }
+    ],
+    "chips": [
+      "How many bedrooms are there?",
+      "Is there a sauna?",
+      "Kuinka monta makuuhuonetta (MH) pohjapiirustuksessa on?"
+    ],
+    "credit": "Plan: CubiCasa5K, CC BY-NC-SA 4.0",
+    "kind": "plan"
+  },
+  {
+    "id": "habs",
+    "name": "Creque Marine Railway, head house",
+    "place": "Charlotte Amalie, St. Thomas (US Virgin Islands)",
+    "facts": [
+      "historic measured drawing",
+      "scanned sheet"
+    ],
+    "contents": "1 scanned sheet",
+    "sheets": [
+      {
+        "label": "North elevation",
+        "path": "data/habs/vi0026_sheet_00003.jpg"
+      }
+    ],
+    "chips": [
+      "What kind of drawing is this?",
+      "What is the scale of this drawing?",
+      "When was this drawing made?"
+    ],
+    "credit": "Drawing: HAER, National Park Service; Library of Congress, public domain",
+    "kind": "historic"
+  }
+]

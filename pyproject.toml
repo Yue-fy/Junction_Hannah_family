@@ -1,0 +1,39 @@
+[project]
+name = "stoa"
+version = "0.1.0"
+description = "Junction 2026 / Stoa 'Make Blueprints Talk': verifiable QA over construction drawings"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+dependencies = [
+    "numpy",
+    "pydantic>=2",
+    "tqdm",
+    "pillow",
+    "shapely",
+    "ezdxf",
+    "pymupdf",
+    "ifcopenshell",
+    "opencv-python-headless",
+    "openai",
+    "fastapi",
+    "uvicorn",
+    "rapidfuzz",
+    "pandas",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+# raster_cc5k (D8: pretrained CubiCasa5K model, CPU). Install the CPU wheel, not PyPI's CUDA build (~3 GB):
+#   uv pip install --python $JUNCTION_VENV/bin/python torch --index-url https://download.pytorch.org/whl/cpu
+# (dry run 01:10: torch 2.15.0+cpu + filelock, fsspec, jinja2, markupsafe, mpmath, setuptools, sympy; numpy unchanged)
+cc5k = ["torch>=2.4"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["stoa*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

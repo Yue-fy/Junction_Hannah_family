@@ -1,0 +1,928 @@
+{
+ "entries": {
+  "cubicasa5k|count:balcony:drawing": {
+   "acc": {
+    "dxf": 0.0,
+    "ifc": 0.0,
+    "prior": 0.575,
+    "raster": 0.75,
+    "vlm_direct": 0.325,
+    "vlm_lora": 0.875
+   },
+   "cost_usd": {
+    "dxf": 0.0,
+    "ifc": 0.0,
+    "prior": 0.0,
+    "raster": 0.0010666,
+    "vlm_direct": 8.48e-05,
+    "vlm_lora": 6.1e-05
+   },
+   "lora_vs_raster": {
+    "agree": [
+     29,
+     32
+    ],
+    "disagree": [
+     6,
+     8
+    ]
+   },
+   "n": 40
+  },
+  "cubicasa5k|count:bathroom:drawing": {
+   "acc": {
+    "dxf": 0.0,
+    "ifc": 0.0,
+    "prior": 0.825,
+    "raster": 0.825,
+    "vlm_direct": 0.45,
+    "vlm_lora": 0.925
+   },
+   "cost_usd": {
+    "dxf": 0.0,
+    "ifc": 0.0,
+    "prior": 0.0,
+    "raster": 0.0,
+    "vlm_direct": 9.88e-05,
+    "vlm_lora": 5.71e-05
+   },
+   "lora_vs_raster": {
+    "agree": [
+     33,
+     36
+    ],
+    "disagree": [
+     4,
+     4
+    ]
+   },
+   "n": 40
+  },
+  "cubicasa5k|count:bedroom:drawing": {
+   "acc": {
+    "dxf": 0.0,
+    "ifc": 0.0,
+    "prior": 0.275,
+    "raster": 0.725,
+    "vlm_direct": 0.7,
+    "vlm_lora": 0.85
+   },
+   "cost_usd": {
+    "dxf": 0.0,
+    "ifc": 0.0,
+    "prior": 0.0,
+    "raster": 0.0010984,
+    "vlm_direct": 3.11e-05,
+    "vlm_lora": 6.59e-05
+   },
+   "lora_vs_raster": {
+    "agree": [
+     29,
+     33
+    ],
+    "disagree": [
+     5,
+     7
+    ]
+   },
+   "n": 40
+  },
+  "cubicasa5k|count:door:drawing": {
+   "acc": {
+    "dxf": 0.0,
+    "ifc": 0.0,
+    "prior": 0.075,
+    "raster": 0.075,
+    "vlm_direct": 0.15,
+    "vlm_lora": 0.375
+   },
+   "cost_usd": {
+    "dxf": 0.0,
+    "ifc": 0.0,
+    "prior": 0.0,
+    "raster": 0.0,
+    "vlm_direct": 2.43e-05,
+    "vlm_lora": 6.31e-05
+   },
+   "lora_vs_raster": {
+    "agree": [
+     2,
+     5
+    ],
+    "disagree": [
+     13,
+     35
+    ]
+   },
+   "n": 40
+  },
+  "cubicasa5k|count:kitchen:drawing": {
+   "acc": {
+    "dxf": 0.0,
+    "ifc": 0.0,
+    "prior": 0.975,
+    "raster": 0.975,
+    "vlm_direct": 0.825,
+    "vlm_lora": 0.975
+   },
+   "cost_usd": {
+    "dxf": 0.0,
+    "ifc": 0.0,
+    "prior": 0.0,
+    "raster": 0.0,
+    "vlm_direct": 0.0001618,
+    "vlm_lora": 6.05e-05
+   },
+   "lora_vs_raster": {
+    "agree": [
+     39,
+     40
+    ],
+    "disagree": [
+     0,
+     0
+    ]
+   },
+   "n": 40
+  },
+  "cubicasa5k|count:sauna:drawing": {
+   "acc": {
+    "dxf": 0.0,
+    "ifc": 0.0,
+    "prior": 0.425,
+    "raster": 0.85,
+    "vlm_direct": 0.525,
+    "vlm_lora": 0.975
+   },
+   "cost_usd": {
+    "dxf": 0.0,
+    "ifc": 0.0,
+    "prior": 0.0,
+    "raster": 0.0012442,
+    "vlm_direct": 0.0001203,
+    "vlm_lora": 6.76e-05
+   },
+   "lora_vs_raster": {
+    "agree": [
+     33,
+     33
+    ],
+    "disagree": [
+     6,
+     7
+    ]
+   },
+   "n": 40
+  },
+  "cubicasa5k|count:shower_bathtub:drawing": {
+   "acc": {
+    "dxf": 0.0,
+    "ifc": 0.0,
+    "prior": 0.65,
+    "raster": 0.65,
+    "vlm_direct": 0.3,
+    "vlm_lora": 0.65
+   },
+   "cost_usd": {
+    "dxf": 0.0,
+    "ifc": 0.0,
+    "prior": 0.0,
+    "raster": 0.0,
+    "vlm_direct": 3.04e-05,
+    "vlm_lora": 6.29e-05
+   },
+   "lora_vs_raster": {
+    "agree": [
+     23,
+     30
+    ],
+    "disagree": [
+     3,
+     10
+    ]
+   },
+   "n": 40
+  },
+  "cubicasa5k|count:sink:drawing": {
+   "acc": {
+    "dxf": 0.0,
+    "ifc": 0.0,
+    "prior": 0.4,
+    "raster": 0.625,
+    "vlm_direct": 0.4,
+    "vlm_lora": 0.725
+   },
+   "cost_usd": {
+    "dxf": 0.0,
+    "ifc": 0.0,
+    "prior": 0.0,
+    "raster": 0.001253,
+    "vlm_direct": 2.82e-05,
+    "vlm_lora": 6.23e-05
+   },
+   "lora_vs_raster": {
+    "agree": [
+     22,
+     28
+    ],
+    "disagree": [
+     7,
+     12
+    ]
+   },
+   "n": 40
+  },
+  "cubicasa5k|count:storey:drawing": {
+   "acc": {
+    "dxf": 0.0,
+    "ifc": 0.0,
+    "prior": 0.725,
+    "raster": 0.925,
+    "vlm_direct": 0.925,
+    "vlm_lora": 0.975
+   },
+   "cost_usd": {
+    "dxf": 0.0,
+    "ifc": 0.0,
+    "prior": 0.0,
+    "raster": 3.9e-05,
+    "vlm_direct": 2.58e-05,
+    "vlm_lora": 5.95e-05
+   },
+   "lora_vs_raster": {
+    "agree": [
+     36,
+     36
+    ],
+    "disagree": [
+     3,
+     4
+    ]
+   },
+   "n": 40
+  },
+  "cubicasa5k|count:wc:drawing": {
+   "acc": {
+    "dxf": 0.0,
+    "ifc": 0.0,
+    "prior": 0.6,
+    "raster": 0.725,
+    "vlm_direct": 0.55,
+    "vlm_lora": 0.85
+   },
+   "cost_usd": {
+    "dxf": 0.0,
+    "ifc": 0.0,
+    "prior": 0.0,
+    "raster": 0.0012855,
+    "vlm_direct": 2.42e-05,
+    "vlm_lora": 5.86e-05
+   },
+   "lora_vs_raster": {
+    "agree": [
+     27,
+     30
+    ],
+    "disagree": [
+     7,
+     10
+    ]
+   },
+   "n": 40
+  },
+  "cubicasa5k|count:wc_room:drawing": {
+   "acc": {
+    "dxf": 0.0,
+    "ifc": 0.0,
+    "prior": 0.6,
+    "raster": 0.825,
+    "vlm_direct": 0.175,
+    "vlm_lora": 0.875
+   },
+   "cost_usd": {
+    "dxf": 0.0,
+    "ifc": 0.0,
+    "prior": 0.0,
+    "raster": 0.001009,
+    "vlm_direct": 2e-05,
+    "vlm_lora": 5.58e-05
+   },
+   "lora_vs_raster": {
+    "agree": [
+     32,
+     35
+    ],
+    "disagree": [
+     3,
+     5
+    ]
+   },
+   "n": 40
+  },
+  "cubicasa5k|count:window:drawing": {
+   "acc": {
+    "dxf": 0.0,
+    "ifc": 0.0,
+    "prior": 0.1,
+    "raster": 0.1,
+    "vlm_direct": 0.125,
+    "vlm_lora": 0.15
+   },
+   "cost_usd": {
+    "dxf": 0.0,
+    "ifc": 0.0,
+    "prior": 0.0,
+    "raster": 0.0,
+    "vlm_direct": 3.08e-05,
+    "vlm_lora": 6.97e-05
+   },
+   "lora_vs_raster": {
+    "agree": [
+     1,
+     4
+    ],
+    "disagree": [
+     5,
+     36
+    ]
+   },
+   "n": 40
+  },
+  "ifc_models|area:room:room": {
+   "acc": {
+    "dxf": 0.0,
+    "ifc": 1.0,
+    "prior": 0.025,
+    "raster": 0.0,
+    "vlm_direct": 0.025
+   },
+   "cost_usd": {
+    "dxf": 0.0,
+    "ifc": 3.8e-06,
+    "prior": 0.0,
+    "raster": 0.0,
+    "vlm_direct": 0.0026484
+   },
+   "n": 40
+  },
+  "ifc_models|area:room:storey_total": {
+   "acc": {
+    "dxf": 0.0,
+    "ifc": 1.0,
+    "prior": 0.4348,
+    "raster": 0.0,
+    "vlm_direct": 0.0
+   },
+   "cost_usd": {
+    "dxf": 0.0,
+    "ifc": 2.6e-06,
+    "prior": 0.0,
+    "raster": 0.0,
+    "vlm_direct": 0.0024177
+   },
+   "n": 23
+  },
+  "ifc_models|area:wall:storey_total": {
+   "acc": {
+    "dxf": 0.0,
+    "ifc": 1.0,
+    "prior": 0.0,
+    "raster": 0.0,
+    "vlm_direct": 0.0
+   },
+   "cost_usd": {
+    "dxf": 0.0,
+    "ifc": 2e-06,
+    "prior": 0.0,
+    "raster": 0.0,
+    "vlm_direct": 0.0034478
+   },
+   "n": 28
+  },
+  "ifc_models|count:beam:model": {
+   "acc": {
+    "dxf": 0.0,
+    "ifc": 1.0,
+    "prior": 0.0,
+    "raster": 0.0,
+    "vlm_direct": 0.0
+   },
+   "cost_usd": {
+    "dxf": 0.0,
+    "ifc": 1.3e-06,
+    "prior": 0.0,
+    "raster": 0.0,
+    "vlm_direct": 0.0015445
+   },
+   "n": 14
+  },
+  "ifc_models|count:column:model": {
+   "acc": {
+    "dxf": 0.0,
+    "ifc": 1.0,
+    "prior": 0.0,
+    "raster": 0.0,
+    "vlm_direct": 0.1333
+   },
+   "cost_usd": {
+    "dxf": 0.0,
+    "ifc": 1.4e-06,
+    "prior": 0.0,
+    "raster": 0.0,
+    "vlm_direct": 0.0015078
+   },
+   "n": 15
+  },
+  "ifc_models|count:column:storey": {
+   "acc": {
+    "dxf": 0.0,
+    "ifc": 1.0,
+    "prior": 0.3333,
+    "raster": 0.0,
+    "vlm_direct": 0.0
+   },
+   "cost_usd": {
+    "dxf": 0.0,
+    "ifc": 1.8e-06,
+    "prior": 0.0,
+    "raster": 0.0,
+    "vlm_direct": 0.0026795
+   },
+   "n": 24
+  },
+  "ifc_models|count:door:model": {
+   "acc": {
+    "dxf": 0.0,
+    "ifc": 1.0,
+    "prior": 0.0,
+    "raster": 0.0,
+    "vlm_direct": 0.0
+   },
+   "cost_usd": {
+    "dxf": 0.0,
+    "ifc": 9e-07,
+    "prior": 0.0,
+    "raster": 0.0,
+    "vlm_direct": 0.0018492
+   },
+   "n": 16
+  },
+  "ifc_models|count:door:storey": {
+   "acc": {
+    "dxf": 0.0,
+    "ifc": 1.0,
+    "prior": 0.1622,
+    "raster": 0.0,
+    "vlm_direct": 0.0
+   },
+   "cost_usd": {
+    "dxf": 0.0,
+    "ifc": 1.5e-06,
+    "prior": 0.0,
+    "raster": 0.0,
+    "vlm_direct": 0.0026999
+   },
+   "n": 37
+  },
+  "ifc_models|count:light:model": {
+   "acc": {
+    "dxf": 0.0,
+    "ifc": 1.0,
+    "prior": 0.0,
+    "raster": 0.0,
+    "vlm_direct": 0.0
+   },
+   "cost_usd": {
+    "dxf": 0.0,
+    "ifc": 1.2e-06,
+    "prior": 0.0,
+    "raster": 0.0,
+    "vlm_direct": 0.0011908
+   },
+   "n": 5
+  },
+  "ifc_models|count:room:model": {
+   "acc": {
+    "dxf": 0.0,
+    "ifc": 1.0,
+    "prior": 0.2,
+    "raster": 0.0,
+    "vlm_direct": 0.0
+   },
+   "cost_usd": {
+    "dxf": 0.0,
+    "ifc": 1.1e-06,
+    "prior": 0.0,
+    "raster": 0.0,
+    "vlm_direct": 0.0011746
+   },
+   "n": 20
+  },
+  "ifc_models|count:room:storey": {
+   "acc": {
+    "dxf": 0.0,
+    "ifc": 1.0,
+    "prior": 0.1667,
+    "raster": 0.0,
+    "vlm_direct": 0.0556
+   },
+   "cost_usd": {
+    "dxf": 0.0,
+    "ifc": 2e-06,
+    "prior": 0.0,
+    "raster": 0.0,
+    "vlm_direct": 0.0027718
+   },
+   "n": 36
+  },
+  "ifc_models|count:sanitary:model": {
+   "acc": {
+    "dxf": 0.0,
+    "ifc": 1.0,
+    "prior": 0.0,
+    "raster": 0.0,
+    "vlm_direct": 0.0
+   },
+   "cost_usd": {
+    "dxf": 0.0,
+    "ifc": 5e-07,
+    "prior": 0.0,
+    "raster": 0.0,
+    "vlm_direct": 0.0006071
+   },
+   "n": 10
+  },
+  "ifc_models|count:stair:model": {
+   "acc": {
+    "dxf": 0.0,
+    "ifc": 1.0,
+    "prior": 0.0588,
+    "raster": 0.0,
+    "vlm_direct": 0.0
+   },
+   "cost_usd": {
+    "dxf": 0.0,
+    "ifc": 1e-06,
+    "prior": 0.0,
+    "raster": 0.0,
+    "vlm_direct": 0.0019373
+   },
+   "n": 17
+  },
+  "ifc_models|count:stair:storey": {
+   "acc": {
+    "dxf": 0.0,
+    "ifc": 1.0,
+    "prior": 0.6316,
+    "raster": 0.0,
+    "vlm_direct": 0.8158
+   },
+   "cost_usd": {
+    "dxf": 0.0,
+    "ifc": 1.3e-06,
+    "prior": 0.0,
+    "raster": 0.0,
+    "vlm_direct": 0.0035721
+   },
+   "n": 38
+  },
+  "ifc_models|count:wall:model": {
+   "acc": {
+    "dxf": 0.0,
+    "ifc": 1.0,
+    "prior": 0.0,
+    "raster": 0.0,
+    "vlm_direct": 0.0
+   },
+   "cost_usd": {
+    "dxf": 0.0,
+    "ifc": 2.4e-06,
+    "prior": 0.0,
+    "raster": 0.0,
+    "vlm_direct": 0.0020966
+   },
+   "n": 19
+  },
+  "ifc_models|count:wall:storey": {
+   "acc": {
+    "dxf": 0.0,
+    "ifc": 1.0,
+    "prior": 0.2727,
+    "raster": 0.0,
+    "vlm_direct": 0.0
+   },
+   "cost_usd": {
+    "dxf": 0.0,
+    "ifc": 1.7e-06,
+    "prior": 0.0,
+    "raster": 0.0,
+    "vlm_direct": 0.0035346
+   },
+   "n": 22
+  },
+  "ifc_models|count:window:model": {
+   "acc": {
+    "dxf": 0.0,
+    "ifc": 1.0,
+    "prior": 0.0,
+    "raster": 0.0,
+    "vlm_direct": 0.0
+   },
+   "cost_usd": {
+    "dxf": 0.0,
+    "ifc": 9e-07,
+    "prior": 0.0,
+    "raster": 0.0,
+    "vlm_direct": 0.0021849
+   },
+   "n": 18
+  },
+  "ifc_models|count:window:storey": {
+   "acc": {
+    "dxf": 0.0,
+    "ifc": 1.0,
+    "prior": 0.0,
+    "raster": 0.0,
+    "vlm_direct": 0.0
+   },
+   "cost_usd": {
+    "dxf": 0.0,
+    "ifc": 1.2e-06,
+    "prior": 0.0,
+    "raster": 0.0,
+    "vlm_direct": 0.0027481
+   },
+   "n": 19
+  },
+  "ifc_models|length:wall:storey_total": {
+   "acc": {
+    "dxf": 0.0,
+    "ifc": 1.0,
+    "prior": 0.0,
+    "raster": 0.0,
+    "vlm_direct": 0.0
+   },
+   "cost_usd": {
+    "dxf": 0.0,
+    "ifc": 1.2e-06,
+    "prior": 0.0,
+    "raster": 0.0,
+    "vlm_direct": 0.0037853
+   },
+   "n": 28
+  },
+  "ifc_models|volume:slab:storey_total": {
+   "acc": {
+    "dxf": 0.0,
+    "ifc": 1.0,
+    "prior": 0.2308,
+    "raster": 0.0,
+    "vlm_direct": 0.0
+   },
+   "cost_usd": {
+    "dxf": 0.0,
+    "ifc": 1.2e-06,
+    "prior": 0.0,
+    "raster": 0.0,
+    "vlm_direct": 0.0044714
+   },
+   "n": 26
+  },
+  "ifc_models|volume:wall:storey_total": {
+   "acc": {
+    "dxf": 0.0,
+    "ifc": 1.0,
+    "prior": 0.0667,
+    "raster": 0.0,
+    "vlm_direct": 0.0
+   },
+   "cost_usd": {
+    "dxf": 0.0,
+    "ifc": 1.2e-06,
+    "prior": 0.0,
+    "raster": 0.0,
+    "vlm_direct": 0.0061803
+   },
+   "n": 30
+  },
+  "swiss_dwellings|area:apartment:apartment": {
+   "acc": {
+    "dxf": 1.0,
+    "ifc": 0.0,
+    "prior": 0.025,
+    "raster": 0.0,
+    "vlm_direct": 0.0
+   },
+   "cost_usd": {
+    "dxf": 1.58e-05,
+    "ifc": 0.0,
+    "prior": 0.0,
+    "raster": 0.0,
+    "vlm_direct": 0.0086277
+   },
+   "n": 40
+  },
+  "swiss_dwellings|area:room:floor_total": {
+   "acc": {
+    "dxf": 1.0,
+    "ifc": 0.0,
+    "prior": 0.025,
+    "raster": 0.0,
+    "vlm_direct": 0.0
+   },
+   "cost_usd": {
+    "dxf": 1.55e-05,
+    "ifc": 0.0,
+    "prior": 0.0,
+    "raster": 0.0,
+    "vlm_direct": 0.0093774
+   },
+   "n": 40
+  },
+  "swiss_dwellings|area:room:label_total": {
+   "acc": {
+    "dxf": 1.0,
+    "ifc": 0.0,
+    "prior": 0.0,
+    "raster": 0.0,
+    "vlm_direct": 0.05
+   },
+   "cost_usd": {
+    "dxf": 1.53e-05,
+    "ifc": 0.0,
+    "prior": 0.0,
+    "raster": 0.0,
+    "vlm_direct": 0.0082202
+   },
+   "n": 40
+  },
+  "swiss_dwellings|area:room:room": {
+   "acc": {
+    "dxf": 1.0,
+    "ifc": 0.0,
+    "prior": 0.025,
+    "raster": 0.0,
+    "vlm_direct": 0.25
+   },
+   "cost_usd": {
+    "dxf": 1.61e-05,
+    "ifc": 0.0,
+    "prior": 0.0,
+    "raster": 0.0,
+    "vlm_direct": 0.0090365
+   },
+   "n": 40
+  },
+  "swiss_dwellings|count:apartment:drawing": {
+   "acc": {
+    "dxf": 1.0,
+    "ifc": 0.0,
+    "prior": 0.225,
+    "raster": 0.0,
+    "vlm_direct": 0.875
+   },
+   "cost_usd": {
+    "dxf": 1.57e-05,
+    "ifc": 0.0,
+    "prior": 0.0,
+    "raster": 0.0,
+    "vlm_direct": 0.0080516
+   },
+   "n": 40
+  },
+  "swiss_dwellings|count:bathtub:drawing": {
+   "acc": {
+    "dxf": 1.0,
+    "ifc": 0.0,
+    "prior": 0.275,
+    "raster": 0.0,
+    "vlm_direct": 0.425
+   },
+   "cost_usd": {
+    "dxf": 1.51e-05,
+    "ifc": 0.0,
+    "prior": 0.0,
+    "raster": 0.0,
+    "vlm_direct": 0.008545
+   },
+   "n": 40
+  },
+  "swiss_dwellings|count:door:drawing": {
+   "acc": {
+    "dxf": 1.0,
+    "ifc": 0.0,
+    "prior": 0.05,
+    "raster": 0.0,
+    "vlm_direct": 0.05
+   },
+   "cost_usd": {
+    "dxf": 1.34e-05,
+    "ifc": 0.0,
+    "prior": 0.0,
+    "raster": 0.0,
+    "vlm_direct": 0.0135455
+   },
+   "n": 40
+  },
+  "swiss_dwellings|count:room:label": {
+   "acc": {
+    "dxf": 1.0,
+    "ifc": 0.0,
+    "prior": 0.25,
+    "raster": 0.0,
+    "vlm_direct": 0.8
+   },
+   "cost_usd": {
+    "dxf": 1.24e-05,
+    "ifc": 0.0,
+    "prior": 0.0,
+    "raster": 0.0,
+    "vlm_direct": 0.008783
+   },
+   "n": 40
+  },
+  "swiss_dwellings|count:shower:drawing": {
+   "acc": {
+    "dxf": 1.0,
+    "ifc": 0.0,
+    "prior": 0.45,
+    "raster": 0.0,
+    "vlm_direct": 0.45
+   },
+   "cost_usd": {
+    "dxf": 1.34e-05,
+    "ifc": 0.0,
+    "prior": 0.0,
+    "raster": 0.0,
+    "vlm_direct": 0.010237
+   },
+   "n": 40
+  },
+  "swiss_dwellings|count:washbasin:drawing": {
+   "acc": {
+    "dxf": 1.0,
+    "ifc": 0.0,
+    "prior": 0.225,
+    "raster": 0.0,
+    "vlm_direct": 0.35
+   },
+   "cost_usd": {
+    "dxf": 1.5e-05,
+    "ifc": 0.0,
+    "prior": 0.0,
+    "raster": 0.0,
+    "vlm_direct": 0.0100954
+   },
+   "n": 40
+  },
+  "swiss_dwellings|count:wc:drawing": {
+   "acc": {
+    "dxf": 1.0,
+    "ifc": 0.0,
+    "prior": 0.2,
+    "raster": 0.0,
+    "vlm_direct": 0.45
+   },
+   "cost_usd": {
+    "dxf": 1.41e-05,
+    "ifc": 0.0,
+    "prior": 0.0,
+    "raster": 0.0,
+    "vlm_direct": 0.0107996
+   },
+   "n": 40
+  },
+  "swiss_dwellings|count:window:drawing": {
+   "acc": {
+    "dxf": 1.0,
+    "ifc": 0.0,
+    "prior": 0.05,
+    "raster": 0.0,
+    "vlm_direct": 0.0
+   },
+   "cost_usd": {
+    "dxf": 1.39e-05,
+    "ifc": 0.0,
+    "prior": 0.0,
+    "raster": 0.0,
+    "vlm_direct": 0.0107106
+   },
+   "n": 40
+  }
+ },
+ "meta": {
+  "built": "2026-11-14T01:38:34",
+  "per_key": 1000,
+  "solver_args": {},
+  "solvers": [
+   "dxf",
+   "ifc",
+   "prior",
+   "raster",
+   "schedule",
+   "vlm_direct",
+   "vlm_lora"
+  ],
+  "split": "train (swiss/ifc keys, 40/key) + train_gate (all 12 cubicasa keys, 40/key, paired: prior/raster v5/vlm_direct/vlm_lora; the LoRA cc-v2 never saw train_gate drawings)"
+ }
+}

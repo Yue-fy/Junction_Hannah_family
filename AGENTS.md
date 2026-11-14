@@ -50,12 +50,23 @@ If something says `TBD`, the captain hasn't decided it yet. Ask your human; do n
 
 ## Stack & commands
 
-<!-- Captain fills this in right after the challenge is chosen. -->
-- Frontend: TBD
-- Backend: TBD
-- Install: `TBD`
-- Run locally: `TBD`
-- Checks before every PR (lint / types / tests): `TBD`
+<!-- Filled in overnight by agent S0 for the captain (Stoa challenge); some commands are planned, not built yet. -->
+- Frontend: `web/` (Vite dev server on port 5173; IFC via That Open Engine / web-ifc, PDFs via PDF.js; MIT/Apache/BSD only)
+- Backend: Python 3.12 package `stoa/` (solvers, eval, FastAPI API on port 8100); shared local VLM server
+  (vLLM, OpenAI-compatible) on port 8001
+- Install: `uv venv --python 3.12 $JUNCTION_VENV && uv pip install --python $JUNCTION_VENV/bin/python -e .`
+  then `cd web && npm install`
+- Run locally: API `$JUNCTION_VENV/bin/python -m uvicorn stoa.api:app --port 8100` (endpoints: `/health`,
+  `POST /ask`, `/file`, `/files`, `/questions`, `/intent`), web `cd web && npm run dev` (planned)
+- Solvers (`python -m stoa.eval --list`): `pipeline` (team entry point: route + gated cascade + `agent` for unseen
+  question kinds), `dxf` (swiss DXF), `pdf_vector` (swiss-style PDF without DXF), `schedule` (PDF schedule tables),
+  `ifc` (IFC models), `raster` (cubicasa), `vlm_direct` (local VLM), `agent` (tool-using reasoning agent),
+  `prior` / `dummy` (fallback)
+- Eval splits: `smoke`, `dev`, `hard` (rewordings/translations/compositions), `hard2` (new operators; develop here),
+  `hard2q` / `hard2p` (held out: aggregates only), `cc5k_heldout` (for CubiCasa5K-pretrained models), `test` (sealed)
+- Checks before every PR (lint / types / tests): `$JUNCTION_VENV/bin/python -m pytest -q` and
+  `$JUNCTION_VENV/bin/python -m stoa.eval --solver dummy --split smoke --limit 20`
+- Dataset: outside git, at `$STOA_DATA` (full) / `$STOA_PREVIEW` (preview). Never commit it.
 - Deployed demo URL: TBD
 
 ## Workflows

@@ -1,0 +1,33 @@
+diff --git a/stoa/data.py b/stoa/data.py
+index 64f6f54..d645fc6 100644
+--- a/stoa/data.py
++++ b/stoa/data.py
+@@ -58,7 +58,12 @@ def dataset_rel(path: str | Path, root: Path | None = None) -> str:
+     parts = p.parts
+     for i in range(len(parts) - 3, -1, -1):  # need data/<source>/<file> at least
+         if parts[i] == "data":
+-            return str(Path(*parts[i:]))
++            cut = Path(*parts[i:])
++            # cut only when the cut path names a file in OUR dataset (or the absolute file doesn't exist anyway):
++            # a new drawing in someone else's data/<source>/ folder must keep its own path (Q red team, bug 2)
++            if (root or data_root()).joinpath(cut).exists() or not p.exists():
++                return str(cut)
++            break
+     return str(path)
+ 
+ 
+diff --git a/stoa/pipeline.py b/stoa/pipeline.py
+index 6ff24ca..bcbb7e2 100644
+--- a/stoa/pipeline.py
++++ b/stoa/pipeline.py
+@@ -393,6 +393,10 @@ class Pipeline(BaseSolver):
+                     # an unseen wording asked as is: the template's train rate does not vouch for how the solver
+                     # read it (F hard2: "how many times larger is B than A" -> apartment count at 0.976)
+                     conf = min(conf, ans.confidence)
++                if TIER.get(name) == "deterministic" and ans.confidence is not None and ans.confidence < 0.5:
++                    # the solver itself doubts this answer (ifc: "could not resolve '05 Vijfde verdieping'"): the
++                    # template's train rate must not overrule it (Q red team: false premises reported at 0.97)
++                    conf = min(conf, ans.confidence)
+             else:
+                 conf = ans.confidence
+             trace.append(f"{name}: {ans.value} {ans.unit or ''} (conf {conf:.2f}"

@@ -36,3 +36,18 @@ playwright-report/
 # Challenge datasets stay outside git (licences, size)
 junction-dataset*
 *.zip
+
+# Overnight safety net: no drawings, models or big outputs in git
+*.ifc
+*.dxf
+*.dwg
+*.safetensors
+*.pt
+*.pth
+*.ckpt
+*.onnx
+*.gguf
+artifacts/
+
+# Python packaging
+*.egg-info/

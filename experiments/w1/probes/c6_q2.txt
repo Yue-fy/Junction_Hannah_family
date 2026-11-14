@@ -1,0 +1,48 @@
+# c6 probe 2 (08:35), written BEFORE running, after the 059e9c4 fixes: same families, other models/languages.
+# gdynia: Foundation(-2.95, empty) -1(5 doors, 8 win) 0(6, 7) 1(5, 6) Roof(empty)
+PATH bimspeed-gdynia_ruchu-oporu-18_plan-03-0.pdf
+# gold 11750
+If every door costs EUR 2,350, how much will the doors on storey '-1' cost?
+# gold 8700
+Ile kosztują wszystkie okna na kondygnacji '1', jeśli jedno okno kosztuje 1 450 zł?
+# gold 3 (conf <= 0.6, with them 5)
+How many floors does the house have?
+# gold 5 ('1')
+How many doors are on the top floor?
+# gold 5 ('-1', not Foundation)
+How many doors are on the lowest floor?
+# gold: no 4th floor -> conf <= 0.3
+How many doors are on the 4th floor?
+# gold yes (7 > 6)
+Is the number of windows on '0' greater than on '1'?
+# gold yes (5 < 6)
+Has storey '-1' fewer doors than storey '0'?
+# smiley: KG(-2.81) 20 doors 20 win; EG 50/20; 1.OG 50/20; 2.OG 50/20; Dach empty
+PATH kit-smiley-west_ac-20-smiley-west-10-bldg_plan-03-1-og.pdf
+# gold 20
+Wie viele Türen gibt es im Keller?
+# gold 20
+Hoeveel deuren zijn er in de kelder?
+# gold 40 h
+If fitting a window takes 2 hours, how many hours are needed for all windows on 'EG'?
+# gold 100
+How many doors are on EG and 1.OG combined?
+# gold 4 (with them 5)
+How many storeys does the building have?
+# duplex: T/FDN(empty) Level 1 (6 doors, 4 win) Level 2 (8, 18) Roof (0 doors, 2 win, 1 roof space)
+PATH bsc-duplex_duplex-a-20110907.ifc
+# gold 8 (Level 2)
+How many doors are on the top floor?
+# gold yes (4 < 18)
+Are there fewer windows on 'Level 1' than on 'Level 2'?
+# gold = wall side area on Level 1 / 25
+If a crew paints 25 m² of wall per day, how many days does it take to paint the walls on 'Level 1'?
+What is the total wall area on 'Level 1'?
+# gold 2 (with them 4)
+How many floors does the building have?
+# esplanades, Estonian
+PATH bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf
+# gold 55200
+Kui palju maksavad kõik uksed korrusel '1.korrus', kui üks uks maksab 1 200 eurot?
+# gold 5 (conf <= 0.6)
+Mitu korrust on hoonel?
