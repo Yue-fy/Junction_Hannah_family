@@ -233,3 +233,17 @@ def test_false_premises_and_units(solver):
     m = s(ESPL, "What is the total length of the walls on '1.korrus'?")
     mm = s(ESPL, "What is the total length of the walls on '1.korrus', in millimetres?")
     assert mm.unit == "mm" and mm.value == pytest.approx(m.value * 1000, rel=1e-6)
+
+
+def test_how_big_is_an_area(solver):
+    import glob
+
+    from stoa.data import data_root
+
+    hits = glob.glob(str(data_root() / "data/ifc_models/bimspeed-gdynia*.ifc"))
+    if not hits:
+        pytest.skip("dataset not available")
+    g = "data/ifc_models/" + hits[0].rsplit("/", 1)[-1]
+    big = solver.solve(g, "How big is the room 'Hall (0.1)' on '0'?")
+    sq = solver.solve(g, "How many square metres is 'Hall (0.1)' on '0'?")
+    assert big.unit == "m2" and big.value == pytest.approx(sq.value)

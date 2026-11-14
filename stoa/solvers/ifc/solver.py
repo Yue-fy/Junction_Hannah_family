@@ -361,6 +361,9 @@ class IfcSolver(BaseSolver):
                 ans.confidence = 0.3
                 ans.missing.append(f"the question gives the number(s) {', '.join(left[:3])}, which the rules did not use")
                 ans.trace.append(f"guard: number(s) {', '.join(left[:3])} in the question not used -> confidence 0.3")
+        if ans.value is not None and ctx.get("assumed_count") and ans.unit == "count" and ans.confidence > 0.3:
+            ans.confidence = 0.3
+            ans.missing.append("the question has no counting word; a count was assumed")
         if ans.value is not None and ctx.get("room_type_missing") and it.kind in (None, "space") \
                 and ans.confidence > 0.3:
             ans.confidence = 0.3
@@ -561,6 +564,7 @@ class IfcSolver(BaseSolver):
             if it.kind is not None and it.names:
                 it.metric = "count"  # "Count the walls on storey X." style imperatives without a count word
                 trace.append("no metric word; assuming a count")
+                ctx["assumed_count"] = True
             else:
                 return Answer.abstain(self.name, "free-text question: no deterministic rule", trace=trace,
                                       missing=["a quantity question (count/area/volume/length)"])
@@ -1230,6 +1234,13 @@ class IfcSolver(BaseSolver):
                 w = mt1.group(1)
                 it.threshold = ("lt" if w in _LOW1 else "gt", float(mt1.group(2).replace(",", ".")))
                 it.mod, it.op, it.kind, it.metric, it.yes_no = "threshold", None, "space", "area", False
+        # "How big is the room 'X'?", "what size is …": an area, not a count (Q 04:18)
+        if it.metric in ("text", "count") and not re.search(r"\b(how many|number of|count)\b", qf) and re.search(
+                r"\bhow (big|large)\b|\bwhat size\b|\bsize of\b|\bwie gross\b|\bhoe groot\b|\bkui suur\b|"
+                r"\bjak duz\w*\b|\bque tamano\b|\bquanto (e )?grande\b|\bquelle (est la )?taille\b|\bkuinka iso\b", qf):
+            it.metric = "area"
+            if it.kind in (None, "storey"):
+                it.kind = "space"
         # "How much bigger is the largest room than the smallest?" -> largest minus smallest
         if re.search(r"\b(largest|biggest)\b.{0,60}\b(than|and|vs|minus)\b.{0,30}\b(smallest|tiniest)\b|"
                      r"\b(difference|range)\b.{0,30}\b(largest|biggest)\b.{0,30}\b(smallest)\b", qf):
