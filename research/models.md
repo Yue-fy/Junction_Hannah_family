@@ -20,6 +20,7 @@ Hardware: 1× RTX PRO 6000 Blackwell 96 GB. Shared server budget ≈ 45 GB (`--g
 | what | value |
 |---|---|
 | :8002 (since 09:40, D21) | Qwen3.6-35B-A3B-FP8 `qwen3.6-35b-a3b`, util 0.48; ONLY via `llm.text_backend()` (STOA_TEXT_BACKEND=local2), falls back to :8001 |
+| hosted Gemini (`backend="gemini"`, 10:38) | `gemini-3-flash-preview` default ($GEMINI_MODEL); per-agent daily cap 200 ($STOA_AGENT), purpose log `logs/gemini_calls.jsonl`, 10 rpm; demo / small probes only (Google no-abuse rule); offline-tested, **not yet run live** |
 | :8001 adapters | LoRAs `cc-v2` (CubiCasa counts) and `cc-v3` (+ Swiss PNG), loaded by `serving/start.sh` |
 | model | Qwen3-VL-8B-Instruct (bf16), from the text encoder inside Qwen-Image-2.1 (full VLM: vision tower + lm_head; same config as Qwen3-VL-8B-Instruct) |
 | URL | http://127.0.0.1:8001/v1, model `default` or `qwen3-vl-8b` |
@@ -219,6 +220,11 @@ Cost of one answer (D21 item 4), measured, not assumed:
   | **source hook: outside raster → 'cubicasa5k' at p≥0.8** | **75.1** | 478 (93.5%) | **31** | **32.4%** | **0.041** |
   | dataset path (control, Q 09:33) | 75.9 | 450 (94.7%) | 24 | 47.8% | 0.016 |
   | same 800 as JPEG q85 uploads: off → hook | 74.6 → 75.1 | 562 → 477 | 47 → 30 | 0 → 32.0% | 0.043 → 0.040 |
+
+  Swiss PNG dev counts as uploads (200 Qs, 95 images, all guessed Swiss at p≥0.8), filed as 'swiss_dwellings' vs 'unknown':
+  56.5 vs 56.0%, confident misses 6 vs 6, evidence 0 vs 0 (no Swiss raster reader with boxes; both answer with vlm_lora),
+  $0.099 vs $0.149/1k → **file CubiCasa only**; a Swiss guess buys nothing until a Swiss raster reader exists
+  (runs 20261114-103517-pipeline-upload_swiss_png-6dc9 / -c73f; `STYLE_HOOK_CLASSES=cubicasa5k,swiss_dwellings eval_hooked.py`).
 
   The hook touches 588 Qs (147/200 images): 586 answers identical to the dataset path. The adapter-only variant loses 13 W / 21 L
   (the per-concept gate matters, not the adapter) → dropped. Runtime moved to `stoa/style.py` (+ `stoa/style_weights.json`); the
