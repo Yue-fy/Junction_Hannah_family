@@ -45,6 +45,14 @@ room ≥ 4 m² is right 34/50 (68%) vs 1407/1447 (97.2%) otherwise; dropping the
 detector: they disagree (> 2%) on 10 of 400 dev Swiss area Qs and dxf is right on 7 of the 9 confident ones
 (run 20261114-102530-pdf_vector-dev-a2aa); the other 7 confident-wrongs have both readers agreeing.
 
+**Addendum 10:55 — night 6025963 (S0 cycle 42 round 2) vs 1a4e2af, 19 probes / 10,894 paired rows: 51 won / 13 lost,
+confident-wrong 73 → 68, every loss at conf ≤ 0.65.** W1 7fa37ed: "How many N are in this building?" on a sheet = whole
+model (whole_top 95.4 → 100); W2 e461199: DXF twins outside data/swiss_dwellings/ read (neutral_path cw 15 → 13). One dxf
+parse loss: "Welche Wohnfläche hat die Wohnung A (ohne Balkon)?" → area_label(Balkon) (an exclusion read as the target;
+W2 told). New `unit_probe` (832 rows: square feet / sq ft / cm² / mm / cm / feet): answers come back in the unit asked and
+strict = converted = the m² control (IFC 100%, Swiss 98.3%). Eval: runs > 200 Qs hide the Gemini key (`--allow-gemini`);
+`--split human` reads agent H's expert questions.
+
 Files outside the dataset: documented in `docs/CONTRACT.md` ("Files outside the dataset"): what `source_of` /
 `siblings` / `dataset_rel` infer, the measured cost per layout, and the recommended layout for Stoa's files
 (`<ROOT>/data/<source>/<name>.<ext>`, twins under one stem, the IFC model next to its sheets).

@@ -259,15 +259,62 @@ def write_splits(seed: int = SEED, force: bool = False) -> dict[str, int]:
     return counts
 
 
+def human_file() -> Path:
+    """Expert-made questions from agent H's workbench (D24-pre addendum): append-only, one row per save."""
+    return shared_root() / "human" / "questions.jsonl"
+
+
+def _split_file(name: str) -> Path:
+    if name == "human":
+        return human_file()
+    return Path(name) if (name.endswith(".jsonl") or "/" in name) else splits_dir() / f"{name}.jsonl"
+
+
+def _human_rows(f: Path) -> list[dict]:
+    """`human` split: the last saved row per qid wins (the workbench appends edits); the expert's sureness, page and
+    method go to meta (meta.kind = "human:<sureness>"), so results can be read per sureness. Reported separately
+    from dev (its own split name in the leaderboard)."""
+    last: dict[str, dict] = {}
+    with open(f, encoding="utf-8") as fh:
+        for line in fh:
+            if not line.strip():
+                continue
+            r = json.loads(line)
+            if not r.get("question") or not r.get("path"):
+                continue
+            qid = r.get("qid") or make_qid(r["path"], r["question"])
+            ans = r.get("answer")
+            if isinstance(ans, str):
+                try:
+                    ans = float(ans.replace(",", ".")) if ans.strip() else None
+                except ValueError:
+                    pass  # a text answer stays text
+            last[qid] = dict(qid=qid, path=r["path"], question=r["question"], answer=ans, unit=r.get("unit") or None,
+                             type=r.get("type") or "other",
+                             meta={"kind": f"human:{r.get('sureness') or 'unknown'}", "sureness": r.get("sureness"),
+                                   "page": r.get("page"), "method": r.get("method"), "author": "expert"})
+    return list(last.values())
+
+
 def load_split(name: str) -> list[Question]:
     """Questions of a split, in file order. `name` is a split name or a path to a .jsonl file. Rows that carry their
     own `question` + `path` (generated splits such as `hard`, ad-hoc files) are used as-is (`answer`, `qid`, `unit`,
-    `type` optional); rows with only a `qid` are joined with questions.jsonl."""
+    `type` optional); rows with only a `qid` are joined with questions.jsonl. `human` = the expert's questions
+    ($JUNCTION_SHARED/human/questions.jsonl, see _human_rows)."""
     if name == "all":
         return list(load_questions())
-    f = Path(name) if (name.endswith(".jsonl") or "/" in name) else splits_dir() / f"{name}.jsonl"
+    f = _split_file(name)
     if not f.exists():
+        if name == "human":
+            raise FileNotFoundError(f"{f} missing: no expert questions saved yet (agent H's workbench writes it)")
         raise FileNotFoundError(f"{f} missing; run `python -m stoa.eval.splits --write`")
+    if name == "human":
+        out = []
+        for r in _human_rows(f):
+            q = Question(r["qid"], dataset_rel(r["path"]), r["question"], r["answer"], r["unit"], r["type"])
+            object.__setattr__(q, "meta", r["meta"])
+            out.append(q)
+        return out
     by_id = None
     out = []
     with open(f, encoding="utf-8") as fh:
@@ -295,7 +342,7 @@ def load_split(name: str) -> list[Question]:
 
 def split_hash(name: str) -> str | None:
     """Short content hash of a split file, recorded in leaderboard lines (detects regenerated splits)."""
-    f = Path(name) if (name.endswith(".jsonl") or "/" in name) else splits_dir() / f"{name}.jsonl"
+    f = _split_file(name)
     return hashlib.sha1(f.read_bytes()).hexdigest()[:8] if f.exists() else None
 
 
