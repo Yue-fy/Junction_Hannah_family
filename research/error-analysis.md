@@ -1,6 +1,6 @@
 # Error analysis (E = agent F)
 
-Updated 08:55, 14 Nov 2026 (sections newest first). Regenerate the tables with
+Updated 09:50, 14 Nov 2026 (sections newest first). Regenerate the tables with
 `/data/User/fangy4/envs/junction/bin/python -m stoa.eval.analyze <run_id> --baseline <dummy run_id> --top 20`.
 For paired significance use `python3 experiments/r1/stats/compare.py RUN_A RUN_B --by template` (cluster CI).
 
@@ -13,7 +13,45 @@ answer) vs `20261113-234812-dummy-dev` (template prior), both on dev v2 (hash f4
 | dummy (prior) | 26.1% | 40.4% | 0 | 0% |
 | vlm_direct | 32.0% (28.0–36.5) | 44.1% | 200 (all IFC) | 0% |
 
-## LATEST (08:55, cycle 225): same-gold wording probes in 8 languages: where a judge's own wording breaks us
+## LATEST (09:50, cycle 226): the same files outside our dataset folders (Stoa's noon files, demo uploads)
+
+Every test we run uses dataset paths (`data/<source>/<file>`). Stoa's files and a visitor's upload won't sit there,
+and several routes read the path: `source_of()` takes the source from the folder name, `siblings()` finds same-stem
+twins, IFC sheets find their model by file-name prefix, caches/gates are keyed by dataset-relative paths.
+**Neutral-path probe** (`experiments/F/neutral_path_probe.py`, OPEN: 168 dev questions, the same bytes hard-linked
+under `/data/User/fangy4/stoa-neutral/`, 5 kinds of path; report `python3 experiments/F/neutral_compare.py RUN`):
+
+| variant (meta.wording) | what it is | before (2b1a) | after 749e5c3 (3cb0) | LLM calls / Q |
+|---|---|---:|---:|---:|
+| dataset | control | 91.1 | 91.1 | 0.35 |
+| twins_name | neutral folder, original names, all twins (dxf/png/svg/.ifc) | 66.7 | **90.5** | 0.71 |
+| twins_hash | same, hashed names ("A101.pdf") | 66.1 | **89.9** | 0.68 |
+| srcdir_lone | the file alone in `.../data/<source>/`, hashed | 65.5 | 66.1 | 0.36 |
+| lone_hash | the file alone, hashed (a single upload) | 66.7 | 66.1 | 1.63 |
+
+Per source (after the fix):
+- **ifc_models sheets (43 Qs)**: with the model in the folder 100% (before: **0–21%**: source 'unknown' → no model
+  sibling, no `ifc` route, `ifc.can_handle` False → vlm_direct guesses at ≤0.32, pdf_text echoing the room number
+  '(0.1)' as an area at 0.65–0.75). Fix in `stoa/data.py` (F-owned): an outside sheet whose model sits next to it
+  (prefix name, or the ONLY .ifc in a project folder that isn't laid out as data/ifc_models/) is source 'ifc_models'.
+  A sheet without its model: 0/43 (prior at ≤0.23 or vlm_direct; calibrated except the pdf_text echo, W2 told).
+- **Swiss (60 Qs)**: areas 93.3 → 100 (pdf_vector answers; it is right on two floors where dxf's room total is 2.2% high
+  at 0.9–0.975); counts 100 → 90 (dxf declines a DXF twin outside data/swiss_dwellings/: DE/FR windows). W2 told.
+- **CubiCasa (56 Qs)**: 76.8% in every variant; vlm_lora answers all (raster_cc5k and the prior gate drop out),
+  tokens 630 → 1,056–1,521 per Q. **Schedules** (9 Qs) and **ifc_bench free text on an outside .ifc** (14 Qs, judged):
+  unchanged (one schedule LLM flake 379 → 235 @0.85 in 1 of 10 identical runs).
+
+**Sheets named without their storey** (`experiments/F/this_plan_probe.py` + `experiments/F/neutralize.py --mode hash`:
+163 dev sheet questions that name the sheet's own storey, re-asked "on this floor plan" / "on this floor"):
+dataset names 163/163; hashed names counts 1/19, volumes 0/12, lengths 0/3, area totals −11 (room-by-name areas
+fine), all at 0.475–0.485: "no storey named or implied (not a plan file); whole model". The sheet states its storey
+in its own text ("— Floor plan: 0") and through its room labels. W1 told. Runs -093821-…-this_plan-5fca vs
+-093834-…-this_plan_nh-92ec.
+
+`experiments/F/neutralize.py IN OUT --mode hash|name|lone` re-asks any open probe on neutral copies (same qids);
+pair with `kind_compare.py`. Use it on any new route before trusting it on Stoa's files.
+
+## Earlier (08:55, cycle 225): same-gold wording probes in 8 languages: where a judge's own wording breaks us
 
 All probes are OPEN (dev drawings / open hard + hard2 bases; quote and fix freely). Each re-asks a dataset question in
 the words a judge might type, with the SAME gold; most carry the dataset wording of the same base as a control
