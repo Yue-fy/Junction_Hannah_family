@@ -537,7 +537,9 @@ class Pipeline(BaseSolver):
             trace.append(f"unsure (conf {conf:.2f} < {self.accept}): asking {rest[0]} for a cross-check")
         best = self._combine(answers, intent, trace)
         if best is not None and canon and unsure is not None and unsure[1].value is not None and \
-                not _agree(best.value, unsure[1].value, intent.task):
+                _fits(intent.task, unsure[1]) and not _agree(best.value, unsure[1].value, intent.task):
+            # (a count answer to an area question is not a second reading: Q "size of the küche, room 3.09" -> dxf
+            # '6 count' as asked capped the right 7.5 m² at 0.30)
             cap = min(best.confidence, unsure[1].confidence)
             trace.append(f"the canonical form gave {best.value}, the question as asked {unsure[1].value} "
                          f"({unsure[0]}): confidence capped at {cap:.2f}")
