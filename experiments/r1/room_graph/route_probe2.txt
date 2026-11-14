@@ -1,0 +1,44 @@
+# Written by R1 at 08:20 (cycle 243) BEFORE running route.py on it; route.py was tuned on route_probe.txt only.
+# 1 = scoped to a room / relation between rooms (room_graph), 0 = whole-plan question (keep the pipeline).
+1|What's the floor area of the second bedroom?
+1|Which room has the most windows?
+1|Is the bathroom reachable without passing through a bedroom?
+1|How many doors open off the entrance hall?
+1|What room is next to the sauna?
+1|Give me the area of the utility room.
+1|Does the living room open onto the balcony?
+1|In which room is the stove located?
+1|How many windows has the kitchen got?
+1|Which bedrooms share a wall with the living room?
+1|What is the total area of all bedrooms?
+1|Where's the toilet?
+1|Is there a door between the kitchen and the living room?
+1|How big is the hall?
+1|Which is the smallest room in the flat?
+1|How many rooms open into the corridor?
+1|Name the room you enter first from the front door.
+1|Are the WC and the bathroom adjacent?
+1|Kuinka monta ikkunaa olohuoneessa on?
+1|Wie groß ist die Küche?
+1|Which room does the balcony connect to?
+1|How many fixtures are in the bathroom?
+1|What is the size of the walk-in closet?
+1|How many of the bedrooms have a balcony?
+0|How many rooms does the flat have in total?
+0|What's the gross area of this unit?
+0|Count all windows on the plan.
+0|How many doors does this floor plan show?
+0|Is there a dishwasher?
+0|How many sinks are drawn (kitchen and bathroom combined)?
+0|How many bedrooms are on this floor plan?
+0|What is the apartment's total living area?
+0|Does the plan include a sauna?
+0|How many storeys are drawn?
+0|Number of WC seats in the apartment?
+0|Are there two bathrooms?
+0|How many separate toilet rooms are there?
+0|Which way does the plan face (north arrow)?
+0|What is the total number of rooms labelled MH?
+0|How many balconies are drawn on the plan?
+0|Wie viele Fenster hat die Wohnung?
+0|Montako makuuhuonetta asunnossa on?
