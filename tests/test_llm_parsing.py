@@ -87,3 +87,19 @@ def test_map_conf_monotone_table():
     finally:
         vd.CONF_MAP.clear()
         vd.CONF_MAP.update(old)
+
+
+def test_vlm_lora_adapter_per_source(monkeypatch):
+    """cubicasa -> cc-v2 always; other raster plans -> cc-v3 only when the server lists it; explicit model= wins."""
+    from stoa import llm
+    from stoa.solvers.vlm_direct import VlmLora
+
+    monkeypatch.setattr(llm, "served_models", lambda backend="local", ttl=60.0: frozenset({"default", "cc-v2"}))
+    s = VlmLora()
+    assert s.model_for("data/cubicasa5k/colorful-1.png") == "cc-v2"
+    assert s.model_for("data/swiss_dwellings/a.png") == "cc-v2"
+    monkeypatch.setattr(llm, "served_models", lambda backend="local", ttl=60.0: frozenset({"cc-v2", "cc-v3"}))
+    assert s.model_for("data/cubicasa5k/colorful-1.png") == "cc-v2"
+    assert s.model_for("data/swiss_dwellings/a.png") == "cc-v3"
+    assert VlmLora(model="cc-v2").model_for("data/swiss_dwellings/a.png") == "cc-v2"
+    assert "washbasin" in VlmLora.TRAINED_BY_MODEL["cc-v3"] and "washbasin" not in VlmLora.TRAINED

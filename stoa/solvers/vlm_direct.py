@@ -405,8 +405,36 @@ class VlmLora(VlmDirect):
                "bathroom", "balcony"}
     UNTRAINED_CONF = 0.3
 
-    def __init__(self, model: str | None = "cc-v2", **kwargs):
+    # Adapter per drawing style (R2, 03:30). cc-v2 answers cubicasa (every pipeline gate is fitted on it). cc-v3 =
+    # cc-v2 continued on cubicasa + swiss PNG twins: same on cubicasa (dev 74.6 vs 73.9, n.s.) but better on a
+    # raster style cc-v2 never saw (swiss dev counts on PNG: 56.5 vs 46.0 vs base 40.5, +10.5 [+4.4, +16.8]), so it
+    # answers raster plans of any OTHER source -- if the server lists it; otherwise cc-v2 (still > base there).
+    STYLE_MODEL = "cc-v3"
+    TRAINED_BY_MODEL = {"cc-v3": TRAINED | {"room", "apartment", "washbasin", "bathtub", "shower"}}
+
+    def __init__(self, model: str | None = None, **kwargs):
+        self._fixed = model  # an explicit model= is used for every drawing
         super().__init__(model=model or "cc-v2", **kwargs)
+        self._kwargs = kwargs
+        self._delegates: dict[str, VlmDirect] = {}
+
+    def model_for(self, path: str) -> str:
+        if self._fixed:
+            return self._fixed
+        from stoa import llm
+        from stoa.data import source_of
+
+        if source_of(path) == "cubicasa5k":
+            return "cc-v2"
+        return self.STYLE_MODEL if self.STYLE_MODEL in llm.served_models(self.backend) else "cc-v2"
+
+    def _solve_with(self, model: str, path: str, question: str) -> Answer:
+        if model == self.model:
+            return super().solve(path, question)
+        d = self._delegates.get(model)
+        if d is None:  # benign race: two threads may both build one; either is fine
+            d = self._delegates.setdefault(model, VlmDirect(model=model, **self._kwargs))
+        return d.solve(path, question)
 
     @staticmethod
     def _intent(question: str):
@@ -429,9 +457,11 @@ class VlmLora(VlmDirect):
         intent, mods = self._intent(question)
         if mods:
             return self.abstain(f"question has operators {mods}: decompose it into atomic counts first")
-        ans = super().solve(path, question)
+        model = self.model_for(path)
+        ans = self._solve_with(model, path, question)
         target = getattr(intent, "target", "unknown")
-        if ans.value is not None and target not in self.TRAINED and ans.confidence > self.UNTRAINED_CONF:
+        trained = self.TRAINED_BY_MODEL.get(model, self.TRAINED)
+        if ans.value is not None and target not in trained and ans.confidence > self.UNTRAINED_CONF:
             ans.trace.append(f"target '{target}' not among the LoRA's trained concepts: confidence capped at "
                              f"{self.UNTRAINED_CONF}")
             ans.confidence = self.UNTRAINED_CONF

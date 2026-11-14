@@ -336,6 +336,24 @@ def served_model(backend: str = "local") -> str:
         return f"unavailable ({type(e).__name__})"
 
 
+_SERVED: dict[str, tuple[float, frozenset]] = {}
+
+
+def served_models(backend: str = "local", ttl: float = 60.0) -> frozenset:
+    """Every model id the server lists (base names, aliases and LoRA adapters), cached for `ttl` seconds.
+    Empty set if the server is unreachable."""
+    now = time.time()
+    hit = _SERVED.get(backend)
+    if hit and now - hit[0] < ttl:
+        return hit[1]
+    try:
+        ids = frozenset(m.id for m in _client(backend).models.list().data)
+    except Exception:  # noqa: BLE001
+        ids = frozenset()
+    _SERVED[backend] = (now, ids)
+    return ids
+
+
 def _nvidia_throttle() -> None:
     """Space out NVIDIA API calls across every process on this machine (file lock + timestamp)."""
     rpm = float(os.environ.get("NVIDIA_RPM", 30))
