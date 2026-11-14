@@ -732,7 +732,7 @@ async function showAnswer(a: Answer, roundTripMs: number) {
       if (loc.solver === "rooms") return locateRooms(a, askedPath, askedQ);
       // a second reader answers the same question; its boxes become the evidence, with a cross-check line
       const t0 = performance.now();
-      const r = await ask(askedPath, askedQ, loc.solver);
+      const r = await ask(askedPath, askedQ, loc.solver, loc.args);
       if (state.file?.path !== askedPath) return;
       const same = r.value !== null && Number(r.value) === Number(a.value);
       const ev = (r.evidence ?? []).filter((e) => e.bbox);

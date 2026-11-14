@@ -59,6 +59,9 @@ doors 42, rooms 60, walls 156 (all = dataset), rooms > 40 m² = KORIDOR (202) 78
 (201) 45.50 (= dataset), 1 s each, 0 LLM calls. A lone PDF sheet says how to get this ("upload the .ifc too"); without
 it the sheet goes the vision way (Q 09:58: 0/5). The 2D sheet has no boxes in this mode (the GlobalId layer is the
 dataset's SVG twin, which is not uploaded).
+**Show where · door swings** (uploaded images that are not CubiCasa-style, door counts): W3's door-swing reader
+(`raster`, `twins=0`, geometry, no model call, ~20 s) boxes each swing arc it finds and adds a ✓/✗ line. Lone Swiss
+PNG (samples/swiss-floor-plan.png): answer 26 @ 0.11, reader 35 boxes, ✗ shown (gold 36).
 **Style** under the upload box, for images. Default "guess from the image": R2's `experiments/r2/style/style.py`
 (image features, no model call, ~0.2 s) and, when it says CubiCasa at p ≥ 0.8, the file is read as below (W5 c8:
 1 of 90 random non-CubiCasa images passed that bar; 3 of 12 CubiCasa plans came out 'scan', which changes nothing, so
