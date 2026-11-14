@@ -176,7 +176,9 @@ def summarize(preds: list[dict]) -> dict:
     def block(rows: list[dict]) -> dict:
         # questions without a known answer (ad-hoc files, e.g. Stoa's examples) are predicted but never scored
         scored = [r for r in rows if r["type"] in SCORED_TYPES and r.get("gold") is not None]
-        text = [r for r in rows if r["type"] not in SCORED_TYPES]
+        # text~ only over rows with a known answer: an examples file without answers (Stoa noon) must not
+        # print text~ 0.0 for questions nobody can grade
+        text = [r for r in rows if r["type"] not in SCORED_TYPES and r.get("gold") is not None]
         answered = [r for r in rows if not r["abstained"]]
         d = {
             "n": len(rows),
