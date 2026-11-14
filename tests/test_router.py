@@ -278,3 +278,20 @@ def test_absence_cap():
     boxed = Answer(value=0, unit="count", confidence=0.89,
                    evidence=[Evidence(file="a.pdf", page=0, bbox=[0, 0, 1, 1], bbox_space="pdf_pt", note="x")])
     assert _absence_cap(stairs, 0.89, boxed, [])[0] == 0.89
+
+
+def test_listed_total():
+    """Q v25: a total asked of a listed top-N (ifc's 'NAME (ID) (90.64 m²); …') is the list's sum; list requests stay."""
+    from stoa.contract import Answer
+    from stoa.pipeline import _listed_total
+
+    lst = "FUAJEE-TREPIKODA (101) (90.64 m²); KORIDOR (105) (78.40 m²); KORIDOR (119) (63.84 m²)"
+    q = "What is the total area of the three largest rooms on '1.korrus'?"
+    out = _listed_total(q, parse(q), Answer(value=lst, confidence=0.9))
+    assert out.value == 232.88 and out.unit == "m²" and out.confidence == 0.9
+    tie = "Bedroom 2 (A203) (22.04 m²); Bedroom 1 (A202) (22.04 m²) (tie at 22.04 m² with Bedroom 2 (B203))"
+    q2 = "What is the total area of the two largest rooms on 'Level 2'?"
+    assert _listed_total(q2, parse(q2), Answer(value=tie, confidence=0.8)).value == 44.08
+    for q3 in ("What are the three largest rooms on '1.korrus'?", "Which rooms have a total area above 50 m²?"):
+        assert _listed_total(q3, parse(q3), Answer(value=lst, confidence=0.9)) is None
+    assert _listed_total(q, parse(q), Answer(value="FUAJEE (101); KORIDOR (105)", confidence=0.9)) is None

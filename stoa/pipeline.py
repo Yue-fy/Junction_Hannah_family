@@ -400,6 +400,33 @@ def _located(ans: Answer) -> bool:
     return any(e.bbox or getattr(e, "ifc_guid", None) for e in ans.evidence or [])
 
 
+_TOTAL_CUE = re.compile(r"\b(?:total|sum|combined|together|altogether|in all|insgesamt|zusammen|gesamt\w*|yhteensä|"
+                        r"yhteenlaskettu|somme|au total|totale?|samman\w*|totalt)\b", re.I)
+_LIST_LEAD = re.compile(r"^\W*(?:which|list|name|what are|give|show|welche|nenne|liste|mitkä|luettele|quel(?:le)?s|"
+                        r"listez|vilka|lista)\b", re.I)
+_LISTED_QTY = re.compile(r"^(?P<name>[^;()]{1,80}(?:\([^;()]{1,20}\))?)\s*\((?P<v>\d+(?:\.\d+)?)\s*(?P<u>m²|m2|m³|m3|m)\)$")
+
+
+def _listed_total(question: str, intent: Intent, ans: Answer) -> Answer | None:
+    """Q v25: "What is the total area of the three largest rooms on '1.korrus'?" -> ifc listed the top 3 rooms with
+    their areas at 0.90 (gold = their sum, 232.88). A total asked of a list whose every item carries ONE quantity in
+    the same unit is that list's sum; a list request ('Which rooms …') is left alone."""
+    if intent.task not in ("area", "length", "volume") or not isinstance(ans.value, str) or \
+            not _TOTAL_CUE.search(question) or _LIST_LEAD.search(question):
+        return None
+    # a tie note after the last item ("… (22.04 m²) (tie at 22.04 m² with Bedroom 2 (B203))") does not change the sum
+    items = [re.sub(r"\s*\(tie at [^()]*(?:\([^()]*\)[^()]*)*\)$", "", x.strip()) for x in ans.value.split(";") if x.strip()]
+    ms = [_LISTED_QTY.match(x) for x in items]
+    if len(items) < 2 or not all(ms) or len({m["u"].replace("2", "²").replace("3", "³") for m in ms}) != 1:
+        return None
+    unit = ms[0]["u"].replace("2", "²").replace("3", "³")
+    total = round(sum(float(m["v"]) for m in ms), 2)
+    out = ans.model_copy(deep=True)
+    out.value, out.unit = total, unit
+    out.trace = [*out.trace, f"total of the {len(ms)} listed: " + " + ".join(m["v"] for m in ms) + f" = {total} {unit}"]
+    return out
+
+
 def _absence_cap(intent: Intent, conf: float, ans: Answer, trace: list[str]) -> tuple[float, Answer]:
     if intent.task != "count" or intent.target not in COMMON_OBJECTS or conf <= ABSENCE_CAP or _located(ans):
         return conf, ans
@@ -1584,6 +1611,11 @@ class Pipeline(BaseSolver):
                 if any("not understood" in str(x) for x in [*a.missing, *a.trace[-2:]]):
                     abstained.add(name)
                 continue
+            summed = _listed_total(question, intent, a)
+            if summed is not None:
+                trace.append(f"{name} (question as asked) listed {str(a.value).count(';') + 1} items; the question asks "
+                             f"their total: {summed.value} {summed.unit}")
+                a = summed
             if intent.task == "area" and str(a.unit or "").lower() == "count" and _AREA_UNIT_WORD.search(question):
                 # F 08:40: "Combien de mètres carrés fait l'appartement B (hors balcons …)?" -> dxf read 'combien' as a
                 # count and counted the balconies (1 count). A question that names an area unit is not answered by a count
