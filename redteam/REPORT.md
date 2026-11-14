@@ -14,7 +14,8 @@ caused by the perturbation, not by the drawing.
 - **Fixed tonight, verified on the same rows:** false premises (7/24 confident → 0/24), storeys in everyday words,
   "whole building" in 9 languages, "1,200 euros", "how many floors", "how many X and how many Y" (summed → listed, in
   every language), storey heights, size comparisons, twin-less PNG areas. Every owner commit since 08:14 was checked
-  before or right after S0 merged it (pre-merge checks #3–#7): 0 right answers lost except one flaky LLM-code row.
+  before or right after S0 merged it (pre-merge checks #3–#7): no right answer lost except one flaky LLM-code row
+  (Swiss price × doors, 0.45) and one CubiCasa LoRA flip that fell to confidence 0.20.
 - **Still weak (not confident, but wrong):** questions *about the links* between plan, model and sheets (v17: 2/9 —
   the knowledge graph checks answers but doesn't answer "do they agree?" / "which sheet?"), Italian "in tutto
   l'edificio", door/window counts on PNG-only plans, cost under attack (+51 % since 05:05).
