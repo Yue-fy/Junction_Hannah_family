@@ -42,7 +42,7 @@ GLOSSARY = {
     'emergency fund': 'An emergency fund is money set aside for necessary, unexpected costs. Its size depends on your essential expenses and circumstances, so an account history alone cannot determine the right target.',
     'safe-to-spend': 'Safe-to-spend is an estimate of money left after protecting a reserve, expected bills and a spending buffer. It uses past patterns and can miss obligations that are not recorded in the account.',
     'fixed vs variable costs': 'Fixed costs recur with fairly predictable amounts, while variable costs change with use or choices. Both can be essential, so variable does not mean unnecessary.',
-    'three baskets': 'The three baskets describe regular essentials, irregular essentials and everyday discretionary spending. They help you understand when and why money is needed, without rating your character.',
+    'three baskets': 'The three baskets are Must-pays (bills that come every month, such as rent and electricity), Surprise must-pays (necessary but hard to predict, such as a broken washing machine) and Little leaks (small everyday choices that add up, such as coffee and takeaway). Seeing which basket money falls into helps you plan for it.',
     'interest': 'Interest is the cost of borrowing money or the payment for holding savings. The actual terms depend on the agreement, which transaction data alone does not establish.',
     'compound interest': 'Compound interest means interest can itself earn or incur interest over time. The result depends on the rate, timing and terms, so it is not a promised return.',
     'budget': 'A budget is a plan for how your income will cover spending, saving and upcoming needs. You can adjust it when your circumstances or priorities change.',

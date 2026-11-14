@@ -4,6 +4,8 @@ export const CATEGORY_GROUPS = Object.freeze({
   home: Object.freeze(['Housing','Utilities','Home & Tech','Health']),
   leisure: Object.freeze(['Lifestyle','Entertainment','Travel']),
 });
+// The three teaching baskets filter by classified role, so Home and Spending use one vocabulary.
+export const BASKET_GROUPS = Object.freeze({regular:'fixed_obligation', irregular:'flexible_essential', leaks:'discretionary'});
 const CONSUMPTION = new Set(['purchase','utilities_payment','housing_payment']);
 
 export function spendingCategories(rows = [], group = 'all') {
@@ -11,7 +13,8 @@ export function spendingCategories(rows = [], group = 'all') {
   for (const row of rows) {
     if (!CONSUMPTION.has(row.transaction_type) || !Number.isSafeInteger(row.amount_cents) || row.amount_cents >= 0) continue;
     const category = row.category || 'Other';
-    if (group !== 'all' && !CATEGORY_GROUPS[group]?.includes(category)) continue;
+    if (BASKET_GROUPS[group]) { if (row.role !== BASKET_GROUPS[group]) continue; }
+    else if (group !== 'all' && !CATEGORY_GROUPS[group]?.includes(category)) continue;
     if (!totals.has(category)) totals.set(category, {category,total_cents:0,count:0});
     const item = totals.get(category);
     item.total_cents -= row.amount_cents;

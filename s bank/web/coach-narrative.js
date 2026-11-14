@@ -51,9 +51,9 @@ export function coachNarrative(response = {}, options = {}) {
   const amount = value => integer(value) ? plain(money(value)) : unavailable;
   const flow = value => options.flowName ? plain(options.flowName(value)) : ({
     income:l('Income', 'Tulot', 'Inkomster'),
-    fixed_obligation:l('regular essentials', 'säännölliset välttämättömät menot', 'regelbundna nödvändiga utgifter'),
-    flexible_essential:l('irregular essentials', 'epäsäännölliset välttämättömät menot', 'oregelbundna nödvändiga utgifter'),
-    discretionary:l('everyday choices', 'arjen valinnat', 'vardagsval'),
+    fixed_obligation:l('must-pays', 'pakolliset kuukausimenot', 'fasta måsten'),
+    flexible_essential:l('surprise must-pays', 'yllättävät pakolliset menot', 'oväntade måsten'),
+    discretionary:l('little leaks', 'arjen pikkumenot', 'vardagens småutgifter'),
     saving_or_transfer:l('saving and transfers', 'säästäminen ja siirrot', 'sparande och överföringar'),
   }[value] || plain(value));
   const list = values => new Intl.ListFormat(locale, {style:'long',type:'conjunction'}).format(values.filter(Boolean));

@@ -798,3 +798,9 @@ html[data-current-view="coach"] .persona-panel { position: absolute; top: 56px; 
 
 /* V3: offline answer tag */
 .offline-tag{display:inline-block;margin:0 0 .5rem;padding:.15rem .5rem;border-radius:999px;background:var(--wash);color:var(--muted);font-size:.75rem;font-weight:600}
+/* V3: basket explanations */
+.basket-text{display:grid;gap:2px;min-width:0;text-align:left}
+.basket-text b{color:var(--ink);font-weight:650}
+.basket-help,.basket-examples{display:block;font-size:13px;line-height:1.35;color:var(--muted);font-weight:400}
+.basket-examples{color:var(--green)}
+#spending-group-help{margin:8px 0 0}
