@@ -220,7 +220,7 @@ Cost of one answer (D21 item 4), measured, not assumed:
 0b. **Examples given as text only (no drawings)** (11:09, night-R2 7ad19d5): write one question per line in a `.txt` and run
    `PER_SOURCE=2 experiments/r2/noon_models.sh EXAMPLES.txt 40` — `experiments/r2/attach_drawings.py` puts every question on the
    SAME seeded open dev drawings of each source (default cubicasa5k, swiss_dwellings, ifc_models, habs; `SOURCES=a,b` to change),
-   answer null. Line tags: `[habs]` / `[cubicasa5k,swiss_dwellings]` = sources, `[data/...file]` = that file, `[kind=x]` = label,
+   answer null. Line tags: `[habs]` / `[cubicasa5k,swiss_dwellings]` = sources, `[data/...file]` = that file, `[kind=x]` = label (tags first, or last on the line since 6920168),
    `[answer=12]` = gold. Per question the table groups by kind; `compare_runs.py ... --by source` gives the other cut. Don't hand the
    eval a row without `path`: `load_split` crashes with KeyError 'qid' (F told 11:03). Dry run 11:05 (4 questions → 8 rows, 3 min,
    runs 20261114-110500-pipeline-noon_dry_txt-9562 / -110746-vlm_direct-…-f4e6 / -110750-…-n2-9c22): what's slow is the open
