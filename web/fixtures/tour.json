@@ -17,7 +17,7 @@
  {
   "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
   "q": "Do the floor plan and the IFC model agree on the number of windows on '1.korrus'?",
-  "note": "Now ask about the link itself. The answer comes from the project's knowledge graph (sheets, storeys, rooms and elements linked across the drawings and the model by IFC GlobalId): no, the model has 55 and the plan draws 52, and the other 3 are exactly the windows above or below the plan's 1.2 m cut, highlighted in 3D. One small local model call picks the facts; the numbers come from the graph, and the IFC rules answer the same question independently (✓)."
+  "note": "Now ask about the link itself. The drawing and the model are linked (sheets, storeys and elements share IFC GlobalIds), so the answer is computed from those links: no, the model has 55 windows and the plan draws 52, and the other 3 are exactly the windows above or below the plan's 1.2 m cut, highlighted in 3D. Numbers from the links, not from a language model."
  },
  {
   "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",

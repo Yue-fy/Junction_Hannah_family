@@ -72,9 +72,10 @@ and shows a one-line note:
    highlighted ("windows plan 52 · IFC 52 at the cut (55 on storey) ✓").
 4. Same sheet, a question about the link itself: "Do the floor plan and the IFC model agree on the number of windows
    on '1.korrus'?" → "no (IFC model 55, plan draws 52; the other 3 lie entirely above/below the 1.2 m section plane,
-   so the drawing is consistent with the model)" at 0.85, the 3 undrawn windows highlighted in 3D. Answered from the
-   project knowledge graph (R1's kg_qa over W1's stoa.kg, routed by W4 1b831ed): one local call picks fact rows,
-   Python computes; the IFC rules answer it independently (✓). Same family: "Which sheet shows the server room?",
+   so the drawing is consistent with the model)" at 0.85, the 3 undrawn windows highlighted in 3D. On night 31397eb
+   W1's IFC rules answer it as asked (0 LLM calls, 9 ms); with W4 1b831ed it goes to the project knowledge graph first
+   (R1's kg_qa over W1's stoa.kg: one local call picks fact rows, Python computes) with the IFC rules as the ✓
+   cross-check; the recorded fixture is that route. Same family: "Which sheet shows the server room?",
    "How many floor plan sheets does this building have?" → 5 (no model call).
 5. Model-wide doors → 211 with evidence on 5 sheets (chips; click one to open that plan, same answer).
 6. A question no template covers, with a number in it ("if each door costs 450 euros, what do all the doors on
