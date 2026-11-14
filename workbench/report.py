@@ -30,6 +30,29 @@ def _clip(s, n=140) -> str:
     return s if len(s) <= n else s[: n - 1] + "…"
 
 
+def _median(xs: list[float]) -> float:
+    xs = sorted(xs)
+    n = len(xs)
+    return xs[n // 2] if n % 2 else (xs[n // 2 - 1] + xs[n // 2]) / 2
+
+
+def _time_line(done: list[dict]) -> str:
+    """'Time to verify' (Stoa: a human can verify an answer in seconds): median seconds from item shown to verdict,
+    page-hidden time left out (the browser measures it; rows before 11:20 have none)."""
+    secs = [(a["verdict"], float(a["seconds"])) for a in done if isinstance(a.get("seconds"), (int, float))]
+    if not secs:
+        return ""
+    parts = []
+    for v in ("supports", "wrong", "cant_tell"):
+        xs = [s for vv, s in secs if vv == v]
+        if xs:
+            parts.append(f"{VERDICT[v]} {_median(xs):.0f} s (n={len(xs)})")
+    allx = [s for _, s in secs]
+    quick = sum(1 for s in allx if s <= 30)
+    return (f"Time to verify (item shown → verdict): median **{_median(allx):.0f} s** over {len(allx)} items; "
+            f"{quick} of {len(allx)} within 30 s. By verdict: " + ", ".join(parts) + ".")
+
+
 def build() -> str:
     from stoa.eval.scoring import score
 
@@ -48,6 +71,9 @@ def build() -> str:
     if done:
         L.append(f"Verdicts: {c.get('supports', 0)} ✓ supports, {c.get('wrong', 0)} ✗ wrong, "
                  f"{c.get('cant_tell', 0)} ? can't tell.")
+        t = _time_line(done)
+        if t:
+            L.append(t)
         by_src = defaultdict(Counter)
         for a in done:
             src = a.get("path", "").split("/")[1] if a.get("path", "").count("/") >= 2 else "?"

@@ -44,6 +44,7 @@ if (!location.pathname.endsWith("/")) location.replace(location.pathname + "/" +
         <div class="small">Reasoning questions made by our own agents (comparisons, ratios, combinations). Their reference answers were
         computed by us too, so a ✗ may also mean “the reference is wrong” (please say so in the comment).</div>
       </div>
+      <div id="audit-batches" class="more" hidden></div>
       <div class="meta-line" id="audit-meta"></div>
       <h2 id="audit-question" class="question"></h2>
       <div class="answers">
@@ -84,7 +85,10 @@ if (!location.pathname.endsWith("/")) location.replace(location.pathname + "/" +
       <input id="pick-search" type="search" placeholder="Search drawings by name or title (e.g. 'church', 'site 1000', 'clinic')">
       <button id="pick-search-btn">Search</button>
       <button id="pick-reset" class="ghost">Show all groups</button>
+      <button id="pick-upload-btn" class="ghost" title="PDF, PNG, JPEG, TIFF or WebP, up to 60 MB. Kept on our server only.">Add your own drawing…</button>
+      <input id="pick-upload" type="file" accept=".pdf,.png,.jpg,.jpeg,.tif,.tiff,.webp" hidden>
     </div>
+    <div id="pick-upload-msg" class="hint" hidden></div>
     <div id="pick-jump" class="jump"></div>
     <div id="pick-groups"></div>
   </div>
