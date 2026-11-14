@@ -71,6 +71,18 @@ def matches(rule: dict, question: str) -> bool:
     return bool(_words(what)) or any(re.search(rf"\b{m}\b", what) for m in MEASURE)
 
 
+def violations(rules: list[dict], question: str, value, unit: str | None, typ: str | None = None) -> list[str]:
+    """The expert's rules that ONE answer breaks, as short sentences for the page (same matching as check())."""
+    pred = {"question": question, "value": value, "unit": unit, "type": typ}
+    out = []
+    for res in check(rules, [pred]):
+        if res.get("flagged"):
+            r = res["rule"]
+            rng = f"{r.get('min') if r.get('min') is not None else '…'}–{r.get('max') if r.get('max') is not None else '…'} {r.get('unit') or ''}"
+            out.append(f"outside your rule “{r.get('what')}”: {rng.strip()}" + (f" ({r['why']})" if r.get("why") else ""))
+    return out
+
+
 def check(rules: list[dict], preds: list[dict]) -> list[dict]:
     from stoa.eval.scoring import convert, parse_number
 

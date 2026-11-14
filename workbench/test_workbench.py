@@ -137,3 +137,15 @@ def test_batch_from_run_without_reference(client, tmp_path, monkeypatch):
     assert _human_rows(tmp_path / "human" / "questions.jsonl") == []  # the eval drops it (night-F ff1e88e)
     client.post("/api/audit", json={"item_id": q1["item_id"], "verdict": "supports"})
     assert _human_rows(tmp_path / "human" / "questions.jsonl")[0]["answer"] == 4
+
+
+def test_rule_flags_on_one_answer():
+    from workbench.rules_check import violations
+
+    rules = [{"what": "door width", "min": 0.7, "max": 1.2, "unit": "m", "why": "building code"},
+             {"what": "room area", "min": 2, "max": 80, "unit": "m2"}]
+    assert violations(rules, "How wide is the front door?", 2.5, "m") == \
+        ["outside your rule “door width”: 0.7–1.2 m (building code)"]
+    assert violations(rules, "How wide is the front door?", 90, "cm") == []
+    assert violations(rules, "What is the area of the living room?", 95, "m²") == ["outside your rule “room area”: 2–80 m2"]
+    assert violations(rules, "How many doors?", 5, "count") == []
