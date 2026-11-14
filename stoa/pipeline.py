@@ -78,7 +78,11 @@ FLOOR_AREA_Q = ("What is the total net floor area in m² of all numbered indoor 
 
 # a counting cue in any language (wider than the parser's _COUNT, which steers parsing and R2's translate trigger)
 _COUNT_CUE = re.compile(r"\b(?:quant[oa]s|kolik|ko[lľ]ko|koliko|kiek|h[aá]ny|ka[cç]|c[aâ]te|c[aâ]ți|ilu|kui palju|cik|"
-                        r"tally|total number|count)\b", re.I)
+                        r"tally|total number|count|"
+                        # Q 08:21: "Qual è il numero totale di porte e finestre …?" (68 right, capped at 0.3)
+                        r"numero (?:totale |complessivo )?d[ie]\w*|nombre (?:total )?d\w*|n[uú]mero (?:total )?de|"
+                        r"gesamtzahl|zahl der|lukum[aä][aä]r[aä]|kokonaism[aä][aä]r[aä]|liczba|po[cč]et|antall|"
+                        r"totale (?:delle|dei|degli|di))\b", re.I)
 
 
 _NOT_CLASSES = {"room", "unknown", "sanitary", "apartment", "storey"}  # scopes/containers, not counted objects
@@ -91,8 +95,28 @@ def _unused_classes(question: str, ans: Answer) -> set[str]:
     named = set(targets_mentioned(question)) - _NOT_CLASSES
     if len(named) < 2:
         return set()
+    # F 08:28 probe: "How many bathroom sinks are on this floor?" -> dxf's right 4 (its trace says 'washbasins') was
+    # sent to the agent (2 @ 0.9). A room word right before an object noun is a scope ("bathroom sinks", "kitchen
+    # windows"), and sink/washbasin, wc/toilet, shower/bathtub name the same fixtures in different solvers
+    from stoa.router.intent import _TARGETS
+
+    rx = dict(_TARGETS)
+    for r in [t for t in named if t in _ROOMISH]:
+        for m in rx[r].finditer(question):
+            nxt = question[m.end():m.end() + 30]
+            if any(re.match(r"\s+(?:\w+\s+)?(?:" + rx[t].pattern + ")", nxt, re.I) for t in named if t != r):
+                named.discard(r)
+                break
+    if len(named) < 2:
+        return set()
     text = " ".join([*map(str, ans.trace), *(e.note or "" for e in ans.evidence)])
-    return named - set(targets_mentioned(text))
+    seen = set(targets_mentioned(text))
+    seen |= {t for grp in _SAME_FIXTURE if grp & seen for t in grp}
+    return named - seen
+
+
+_ROOMISH = {"bathroom", "kitchen", "bedroom", "wc_room", "balcony", "sauna", "apartment", "storey"}
+_SAME_FIXTURE = [{"sink", "washbasin"}, {"wc", "wc_room"}, {"shower", "bathtub", "shower_bathtub"}]
 
 
 # a rules solver saying the question's premise is false: the named thing is labelled otherwise / does not exist / the
@@ -315,7 +339,7 @@ class Pipeline(BaseSolver):
                  compose: int | str = 1, normalise: int | str = 1, crosscheck: int | str = 1, agent: int | str = 1,
                  raw_first: int | str = 1, raw_accept: float | str = 0.45, raster_first: int | str = 1,
                  cc5k: int | str = 1, lora: int | str = 1, lora_second: int | str = 0, lora_conf: str = "own", translate: int | str = 1,
-                 translate_cap: float | str = 0.9, **kwargs):
+                 translate_cap: float | str = 0.9, both_readings: int | str = 1, **kwargs):
         super().__init__(**kwargs)
         # R2's language front end (stoa.llm.should_translate / to_english): a non-English question the rules can't read
         # is translated to English once (local model, quoted names/numbers verbatim) and answered in English
@@ -324,6 +348,7 @@ class Pipeline(BaseSolver):
         # 0.9 vs 0.75 on lang4b / F's hardL_open / R2's lang4: ECE 0.187/0.140/0.184 vs 0.239/0.176/0.253, the >= 0.8
         # bin 97.1/99.1/100% right (R2/F 04:57: right translated answers all sat at 0.75)
         self.translate_cap = float(translate_cap)
+        self.both_readings = bool(int(both_readings))
         self.accept = float(accept)
         self.agree = {"1": "cheap", "0": "never", "2": "always"}.get(str(agree), str(agree))  # cheap|never|always
         self.api = bool(int(api))
@@ -401,6 +426,8 @@ class Pipeline(BaseSolver):
         question = normalise_refs(normalise_numbers(question))
         asked = question
         question, tr_note, tr_cost = self._front_end(question) if self.translate else (question, None, None)
+        if question != asked:  # the English translation may say "the B apartment in m²" (hardL_open tr: 321.76 @ 0.95)
+            question = normalise_refs(normalise_numbers(question))
         plan = decompose(source_of(path), question) if self.compose else None
         if plan is None:
             ans = self._solve_atomic(path, question)
@@ -417,7 +444,10 @@ class Pipeline(BaseSolver):
                 ans.trace = [f"language front end: {tr_note}"] + ans.trace
                 ans.assumptions = [*ans.assumptions, tr_note]
                 cap = self.translate_cap if not extra_structure(question) else UNSEEN_MAX
-                if ans.value is not None and ans.confidence > cap:
+                both = self._both_readings(path, asked, question, ans) if self.both_readings else None
+                if both == "agree":
+                    pass  # two independent readings gave the same rules answer: no translation cap
+                elif ans.value is not None and ans.confidence > cap:
                     ans.trace.append(f"translated question: confidence capped at {cap}")
                     ans.confidence = cap
         elif tr_note:
@@ -429,6 +459,14 @@ class Pipeline(BaseSolver):
             ans.trace.append("a count answer, but the question asks no 'how many': confidence capped at 0.3")
             ans.confidence = 0.3
             ans.missing = [*ans.missing, "the question does not ask for a number of things; the answer is a count"]
+        if ans.value is not None and ans.confidence > 0.3 and _UNIT_KIND.get(str(ans.unit or "").lower()) in (
+                "area", "length", "volume") and parse(question).task == "count" and \
+                not (set(modifiers(question)) & {"avg", "ratio", "share", "diff", *DERIVED}):
+            # F 08:20: "How many rooms (spaces) are on the '-1' floor?" (hu, ifc) -> 54.406 m² @ 0.67: a how-many
+            # question answered with a size reads the wrong quantity (the fraction guard below only saw 'count' units)
+            ans.trace.append(f"a 'how many' question answered in {ans.unit}: confidence capped at 0.3")
+            ans.confidence = 0.3
+            ans.missing = [*ans.missing, f"the question asks for a number of things; the answer is a size ({ans.unit})"]
         if ans.value is not None and ans.confidence > 0.3 and str(ans.unit or "count").lower() == "count":
             it_q = parse(question)
             v = _num(ans.value)
@@ -511,6 +549,59 @@ class Pipeline(BaseSolver):
             return question, (f"a machine translation (\"{tr.text}\") changed the object classes the question names "
                               f"({', '.join(sorted(lost))} lost); answered the original wording"), cost
         return tr.text, tr.note, cost
+
+    def _both_readings(self, path: str, asked: str, english: str, ans: Answer) -> str | None:
+        """F 08:20 "both readings" (offline sim on hardL_open: ECE 0.145 -> 0.114, conf >= 0.8 25% -> 56% @ 97.7%;
+        held-out hardL: >= 0.8 22% -> 54% @ 99.2%, rules-only lift 53% @ 100%): a translated question answered by a
+        rules solver is also given to the rules solvers in its ORIGINAL wording (no LLM pass of ours). Same answer ->
+        confidence = the surer of the two, no translation cap ('agree'); different -> the surer one, capped at 0.5
+        ('disagree'). Only rules answers are lifted (vlm/raster/LoRA/agent readings never are)."""
+        if ans.value is None or str(ans.solver or "").split("/")[-1] not in ("dxf", "ifc", "schedule", "pdf_vector",
+                                                                              "pdf_text"):
+            return None
+        task = parse(english).task
+        for name in [c for c in route(path, parse(asked)) if TIER.get(c) == "deterministic"]:
+            s = self._get(name)
+            if s is None:
+                continue
+            try:
+                if not s.can_handle(path, asked):
+                    continue
+                a = s.solve(path, asked)
+            except Exception:  # noqa: BLE001
+                continue
+            if not isinstance(a, Answer):
+                a = Answer.model_validate(a)
+            ans.cost = _cost_of(ans).add(_cost_of(a))
+            if a.value is None or not _fits(task, a):
+                continue
+            if _agree(ans.value, a.value, task):
+                c = round(max(ans.confidence, a.confidence) if a.confidence >= 0.5 else ans.confidence, 3)
+                ans.trace.append(f"both readings: {name} on the ORIGINAL wording also gives {a.value} {a.unit or ''} "
+                                 f"(conf {a.confidence:.2f}) ✓ -> confidence {c:.2f}, no translation cap")
+                ans.confidence = c
+                return "agree"
+            if any("cross-check" in str(t) and "✓" in str(t) and "✗" not in str(t) for t in ans.trace):
+                # a third, independent reading (DXF polygons / another file of the building) agrees with the translated
+                # one: 2 against 1 (hardL_open tr "B dairesinin …": dxf on the Turkish read the whole floor, 321.76)
+                ans.trace.append(f"both readings: {name} on the ORIGINAL wording gives {a.value} {a.unit or ''} "
+                                 f"(conf {a.confidence:.2f}) ≠ translated {ans.value}, but the cross-check agrees with "
+                                 "the translated reading: kept (translation cap)")
+                ans.missing = [*ans.missing, f"{name} on the original wording gave {a.value} {a.unit or ''}"]
+                return "disagree-xcheck"
+            if a.confidence > ans.confidence:
+                ans.trace.append(f"both readings: {name} on the ORIGINAL wording gives {a.value} {a.unit or ''} at conf "
+                                 f"{a.confidence:.2f} > translated {ans.value} ({ans.confidence:.2f}): kept, capped at 0.5")
+                ans.missing = [*ans.missing, f"the English translation gave {ans.value} {ans.unit or ''}"]
+                ans.value, ans.unit, ans.evidence = a.value, a.unit, list(a.evidence)
+                ans.solver = f"pipeline/{name}"
+            else:
+                ans.trace.append(f"both readings: {name} on the ORIGINAL wording gives {a.value} {a.unit or ''} "
+                                 f"(conf {a.confidence:.2f}) ≠ translated {ans.value}: capped at 0.5")
+                ans.missing = [*ans.missing, f"{name} on the original wording gave {a.value} {a.unit or ''}"]
+            ans.confidence = round(min(max(ans.confidence, a.confidence), 0.5), 3)
+            return "disagree"
+        return None
 
     def _original_if_sure(self, path: str, asked: str, ans: Answer, trace_note: str) -> Answer:
         """The translated reading came back unsure: a deterministic solver that is sure about the ORIGINAL wording
