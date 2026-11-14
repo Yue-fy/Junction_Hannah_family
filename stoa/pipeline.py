@@ -1180,9 +1180,9 @@ class Pipeline(BaseSolver):
         a = None
         # W1 10:26: kg_qa answered plan-vs-model comparatives confidently wrong and ifc never checked them (trigger
         # reason 'plan and model named'): W1's deterministic reading checks EVERY link question it can read (0 LLM;
-        # 127/127 right where comparable). Same -> ✓ + GUIDs; different -> capped at LINK_DISAGREE (R1 10:34: after
-        # a07af69 they agree on every probe row, so no measured case for letting either one overrule the other);
-        # kg_qa gives nothing (hashed copies have no KG, Q v26) -> the GlobalId reading answers
+        # 127/127 right where comparable). Same -> ✓ + GUIDs; different -> the GlobalId reading's value at LINK_DISAGREE
+        # (it won all 6 measured disagreements; R1 10:34: no confident overrule); kg_qa gives nothing (hashed copies
+        # have no KG, Q v26) -> the GlobalId reading answers
         # (the registry imports stoa.solvers.ifc under the pipeline's lock first: a bare import from 6 eval threads at
         # once met a half-initialised module and the guarded import silently returned None)
         pvm = _plan_vs_model(path, question) if self.pvm and self._get("ifc") is not None else None
@@ -1222,6 +1222,22 @@ class Pipeline(BaseSolver):
                 if ka[1] == ia[1]:
                     out.trace.append(f"cross-check: {a_label} says {_clip(a.value)} ✓")
                     out.evidence = [*out.evidence, *[e for e in a.evidence if getattr(e, "ifc_guid", None)][:12]]
+                elif pvm is not None:
+                    # link probe (375 Qs, run 20261114-103528-pipeline-links-d1c0 vs -7a29): the 2 disagreements were
+                    # sheet totals where the GlobalId reading was right (10 vs kg_qa 6 / 4; W1 4/4 before): its value,
+                    # at the disagreement cap, with kg_qa's answer named (R1 10:34: no confident overrule)
+                    kv = k.value
+                    out = a.model_copy(deep=True)
+                    out.confidence = round(min(float(a.confidence or 0), LINK_DISAGREE), 3)
+                    out.trace = trace + [f"project knowledge graph: {_clip(kv)} at conf {k.confidence:.2f}",
+                                         f"cross-check: {a_label} says {_clip(a.value)} ✗ — taking the deterministic "
+                                         f"reading, confidence capped at {LINK_DISAGREE}"] + \
+                        [f"[ifc] {t}" for t in a.trace[-10:]]
+                    out.missing = [*out.missing, f"the knowledge-graph reader answered {_clip(kv)}"]
+                    out.solver = "pipeline/ifc"
+                    out.cost = _cost_of(k).add(_cost_of(a))
+                    out.cost.wall_seconds = round(time.perf_counter() - t0, 4)
+                    return out
                 elif out.confidence > LINK_DISAGREE:
                     out.trace.append(f"cross-check: {a_label} says {_clip(a.value)} (conf "
                                      f"{float(a.confidence or 0):.2f}) ✗: confidence capped at {LINK_DISAGREE}")

@@ -298,7 +298,7 @@ def test_listed_total():
 
 
 def test_link_route_plan_vs_model_overrules_kg_qa(monkeypatch):
-    """W1 10:26: W1's deterministic GlobalId reading checks kg_qa on link questions; same -> ✓, different -> cap."""
+    """W1 10:26: W1's deterministic GlobalId reading checks kg_qa on link questions; same -> ✓, different -> its value at the cap."""
     import experiments.r1.kg_qa.kgqa as kq
     import stoa.pipeline as pl
     import stoa.solvers.ifc as ifcmod
@@ -309,8 +309,9 @@ def test_link_route_plan_vs_model_overrules_kg_qa(monkeypatch):
     monkeypatch.setattr(ifcmod, "plan_vs_model", lambda p, q: Answer(value="yes: 55 vs 52", confidence=0.85))
     path = "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf"
     q = "Does this plan show fewer windows than the IFC model has?"
-    out = pl.Pipeline(crosscheck=0)._link_question(path, q, 0.0)  # disagree -> capped, the other reading named
-    assert out.value.startswith("no") and out.confidence == pl.LINK_DISAGREE and any("yes: 55" in m for m in out.missing)
+    out = pl.Pipeline(crosscheck=0)._link_question(path, q, 0.0)  # disagree -> GlobalId value, capped, kg_qa named
+    assert out.value.startswith("yes") and out.confidence == pl.LINK_DISAGREE and out.solver == "pipeline/ifc"
+    assert any("knowledge-graph reader answered no" in m for m in out.missing)
     monkeypatch.setattr(kq, "solve", lambda p, q: Answer(value=None, confidence=0.0))  # no KG -> GlobalId reading
     assert pl.Pipeline(crosscheck=0)._link_question(path, q, 0.0).solver == "pipeline/ifc"
     monkeypatch.setattr(kq, "solve", lambda p, q: Answer(value="yes (52 < 55)", confidence=0.85))
