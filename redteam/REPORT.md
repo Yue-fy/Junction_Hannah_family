@@ -41,6 +41,8 @@ caused by the perturbation, not by the drawing.
    part at 0.95 (W4). (#4 at 08:27: 11 left, with a W1 "ground floor" confidence drop that #5's W1 commit undoes.)
    **Newest (08:45, pre-merge #6 on night 62754aa + five newer heads): 3 left, all false premises ("whole building" on a
    single-floor plan, W2); 350 of 350 scored answers at ≥ 0.8 right** (see "Night 62754aa and pre-merge check #6").
+   **With v17–v18 (609 rows, 08:52, pre-merge #7 on 62754aa + the eight newest heads): 351 of 352 scored answers at
+   ≥ 0.8 right; 4 confident misses = the 3 single-floor "whole building" premises + bug 21 (a plan-vs-model question).**
    Unscored but visible: two-part questions to dxf answer one part at 0.60 ("3" with unit m² for "how many rooms
    and what is their total area", bug 20, W2); on scans, unanswerable questions still get an invented number (514
    seats at 0.34) with no reason given (v10, W4).
@@ -662,6 +664,13 @@ building located?", "Missä osavaltiossa rakennus sijaitsee?". Night 62754aa (ru
 **36/36 right**, all by `raster` from W3's text layer (boxed), 34 at 0.75 and 2 at 0.30 — robust, if under-confident
 for text printed in a title block. Caveat: W3/W4 have seen these sheets (W4's probe), so this is robustness to
 wording / language / rotation, not a held-out accuracy.
+
+## Pre-merge check #7 (08:52): night 62754aa + F 5b7fa24 + W1 a5c8ab9 + W2 fb43d52 + W3 ac981b3 + W4 4d4187f + W5 6b10725 + R1 33d9195 + R2 ead0d6d
+All 609 rows (v1–v18), run `20261114-085112-pipeline-questions-v18-6fe8` vs 62754aa (`59a3` + `dd7a` + `08d8`):
+**5 won, 1 lost; scored 91.9 → 92.6 %; 351 of 352 scored answers at ≥ 0.8 right**; core 283 rows 98.1 %, 188/188 at
+≥ 0.8, 0/24 premises. Won: bug 18 in DE/FR/IT/FI. Lost: the Swiss "1,200 euros per door" → 91,200 at 0.45 (dxf table
+code multiplies the price by all objects; it flipped in 2 of 5 runs tonight — a flake, not noise to ignore). Left at
+≥ 0.8: one-floor "whole building" ×3 (W2) and bug 21 ("windows in the model but not drawn on this plan" → 297, W1/W4).
 
 ## For Saturday noon: red-team Stoa's example questions in one command (`redteam/from_examples.py`)
 Put Stoa's examples in a jsonl (`path`, `question`, and `answer` / `unit` when known; a path may be absolute), then
