@@ -1,6 +1,7 @@
 # Questions for the Stoa mentor (Saturday morning)
 
-Written by agent Q at 04:15 on 14 Nov from what the team learned overnight. Ordered by how much the answer changes
+Written by agent Q at 04:15 on 14 Nov; numbers refreshed at 09:20 (test 2 = night bb94fe4; red team on night be57171 /
+31397eb). Ordered by how much the answer changes
 what we do in the last hours. Each question says **why we ask** and **what we do with each answer**, so whoever
 talks to Stoa can decide on the spot. Keep it to 10 minutes: ask 1–6 first.
 
@@ -16,8 +17,8 @@ talks to Stoa can decide on the spot. Keep it to 10 minutes: ask 1–6 first.
 ## 2. What does a wrong answer cost compared with a low-confidence answer or "I don't know"?
 - Do you use our `confidence`? E.g. accuracy only on answers above a threshold, a risk–coverage curve, a Brier score?
 - Is "best estimate + low confidence + what is missing" (our policy) scored better than a confident guess?
-- **Why:** we never refuse; we return the best estimate with a calibrated confidence (ECE 0.017 on sealed test, 98 %
-  right when confidence ≥ 0.8), the assumptions, and what is missing. Our red team shows the remaining risk is
+- **Why:** we never refuse; we return the best estimate with a calibrated confidence (sealed test 2: AUROC 0.949, 98 %
+  right when confidence ≥ 0.8), the assumptions, and what is missing (red team: 0 bare refusals in 647 answers). Our red team shows the remaining risk is
   *confidently wrong* answers on unusual wordings, not wrong answers in general.
 - **Do:** if confidence is scored, tighten the caps on unseen wordings (costs a little accuracy, buys calibration).
   If only accuracy counts, loosen them.
@@ -33,8 +34,8 @@ talks to Stoa can decide on the spot. Keep it to 10 minutes: ask 1–6 first.
 - Will the files arrive in the same folder layout (`data/<source>/<file>`) and with their sibling formats
   (Swiss PDF + DXF + PNG; IFC + rendered plan PDFs)?
 - **Why:** our deterministic solvers are near-perfect on the given question kinds (Swiss 98–100 %, IFC 97–100 %), but
-  on our own sealed set of *new wordings of the same kinds* we drop to 63 % micro, and on derived quantities (price ×
-  count etc.) to 35 %. We know where it breaks; we need to know which part to fix first.
+  on our own sealed set of *new wordings of the same kinds* we were at 63 % micro (now 80 %), and on derived
+  quantities (price × count etc.) at 35 % (now 62 %). We know where it breaks; we need to know which part to fix first.
 - **Why the folder question:** our router recognises the source from the path. A copy of a CubiCasa plan outside the
   dataset folder is routed as "unknown raster" and loses the fine-tuned counter (red team, `redteam/REPORT.md`).
 - **Will questions name storeys, rooms and models exactly as the files do** (`'00 Begane grond'`, `room 3.09
@@ -52,11 +53,22 @@ talks to Stoa can decide on the spot. Keep it to 10 minutes: ask 1–6 first.
   at high confidence (two answers were asked), and two-part area questions get only one part. The fix is easy once
   we know the format you expect; a wrong format would cost every multi-part question.
 
+## 3b. Lists and links (asked at 09:20 after red-team v19–v20)
+- **Will answers be lists** ("Which rooms on level 1 are larger than 50 m²?", "List the rooms and their areas") and
+  how are they scored — every item must be named, extra items penalised, order?
+- **Will questions ask about the links themselves** ("Do the plan and the model agree on the windows?", "Which sheet
+  shows the server room?", "How many elevation drawings are there?")? Is one building's set of files (IFC + its plan,
+  section and elevation PDFs) always delivered together?
+- **Why:** plain threshold lists are right on 4 models and 3 languages, but a list with a room type ("which *living
+  rooms* are smaller than 30 m²") still lists every room; plan-vs-model questions now answer "no: the model has 55
+  windows, the plan draws 52 — 3 lie above/below the cut plane" with the 3 element IDs, but new wordings of the same
+  question still slip ("how many of the model's windows does this drawing not show?").
+
 ## 4. How do you score cost?
 - Per question in dollars? Wall time? Does local GPU inference count, and at what price? Do you count the one-off
   cost of training our small model (33 min on one GPU)?
-- **Why:** we track tokens, GPU seconds, hosted API calls and wall time per question ($0.28 per 1,000 questions on
-  sealed test; 64 % of questions never call a model). We need to know which of these you want on the slide.
+- **Why:** we track tokens, GPU seconds, hosted API calls and wall time per question ($0.03 per 1,000 questions on
+  sealed test 2, down from $0.28 on test 1; p95 latency 2 s; about half of the questions never call a model). We need to know which of these you want on the slide.
 
 ## 5. How do you score "the reasoning" and "the interface"?
 - Do judges look at the trace / evidence of individual answers, or only at the demo?
@@ -91,5 +103,6 @@ talks to Stoa can decide on the spot. Keep it to 10 minutes: ask 1–6 first.
 ## What we tell them in one breath if asked "what did you build?"
 Ask a question about a drawing or a building model → an answer, how sure we are, and where it came from, highlighted
 on the 2D sheet or in the 3D model. Structure first, pixels last: we read vector geometry, IFC and schedule tables with
-code, and only use a (small, fine-tuned) vision model when there is nothing to parse. Sealed test: 87 % (weighted 80 %),
-98 % right when we say we are sure, $0.28 per 1,000 questions.
+code, and only use a (small, fine-tuned) vision model when there is nothing to parse. Sealed test: 88 % (weighted 80 %),
+98 % right when we say we are sure, $0.03 per 1,000 questions. On the 609 questions we wrote overnight to break it,
+every answer given at confidence ≥ 0.8 is right (night 31397eb + the 09:15 commits); the newest 38 still find 7.
