@@ -305,7 +305,7 @@ class ScheduleSolver(BaseSolver):
         elif value == 0 and unit == "count":
             conf = min(conf, 0.35)  # "none" from a rebuilt table is weak evidence (a misread column also gives 0)
             missing.append("the count is 0: no row matched, which can also mean the column was misread")
-        if n_rows_used and tableqa._rows_mention_ids(question, res.get("used", []), tables, "row_id") is False:
+        if n_rows_used and tableqa._rows_mention_ids(question, res.get("used", []), tables, "row_id", path) is False:
             conf = min(conf, 0.3)  # the question names an id (P13, 115.A) that none of the cited rows contains
             missing.append("none of the rows the answer used contains the identifier named in the question")
         named = [w for w in re.findall(r"(\w+)\s+schedules?\b", question.lower()) if w not in ("the", "a", "this")]
@@ -321,7 +321,7 @@ class ScheduleSolver(BaseSolver):
         elif counted and not any(w.rstrip("s")[:5] in known for w in counted):
             conf = min(conf, 0.3)  # "how many pier types": no rebuilt table mentions piers
             missing.append(f"no rebuilt table mentions '{' '.join(counted)}'; the answer comes from other text")
-        if isinstance(value, str) and value.strip().upper() in tableqa.id_tokens(question):
+        if isinstance(value, str) and value.strip().upper() in tableqa.id_tokens(question, path):
             conf = min(conf, 0.2)  # the answer only repeats an identifier from the question
             missing.append(f"the answer {value!r} repeats the question's identifier; the table row was not found")
         return Answer(value=value, unit=unit, confidence=conf, evidence=evidence, trace=trace, solver=self.name,
