@@ -1,6 +1,6 @@
 # Error analysis (E = agent F)
 
-Updated 03:30, 14 Nov 2026 (sections newest first). Regenerate the tables with
+Updated 04:00, 14 Nov 2026 (sections newest first). Regenerate the tables with
 `/data/User/fangy4/envs/junction/bin/python -m stoa.eval.analyze <run_id> --baseline <dummy run_id> --top 20`.
 For paired significance use `python3 experiments/r1/stats/compare.py RUN_A RUN_B --by template` (cluster CI).
 
@@ -19,6 +19,26 @@ Context: every agent was stopped by the org spend limit 01:58–03:10, so there 
 W4 c1b294c (trust on unseen wordings, from F's 01:44 held-out mechanisms) + W4 3d21bee (cc5k gate path) + R1 eb03604
 (CC5K crosscheck) as a scratch merge (d764334 = night 609e41c + night-W4 8d7f23a + night-R1 6072523). S0 froze the same
 code (+ R1 f13db8f count ranges, W5 web) as 95f2277 and started sealed test 1 at 03:21.
+
+### Sealed test 1 vs dev (S0's run 20261114-032105-pipeline-test-9709 on 95f2277, cc5k=0; aggregates only)
+| | dev (same code) | expected on test from dev buckets | **test 1** |
+|---|---:|---:|---:|
+| micro | 88.5 | 88.8 | **87.4** |
+| weighted | 81.7 | 81.7 | **79.8** |
+| ECE / conf≥0.8 share @ precision | 0.019 / 78% @ 98.0 | | 0.017 / 78% @ 97.9 |
+
+- The −1.9 weighted gap is cubicasa (70.5 vs 73.4; ≈1 SE). Swiss transfers. IFC: all 7 misses in ONE of the 3 test
+  models (bsc-molio, 7/197; the model is wholly in test, so inspecting it is S0's call).
+- Cubicasa by concept (diagnostic only, never tune on it): symbol counts transfer (windows 19 → 21, doors 33 → 35,
+  WC 76 → 79, sinks 69 → 65); room-label concepts drop (saunas 93 → 80, bedrooms 90 → 82, separate WC rooms
+  100 → 90; together 94 → 84 on ~140 Qs each): choices made while watching dev are a few points optimistic there.
+
+### New sealed split `hard3` (derived quantities; stoa/eval/hard3.py, wordings in $JUNCTION_SHARED/sealed/F/)
+156 Qs on dev drawings: 15 recipes (occupancy limit, yearly heating cost, % growth, ft² carpet price, proportional
+bill split, fixture costs; smoke detectors = bedrooms + storeys, sauna stove kW, cleaning minutes, bedrooms per WC
+seat, balcony planters; flooring + waste %, cleaning hours, door/window hardware cost, wall surface = length × height),
+8 languages. Different recipes and wordings from W4's dev probe (artifacts/W4/derived*.jsonl), which W4 tuned on.
+Rules as hard2r: only F and S0, milestones, aggregates only. Not run yet (first run after S0's test-1 batch).
 
 ### Gate (pipeline, cc5k=0; paired cluster CI from experiments/r1/stats/compare.py)
 | split | 609e41c | d764334 | paired | calibration |
