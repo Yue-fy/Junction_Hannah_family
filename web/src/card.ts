@@ -141,6 +141,18 @@ export function yesNoBasis(a: Answer): string {
   return "";
 }
 
+/** A name in the question the solver could not find (W1 ifc: assumption "could not resolve 'KORIDOR (119)'"): the answer
+ * then covers something broader (the sheet's storey, the model), possibly at high confidence after a rewrite. Shown
+ * right under the value so a reader catches the scope change before trusting the number. */
+export function scopeWarning(a: Answer): string {
+  const all = [...(a.assumptions ?? []), ...(a.missing ?? [])];
+  const names = [...new Set(all.flatMap((l) => [...l.matchAll(/could not resolve '([^']+)'/gi)].map((m) => m[1])))];
+  if (!names.length || a.value === null || a.value === undefined) return "";
+  const scope = all.map((l) => l.match(/\b(storey '[^']+'|the whole model|model-wide)/i)).find((m) => m)?.[1];
+  const hi = (a.confidence ?? 0) >= 0.8 ? " The confidence above is for that broader question." : "";
+  return `<div class="xcheck bad scope-warn"><b>⚠ Not matched</b>the solver could not match ${names.map((n) => `'${esc(n)}'`).join(", ")} to a storey, room or model for this question, so this answer covers ${scope ? esc(scope) : "a broader scope"}.${hi} Check that this is what was asked.</div>`;
+}
+
 /** One row per object: evidence items that share an ifc_guid (2D box + 3D element) are grouped. */
 export function groupEvidence(ev: Evidence[]): { idx: number[]; first: number }[] {
   const groups: { idx: number[]; first: number }[] = [];
@@ -448,6 +460,7 @@ export function renderCard(el: HTMLElement, a: Answer, opts: CardOpts) {
         <div class="conf-num">${conf}%</div><div class="conf-bar"><i style="width:${conf}%"></i></div><div class="conf-lbl">confidence</div>
       </div>
     </div>
+    ${scopeWarning(a)}
     ${intentHtml(a, run)}
     ${compareHtml(a)}
     ${checks.map((x) => `<div class="xcheck ${x.ok ? "ok" : "bad"}"><b>${x.ok ? "✓ Cross-checked" : "✗ Sources disagree"}</b> ${esc(x.text)}</div>`).join("")}
