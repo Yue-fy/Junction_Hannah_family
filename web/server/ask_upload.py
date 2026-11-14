@@ -9,7 +9,8 @@ question (the pipeline loads in ~0.3 s):
 The API (stoa/api.py) only accepts dataset paths, so this does what its POST /ask does (solver, cost meter, intent,
 compose plan) for an absolute path outside the dataset. The pipeline routes such a file by its extension (no
 template, no vector/IFC twin: the hidden set's "different" drawings). Evidence that points at the uploaded file is
-renamed to the virtual path the browser knows. Prints the Answer as JSON on stdout (solvers' prints go to stderr).
+renamed to the virtual path the browser knows (also evidence on a file uploaded TOGETHER with it, in the same folder:
+a sheet's IFC model). Prints the Answer as JSON on stdout (solvers' prints go to stderr).
 """
 
 from __future__ import annotations
@@ -45,11 +46,16 @@ def main() -> None:
         if not ans.cost.wall_seconds:
             ans.cost.wall_seconds = round(time.perf_counter() - t0, 4)
         out = ans.model_dump()
-        name = Path(abs_path).name
+        name, folder = Path(abs_path).name, Path(abs_path).parent
+        vdir = virtual.rsplit("/", 1)[0]
         for e in out.get("evidence") or []:
             f = str(e.get("file") or "")
             if not f or f == abs_path or Path(f).name == name:
                 e["file"] = virtual
+            elif Path(f).is_absolute() and Path(f).parent == folder:  # a file uploaded with it (the sheet's model)
+                e["file"] = f"{vdir}/{Path(f).name}"
+        # the browser knows the folder as upload/<id>: no temp paths in the reasoning shown to the visitor
+        out["trace"] = [str(t).replace(str(folder), vdir) for t in out.get("trace") or []]
         try:
             from stoa.data import source_of
             from stoa.router.compose import decompose

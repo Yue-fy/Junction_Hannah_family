@@ -54,5 +54,8 @@ export const secondOpinion = (path: string, question: string) => ask(path, quest
  * (path `upload/<id>/<name>`), usable like any dataset path in the calls above. */
 export const upload = (file: File, style = "") =>
   call<FileInfo>(`/api/upload?name=${encodeURIComponent(file.name)}${style ? `&style=${encodeURIComponent(style)}` : ""}`, { method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: file });
+/** Files uploaded together (e.g. a plan PDF + its IFC): one folder, so the sheet links to the model (POST /api/upload/set). */
+export const uploadSet = (paths: string[]) =>
+  call<{ files: FileInfo[] }>("/api/upload/set", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ paths }) }).then((r) => r.files);
 
 export const benchmark = () => fetch("/api/bench").then((r) => (r.ok ? r.json() : Promise.reject(new Error(`${r.status}`))));

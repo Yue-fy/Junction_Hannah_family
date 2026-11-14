@@ -402,24 +402,89 @@ function uploadAbs(virtual: string): string | null {
   const abs = m[2] ? path.join(UPLOADS, m[1], "data", m[2], m[3]) : path.join(UPLOADS, m[1], m[3]);
   return fs.existsSync(abs) ? abs : null;
 }
-function uploadInfo(virtual: string) {
+/** An upload's FileInfo. Files uploaded TOGETHER share one folder (a "set", e.g. plan.pdf + model.ifc): a sheet then
+ * lists the model as its ".ifc" sibling (same stem, or the only .ifc in the folder: the rule stoa.data.ifc_model_for
+ * applies, F 749e5c3), so the pipeline answers from the model and the browser opens 2D + 3D side by side. */
+function uploadInfo(virtual: string, extra: Record<string, unknown> = {}) {
   const ext = path.extname(virtual).toLowerCase();
-  const style = virtual.split("/").length > 3 ? virtual.split("/")[2] : "";
-  return { path: virtual, source: "upload", ext, siblings: { [ext]: virtual }, n_questions: 0, license: "your file", style,
-    credit: "your upload: not in the dataset, kept only on this machine (temp folder)", title: path.basename(virtual), source_url: "" };
+  const parts = virtual.split("/");
+  const style = parts.length > 3 ? parts[2] : "";
+  const siblings: Record<string, string> = { [ext]: virtual };
+  let set: string[] = [];
+  const abs = uploadAbs(virtual);
+  if (abs && !style) {
+    const vdir = parts.slice(0, 2).join("/");
+    const names = fs.readdirSync(path.dirname(abs)).filter((n) => !n.startsWith(".") && UPLOAD_EXT.has(path.extname(n).toLowerCase())).sort();
+    const stem = path.parse(abs).name;
+    for (const n of names) if (n !== parts[2] && path.parse(n).name === stem) siblings[path.extname(n).toLowerCase()] = `${vdir}/${n}`;
+    const ifcs = names.filter((n) => n.toLowerCase().endsWith(".ifc"));
+    if (ext !== ".ifc" && !siblings[".ifc"] && ifcs.length === 1) siblings[".ifc"] = `${vdir}/${ifcs[0]}`;
+    if (names.length > 1) set = names.map((n) => `${vdir}/${n}`);
+  }
+  return { path: virtual, source: "upload", ext, siblings, n_questions: 0, license: "your file", style, set,
+    credit: "your upload: not in the dataset, kept only on this machine (temp folder)", title: path.basename(virtual), source_url: "", ...extra };
+}
+/** R2's image-content style guess (experiments/r2/style/style.py, ~0.1 s, no model call; p >= 0.8 is 96.7 % right on
+ * held-out drawings). Only "cubicasa5k" changes how the file is read (stored under data/cubicasa5k/: Q 09:58 measured
+ * 64/64 answers identical to the dataset path; without it the per-concept gate is skipped: confident misses 24 -> 46). */
+const STYLE_MIN_P = 0.8;
+function guessStyle(abs: string): Promise<{ style: string; p: number } | null> {
+  const code = "import json,sys; sys.path.insert(0,'experiments/r2/style'); import style; s,p=style.guess_style(sys.argv[1]); print(json.dumps({'style':s,'p':round(float(p),3)}))";
+  return new Promise((resolve) => {
+    execFile(PY, ["-c", code, abs], { cwd: KG_REPO, timeout: 30_000 }, (err, stdout) => {
+      try {
+        resolve(err ? null : JSON.parse(stdout.trim().split("\n").pop()!));
+      } catch {
+        resolve(null);
+      }
+    });
+  });
 }
 async function saveUpload(name: string, body: Buffer, style = "") {
   const safe = path.basename(name).replace(/[^\w.\- ()]+/g, "_").replace(/^\.+/, "").slice(-120) || "upload";
   const ext = path.extname(safe).toLowerCase();
   if (!UPLOAD_EXT.has(ext)) throw Object.assign(new Error(`only ${[...UPLOAD_EXT].join(", ")} files`), { status: 415 });
   if (!body.length || body.length > UPLOAD_MAX) throw Object.assign(new Error(`file is empty or over ${UPLOAD_MAX >> 20} MB`), { status: 413 });
-  if (style && (!UPLOAD_STYLES.has(style) || ![".png", ".jpg", ".jpeg"].includes(ext))) style = "";
+  const image = [".png", ".jpg", ".jpeg"].includes(ext);
+  // style: "cubicasa5k" (declared), "auto" (guess from the image), anything else: none
+  let guess: { style: string; p: number } | null = null;
+  if (style === "auto" && image) {
+    const plainId = createHash("sha256").update(body).digest("hex").slice(0, 12);
+    const plain = path.join(UPLOADS, plainId, safe);
+    fs.mkdirSync(path.dirname(plain), { recursive: true });
+    if (!fs.existsSync(plain)) fs.writeFileSync(plain, body);
+    guess = await guessStyle(plain);
+    style = guess && guess.p >= STYLE_MIN_P && UPLOAD_STYLES.has(guess.style) ? guess.style : "";
+    if (!style) return uploadInfo(`upload/${plainId}/${safe}`, guess ? { style_guess: guess } : {});
+  }
+  if (style && (!UPLOAD_STYLES.has(style) || !image)) style = "";
   const id = createHash("sha256").update(style).update(body).digest("hex").slice(0, 12);
   const dir = style ? path.join(UPLOADS, id, "data", style) : path.join(UPLOADS, id);
   fs.mkdirSync(dir, { recursive: true });
   const abs = path.join(dir, safe);
   if (!fs.existsSync(abs)) fs.writeFileSync(abs, body);
-  return uploadInfo(style ? `upload/${id}/${style}/${safe}` : `upload/${id}/${safe}`);
+  return uploadInfo(style ? `upload/${id}/${style}/${safe}` : `upload/${id}/${safe}`, guess ? { style_guess: guess } : {});
+}
+/** Files uploaded together → one new folder named by their content (ids + names), files hard-linked (else copied). */
+function linkUploads(paths: unknown) {
+  const list = Array.isArray(paths) ? paths.map(String) : [];
+  const srcs = list.map((v) => ({ v, abs: uploadAbs(v), name: v.split("/").pop()! }));
+  if (srcs.length < 2 || srcs.some((s) => !s.abs || s.v.split("/").length !== 3))
+    throw Object.assign(new Error("a set needs 2+ uploaded files (not style-tagged images)"), { status: 400 });
+  if (new Set(srcs.map((s) => s.name)).size !== srcs.length) throw Object.assign(new Error("two files with the same name"), { status: 400 });
+  const id = createHash("sha256").update(srcs.map((s) => `${s.v.split("/")[1]}/${s.name}`).sort().join("\n")).digest("hex").slice(0, 12);
+  const dir = path.join(UPLOADS, id);
+  fs.mkdirSync(dir, { recursive: true });
+  for (const s of srcs) {
+    const to = path.join(dir, s.name);
+    if (fs.existsSync(to)) continue;
+    try {
+      fs.linkSync(s.abs!, to);
+    } catch {
+      fs.copyFileSync(s.abs!, to);
+    }
+  }
+  return { files: srcs.map((s) => uploadInfo(`upload/${id}/${s.name}`)) };
 }
 const ASK_UPLOAD = path.resolve(__dirname, "../server/ask_upload.py");
 const uploadAnswers = new Map<string, Promise<Record<string, unknown>>>();
@@ -428,7 +493,7 @@ function askUpload(b: { path: string; question?: string; solver?: string; solver
   const hit = uploadAnswers.get(key);
   if (hit) return hit.then((a) => ({ ...a, cached: true }));
   const p = new Promise<Record<string, unknown>>((resolve, reject) => {
-    const child = execFile(PY, [ASK_UPLOAD], { cwd: KG_REPO, timeout: 600_000, maxBuffer: 64 << 20, env: { ...process.env, STOA_DATA: DATA } },
+    const child = execFile(PY, [ASK_UPLOAD], { cwd: KG_REPO, timeout: 600_000, maxBuffer: 64 << 20, env: { ...process.env, STOA_DATA: DATA, STOA_TEXT_BACKEND: process.env.STOA_TEXT_BACKEND ?? "local2" } },
       (err, stdout, stderr) => {
         if (err) return reject(new Error(`the solver failed on this file: ${String(stderr || err.message).trim().split("\n").slice(-1)[0]}`));
         try {
@@ -449,6 +514,14 @@ async function handleUpload(req: Connect.IncomingMessage, res: http.ServerRespon
     try {
       const info = await saveUpload(url.searchParams.get("name") ?? "upload", await readBody(req), url.searchParams.get("style") ?? "");
       send(res, 200, info, "disk");
+    } catch (e) {
+      send(res, (e as { status?: number }).status ?? 500, { detail: (e as Error).message }, "disk");
+    }
+    return true;
+  }
+  if (route === "/upload/set" && req.method === "POST") {
+    try {
+      send(res, 200, linkUploads(JSON.parse((await readBody(req)).toString() || "{}").paths), "disk");
     } catch (e) {
       send(res, (e as { status?: number }).status ?? 500, { detail: (e as Error).message }, "disk");
     }
