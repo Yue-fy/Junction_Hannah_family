@@ -513,6 +513,11 @@ def _crosscheck(path: str, intent, answer) -> str | None:
     val = _val(answer)
     if not isinstance(val, (int, float)) or isinstance(val, bool):
         return None
+    # a count of elements filtered by a size ('doors on 1.korrus wider than 1 m' = 11 of 46) is a subset, not the
+    # storey total: comparing it with the storey's 46 was a false ✗ (pipeline 0.85 -> 0.60; W1 c8)
+    if any(re.match(r"(\[ifc\] )?(dimension question:|threshold:|equal:|distinct )", str(t))
+           for t in (getattr(answer, "trace", None) or (answer.get("trace", []) if isinstance(answer, dict) else []))):
+        return None
     if src == "ifc_models":
         from stoa.solvers.ifc.index import load_index
         from stoa.solvers.ifc.plan2d import plan_items
