@@ -337,6 +337,14 @@ def parse(question: str) -> Intent:
                 if len(quoted) >= 2:
                     filters["room"] = quoted[0]
                     scope = "room"
+                    # "on '1.korrus' does 'KORIDOR (119)' take" / "on 'A' …, leaving out 'B'": the name right after a
+                    # storey preposition is the storey, whatever its position (W4 novel: roles were swapped)
+                    pos = [m.start() for m in re.finditer(r"<q>", q_noquote)]
+                    st = [i for i, p in enumerate(pos) if re.search(
+                        r"\b(?:on|op|på|auf|im|sur|au|dans|del|della|sul|kerroksessa|korrusel)\s*$", q_noquote[:p], re.I)]
+                    if len(pos) == len(quoted) and len(st) == 1:
+                        filters["storey"] = quoted[st[0]]
+                        filters["room"] = next(x for i, x in enumerate(quoted) if i != st[0])
     if task in ("area",) and scope == "drawing" and (_NUMBERED.search(q_noquote) or _OUTDOOR_EXCL.search(q)):
         scope, target = "floor_total", "room"
     if scope == "storey" and task in ("area", "volume", "length") and _TOTAL.search(q_noquote):
