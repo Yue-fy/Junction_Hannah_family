@@ -181,9 +181,19 @@ def test_protect_keeps_grouped_thousands_as_one_number():
 def test_should_translate_fires_on_unread_compositions_outside_rule_languages():
     from stoa.llm import should_translate
 
-    # Swedish 'och' + 'totalt': the composer reads neither, so the question reached the LoRA as balconies only
-    assert should_translate("Hur många toalettstolar och balkonger finns det totalt på planritningen?")
-    assert should_translate("Hur många sovrum och bastur finns det totalt på planritningen?")
+    from stoa.router.compose import _TOGETHER
+    from stoa.router.intent import targets_mentioned
+
+    # Swedish 'och' with no 'total' word at all: the composer never splits it, so the front end must
+    assert should_translate("Hur många sovrum och bastur finns det på planritningen?")
+    assert should_translate("Hur många toalettstolar och balkonger finns det på planritningen?")
+    # Swedish 'och' + 'totalt' reached the LoRA as ONE class (balconies only). W4 08:54: once the composer reads
+    # 'totalt' / the Swedish nouns, these are EITHER composed (two classes + a total word) OR translated, never neither
+    for q in ("Hur många toalettstolar och balkonger finns det totalt på planritningen?",
+              "Hur många sovrum och bastur finns det totalt på planritningen?",
+              "Hur många sovrum och bastur finns det sammanlagt på planritningen?"):
+        composed = len(set(targets_mentioned(q)) - {"apartment", "room"}) >= 2 and _TOGETHER.search(q)
+        assert should_translate(q) or composed, q
     # two classes + a 'total' word the composer reads (NL 'in totaal'): keep the original (no translation cap)
     assert not should_translate("Hoeveel deuren en ramen staan er in totaal op deze plattegrond?")
     # rule languages compose themselves; no conjunction -> nothing to split
