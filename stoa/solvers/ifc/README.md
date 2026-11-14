@@ -175,3 +175,27 @@ the model's own rooms and counts) had 12/28 right with 9 confident-wrong -> 28/2
 No dataset question (0 of 3,034 non-test ifc_models / ifc_bench) uses these wordings; ifc_models train/dev/hard/hard2
 0 answers changed; F's area (137) and count (301) probes 0 changed; c4–c6 probes (266) 0 changed. Tests:
 `tests/test_ifc_c7.py`.
+Later in cycle 7 (all probes written before fixing; outputs in `$JUNCTION_SHARED/artifacts/W1/probes-c7/`):
+- **Ground floor role** (F 09:24, a confident-wrong class: smiley 'walls on the ground floor' = whole model 281 @ 0.97):
+  `parse.storey_mention` maps 'ground floor / ground level / Erdgeschoss / rez-de-chaussée / pohjakerros …' to a
+  storey NAMED so (EG, Erdgeschoss, GF, RDC, Begane grond, E00…), else `_repair_intent` picks the floor with rooms or
+  doors nearest elevation 0 (≤ 0.85; esplanades '1.korrus', clinic 'First Floor', warmond '1. Level'), else cap 0.5.
+  'above/below ground level' is a reference height (`ground_reference`), not the role. 13-Q probe on 9 models: 6
+  confident-wrong -> 13/13; F's storey-role probe 114/114.
+- **2D on another storey's sheet**: a question about storey S asked on the sheet of T is boxed and cross-checked on S's
+  own plan (it compared with T's drawing and lowered right answers to 0.75).
+- **Links** (Q v20, R1's kg probe): 'does this drawing not show', German/French/Finnish/Estonian agree words
+  ('stimmen … überein', 'même nombre … maquette'), sheet of a storey ('Which sheet is the floor plan of 3.korrus /
+  shows the attic'), sheets in total (plans + sections + elevations), 'how many section / elevation drawings' and
+  'is there a section drawing' (sibling files `<model>_section-*.pdf`), storeys without their own plan, 'more windows
+  in the model than the plan shows', 'the plan shows doors the model assigns to other storeys'. Q v20 6/19 -> 24/24
+  (19 + 5 own), R1 probe 11/21 with 4 confident-wrong -> 20/21, 0 (kg07 'another dataset' is R1's kg_qa).
+- **Storeys with none of a kind**: 'Which storeys of the model have no rooms at all?' (0.85 when the class is used on
+  other storeys, else 0.5).
+- **Lists** (Q v24): excluded room types (`room_exclusions`: 'apart from the living rooms and kitchens', '… are not
+  living rooms', 'except the bedrooms'), list questions after a leading clause, ties name every room equal to the
+  centimetre ('largest room on Level 2' -> 4 bedrooms).
+- **Two questions in any language** (`_two_q`): 'Montako ovea ja montako ikkunaa …' (the translation merged them into a
+  sum); the original wording is split when the translation lost the second question.
+- `factcard.answer_free_text` uses `llm.text_backend()` (S0 D21; inert unless `STOA_TEXT_BACKEND=local2`).
+Every step: ifc_models train/dev/hard/hard2 0 answers changed; 0 of 3,882 dataset IFC questions match the new patterns.

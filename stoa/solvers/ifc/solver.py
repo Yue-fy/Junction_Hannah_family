@@ -17,6 +17,7 @@ Definitions (measured on the TRAIN split, experiments/w1/explore_defs.py, all 10
 
 from __future__ import annotations
 
+import functools
 import re
 import time
 from collections import Counter
@@ -171,11 +172,94 @@ def _ascii_drop(s: str) -> str:
     return re.sub(r"[^a-z0-9]+", "", (s or "").lower().encode("ascii", "ignore").decode())
 
 
+def _storey_by_tags(path: str, idx: IfcIndex) -> tuple[Storey | None, str]:
+    """The storey a sheet shows, from the IFC GlobalIds tagged in its SVG twin (for sheets whose file name says
+    nothing: uploads 'A101.pdf', hashed copies; F 09:39: 'this floor plan' was answered for the whole model). A floor
+    plan tags most rooms of ONE storey: the storey holding >= 80% of the tagged rooms/doors/windows/walls, and the
+    sheet tags >= 50% of that storey's rooms (a section cuts a few rooms of several storeys)."""
+    if Path(path).suffix.lower() not in (".pdf", ".svg"):
+        return None, "not a sheet"
+    try:
+        from stoa.solvers.ifc.plan2d import plan_items
+
+        items = plan_items(str(path))
+    except Exception:  # noqa: BLE001 - unreadable twin: no storey
+        return None, "no readable SVG twin"
+    votes: Counter = Counter()
+    rooms: Counter = Counter()
+    for g, itm in items.items():
+        e = idx.elements.get(g)
+        if e is None or not e.storey or e.cls not in ("IfcSpace", "IfcDoor", "IfcWindow", "IfcWall", "IfcWallStandardCase"):
+            continue
+        votes[e.storey] += 1
+        if e.cls == "IfcSpace":
+            rooms[e.storey] += 1
+    if sum(votes.values()) < 3:
+        return None, "no plan tags"
+    sg, n = votes.most_common(1)[0]
+    st = next((s_ for s_ in idx.storeys if s_.guid == sg), None)
+    if st is None or n < 0.8 * sum(votes.values()):
+        return None, "tags of several storeys (not a floor plan)"
+    n_sp = len(idx.in_storey(sg, "IfcSpace"))
+    if n_sp and rooms[sg] < 0.5 * n_sp:
+        return None, f"only {rooms[sg]} of the {n_sp} rooms of '{st.name}' tagged (a section?)"
+    return st, f"sheet tags {n} elements of storey '{st.name}' ({n / sum(votes.values()):.0%} of its tagged elements)"
+
+
+_PLAN_TITLE = re.compile(r"(?:floor ?plan|plan|grundriss|plattegrond|pohjapiirustus|plaan|plan d.etage|planta|pianta|rzut|"
+                         r"planritning)\s*(?:of|von|van|de|du|del|di)?\s*[:\-\u2013\u2014]\s*(.{1,60}?)\s*$", re.I)
+
+
+@functools.lru_cache(maxsize=256)
+def _sheet_text_lines(path: str) -> tuple[str, ...]:
+    try:
+        import pymupdf
+
+        doc = pymupdf.open(str(abspath(path)))
+        lines = [ln.strip() for ln in doc[0].get_text().splitlines() if ln.strip()]
+        doc.close()
+        return tuple(lines)
+    except Exception:  # noqa: BLE001 - no text layer / not a PDF
+        return ()
+
+
+def _storey_by_title(path: str, idx: IfcIndex) -> tuple[Storey | None, str]:
+    """'… — Floor plan: Intermediate level 1' in the sheet's title line (F 09:39: the sheets rendered from the
+    model carry it; tags alone confuse an intermediate level's plan with the floor it cuts through)."""
+    if Path(path).suffix.lower() != ".pdf":
+        return None, "not a PDF"
+    for ln in _sheet_text_lines(str(path)):
+        m = _PLAN_TITLE.search(ln)
+        if not m:
+            continue
+        name = m.group(1).strip()
+        exact = [s_ for s_ in idx.storeys if fold(s_.name or "") == fold(name)]
+        if len(exact) == 1:
+            return exact[0], f"sheet title '{ln[:80]}' names storey '{exact[0].name}'"
+        ms = match_storey(idx, name)
+        if ms is not None and ms.score >= 90:
+            return ms.obj, f"sheet title '{ln[:80]}' ~ storey '{ms.obj.name}'"
+    return None, "no storey in the sheet title"
+
+
+def is_plan_sheet(path: str, idx: IfcIndex) -> bool:
+    """A floor plan sheet: named '<model>_plan-NN-…', or a .pdf/.svg whose tags show one storey."""
+    if Path(path).suffix.lower() not in (".pdf", ".svg"):
+        return False
+    return "_plan-" in Path(path).stem or (_storey_by_title(path, idx)[0] or _storey_by_tags(path, idx)[0]) is not None
+
+
 def plan_storey(path: str, idx: IfcIndex) -> tuple[Storey | None, str]:
-    """Storey shown on a rendered plan `<model>_plan-NN-<level-slug>.pdf` (slug match, NN breaks ties)."""
+    """Storey shown on a rendered plan `<model>_plan-NN-<level-slug>.pdf` (slug match, NN breaks ties); for a sheet
+    whose name says nothing, the storey its GlobalId tags show (`_storey_by_tags`)."""
     m = re.search(r"_plan-(\d+)-(.+)$", Path(path).stem)
     if not m:
-        return None, "not a plan file"
+        if "_section-" in Path(path).stem or "_elevation-" in Path(path).stem:
+            return None, "not a plan file"
+        st_, why_ = _storey_by_title(path, idx)
+        if st_ is None:
+            st_, why_ = _storey_by_tags(path, idx)
+        return (st_, why_) if st_ is not None else (None, "not a plan file")
     nn, slug = int(m.group(1)), m.group(2)
     for key in (norm, _ascii_drop):
         hits = [s for s in idx.storeys if key(s.name) == key(slug)]
@@ -339,6 +423,34 @@ def rooms_named(idx: IfcIndex, question: str) -> tuple[list[Element], str]:
         if what:
             found, how = grp, f"rooms {'labelled' if h == 'label' else 'of type'} '{what}'"
     return found, how
+
+
+_EXCL_RX = re.compile(r"\b(?:except(?: for)?|apart from|other than|excluding|exclusive of|besides|but not|without|not|"
+                      r"ausser|ausgenommen|ohne|behalve|zonder|sauf|hormis|excepto|salvo|tranne|eccetto|paitsi|lukuun ottamatta|"
+                      r"valja arvatud|v\u00e4lja arvatud|utom|bortsett fran|oprocz|poza)\s+(?:the |die |de |le |la |les |los |"
+                      r"las |i |gli |a |an )?((?:[^\s,?;:.]+\s*){1,6}?)(?=,|\?|;|\.|\bwhich\b|\bwhat\b|\bare\b|\bis\b|"
+                      r"\bon\b|\bin\b|\blarger\b|\bsmaller\b|\bwith\b|$)")
+
+
+def room_exclusions(idx: IfcIndex, question: str) -> tuple[str, set[str], list[str]]:
+    """Room sets a question EXCLUDES ('Apart from the living rooms and kitchens, which rooms …', '… are not living
+    rooms', 'except the bedrooms'): (question without those phrases, excluded space GUIDs, what was excluded). Q v24:
+    'which rooms larger than 10 m² are not living rooms' was read as the living rooms (0.89)."""
+    base = fold(question)
+    masked = _QUOTED_RX.sub(lambda m: "_" * len(m.group(0)), base)  # same length: offsets stay valid
+    out_q, ex, what = base, set(), []
+    for m in _EXCL_RX.finditer(masked):
+        phrase = m.group(1)
+        for part in re.split(r"\s*(?:,|\band\b|\bor\b|\bund\b|\ben\b|\bet\b|\by\b|\be\b|\bja\b|\boch\b)\s*", phrase):
+            if not part.strip():
+                continue
+            w, grp, _ = room_filter(idx, part)
+            if w:
+                ex |= {e.guid for e in grp}
+                what.append(w)
+        if what:
+            out_q = out_q[:m.start()] + " " * (m.end() - m.start()) + out_q[m.end():]
+    return (out_q if ex else question), ex, what
 
 
 _OUTLINE_CLASSES = ("IfcSpace", "IfcWall", "IfcWallStandardCase", "IfcColumn", "IfcCurtainWall")
@@ -515,19 +627,35 @@ class IfcSolver(BaseSolver):
     # ------------------------------------------------------------------------------------------------
     _PVM_AGREE = re.compile(r"\b(agree\w*|match(es)?|consistent|same (number|count)|correspond\w*|tally|differ\w*|"
                             r"discrepan\w*|mismatch\w*|uberein\w*|ueberein\w*|stimmen|stimmt|overeen\w*|vastaa\w*|"
-                            r"kooskola\w*|sama palju|samma antal|coincid\w*|concord\w*|zgodn\w*|corrispond\w*)\b")
+                            r"kooskola\w*|sama palju|samma antal|coincid\w*|concord\w*|zgodn\w*|corrispond\w*|"
+                            r"meme nombre|meme quantite|zelfde aantal|gleiche anzahl|sama maara|ta sama liczba|"
+                            r"mismo numero|stesso numero)\b")
     _PVM_PLAN = re.compile(r"\b(plan|drawing|sheet|2d|grundriss\w*|zeichnung|plattegrond|tekening|pohjapiirustu\w*|"
                            r"piirustu\w*|plaan\w*|joonis\w*|ritning\w*|dessin|plano|pianta|rzut\w*)\b")
-    _PVM_MODEL = re.compile(r"\b(model|ifc|bim|3d|modell\w*|malli\w*|mudel\w*|modele|modelo|modello)\b|ifc-")
+    _PVM_MODEL = re.compile(r"\b(model|ifc|bim|3d|modell\w*|malli\w*|mudel\w*|modele|modelo|modello|maquette)\b|ifc-")
+    _PVM_MORE = re.compile(r"\b(more|fewer|less)\b[^?]{0,60}\bthan\b[^?]{0,50}\b(plan|drawing|sheet|model|ifc)\b")
+    _PVM_OTHER = re.compile(r"\b(plan|drawing|sheet)\b[^?]{0,30}\b(shows?|draws?|contains?|includes?)\b[^?]{0,50}\b(that|which)\b"
+                            r"[^?]{0,20}\bmodel\b[^?]{0,15}\b(does not|doesn.t|do not|don.t)\b[^?]{0,10}\b(assign|place|put|"
+                            r"have|locate|attach)\w*|\bof (other|another|different) (storeys?|floors?|levels?)\b")
     _PVM_NOTDRAWN = re.compile(r"\bnot (drawn|shown|visible)\b|\bmissing (from|on) (the |this )?(plan|drawing|sheet)\b|"
                                r"\bin the model but not\b|\bonly in the model\b|\babsent from the (plan|drawing|sheet)\b|"
                                r"\b(plan|drawing|sheet)s?\b.{0,12}\b(not|n't|never) (show|draw|depict|include|contain)\b|"
                                r"\b(does|do|did)( not|n't) (this |the )?(floor )?(plan|drawing|sheet) (show|draw|depict|include)\b|"
                                r"\b(does|do) (this |the )?(floor )?(plan|drawing|sheet) not (show|draw|depict|include)\b")
     _PVM_KINDS = re.compile(r"\bhow many (section|elevation|facade)s?( drawings?| views?| sheets?| plans?)?\b|"
-                            r"\bnumber of (section|elevation|facade)s?( drawings?| views?| sheets?)?\b")
+                            r"\bnumber of (section|elevation|facade)s?( drawings?| views?| sheets?)?\b|"
+                            r"\b(?:is|are) there (?:an?y? |one )?(section|elevation|facade)s?( drawings?| views?| sheets?)?\b|"
+                            r"\b(wie viele|kuinka monta|hoeveel|combien|mitu|ile|hur manga)\b[^?]{0,20}?\b(schnitt\w*|leikkau\w*|"
+                            r"doorsnede\w*|coupe\w*|loige\w*|przekr\w*|sektion\w*|ansicht\w*|julkisivu\w*|aanzicht\w*|"
+                            r"gevel\w*|elevation\w*|facade\w*|vaade\w*|elewac\w*|fasad\w*)")
     _PVM_SHEETS = re.compile(r"\bhow many (floor )?(plan )?(sheets|plans|drawings|floor plans)\b|\bnumber of (floor )?(plan )?"
-                             r"(sheets|plans|drawings)\b")
+                             r"(sheets|plans|drawings)\b|\b(wie viele|wieviele) (grundrisse|plane|zeichnungen|blatter)\b|"
+                             r"\bkuinka monta (pohja)?piirustu\w*|\bhoeveel (plattegronden|tekeningen|bladen)\b|"
+                             r"\bcombien de (plans|dessins|feuilles)\b|\bmitu (plaani|joonist|korruse plaani)\w*|"
+                             r"\bile (rzutow|rysunkow|arkuszy)\b|\bhur manga (ritningar|planritningar)\b")
+    _SHEET_KIND_WORDS = {"section": r"section|schnitt\w*|leikkau\w*|doorsnede\w*|coupe\w*|przekr\w*|loige\w*|sektion\w*|sezion\w*",
+                         "elevation": r"elevation|facade|ansicht\w*|julkisivu\w*|aanzicht\w*|gevel\w*|fasad\w*|vaade\w*|elewac\w*|"
+                                      r"prospett\w*|alzad\w*"}
 
     _PVM_ALL = re.compile(r"\b(show|shows|draw|draws|include|includes|contain|contains|depict\w*)\b.{0,25}\b(every|all|each)\b|"
                           r"\b(every|all|each)\b.{0,50}\b(drawn|shown|depicted|included|visible)\b")
@@ -597,28 +725,66 @@ class IfcSolver(BaseSolver):
         from stoa.solvers.ifc.plan2d import plan_items, plans_of_model
 
         qf = fold(_QUOTED_RX.sub(" ", question))
-        if self._PVM_SHEETS.search(qf) and not re.search(r"\b(door|window|room|wall|column)", qf):
+        no_el = not re.search(r"\b(door|window|room|wall|column)", qf)
+        folder = abspath(model).parent
+        def sheets_of(kind_: str) -> list[str]:
+            return [str(Path(model).parent / f.name) for f in sorted(folder.glob(f"{Path(model).stem}_{kind_}-*.pdf"))]
+        mk = self._PVM_KINDS.search(qf)
+        if self._PVM_SHEETS.search(qf) and no_el and not mk:
             plans = sorted(plans_of_model(model).items(), key=lambda kv: kv[1])
             if not plans:
                 return None
             names = {st.guid: st.name for st in idx.storeys}
             ev = [Evidence(file=p, page=0, note=f"plan of storey '{names.get(g, '?')}'") for g, p in plans]
+            secs, elevs = sheets_of("section"), sheets_of("elevation")
+            all_kinds = re.search(r"\b(in total|altogether|all (the )?(sheets|drawings)|every (sheet|drawing)|sections?|"
+                                  r"elevations?|of any kind|including)\b", qf) and not re.search(r"\bfloor ?plans?\b|\bplan sheets?\b", qf)
+            if all_kinds:
+                # 'How many sheets in total belong to this building (plans, sections and elevations)?' (R1 kg09: 4 vs 10)
+                n_all = len(plans) + len(secs) + len(elevs)
+                return Answer(value=n_all, unit="count", confidence=0.85, solver=self.name,
+                              evidence=ev + [Evidence(file=r, page=0, note="section") for r in secs]
+                              + [Evidence(file=r, page=0, note="elevation") for r in elevs],
+                              trace=[f"sheets of {Path(model).name}: {len(plans)} plans + {len(secs)} sections + "
+                                     f"{len(elevs)} elevations = {n_all}"],
+                              assumptions=["sheets = every drawing rendered from this model (floor plans, sections, "
+                                           "elevations)"], missing=[])
             return Answer(value=len(plans), unit="count", confidence=0.85, evidence=ev, solver=self.name,
                           trace=["plan sheets rendered from the model: " + ", ".join(Path(p).name for _, p in plans)],
                           assumptions=["plan sheets = the floor plan files of this model (one per storey drawn); "
-                                       "sections and elevations not counted"], missing=[])
-        mk = self._PVM_KINDS.search(qf)
-        if mk and not re.search(r"\b(door|window|room|wall|column)", qf):
-            # 'How many section / elevation drawings belong to this model?' (Q v20): the model's sibling files
-            kind_ = {"facade": "elevation"}.get(mk.group(1) or mk.group(3), mk.group(1) or mk.group(3))
-            folder = abspath(model).parent
-            files = sorted(folder.glob(f"{Path(model).stem}_{kind_}-*.pdf"))
-            rel = [str(Path(model).parent / f.name) for f in files]
-            return Answer(value=len(files), unit="count", confidence=0.8 if files else 0.5,
-                          evidence=[Evidence(file=r, page=0, note=f"{kind_} drawing") for r in rel], solver=self.name,
-                          trace=[f"{kind_} drawings of {Path(model).name}: " + (", ".join(f.name for f in files) or "none")],
+                                       f"sections ({len(secs)}) and elevations ({len(elevs)}) not counted"], missing=[])
+        if mk and no_el:
+            # 'How many section / elevation drawings belong to this model?' (Q v20), 'Is there a section drawing in the
+            # set?', Finnish 'Kuinka monta leikkauspiirustusta …' (R1 kg13/kg18): the model's sibling files
+            kind_ = next((k for k, rx in self._SHEET_KIND_WORDS.items() if re.search(r"\b(" + rx + r")", mk.group(0))), "section")
+            rel = sheets_of(kind_)
+            evs = [Evidence(file=r, page=0, note=f"{kind_} drawing") for r in rel]
+            if re.match(r"\s*(is|are) there\b", qf):
+                return Answer(value=f"{'yes' if rel else 'no'} ({len(rel)} {kind_} drawing{'s' if len(rel) != 1 else ''})",
+                              unit=None, confidence=0.85 if rel else 0.6, evidence=evs, solver=self.name,
+                              trace=[f"{kind_} drawings of {Path(model).name}: " + (", ".join(Path(r).name for r in rel) or "none")],
+                              assumptions=[f"the set = the drawings rendered from this model ({kind_}-*.pdf)"], missing=[])
+            return Answer(value=len(rel), unit="count", confidence=0.8 if rel else 0.5,
+                          evidence=evs, solver=self.name,
+                          trace=[f"{kind_} drawings of {Path(model).name}: " + (", ".join(Path(r).name for r in rel) or "none")],
                           assumptions=[f"{kind_} drawings = the {kind_} sheets rendered from this model ({kind_}-*.pdf)"],
-                          missing=[] if files else [f"no {kind_} sheet exists for this model in the dataset"])
+                          missing=[] if rel else [f"no {kind_} sheet exists for this model in the dataset"])
+        # 'Welche Geschosse des Modells haben keinen eigenen Grundriss?' / 'Which storeys have no floor plan?' (R1 kg02)
+        if re.search(r"\b(which|what|welche\w*|mitka|millised|quels?|quelles?|welke|vilka|ktore)\b[^?]{0,40}\b(storeys?|stor(y|ies)|"
+                     r"floors?|levels?|geschosse?|kerrokset|korrused|etages?|verdiepingen|vaningar|kondygnacje)\b[^?]{0,40}\b("
+                     r"no|without|keine\w*|ohne|ilman|ei ole|pole|sans|zonder|utan|bez)\b[^?]{0,25}\b(own |eigene\w* |"
+                     r"oma\w* )?(floor ?plan|plan|grundriss|pohjapiirustu\w*|plattegrond|korruse plaan\w*|plaan\w*|plan d.etage|"
+                     r"ritning|rzut\w*|sheet|drawing)", qf):
+            have = set(plans_of_model(model))
+            sts = sorted(own_storeys(idx), key=lambda st: st.elevation or 0.0)
+            miss = [st for st in sts if st.guid not in have]
+            return Answer(value=("; ".join(st.name for st in miss) if miss else "none: every storey has a floor plan"),
+                          unit=None, confidence=0.85, solver=self.name,
+                          evidence=[Evidence(file=model, ifc_guid=st.guid, note=f"IfcBuildingStorey {st.name}: no plan sheet")
+                                    for st in miss],
+                          trace=[f"storeys with a plan sheet: {len(have)} of {len(sts)}"],
+                          assumptions=["a storey's own floor plan = a plan sheet rendered for that IfcBuildingStorey"],
+                          missing=[])
         if self._PVM_WHICH_SHEET.search(qf):
             st_ = self._storey_asked(idx, question) if not re.search(r"\b(room|space)s?\b", qf) else None
             if st_ is not None:
@@ -639,7 +805,12 @@ class IfcSolver(BaseSolver):
         complete = bool(self._PVM_ALL.search(qf) and self._PVM_PLAN.search(qf) and self._PVM_MODEL.search(qf))
         agree = agree or complete
         notdrawn = bool(self._PVM_NOTDRAWN.search(qf))
-        if not (agree or notdrawn):
+        mm_ = self._PVM_MORE.search(qf)
+        # 'Does the model contain more windows on S than the S floor plan shows?' (R1 kg12: 'no (36 = 36)' @ 0.89)
+        more_q = bool(mm_ and self._PVM_PLAN.search(qf) and self._PVM_MODEL.search(qf))
+        # 'Does the UG2 floor plan show doors that the model does not assign to UG2?' (R1 kg21)
+        other_q = bool(self._PVM_OTHER.search(qf) and self._PVM_PLAN.search(qf))
+        if not (agree or notdrawn or more_q or other_q):
             return None
         it = parse(question)
         kind = it.kind if it.kind in ("door", "window", "space", "wall", "column", "stair", "slab") else None
@@ -652,7 +823,7 @@ class IfcSolver(BaseSolver):
             if ms is not None and ms.score >= 90:
                 storey = ms.obj
                 break
-        asked_plan = Path(path).suffix.lower() in (".pdf", ".svg") and "_plan-" in Path(path).stem
+        asked_plan = is_plan_sheet(path, idx)
         if storey is None and asked_plan:
             storey = plan_storey(path, idx)[0]
         if storey is None:
@@ -693,6 +864,25 @@ class IfcSolver(BaseSolver):
                           trace=trace + [f"in the model but not drawn: {len(on)} - {len(drawn)} = {len(missing_els)}; "
                                          + why_nd],
                           solver=self.name, assumptions=asm, missing=[])
+        if other_q and not more_q:
+            txt = (f"{'yes' if other else 'no'}: {Path(plan).name} draws {len(other)} {word} that the model assigns to "
+                   f"other storeys than '{storey.name}'" + (f" (and {len(drawn)} of the {len(on)} of '{storey.name}')"))
+            ev_o = [Evidence(file=plan, page=0, bbox=list(items[g].bbox), ifc_guid=g, note=f"{items[g].cls} of another storey")
+                    for g in other][:MAX_EVIDENCE]
+            return Answer(value=txt, unit=None, confidence=0.85, evidence=ev_o or ev[:MAX_EVIDENCE], trace=trace,
+                          solver=self.name, assumptions=asm, missing=[])
+        if more_q:
+            pre = qf[:mm_.start()]
+            subj_plan = bool(self._PVM_PLAN.search(pre)) and (not self._PVM_MODEL.search(pre) or
+                                                             self._PVM_PLAN.search(pre).start() < self._PVM_MODEL.search(pre).start())
+            n_plan = len(drawn) + len(other)
+            a_, b_ = (n_plan, len(on)) if subj_plan else (len(on), n_plan)
+            res = a_ > b_ if mm_.group(1) == "more" else a_ < b_
+            txt = (f"{'yes' if res else 'no'}: the model has {len(on)} {word} on '{storey.name}', the plan draws {n_plan}"
+                   + (f" ({len(missing_els)} of the model's not drawn; {why_nd})" if missing_els else "")
+                   + (f" ({len(other)} of other storeys)" if other else ""))
+            return Answer(value=txt, unit=None, confidence=0.85, evidence=(ev or [self._ev(model, e, e.eff_cls) for e in drawn])[:MAX_EVIDENCE],
+                          trace=trace, solver=self.name, assumptions=asm, missing=[])
         if complete and not self._PVM_AGREE.search(qf):
             txt = (f"yes: all {len(on)} {word} of the model on '{storey.name}' are drawn on {Path(plan).name}" if not missing_els
                    else f"no: {len(drawn)} of the {len(on)} {word} of the model on '{storey.name}' are drawn; "
@@ -998,6 +1188,31 @@ class IfcSolver(BaseSolver):
             return None
         which = self._WHICH_FLOORS.search(t)
         howmany = self._HOWMANY_FLOORS.search(t)
+        # ---- (0) storeys with none of a kind: 'Which storeys of the model have no rooms at all?' (R1 kg19: a room @ 0.90)
+        mz = re.search(r"\b(no|without|zero|not any|keine\w*|ohne|ilman|pole|sans|zonder|utan|bez|geen)\s+((?:[\w-]+\s+){0,2}?"
+                       r"[\w-]+?)(?=\s+(?:at all|on|in|whatsoever)\b|\s*[?.!]|\s*$)", t)
+        if (which or howmany) and mz and not _TH.search(t):
+            kind0 = parse(f"How many {mz.group(2)}?").kind
+            if kind0 not in (None, "storey"):
+                kw0 = mz.group(2) if (kind0 != "space" or room_filter(idx, mz.group(2))[0]) else "rooms"
+                rows0 = []
+                for st in sts:
+                    a, _, _ = self._core(path, model, idx, f"How many {kw0} are there on '{st.name}'?")
+                    if a.value is None or isinstance(a.value, str) or a.unit != "count":
+                        return None
+                    rows0.append((st, int(a.value), a))
+                none_ = [st for st, n, _ in rows0 if n == 0]
+                trace.append(f"storeys with no {kw0}: " + ", ".join(f"'{st.name}' {n}" for st, n, _ in rows0))
+                # a zero is reliable when the model uses that class on other storeys (then it is not modelled as proxies)
+                conf0 = 0.85 if any(n for _, n, _ in rows0) else 0.5
+                ev0 = [Evidence(file=model, ifc_guid=st.guid, note=f"IfcBuildingStorey {st.name}: 0 {kw0}") for st in none_]
+                asm0 = [f"per storey with the same rule as 'How many {kw0} are on <storey>?'",
+                        "storeys with some: " + ", ".join(f"{st.name} ({n})" for st, n, _ in rows0 if n)]
+                if howmany and not which:
+                    return Answer(value=len(none_), unit="count", confidence=conf0, evidence=ev0, trace=trace,
+                                  solver=self.name, assumptions=asm0)
+                return Answer(value="; ".join(st.name for st in none_) if none_ else f"none: every storey has {kw0}",
+                              unit=None, confidence=conf0, evidence=ev0, trace=trace, solver=self.name, assumptions=asm0)
         # ---- (1) count / area threshold over storeys -----------------------------------------------------------
         mt = _TH.search(t)
         if (which or howmany) and mt:
@@ -2186,12 +2401,33 @@ class IfcSolver(BaseSolver):
             vals = [(v, e) for v, e in vals if e.guid not in zs]
             conf = min(conf, 0.85)
         order = sorted(vals, key=lambda x: x[0], reverse=big)
+        topk = next((int(n[5:]) for n in it.notes if n.startswith("topk:")), 0)
+        if topk >= 2:
+            top = order[:topk]
+            nxt = order[topk] if len(order) > topk else None
+            tie_b = nxt is not None and abs(nxt[0] - top[-1][0]) <= 0.005 + 0.0002 * abs(top[-1][0])
+            trace.append(f"{'largest' if big else 'smallest'} {len(top)} of {len(vals)} rooms {where_s}: "
+                         + "; ".join(f"{lab_of(e)} {v:.2f} m²" for v, e in top))
+            txt = "; ".join(f"{lab_of(e)} ({v:.2f} m²)" for v, e in top)
+            if tie_b:
+                txt += f" (tie at {top[-1][0]:.2f} m² with {lab_of(nxt[1])})"
+            return Answer(value=txt, unit=None, confidence=conf * 0.9 * (0.85 if tie_b else 1.0),
+                          evidence=[self._ev(model, e, f"#{i + 1} {lab_of(e)} {v:.2f} m²") for i, (v, e) in enumerate(top)],
+                          trace=trace, solver=self.name, assumptions=assumptions, missing=missing)
         v0, e0 = order[min(rank, len(order)) - 1]
         lab = lab_of(e0)
         trace.append(f"{'largest' if big else 'smallest'}{f' #{rank}' if rank > 1 else ''} of {len(vals)} rooms "
                      f"{where_s}: {lab} {v0:.2f} m²")
         ev = [self._ev(model, e0, f"{lab} {v0:.2f} m²")]
         if it.op.startswith("arg") or it.which:
+            # ties (Q v24: four bedrooms of duplex 'Level 2' at 22.04 m² -> one named): name every room within 0.05 m²
+            tied = [(v, e) for v, e in vals if abs(v - v0) <= 0.005 + 0.0002 * abs(v0)] if rank == 1 else [(v0, e0)]
+            if len(tied) > 1:
+                trace.append(f"tie: {len(tied)} rooms at {v0:.2f} m² (equal to the centimetre)")
+                return Answer(value=f"tie, {len(tied)} rooms at {v0:.2f} m²: " + "; ".join(lab_of(e) for _, e in tied),
+                              unit=None, confidence=conf * 0.9, evidence=[self._ev(model, e, f"{lab_of(e)} {v:.2f} m²")
+                                                                           for v, e in tied],
+                              trace=trace, solver=self.name, assumptions=assumptions, missing=missing)
             return Answer(value=f"{lab} ({v0:.2f} m²)", unit=None, confidence=conf * 0.9, evidence=ev,
                           trace=trace, solver=self.name, assumptions=assumptions, missing=missing)
         return self._final(v0, "m2", it, conf * 0.95, ev, trace, assumptions, missing)
@@ -2359,8 +2595,8 @@ class IfcSolver(BaseSolver):
             it.notes.append("between")
         mt0 = _TH0.search(qf)
         if (mt0 or mb) and it.kind in ("space", None) and re.search(
-                r"^\s*(which|what|list|name|show|give|welche\w*|millised|milliste|quels?|quelles?|cuales|quali|welke|"
-                r"vilka|mitka|ktore)\b", qf) and \
+                r"^\s*(?:[^?,]{3,70},\s*)?(which|what|list|name|show|give|welche\w*|millised|milliste|quels?|quelles?|cuales|"
+                r"quali|welke|vilka|mitka|ktore)\b", qf) and \
                 (re.search(r"\b(rooms|spaces|raume|raeume|ruumid|pieces|kamers|ruimtes|stanze|locali|habitaciones|"
                            r"huoneet|rummen|pomieszczenia)\b", qf) or room_filter(idx, question)[0]) and \
                 not re.search(r"\b(how many|number of|total|sum)\b", qf):  # 'Which bedrooms …' (Q v19)
@@ -2372,6 +2608,32 @@ class IfcSolver(BaseSolver):
             it.notes.append("threshold_list")
             trace.append("threshold list: which rooms pass")
         # ranks and medians: "the second largest room", "median room area"
+        # 'Which floor has the most rooms?' is a COUNT ranking (W5 09:47: ranked by room area @ 0.86, 'floor' read as floor
+        # area); only an area word or unit makes it an area ranking
+        mc_ = re.search(r"\b(most|fewest|least|greatest number of|highest number of|largest number of|lowest number of|"
+                        r"smallest number of)\s+(?:\w+\s+){0,2}?(rooms?|spaces?|doors?|windows?|walls?|columns?|stairs?|"
+                        r"slabs?|beams?)\b", qf)
+        if mc_ and it.metric in ("area", "text") and not re.search(r"\b(area|m2|square|sq|size|surface|volume|m3|length|"
+                                                                  r"large|big|small)\b", qf.replace(mc_.group(0), " ")):
+            it.metric = "count"
+            if it.op in (None, "max", "min"):
+                it.op = "argmin" if mc_.group(1) in ("fewest", "least", "lowest number of", "smallest number of") else "argmax"
+            trace.append(f"'{mc_.group(0)}' ranks by count, not by area")
+        # 'the three largest rooms', 'top 5 rooms', 'the 3 smallest rooms': a top-k list (W5 09:47: an LLM list @ 0.40)
+        _nw = {"two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10}
+        mk_ = re.search(r"\b(?:top\s+)?(\d{1,2}|two|three|four|five|six|seven|eight|nine|ten)\s+(largest|biggest|smallest|"
+                        r"tiniest)\s+(rooms|spaces)\b|\btop\s+(\d{1,2}|two|three|four|five|six|seven|eight|nine|ten)\s+"
+                        r"(rooms|spaces)\b", qf)
+        if mk_ and it.kind in ("space", None):
+            k_ = mk_.group(1) or mk_.group(4)
+            k = int(k_) if k_.isdigit() else _nw[k_]
+            if 2 <= k <= 20:
+                small = (mk_.group(2) or "") in ("smallest", "tiniest")
+                it.op, it.which, it.kind, it.top_n, it.mod = ("argmin" if small else "argmax"), True, "space", False, None
+                if it.metric in ("text", "count"):
+                    it.metric = "area"
+                it.notes.append(f"topk:{k}")
+                trace.append(f"top-{k} list of the {'smallest' if small else 'largest'} rooms")
         mr = re.search(r"\b(second|third|fourth|fifth|2nd|3rd|4th|5th)[- ](largest|biggest|smallest)\b", qf)
         if mr and it.kind in ("space", None):
             k = {"second": 2, "third": 3, "fourth": 4, "fifth": 5, "2nd": 2, "3rd": 3, "4th": 4, "5th": 5}[mr.group(1)]
@@ -2908,8 +3170,16 @@ class IfcSolver(BaseSolver):
                     whole_m = it.scope == "model" or ps is None
                     els = idx.by_class("IfcSpace") if whole_m else idx.in_storey(ps.guid, "IfcSpace")
                     trace.append("threshold over every room " + ("of the model" if whole_m else f"on the sheet's storey '{ps.name}'"))
+                # 'Apart from the living rooms and kitchens …', '… are not living rooms': those rooms are left out (Q v24)
+                q_pos, ex_guids, ex_what = room_exclusions(idx, ctx.get("question", "") or it.question or "")
+                if ex_guids:
+                    n0 = len(els)
+                    els = [e for e in els if e.guid not in ex_guids]
+                    trace.append(f"excluded {', '.join(repr(x) for x in ex_what)}: {n0 - len(els)} of {n0} rooms")
+                    ctx.setdefault("threshold_assumptions", []).append("left out: " + ", ".join(ex_what))
+                    ctx["rest_applied"] = True
                 # 'Which ELUTUBA+KÖÖK rooms …', 'the living rooms …', 'How many bedrooms …': only that room set (Q v19)
-                rf_what, rf_grp, rf_how = room_filter(idx, ctx.get("question", "") or it.question or "")
+                rf_what, rf_grp, rf_how = room_filter(idx, q_pos)
                 if rf_what:
                     keep = {e.guid for e in rf_grp}
                     n0, els = len(els), [e for e in els if e.guid in keep]
@@ -3316,9 +3586,24 @@ class IfcSolver(BaseSolver):
         cross-check counts against what the drawing shows."""
         from stoa.solvers.ifc.plan2d import plan_items, plans_of_model
 
-        asked_plan = Path(path).suffix.lower() in (".pdf", ".svg") and "_plan-" in Path(path).stem
+        from stoa.solvers.ifc.index import load_index as _li0
+
+        asked_plan = is_plan_sheet(path, _li0(model))
         model_scope = it.scope == "model" or storey is None
         plans: list[str] = []
+        other_sheet = False
+        if asked_plan and not model_scope:
+            # 'walls on the ground floor' asked on the 1.OG sheet (Q 09:45): box and cross-check on the asked storey's
+            # own plan, not on this sheet (it showed 70 walls of 1.OG against the 81 of EG and lowered a right answer)
+            from stoa.solvers.ifc.index import load_index as _li
+
+            ps_, _ = plan_storey(path, _li(model))
+            own = plans_of_model(model).get(storey.guid)
+            if ps_ is not None and ps_.guid != storey.guid and own:
+                ans.trace.append(f"the question is about storey '{storey.name}', not this sheet's '{ps_.name}': "
+                                 f"2D evidence on {Path(own).name}")
+                asked_plan, other_sheet = False, True
+                plans.append(own)
         if asked_plan:
             plans.append(str(Path(path).with_suffix(".pdf")))
         if model_scope:
@@ -3381,7 +3666,7 @@ class IfcSolver(BaseSolver):
                     ans.confidence = 0.75
                     ans.missing.append(f"the plan drawing shows {len(drawn)} symbols where the model counts "
                                        f"{ans.value}")
-        ans.evidence = (ev2d + ans.evidence) if asked_plan else (ans.evidence + ev2d)
+        ans.evidence = (ev2d + ans.evidence) if (asked_plan or other_sheet) else (ans.evidence + ev2d)
 
     @staticmethod
     def _floor_area(e: Element, it: Intent, trace: list[str]) -> tuple[float | None, str]:

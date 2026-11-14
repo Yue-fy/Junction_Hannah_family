@@ -1,0 +1,54 @@
+# c7 (09:55) R1 link probe (experiments/r1/kg_qa/probe_kg.jsonl on night-R1; gold from file names / IFC index / SVG twins)
+PATH kit-smiley-west_ac-20-smiley-west-10-bldg_plan-03-1-og.pdf
+#  gold 4
+How many floor plan sheets does this building have?
+#  gold Dach
+Welche Geschosse des Modells haben keinen eigenen Grundriss?
+#  gold no
+Do the floor plan and the IFC model agree on the number of windows on '1.OG'?
+#  gold 2.OG
+Which plan sheet shows the room 'ZIMMER-5-4'?
+#  gold KG
+Missä kerroksessa on huone 'Kellerraum-05-2'?
+#  gold 10
+How many windows on 'EG' are in the IFC model but not drawn on the EG floor plan?
+#  gold yes
+Is this building also available as a model in another dataset?
+PATH bimspeed-gdynia_ruchu-oporu-18_plan-03-0.pdf
+#  gold 4
+How many elevation drawings are there in this drawing set?
+#  gold 10
+How many sheets in total belong to this building (plans, sections and elevations)?
+#  gold -1
+On which floor plan is the boiler room?
+PATH kit-institute_ac20-institute-var-2_plan-02-erdgeschoss.pdf
+#  gold yes
+Le plan et la maquette IFC indiquent-ils le même nombre de portes au niveau 'Erdgeschoss' ?
+PATH tuwien-escape-route_real-world-escape-route-test-model-zdb_plan-05-dg1.pdf
+#  gold yes
+Does the model contain more windows on storey 'DG1' than the 'DG1' floor plan shows?
+PATH bimspeed-gdynia_ruchu-oporu-18_plan-03-0.pdf
+#  gold yes
+Is there a section drawing of this building in the set?
+PATH bimspeed-warmond_ar_plan-05-2-level.pdf
+#  gold 8
+Wie viele Grundrisse gibt es für dieses Gebäude?
+PATH kit-fzk-haus_ac20-fzk-haus_plan-01-erdgeschoss.pdf
+#  gold yes
+Do the floor plan and the IFC model agree on the number of windows on 'Erdgeschoss'?
+PATH tuwien-escape-route_real-world-escape-route-test-model-zdb_plan-05-dg1.pdf
+#  gold 2
+How many windows on 'DG1' does the model have that are not drawn on this plan?
+PATH bimspeed-warmond_ar_plan-05-2-level.pdf
+#  gold Attic
+Which sheet shows the attic rooms?
+#  gold 2
+Kuinka monta leikkauspiirustusta tästä rakennuksesta on?
+#  gold Basement, Entrance, Intermediate level 1, Intermediate level 2
+Which storeys of the model have no rooms at all?
+PATH kit-institute_ac20-institute-var-2_plan-03-1-obergeschoss.pdf
+#  gold yes
+Stimmen der Grundriss von '1. Obergeschoss' und das IFC-Modell bei der Anzahl der Türen überein?
+PATH tuwien-escape-route_real-world-escape-route-test-model-zdb_plan-01-ug2.pdf
+#  gold yes
+Does the 'UG2' floor plan show doors that the model does not assign to 'UG2'?
