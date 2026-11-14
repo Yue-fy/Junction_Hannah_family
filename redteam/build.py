@@ -320,6 +320,41 @@ def main():
             out.append(row(path, q, int(g[a_]) + int(g[b_]), "count", "count", f"compose:{lang}", "same",
                            note=f"{a_} {g[a_]} + {b_} {g[b_]}"))
 
+    # ===== v4 (04:45): the same on CubiCasa raster plans (the LoRA must not read a compound as one class) =======
+    # Each composed row has atomic EN controls for its two parts (kind compose-atom), so the analysis can compare
+    # the composed answer with the sum of the pipeline's own atomic answers: parsing isolated from perception.
+    rng4 = random.Random(1404)
+    catom = {"bedroom": "How many bedrooms (makuuhuone, usually marked MH) are on this floor plan?",
+             "sauna": "How many saunas are on this floor plan?",
+             "wc": "How many toilet bowls (WC seats) are drawn on this floor plan?",
+             "balcony": "How many balconies (parveke, including glazed balconies) are on this floor plan?"}
+    cwords = {"en": {"bedroom": "bedrooms", "sauna": "saunas", "wc": "WC seats", "balcony": "balconies"},
+              "fi": {"bedroom": "makuuhuonetta", "sauna": "saunaa", "wc": "WC-istuinta", "balcony": "parveketta"},
+              "de": {"bedroom": "Schlafzimmer", "sauna": "Saunen", "wc": "WC-Sitze", "balcony": "Balkone"},
+              "sv": {"bedroom": "sovrum", "sauna": "bastur", "wc": "toalettstolar", "balcony": "balkonger"}}
+    ctmpl = {"en": "How many {a} and {b} are on this floor plan in total?",
+             "fi": "Kuinka monta {a} ja {b} pohjapiirustuksessa on yhteensä?",
+             "de": "Wie viele {a} und {b} gibt es insgesamt auf diesem Grundriss?",
+             "sv": "Hur många {a} och {b} finns det totalt på planritningen?"}
+    cdev = {q.path for q in load_split("dev") if q.source == "cubicasa5k"}
+    cgold = defaultdict(dict)
+    for q in load_questions():
+        if q.path in cdev:
+            for k, t in catom.items():
+                if q.question == t:
+                    cgold[q.path][k] = q.answer
+    cpairs = [("bedroom", "sauna"), ("wc", "balcony"), ("sauna", "balcony")]
+    cpaths = sorted(p for p, g in cgold.items() if len(g) == len(catom))
+    rng4.shuffle(cpaths)
+    for i, path in enumerate(cpaths[:6]):
+        a_, b_ = cpairs[i % len(cpairs)]
+        g = cgold[path]
+        for k in (a_, b_):
+            out.append(row(path, catom[k], g[k], "count", "count", "compose-atom", "same", note=k))
+        for lang, t in ctmpl.items():
+            out.append(row(path, t.format(a=cwords[lang][a_], b=cwords[lang][b_]), int(g[a_]) + int(g[b_]), "count",
+                           "count", f"compose-cc:{lang}", "same", note=f"{a_} {g[a_]} + {b_} {g[b_]}"))
+
     with open(OUT, "w", encoding="utf-8") as f:
         for r in out:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")

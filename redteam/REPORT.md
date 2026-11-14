@@ -266,6 +266,13 @@ Run `20261114-043705-pipeline-compose-03ee` on night cc1ca5b: **40/42**. EN, FI,
   rule parsers whenever the question has words outside the solver's vocabulary, not only for unknown languages.
   Same family as bugs 1, 3, 9, 10: the check confirms the number that was computed, not that it covers the question.
 
+**v4 (04:38), the same on CubiCasa raster plans** (36 Qs: 6 dev drawings × EN/FI/DE/SV "A and B in total" for
+bedrooms+saunas / WC seats+balconies / saunas+balconies, plus the 12 atomic EN questions as controls; run
+`20261114-043824-pipeline-compose_cc-623d`): atomic 12/12; composed EN 6/6, **FI 6/6**, DE 6/6, all equal to the sum
+of the pipeline's own atomic answers; **SV 3/6**: "Hur många toalettstolar och balkonger …" → balconies only (0 vs
+1) at conf 0.75 (×2), "sovrum och bastur" → agent 1 vs 0 at 0.65. Swedish is the weak language for compositions on
+both sources; W4's unseen-wording cap (≤ 0.75) kept these below 0.8 on raster, the dxf path did not (0.99).
+
 ## What held (worth saying in the pitch)
 - Paraphrase / casing / context / distractor numbers: **0 of 56 answers changed**. Typos and injections changed 7
   answers, **all of them at conf ≤ 0.42**, so the confidence flagged every one.
@@ -275,7 +282,7 @@ Run `20261114-043705-pipeline-compose-03ee` on night cc1ca5b: **40/42**. EN, FI,
 - Rotated, grayscale, heavily compressed and half-resolution copies of a plan: 30/30 right, at the same confidence.
 
 ## Re-run
-`questions.jsonl` now has 247 rows: v1 (174) + v2 (31) + v3 compositions (42); earlier rows are byte-identical across
+`questions.jsonl` now has 283 rows: v1 (174) + v2 (31) + v3 Swiss compositions (42) + v4 CubiCasa compositions (36); earlier rows are byte-identical across
 builds (checked with cmp), so runs on the first 205 rows compare directly.
 ```
 PYTHONPATH=. $JUNCTION_VENV/bin/python redteam/build.py        # regenerates questions.jsonl + images (deterministic)
