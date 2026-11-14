@@ -194,7 +194,13 @@ def _run(code: str, tables: dict[str, pd.DataFrame]) -> dict:
     ans = env["answer"]
     if hasattr(ans, "item"):
         ans = ans.item()
-    if isinstance(ans, (pd.Series, pd.DataFrame, list, tuple)) and not isinstance(ans, str):
+    if isinstance(ans, pd.DataFrame):  # W5 08:41: a row list came back as its CSV header ('room_id, number, ...')
+        cols = [c for c in ("number", "name", "label", "kind", "area_m2", "apartment") if c in ans.columns][:3] or \
+            list(ans.columns)[:3]
+        ans = "; ".join(" ".join(f"{v:.2f} m²" if c == "area_m2" and isinstance(v, float) else str(v)
+                                 for c, v in zip(cols, row) if v is not None and str(v) not in ("", "nan", "None"))
+                        for row in ans[cols].head(60).itertuples(index=False, name=None)) or "none"
+    if isinstance(ans, (pd.Series, list, tuple)) and not isinstance(ans, str):
         ans = ans.tolist() if hasattr(ans, "tolist") else list(ans)
         ans = ans[0] if len(ans) == 1 else ", ".join(map(str, ans))
     used = env.get("used", [])
