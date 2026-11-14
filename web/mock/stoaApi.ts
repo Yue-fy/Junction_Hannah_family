@@ -12,7 +12,9 @@
  */
 import fs from "node:fs";
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import http from "node:http";
+import os from "node:os";
 import path from "node:path";
 import type { Connect, Plugin } from "vite";
 
@@ -380,6 +382,113 @@ function readBody(req: http.IncomingMessage): Promise<Buffer> {
   });
 }
 
+/**
+ * "Your own drawing": files a visitor uploads (PDF, PNG, JPG, IFC). Saved outside the repo and the dataset, in
+ * STOA_UPLOADS (default: <tmp>/stoa-uploads/<sha256[:12]>/<name>), and known to the browser as the virtual path
+ * `upload/<id>/<name>`. The API only accepts dataset paths, so questions about them run the pipeline here with the
+ * shared venv (web/server/ask_upload.py, one process per question, ~0.3 s to load). Local only; cached per question.
+ */
+const UPLOADS = process.env.STOA_UPLOADS ?? path.join(os.tmpdir(), "stoa-uploads");
+const UPLOAD_EXT = new Set([".pdf", ".png", ".jpg", ".jpeg", ".ifc"]);
+const UPLOAD_MAX = 200 << 20;
+const isUpload = (p: string | null | undefined) => !!p && p.startsWith("upload/");
+function uploadAbs(virtual: string): string | null {
+  const m = virtual.match(/^upload\/([0-9a-f]{12})\/([^/\\]+)$/);
+  if (!m || m[2].startsWith(".")) return null;
+  const abs = path.join(UPLOADS, m[1], m[2]);
+  return fs.existsSync(abs) ? abs : null;
+}
+function uploadInfo(virtual: string) {
+  const ext = path.extname(virtual).toLowerCase();
+  return { path: virtual, source: "upload", ext, siblings: { [ext]: virtual }, n_questions: 0, license: "your file",
+    credit: "your upload: not in the dataset, kept only on this machine (temp folder)", title: path.basename(virtual), source_url: "" };
+}
+async function saveUpload(name: string, body: Buffer) {
+  const safe = path.basename(name).replace(/[^\w.\- ()]+/g, "_").replace(/^\.+/, "").slice(-120) || "upload";
+  const ext = path.extname(safe).toLowerCase();
+  if (!UPLOAD_EXT.has(ext)) throw Object.assign(new Error(`only ${[...UPLOAD_EXT].join(", ")} files`), { status: 415 });
+  if (!body.length || body.length > UPLOAD_MAX) throw Object.assign(new Error(`file is empty or over ${UPLOAD_MAX >> 20} MB`), { status: 413 });
+  const id = createHash("sha256").update(body).digest("hex").slice(0, 12);
+  fs.mkdirSync(path.join(UPLOADS, id), { recursive: true });
+  const abs = path.join(UPLOADS, id, safe);
+  if (!fs.existsSync(abs)) fs.writeFileSync(abs, body);
+  return uploadInfo(`upload/${id}/${safe}`);
+}
+const ASK_UPLOAD = path.resolve(__dirname, "../server/ask_upload.py");
+const uploadAnswers = new Map<string, Promise<Record<string, unknown>>>();
+function askUpload(b: { path: string; question?: string; solver?: string; solver_args?: Record<string, unknown> }, abs: string) {
+  const key = JSON.stringify([b.path, (b.question ?? "").trim(), b.solver ?? "pipeline", b.solver_args ?? {}]);
+  const hit = uploadAnswers.get(key);
+  if (hit) return hit.then((a) => ({ ...a, cached: true }));
+  const p = new Promise<Record<string, unknown>>((resolve, reject) => {
+    const child = execFile(PY, [ASK_UPLOAD], { cwd: KG_REPO, timeout: 600_000, maxBuffer: 64 << 20, env: { ...process.env, STOA_DATA: DATA } },
+      (err, stdout, stderr) => {
+        if (err) return reject(new Error(`the solver failed on this file: ${String(stderr || err.message).trim().split("\n").slice(-1)[0]}`));
+        try {
+          resolve({ ...JSON.parse(stdout), cached: false });
+        } catch (e) {
+          reject(new Error(`unreadable answer: ${e}`));
+        }
+      });
+    child.stdin?.end(JSON.stringify({ abs, virtual: b.path, question: b.question ?? "", solver: b.solver, solver_args: b.solver_args }));
+  });
+  uploadAnswers.set(key, p);
+  p.catch(() => uploadAnswers.delete(key));
+  return p;
+}
+/** Requests about an uploaded file, answered here (never forwarded: the API would refuse the path). */
+async function handleUpload(req: Connect.IncomingMessage, res: http.ServerResponse, route: string, url: URL): Promise<boolean> {
+  if (route === "/upload" && req.method === "POST") {
+    try {
+      const info = await saveUpload(url.searchParams.get("name") ?? "upload", await readBody(req));
+      send(res, 200, info, "disk");
+    } catch (e) {
+      send(res, (e as { status?: number }).status ?? 500, { detail: (e as Error).message }, "disk");
+    }
+    return true;
+  }
+  if (route === "/files" && isUpload(url.searchParams.get("q"))) {
+    const v = url.searchParams.get("q")!;
+    send(res, 200, { files: uploadAbs(v) ? [uploadInfo(v)] : [] }, "disk");
+    return true;
+  }
+  const p = url.searchParams.get("path");
+  if (!isUpload(p) && !(route === "/ask" && req.method === "POST")) return false;
+  if (route === "/file" && req.method === "GET") {
+    const abs = uploadAbs(p!);
+    if (!abs) return send(res, 404, { detail: "upload not found (uploads live in a temp folder)" }), true;
+    res.setHeader("Content-Type", MIME[path.extname(abs).toLowerCase()] ?? "application/octet-stream");
+    res.setHeader("X-Stoa-Backend", "disk");
+    fs.createReadStream(abs).pipe(res);
+    return true;
+  }
+  if (route === "/questions") return send(res, 200, { questions: [] }, "disk"), true; // the browser offers general ones
+  if (route === "/kg") return send(res, 200, { path: p, nodes: [], checks: [], files: [] }, "disk"), true;
+  if (route === "/rooms") return send(res, 404, { detail: "room graph: CubiCasa dataset plans only" }, "disk"), true;
+  if (route === "/ask" && req.method === "POST") {
+    const raw = await readBody(req);
+    let b: { path?: string; question?: string; solver?: string; solver_args?: Record<string, unknown> } = {};
+    try {
+      b = JSON.parse(raw.toString() || "{}");
+    } catch {
+      /* empty */
+    }
+    if (!isUpload(b.path)) {
+      (req as Connect.IncomingMessage & { stoaBody?: Buffer }).stoaBody = raw; // not ours: hand the body on
+      return false;
+    }
+    const abs = uploadAbs(b.path!);
+    if (!abs) return send(res, 404, { detail: "upload not found (uploads live in a temp folder): upload it again" }, "live"), true;
+    try {
+      send(res, 200, await askUpload(b as { path: string }, abs), "live");
+    } catch (e) {
+      send(res, 500, { detail: (e as Error).message }, "live");
+    }
+    return true;
+  }
+  return false;
+}
+
 let liveDownUntil = 0;
 /** Forward to the live API. Resolves null when it is unreachable (→ mock). */
 function forward(req: http.IncomingMessage, url: string, body: Buffer, waitMs = 600_000): Promise<{ status: number; headers: http.IncomingHttpHeaders; body: Buffer } | null> {
@@ -415,6 +524,7 @@ async function handle(req: Connect.IncomingMessage, res: http.ServerResponse, ne
   const url = new URL(req.url, "http://x");
   const route = url.pathname.replace(/^\/api/, "");
   try {
+    if (await handleUpload(req, res, route, url)) return;
     if (route === "/file" && req.method === "GET") {
       const abs = safeAbs(url.searchParams.get("path") ?? "");
       if (!abs) return send(res, 404, { detail: "file not found" });
@@ -424,7 +534,8 @@ async function handle(req: Connect.IncomingMessage, res: http.ServerResponse, ne
       fs.createReadStream(abs).pipe(res);
       return;
     }
-    const body = req.method === "POST" ? await readBody(req) : Buffer.alloc(0);
+    const stashed = (req as Connect.IncomingMessage & { stoaBody?: Buffer }).stoaBody;
+    const body = req.method === "POST" ? stashed ?? await readBody(req) : Buffer.alloc(0);
     const askBody = route === "/ask" && req.method === "POST" ? (() => { try { return JSON.parse(body.toString() || "{}"); } catch { return {}; } })() : null;
     const hosted = !!askBody && isHosted(askBody);
     const live = route === "/bench" || route === "/rooms" ? null : await forward(req, route + url.search, body, hosted ? HOSTED_WAIT_MS : 600_000);

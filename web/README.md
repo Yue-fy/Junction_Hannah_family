@@ -35,6 +35,18 @@ API cache (`DEMO_WARM=0` skips that; `fixtures/recorded.json` is not changed). T
 - `npm run build` type-checks and builds to `dist/`. `npm run preview` serves the build with the same
   `/api` middleware (no separate server needed).
 
+**Your own drawing (upload).** "＋ Your own drawing" under the file list, or drop a file anywhere on the page: PDF,
+PNG, JPG or IFC, up to 200 MB. The dev server saves it outside the repo and the dataset (`STOA_UPLOADS`, default
+`<tmp>/stoa-uploads/<sha256[:12]>/<name>`) and the browser knows it as `upload/<id>/<name>`. The API only accepts
+dataset paths, so questions about an upload run the same pipeline in the dev server's process with the shared venv
+(`server/ask_upload.py`, one Python process per question, ~0.3 s to load; answers cached per question until the dev
+server restarts). Such a file has no template, no CAD/IFC twin and no cached reading, so it shows what the hidden
+set's "different" drawings get: e.g. a Swiss plan PDF alone → 36 doors with 36 boxes (pdf_vector, 3 s), apartment B
+80.83 m² with its 7 rooms boxed; an IFC-Bench model alone → 5 doors, 2 storeys (ifc rules, GUIDs highlighted in
+3D, 0 LLM calls); a Swiss PNG alone → apartments 4 (LoRA), apartment B 77.79 m² at 0.5 with the room labels and
+the unit outline boxed. Needs the Python env (no mock answers for uploads). The example chips switch to general
+questions (floor-plan ones for drawings, model ones for IFC).
+
 Deep links: `/?file=<dataset-relative path>&q=<question>` opens a file and asks right away, e.g.
 `/?file=data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf&q=How many doors are shown on the floor plan of '1.korrus'?`
 
@@ -183,7 +195,8 @@ known-good answer while a solver regression is fixed, and say why in a `"note"`)
 | `src/viewer3d.ts` | web-ifc → merged three.js meshes per storey; storey filter, highlight/frame by GlobalId, picking |
 | `src/card.ts` | answer card (value, confidence, "understood as" intent + compound plan, cross-check badge, cost tier/time/tokens/€, trace or the agent's reasoning chain, second opinion, evidence) |
 | `src/kg.ts` | knowledge-graph strip and drawer (linked files, drawing-vs-model checks, rooms, storeys) |
-| `mock/stoaApi.ts` | `/api/*` middleware: forwards to :8100, falls back to the mock (and to `stoa.kg` for `/kg`) |
+| `mock/stoaApi.ts` | `/api/*` middleware: forwards to :8100, falls back to the mock (and to `stoa.kg` for `/kg`); uploads (`POST /api/upload`, `upload/...` paths) |
+| `server/ask_upload.py` | answers a question about an uploaded file (absolute path outside the dataset) the way the API's POST /ask does |
 
 ## Licences
 

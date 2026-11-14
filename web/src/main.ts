@@ -1,5 +1,5 @@
 import "./style.css";
-import { ask, benchmark, exampleQuestions, fileUrl, knowledgeGraph, listFiles, onBackend, roomGraph, secondOpinion } from "./api";
+import { ask, benchmark, exampleQuestions, fileUrl, knowledgeGraph, listFiles, onBackend, roomGraph, secondOpinion, upload } from "./api";
 import { renderBench } from "./bench";
 import { agentAsks, crossChecks, renderCard, roomKindsIn } from "./card";
 import { markAnswerCheck, renderKg } from "./kg";
@@ -280,6 +280,24 @@ const GENERIC_QUESTIONS = [
   "How many storeys does this building have?",
   "How many windows are shown on this drawing?",
 ];
+// Your own file (upload): no dataset questions, no template; general questions by kind.
+const UPLOAD_QUESTIONS = [
+  "How many doors are shown on this floor plan?",
+  "How many rooms are there?",
+  "What is the total floor area in m²?",
+  "What kind of drawing is this (floor plan, elevation, section, site plan)?",
+  "What is the scale of this drawing?",
+  "How many windows are shown on this floor plan?",
+];
+const IFC_QUESTIONS = [
+  "How many doors are in this model?",
+  "How many storeys does this building have?",
+  "What is the total floor area of all rooms?",
+  "Which storey has the most doors?",
+  "How tall is the building?",
+  "How many windows are in this model?",
+];
+const uploads: FileInfo[] = [];
 
 async function refreshFiles() {
   const source = $<HTMLSelectElement>("source").value;
@@ -288,14 +306,15 @@ async function refreshFiles() {
   if (!source && !q) {
     demoFiles ??= (await Promise.all(DEMO.map((p) => listFiles("", p, 3).then((r) => r.find((x) => x.path === p)).catch(() => undefined))))
       .filter((x): x is FileInfo => !!x);
-    state.files = [...demoFiles, ...list.filter((f) => !DEMO.includes(f.path))];
+    state.files = [...uploads, ...demoFiles, ...list.filter((f) => !DEMO.includes(f.path))];
   } else state.files = list;
   const ul = $("files");
   ul.innerHTML = state.files.map((f, i) => {
     const name = f.path.split("/").pop()!;
     const sib = Object.keys(f.siblings ?? {}).map((e) => `<span class="ext">${esc(e.slice(1))}</span>`).join("");
-    return `<li data-i="${i}" class="${state.file?.path === f.path ? "on" : ""}"><span class="src ${esc(f.source)}">${esc(f.source.replace(/_.*/, ""))}</span>
-      <span class="name" title="${esc(f.path)}">${esc(name)}</span><span class="meta">${f.n_questions} q ${sib}</span></li>`;
+    const upl = f.source === "upload";
+    return `<li data-i="${i}" class="${state.file?.path === f.path ? "on" : ""}"><span class="src ${esc(f.source)}">${upl ? "yours" : esc(f.source.replace(/_.*/, ""))}</span>
+      <span class="name" title="${esc(upl ? `${name} (uploaded, kept on this machine)` : f.path)}">${esc(name)}</span><span class="meta">${upl ? "new" : `${f.n_questions} q`} ${upl ? "" : sib}</span></li>`;
   }).join("") || `<li class="none">No files match.</li>`;
 }
 $("files").addEventListener("click", (e) => {
@@ -309,6 +328,59 @@ $("search").addEventListener("input", () => {
 });
 $("source").addEventListener("change", refreshFiles);
 
+// --- your own drawing: upload (button or drop anywhere) → saved on this machine → asked like any other file ---
+async function uploadFile(file: File) {
+  const box = $("uploadBox");
+  const msg = $("uploadMsg");
+  box.classList.add("busy");
+  box.classList.remove("err");
+  msg.textContent = `uploading ${file.name} (${(file.size / 1e6).toFixed(1)} MB)…`;
+  try {
+    const f = await upload(file);
+    if (!uploads.some((u) => u.path === f.path)) uploads.unshift(f);
+    msg.textContent = `${file.name} · ask it anything below`;
+    $<HTMLSelectElement>("source").value = "";
+    $<HTMLInputElement>("search").value = "";
+    await refreshFiles();
+    await openFile(f);
+    $("question").focus();
+  } catch (e) {
+    box.classList.add("err");
+    msg.textContent = `could not upload: ${e}`;
+  } finally {
+    box.classList.remove("busy");
+  }
+}
+$<HTMLInputElement>("uploadInput").addEventListener("change", (e) => {
+  const input = e.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = "";
+  if (file) void uploadFile(file);
+});
+let dragDepth = 0;
+const hasFiles = (e: DragEvent) => [...(e.dataTransfer?.types ?? [])].includes("Files");
+document.addEventListener("dragenter", (e) => {
+  if (!hasFiles(e)) return;
+  dragDepth++;
+  $("dropHint").hidden = false;
+});
+document.addEventListener("dragleave", (e) => {
+  if (!hasFiles(e)) return;
+  dragDepth = Math.max(0, dragDepth - 1);
+  if (!dragDepth) $("dropHint").hidden = true;
+});
+document.addEventListener("dragover", (e) => {
+  if (hasFiles(e)) e.preventDefault();
+});
+document.addEventListener("drop", (e) => {
+  if (!hasFiles(e)) return;
+  e.preventDefault();
+  dragDepth = 0;
+  $("dropHint").hidden = true;
+  const file = e.dataTransfer?.files?.[0];
+  if (file) void uploadFile(file);
+});
+
 /** Open a file. With `keep`, the current answer stays and its evidence on this file is drawn (multi-sheet). */
 async function openFile(f: FileInfo, question = "", keep: Answer | null = null, focusIndex: number | null = null) {
   state.file = f;
@@ -319,7 +391,7 @@ async function openFile(f: FileInfo, question = "", keep: Answer | null = null, 
   history.replaceState(null, "", url);
   document.querySelectorAll("#files li").forEach((li) => li.classList.toggle("on", state.files[Number((li as HTMLElement).dataset.i)]?.path === f.path));
   $("fileTitle").textContent = f.path.split("/").pop()!;
-  $("fileMeta").textContent = `${f.source} · ${f.n_questions} questions`;
+  $("fileMeta").textContent = f.source === "upload" ? "your upload · not in the dataset" : `${f.source} · ${f.n_questions} questions`;
   $("credit").innerHTML = creditLine(f);
   if (!keep) {
     markAnswerCheck($("linked"), undefined, undefined);
@@ -328,7 +400,9 @@ async function openFile(f: FileInfo, question = "", keep: Answer | null = null, 
     // the first thing a visitor reads: what every answer carries
     $("card").innerHTML = `<p class="hint">Ask about this ${f.ext === ".ifc" ? "model" : "drawing"} in any language, or pick an example. Every answer
       shows how sure we are, what it cost and how it was worked out, and points at where it came from (${f.ext === ".ifc" ? "elements in the 3D model" : "boxes on the drawing"}),
-      checked against a second source when there is one.</p>`;
+      checked against a second source when there is one.</p>${f.source === "upload" ? `<p class="hint">This file is new to the system: no template,
+      no CAD or IFC twin, nothing cached. It goes the general way (${f.ext === ".ifc" ? "the IFC rules, then the reasoning agent" : f.ext === ".pdf" ? "the PDF's own lines and text, then the local vision model" : "printed text and scale read from the image, then the local vision model"}),
+      so expect lower confidence, said honestly, and a first answer that takes longer.</p>` : ""}`;
   }
   $("pick").hidden = true;
   $("bench").hidden = true;
@@ -381,6 +455,7 @@ async function openSheet(path: string, focusIndex: number | null = null, keepAns
 }
 
 function creditLine(f: FileInfo) {
+  if (f.source === "upload") return `<b>${esc(f.path.split("/").pop()!)}</b> · ${esc(f.credit)}`;
   const title = f.title ? `<b>${esc(f.title)}</b> · ` : "";
   const src = f.source_url ? ` · <a href="${esc(f.source_url)}" target="_blank" rel="noopener">source</a>` : "";
   return `${title}${esc(f.credit)} · licence <b>${esc(f.license)}</b>${src}`;
@@ -403,8 +478,9 @@ async function loadExamples(f: FileInfo) {
     const interleaved: typeof uniq = [];
     for (let k = 0; interleaved.length < uniq.length; k++)
       for (const l of byType.values()) if (l[k]) interleaved.push(l[k]);
+    const general = f.source === "upload" ? (f.ext === ".ifc" ? IFC_QUESTIONS : UPLOAD_QUESTIONS) : GENERIC_QUESTIONS;
     const pick = qs.length ? [...english.filter((q) => q.has_fixture), ...interleaved.filter((q) => !q.has_fixture)].slice(0, 4)
-      : GENERIC_QUESTIONS.map((question) => ({ question, type: "", unit: null }));
+      : general.map((question) => ({ question, type: "", unit: null }));
     chips.innerHTML = pick.map((q) => `<button type="button" class="chip" title="${esc(q.question)}">${esc(q.question.length > 64 ? q.question.slice(0, 61) + "…" : q.question)}</button>`).join("");
     chips.querySelectorAll<HTMLButtonElement>(".chip").forEach((b, i) => b.addEventListener("click", () => {
       $<HTMLTextAreaElement>("question").value = pick[i].question;
@@ -412,7 +488,7 @@ async function loadExamples(f: FileInfo) {
     }));
     // files without dataset questions (historical scans): the general questions, also in the menu (chips show ~2)
     const menu = qs.length ? qs : pick.map((q) => ({ ...q, has_fixture: false }));
-    sel.innerHTML = `<option value="">${qs.length ? "More example questions" : "Questions for any drawing"} (${menu.length})…</option>` + menu.map((q) =>
+    sel.innerHTML = `<option value="">${qs.length ? "More example questions" : f.ext === ".ifc" ? "Questions for any model" : "Questions for any drawing"} (${menu.length})…</option>` + menu.map((q) =>
       `<option value="${esc(q.question)}">${q.has_fixture ? "★ " : ""}${esc(q.question.length > 110 ? q.question.slice(0, 107) + "…" : q.question)}</option>`).join("");
   } catch {
     /* keep empty */
