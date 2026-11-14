@@ -70,9 +70,9 @@ def map_conf(p: float, kind: str, model: str | None = None) -> float:
 
 # Per-concept confidence for the counting LoRAs (R2 04:25): hit rate per (intent target, answer-digit p bin) on
 # train_gate, shrunk toward the concept's overall rate (experiments/r2/fit_concept_conf.py -> lora_concept_conf.json).
-# On dev (pipeline run bb98) it ranks LoRA answers as well as the pipeline's raster-agreement confidence (AUROC 0.885
-# vs 0.881, ECE 0.050 vs 0.035; conf>=0.8 on 66% at 89% right vs 47% at 94.5%) without the raster second reader
-# (~2 LLM calls / ~590 output tokens per cubicasa question; $0.42 -> ~$0.03 per 1k).
+# NEGATIVE (04:3x): it ranks no better than the raster-agreement confidence (dev AUROC 0.885 vs 0.881) and WORSE than
+# the plain global p-map CONF_MAPS["cc-v2"] (dev 0.899 / ECE 0.022; leak-free held-out 0.928 vs 0.905): 40 Qs per
+# concept over 5 bins is too noisy. Opt-in only (vlm_lora concept_conf=1); kept for the record.
 _CONCEPT_CONF: dict | None = None
 _P_RX = re.compile(r"p\(answer digits\) = ([0-9.]+)")
 
@@ -443,8 +443,11 @@ class VlmLora(VlmDirect):
     STYLE_MODEL = "cc-v3"
     TRAINED_BY_MODEL = {"cc-v3": TRAINED | {"room", "apartment", "washbasin", "bathtub", "shower"}}
 
-    def __init__(self, model: str | None = None, **kwargs):
+    def __init__(self, model: str | None = None, concept_conf: int | str = 0, **kwargs):
         self._fixed = model  # an explicit model= is used for every drawing
+        # opt-in only: per-concept tables (40 Qs/concept) rank WORSE than the global p-map (dev AUROC 0.885 vs 0.899,
+        # leak-free held-out 0.905 vs 0.928; R2 04:3x), so the default stays CONF_MAPS
+        self._concept_conf = bool(int(concept_conf))
         super().__init__(model=model or "cc-v2", **kwargs)
         self._kwargs = kwargs
         self._delegates: dict[str, VlmDirect] = {}
@@ -492,7 +495,7 @@ class VlmLora(VlmDirect):
         ans = self._solve_with(model, path, question)
         target = getattr(intent, "target", "unknown")
         trained = self.TRAINED_BY_MODEL.get(model, self.TRAINED)
-        if ans.value is not None and target in trained:
+        if ans.value is not None and target in trained and self._concept_conf:
             cc = concept_conf(model, target, ans.trace)
             if cc is not None:
                 ans.confidence, note = cc
