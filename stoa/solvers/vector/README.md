@@ -42,6 +42,31 @@ Beyond the templates (all deterministic unless noted):
   the rooms it used become evidence. Typed-in numbers are rejected and retried. Derived-gold check:
   `experiments/w2/fallback_eval.py` → 24/24 (avg area per label, which apartment is larger, is there an X).
 
+Reasoning kinds (v5–v10; all deterministic unless noted):
+- operators: mean, ratio ("how many times", Faktor, fois, volte, keer, gånger), share in %, threshold counts
+  ("rooms over 15 m²", über, plus de, più di, meer dan, mer än), floor total minus an apartment ("not in / ohne /
+  sans / senza / niet tot / inte tillhör apartment X"), which-of-two (smaller/larger, kleiner, plus petit, mindre).
+- sets: superlatives over rooms ("area of the largest room", "smallest room in apartment B", "la plus grande
+  pièce", "la stanza più grande"; unnamed numbered ducts are skipped; a 2% tie lowers confidence to 0.5) and over
+  apartments ("which apartment is the largest", "average apartment size", "apartments larger than 60 m²");
+  room types inside an apartment ("the kitchen in apartment A", "bathrooms of apartment A"); "how many rooms does
+  apartment B have" (numbered indoor rooms); "bedrooms" on plans that only say 'Zimmer/Pièce/Stanza' (assumption
+  stated, conf 0.35); "room 1" that is not on the floor → abstain with `missing`.
+- **operation check** (local LLM, 3 tokens out; `--solver-arg opcheck=0` turns it off): a question that is not a
+  known train template and that the rules read as a plain value/sum/difference is classified into 11 operation
+  letters. Agree → rules. Disagree and the parts fit → the rules compute excluding / ratio / share (conf 0.7).
+  Otherwise table QA. Template questions make no call.
+
+| split (v10, 1d55527) | result | notes |
+|---|---|---|
+| dev swiss | count 100% (400), area 97.5% (400) | unchanged since v2 |
+| hard2 swiss (120) | 97.1% scored, text 15/15 judged | development split for reasoning |
+| hard2q swiss (120) | 91.4% scored (v6: 81.9%) | HELD OUT (D9): aggregates only, no question read |
+
+Weak spots: hard2q floor-minus-apartment 47%, smaller-apartment text 40% (not investigated, D9); "what multiple
+of A is B" is read as A/B. How bugs were found: write 20–40 novel questions for one dev floor and look for
+confident wrong answers first (W2 cycle 2 found six kinds answered at conf 0.95–0.99 that way).
+
 Experiments behind the rules: `experiments/w2/` (area_misses.py, unnamed_rooms.py, unnamed_inside.py,
 unnamed_rule.py) and R1's `experiments/r1/swiss_area_def/`.
 

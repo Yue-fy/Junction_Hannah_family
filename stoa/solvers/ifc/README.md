@@ -37,6 +37,22 @@ Question kinds beyond the dataset templates (F's `hard2`: 36/36):
   number: the rule's value goes to the fact-card LLM as a verified fact, with a focus section for the storey.
 - Placeholder rooms (>= 80% of IfcSpaces ~1 m², e.g. sixty5) cap room-area confidence at 0.15 and say why.
 
+IFC-Bench style questions (free text, judged; cycle 3):
+- Type breakdowns name types the way the authoring tool shows them (`index.type_key_fn`): a shared element Name
+  when names are type-like (>= 70% of elements share it with >= 2 others; Revit ':123456' ids stripped), else the
+  IfcTypeObject name, else ObjectType. "materials / made of / composition" adds each type's layer materials and the
+  unique material list; space breakdowns list every room with its area under its storey (<= 60 rooms).
+- Material filters ("concrete in the walls", "steel beams", DE/NL/FR/ES/IT words): elements whose type or name says
+  the material first; else elements with a layer of it, and then volume = element volume x layer thickness share
+  (4351 insulation 81.7 vs gold 82.2 m³). Nothing says the material -> all elements, confidence <= 0.3.
+- "floor slabs" drop roof / landing / foundation slabs. No IfcFooting -> slabs typed BASESLAB or named
+  foundation/footing/pad. No IfcRoof -> slabs/coverings typed ROOF.
+- Kinds missing from the model: IFC2X3 pipe/duct accessories -> IfcValve / IfcDamper + IfcAirTerminalBox; anything
+  else (switches, outlets, toilets, ...) -> proxies/generic elements named like it (confidence <= 0.6).
+- Dimensions (index v7): door/window OverallWidth/OverallHeight and wall/slab thickness (sum of layer thicknesses,
+  or one material's layers): largest / smallest (+ the type and element name), average, or the distribution.
+- New MEP kinds: pipe/duct accessories, meters/sensors, junction boxes, cable fittings, alarms, appliances.
+
 2D cross-checks (`stoa.kg`): the ifc_models sheets are horizontal cuts at storey floor + 1.2 m and draw every
 element crossing that plane, of any storey. Checks compare like with like (`_cut_compare`: elements of the
 storey that cross the plane vs drawn elements of that storey; 244/268 plan x class rows equal) and explain the

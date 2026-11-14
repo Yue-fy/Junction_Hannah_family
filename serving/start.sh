@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Start the shared OpenAI-compatible model server (vLLM) on port 8001.
-# Usage: serving/start.sh [preset]      presets: qwen3vl8b (default), qwen35-9b, qwen36-35b-a3b
+# Usage: serving/start.sh [preset]      presets: qwen3vl8b (default), qwen35-9b, qwen36-35b-a3b, gemma4-e4b
 # Env overrides: MODEL, SERVED_NAME, PORT, GPU_UTIL, MAX_LEN, EXTRA_ARGS, LORA (name=path[,name=path]),
 #   RUNTIME_LORA=1 (enable LoRA + hot-loading via /v1/load_lora_adapter without preloading any)
 # A second, private instance (e.g. to test a LoRA) must use another PORT and hold the GPU lock:
@@ -22,6 +22,9 @@ case "$PRESET" in
   qwen36-35b-a3b)
     : "${MODEL:=$MODELS/hf/Qwen/Qwen3.6-35B-A3B-FP8}"
     : "${SERVED_NAME:=qwen3.6-35b-a3b}" ;;
+  gemma4-e4b)  # Gemma 4 E4B-it (ungated, 16 GB bf16): bake-off candidate, Gemma prize. Use PORT=8002 + GPU lock.
+    : "${MODEL:=$MODELS/hf/google/gemma-4-E4B-it}"
+    : "${SERVED_NAME:=gemma-4-e4b}" ;;
   *) : "${MODEL:?set MODEL for a custom preset}"; : "${SERVED_NAME:=$PRESET}" ;;
 esac
 PORT=${PORT:-8001}
