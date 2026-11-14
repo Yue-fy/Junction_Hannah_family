@@ -67,6 +67,19 @@ cc-v3 is the candidate for count questions on raster plans that are NOT cubicasa
 Cost accounting: local calls record `gpu_seconds = tokens_in/25k + tokens_out/1k` (amortised throughput measured
 at saturation), not HTTP wall time (which includes queueing behind other agents).
 
+**Gemma 4 E4B-it bake-off (03:41, base model, no fine-tuning).** Ungated on HF (Gemma 3 is gated; we have no token),
+16 GB bf16, vLLM 0.31 `Gemma4ForConditionalGeneration`, preset `serving/start.sh gemma4-e4b` (image budget
+`max_soft_tokens` 1120 = the maximum; the default 280 is too coarse for plans). Same vlm_direct code, raw answer-digit p.
+| set | Gemma 4 E4B | Qwen3-VL-8B base |
+|---|---|---|
+| train_gate cubicasa (480) | 31.7 | 46.2 |
+| swiss dev counts on PNG twins (200) | 39.5 | 40.5 |
+| smoke micro / weighted (206) | 28.3 / 31.2 | 37.0 / 42.4 |
+| tokens in per cubicasa Q | 1,169 (1,100 image) | 770 |
+Gemma loses on Finnish room-label reading (kitchens 35 vs 85, saunas 15 vs 50, WC seats 5–15 vs 45–65) and ties on
+swiss plans. Not a replacement base. A Gemma counting LoRA (`experiments/r2/lora/gemma_lora.sh`, `train_lora.py
+--arch gemma4`, same TRAIN mix as cc-v3) tests whether fine-tuning closes the gap (Gemma prize, small fine-tuned model).
+
 ## Candidates surveyed (23:35–23:50, HF hub listing; vLLM 0.31 registry checked)
 | model | size | vLLM | why interesting | verdict |
 |---|---|---|---|---|
