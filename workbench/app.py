@@ -266,6 +266,16 @@ class QuestionIn(BaseModel):
     sureness: str = Field(default="", max_length=40)
     marks: list[list[float]] = Field(default_factory=list)  # her own boxes on the rendered page (image px)
     system: dict | None = None  # what our system answered when she pressed "Ask our system"
+    qid: str = Field(default="", pattern="^(|h-[0-9a-f]{12})$")  # set when editing a saved question
+
+
+def _live_questions() -> dict[str, dict]:
+    """qid -> the last saved row, without deleted ones (same rule as the eval's `human` split: last row wins)."""
+    last: dict[str, dict] = {}
+    for r in store.read("questions"):
+        if r.get("qid"):
+            last[r["qid"]] = r
+    return {k: v for k, v in last.items() if not v.get("deleted")}
 
 
 def _guess_type(unit: str, answer: str) -> str:
@@ -309,13 +319,14 @@ def post_question(q: QuestionIn):
                                  "bbox": conv[0], "bbox_space": conv[1], "note": "expert mark"})
         except Exception:  # noqa: BLE001
             evid = []
+    qid = q.qid if q.qid and q.qid in _live_questions() else "h-" + make_qid(q.path, q.question.strip())
     row = store.append("questions", {
-        "qid": "h-" + make_qid(q.path, q.question.strip()), "path": q.path, "page": q.page,
+        "qid": qid, "path": q.path, "page": q.page,
         "question": q.question.strip(), "answer": q.answer.strip(), "unit": q.unit.strip(),
         "type": q.type or _guess_type(q.unit, q.answer), "method": q.method.strip(), "sureness": q.sureness,
         "marks": q.marks, "evidence": evid, "author": "expert", "system": sys_ans})
-    n = len(store.read("questions"))
-    if n in (1, 5, 10, 20, 40):
+    n = len(_live_questions())
+    if n in (1, 5, 10, 20, 40) and not q.qid:
         _notify("F", f"expert workbench: {n} human question(s) in $JUNCTION_SHARED/human/questions.jsonl "
                      f"(fields: path, question, answer, unit, type, method, sureness, system). Ready for an eval split 'human'.")
     _report()
@@ -324,8 +335,25 @@ def post_question(q: QuestionIn):
 
 @app.get("/api/questions")
 def get_questions():
-    return {"questions": [{k: r.get(k) for k in ("time", "qid", "path", "question", "answer", "unit", "sureness",
-                                                 "system")} for r in store.read("questions")][::-1]}
+    keys = ("time", "qid", "path", "page", "question", "answer", "unit", "type", "method", "sureness", "marks", "system")
+    rows = sorted(_live_questions().values(), key=lambda r: r.get("time", ""), reverse=True)
+    return {"questions": [{k: r.get(k) for k in keys} for r in rows]}
+
+
+class DeleteIn(BaseModel):
+    qid: str = Field(pattern="^h-[0-9a-f]{12}$")
+
+
+@app.post("/api/questions/delete")
+def delete_question(d: DeleteIn):
+    live = _live_questions()
+    if d.qid not in live:
+        raise HTTPException(404, "no such question")
+    r = live[d.qid]
+    store.append("questions", {"qid": d.qid, "path": r.get("path"), "question": r.get("question"), "deleted": True,
+                               "author": "expert"})
+    _report()
+    return {"ok": True, "n": len(_live_questions())}
 
 
 # --- tab 3: rules -------------------------------------------------------------------------------------------

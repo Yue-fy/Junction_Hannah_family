@@ -38,3 +38,18 @@ def test_rules_and_audit_roundtrip(client, tmp_path):
     assert client.get("/api/rules").json()["rules"][0]["what"] == "door width"
     assert client.post("/api/audit", json={"item_id": "nope", "verdict": "supports"}).status_code == 404
     assert client.post("/api/audit", json={"item_id": "x", "verdict": "maybe"}).status_code == 422
+
+
+def test_question_edit_and_delete(client):
+    p = "data/swiss_dwellings/site990_bldg2071_floor9290.pdf"
+    r = client.post("/api/questions", json={"path": p, "question": "How many rooms?", "answer": "7", "unit": "count",
+                                            "type": "count"})
+    assert r.status_code == 200, r.text
+    qid = r.json()["saved"]["qid"]
+    r = client.post("/api/questions", json={"path": p, "question": "How many rooms in apartment E?", "answer": "8",
+                                            "unit": "count", "type": "count", "qid": qid})
+    assert r.json()["saved"]["qid"] == qid and r.json()["n"] == 1
+    qs = client.get("/api/questions").json()["questions"]
+    assert len(qs) == 1 and qs[0]["answer"] == "8"
+    assert client.post("/api/questions/delete", json={"qid": qid}).json()["n"] == 0
+    assert client.get("/api/questions").json()["questions"] == []

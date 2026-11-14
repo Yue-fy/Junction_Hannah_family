@@ -435,28 +435,59 @@ const asker = {
     const body = {
       path: this.path, page: this.page, question, answer: ans, unit: $("#q-unit").value, type,
       method: $("#q-method").value, sureness: ($("input[name=sure]:checked") || {}).value || "",
-      marks: this.viewer.marks, system: this.system,
+      marks: this.viewer.marks, system: this.system, qid: this.editQid || "",
     };
     try {
       const r = await api("api/questions", { method: "POST", body: JSON.stringify(body) });
       flash(`Saved ✓ (${r.n} questions so far)`);
+      this.edit(null);
       $("#q-text").value = ""; $("#q-answer").value = ""; $("#q-method").value = "";
       this.system = null; $("#q-result").hidden = true;
       this.viewer.marks = []; this.viewer.boxes = []; this.viewer.draw();
       this.listMine();
     } catch (e) { alert(`Could not save: ${e.message}`); }
   },
+  edit(q) {
+    this.editQid = q ? q.qid : null;
+    $("#q-save").textContent = q ? "Save changes" : "Save question";
+    $("#q-editing").hidden = !q;
+  },
   async listMine() {
     const r = await api("api/questions");
+    this.mine = r.questions;
     $("#q-count").textContent = r.questions.length;
-    $("#q-list").innerHTML = r.questions.map((q) => `<li><b>${esc(q.question)}</b> → ${esc(q.answer || "?")} ${esc(q.unit || "")}
-      ${q.system ? `<small>(ours: ${esc(q.system.value)} ${esc(q.system.unit || "")})</small>` : ""}</li>`).join("");
+    $("#q-list").innerHTML = r.questions.map((q, i) => `<li><b>${esc(q.question)}</b> → ${esc(q.answer || "?")} ${esc(q.unit || "")}
+      ${q.system ? `<small>(ours: ${esc(q.system.value)} ${esc(q.system.unit || "")})</small>` : ""}
+      <button class="mini" data-edit="${i}">Edit</button><button class="mini" data-del="${i}">Delete</button></li>`).join("");
+    $$("#q-list [data-edit]").forEach((b) => b.addEventListener("click", async () => {
+      const q = this.mine[+b.dataset.edit];
+      await this.open(q.path, q.page || 0);
+      $("#q-text").value = q.question || ""; $("#q-answer").value = q.answer || ""; $("#q-unit").value = q.unit || "";
+      if (q.type) $("#q-type").value = q.type;
+      $("#q-method").value = q.method || "";
+      const s = $(`input[name=sure][value="${q.sureness}"]`); if (s) s.checked = true;
+      this.viewer.marks = (q.marks || []).slice(); this.viewer.drawMarks();
+      this.edit(q);
+      $("#q-text").focus();
+    }));
+    $$("#q-list [data-del]").forEach((b) => b.addEventListener("click", async () => {
+      const q = this.mine[+b.dataset.del];
+      if (!confirm(`Delete this question?\n\n${q.question}`)) return;
+      try { await api("api/questions/delete", { method: "POST", body: JSON.stringify({ qid: q.qid }) }); flash("Deleted"); }
+      catch (e) { alert(`Could not delete: ${e.message}`); }
+      if (this.editQid === q.qid) this.edit(null);
+      this.listMine();
+    }));
   },
 };
 $("#pick-search-btn").addEventListener("click", () => asker.groups($("#pick-search").value.trim()));
 $("#pick-search").addEventListener("keydown", (e) => { if (e.key === "Enter") asker.groups(e.target.value.trim()); });
 $("#pick-reset").addEventListener("click", () => { $("#pick-search").value = ""; asker.groups(); });
-$("#ask-change").addEventListener("click", () => { $("#asker").hidden = true; $("#picker").hidden = false; });
+$("#ask-change").addEventListener("click", () => { $("#asker").hidden = true; $("#picker").hidden = false; asker.edit(null); });
+$("#q-cancel-edit").addEventListener("click", () => {
+  asker.edit(null); $("#q-text").value = ""; $("#q-answer").value = ""; $("#q-method").value = "";
+  asker.viewer.marks = []; asker.viewer.drawMarks();
+});
 $("#q-ask").addEventListener("click", () => asker.ask());
 $("#q-save").addEventListener("click", () => asker.save());
 $("#ask-mark").addEventListener("click", (e) => {
