@@ -562,6 +562,7 @@ class Pipeline(BaseSolver):
                 ans.trace.append(f"a count question answered with a fraction ({ans.value}): confidence capped at 0.3")
                 ans.confidence = 0.3
                 ans.missing = [*ans.missing, "a count should be a whole number; this answer may read the wrong quantity"]
+        self._area_crosscheck(path, asked, ans)
         if ans.value is not None:
             self._sheet_veto(path, asked, ans)
         if ans.value is not None and ans.confidence < 0.4 and not ans.missing:
@@ -854,6 +855,32 @@ class Pipeline(BaseSolver):
             return a, None
         trace.append(f"raster (question as asked): {a.value} {a.unit or ''} at conf {a.confidence:.2f}, unsure")
         return None, ("raster", a)
+
+    def _area_crosscheck(self, path: str, question: str, ans: Answer) -> None:
+        """R1 09:05: room-scoped AREA questions on a CubiCasa plan: R1's room graph from W3's OCR text layer checks the
+        pipeline's value (value never changes; agree -> room box evidence + conf >= 0.75; disagree or a non-numeric
+        answer -> conf <= 0.3 + the graph's value in missing). Offline on R1's 78 probes: area confident-wrong 9 -> 0,
+        area AUROC 0.56 -> 0.76. Guarded import: live once night has night-R1 89fa02b. cc5k=1 only (D8)."""
+        if not (self.cc5k and source_of(path) == "cubicasa5k") or str(ans.solver or "").endswith("room_graph"):
+            return
+        try:
+            from experiments.r1.room_graph.pipeline_rg import area_crosscheck
+            from experiments.r1.room_graph.route import per_room
+
+            hit = per_room(question, path)
+        except Exception:  # noqa: BLE001
+            return
+        if not (hit.get("fire_any") and hit.get("area")):
+            return
+        from stoa.llm import cost_meter
+
+        try:
+            with cost_meter() as m:
+                area_crosscheck(path, question, ans)
+        except Exception:  # noqa: BLE001
+            return
+        ans.cost = _cost_of(ans).add(Cost(llm_calls=m.calls, llm_tokens_in=m.llm_tokens_in,
+                                          llm_tokens_out=m.llm_tokens_out, gpu_seconds=round(m.gpu_seconds, 3)))
 
     def _per_room(self, path: str, question: str, t0: float) -> Answer | None:
         """D19 (4), R1 08:27: R1's measured per-room route (experiments.r1.room_graph.route.per_room: room-scoped /
