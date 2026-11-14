@@ -210,6 +210,12 @@ class Pipeline(BaseSolver):
     # -- main -------------------------------------------------------------------------------------
     def solve(self, path: str, question: str) -> Answer:
         t0 = time.perf_counter()
+        try:  # caches, gates and the KG key on the dataset-relative path (F 03:49: absolute paths missed them)
+            from stoa.data import dataset_rel
+
+            path = dataset_rel(path)
+        except Exception:  # noqa: BLE001
+            pass
         plan = decompose(source_of(path), question) if self.compose else None
         if plan is None:
             ans = self._solve_atomic(path, question)
