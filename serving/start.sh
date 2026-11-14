@@ -32,6 +32,14 @@ case "$PRESET" in
 esac
 PORT=${PORT:-8001}
 GPU_UTIL=${GPU_UTIL:-0.45}
+# The shared server must always serve the counting LoRAs (vlm_lora; without them cubicasa drops ~12 points).
+# Default for the shared qwen3vl8b server: every adapter below that exists. NO_LORA=1 to start without them.
+if [[ $PORT == 8001 && $PRESET == qwen3vl8b && -z ${LORA:-} && ${NO_LORA:-0} != 1 ]]; then
+  for a in cc-v2 cc-v3; do
+    d=$SHARED/artifacts/R2/lora/$a
+    [[ -f $d/adapter_config.json ]] && LORA=${LORA:+$LORA,}$a=$d
+  done
+fi
 MAX_LEN=${MAX_LEN:-32768}
 if [[ $PORT == 8001 ]]; then SUFFIX=""; else SUFFIX="-$PORT"; fi
 LOG=$SHARED/logs/model-server$SUFFIX.log
