@@ -16,6 +16,11 @@ def test_parse_line_tags():
     r = ad.parse_line("[data/swiss_dwellings/x.pdf][answer=3] How many bathrooms?")
     assert r["path"] == "data/swiss_dwellings/x.pdf" and r["answer"] == "3" and r["question"] == "How many bathrooms?"
     assert ad.parse_line("How big is room #3?")["question"] == "How big is room #3?"  # inline '#' is text
+    r = ad.parse_line("How many doors are there on this floor? [kind=count_doors] [habs]")  # tags at the end
+    assert r == {"kind": "count_doors", "sources": ["habs"], "question": "How many doors are there on this floor?"}
+    r = ad.parse_line("[kind=a] How many? [kind=b][data/x/y.pdf]")
+    assert r["kind"] == "a" and r["path"] == "data/x/y.pdf" and r["question"] == "How many?"
+    assert ad.parse_line("What is written in the title block [A1]")["question"] == "What is written in the title block [A1]"
 
 
 def test_attach_same_drawings_for_every_question(monkeypatch, tmp_path):

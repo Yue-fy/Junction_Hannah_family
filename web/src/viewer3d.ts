@@ -76,7 +76,8 @@ export class Viewer3D {
   onPick: (guid: string, label: string, props: Record<string, string>) => void = () => {};
   private loadToken = 0;
   private needsRender = true;
-  /** Customer view: circled numbers ①…⑤ over the elements the answer lists (HTML labels, placed on every render). */
+  private lastFramed: THREE.Object3D | null = null;
+  /** Customer view: numbered pins 1…5 over the elements the answer lists (HTML labels, placed on every render). */
   private labels: { el: HTMLDivElement; p: THREE.Vector3 }[] = [];
   private labelLayer = document.createElement("div");
 
@@ -93,6 +94,8 @@ export class Viewer3D {
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
     this.controls.addEventListener("change", () => (this.needsRender = true));
+    // once the visitor orbits/zooms, a pane resize keeps their view; until then it re-fits the last framing
+    this.controls.addEventListener("start", () => (this.lastFramed = null));
     this.scene.add(new THREE.HemisphereLight(0xffffff, 0x8899aa, 2.2));
     const sun = new THREE.DirectionalLight(0xffffff, 1.6);
     sun.position.set(50, 100, 30);
@@ -111,8 +114,13 @@ export class Viewer3D {
     loop();
   }
 
-  /** Number these elements ① ② ③ … (GlobalIds in the order of the answer's list); [] clears. */
+  /** Number these elements 1 2 3 … (GlobalIds in the order of the answer's list; '' = no element for that number); [] clears. */
   setNumbers(guids: string[]) {
+    this.setNumberGroups(guids.map((g) => (g ? [g] : [])));
+  }
+
+  /** One number per group of elements (e.g. one per floor), placed over the centre of the group's top. */
+  setNumberGroups(groups: string[][]) {
     this.ensureGuidIndex();
     for (const l of this.labels) l.el.remove();
     this.labels = [];
@@ -120,26 +128,51 @@ export class Viewer3D {
       this.labelLayer.className = "v3d-labels";
       this.el.append(this.labelLayer);
     }
-    const CIRC = "①②③④⑤⑥⑦⑧⑨";
     const mat = new THREE.MeshBasicMaterial();
-    guids.forEach((g, k) => {
-      const id = this.guidToId.get(g);
-      if (id === undefined) return;
-      const m = this.elementMesh(id, mat);
-      if (!m) return;
-      const box = new THREE.Box3().setFromObject(m);
-      m.geometry.dispose();
+    groups.forEach((gs, k) => {
+      // an empty group = a numbered item without a GlobalId (a 2D box only): its number stays free
+      const box = this.boxOf(gs, mat);
       if (box.isEmpty()) return;
       const p = box.getCenter(new THREE.Vector3());
       p.y = box.max.y;
       const el = document.createElement("div");
-      el.className = "v3d-num";
-      el.textContent = CIRC[k] ?? String(k + 1);
+      el.className = "v3d-num pin-badge";
+      el.textContent = String(k + 1);
       this.labelLayer.append(el);
       this.labels.push({ el, p });
     });
     mat.dispose();
     this.needsRender = true;
+  }
+
+  private boxOf(guids: string[], mat: THREE.Material) {
+    this.ensureGuidIndex();
+    const box = new THREE.Box3();
+    for (const g of guids) {
+      const id = this.guidToId.get(g);
+      const m = id === undefined ? null : this.elementMesh(id, mat);
+      if (!m) continue;
+      box.union(new THREE.Box3().setFromObject(m));
+      m.geometry.dispose();
+    }
+    return box;
+  }
+
+  /** Show one storey and frame these elements on it (customer view: a floor row of a whole-building answer). */
+  focusGuids(guids: string[], storey: number | null) {
+    this.ensureGuidIndex();
+    this.setStorey(storey);
+    const mat = new THREE.MeshBasicMaterial();
+    const g = new THREE.Group();
+    for (const guid of guids) {
+      const id = this.guidToId.get(guid);
+      const m = id === undefined ? null : this.elementMesh(id, mat);
+      if (m) g.add(m);
+    }
+    // frame() samples the vertices (kept in JS memory after dispose) and re-fits on resize until the visitor orbits
+    if (g.children.length) this.frame(g);
+    for (const m of g.children) (m as THREE.Mesh).geometry.dispose();
+    mat.dispose();
   }
 
   private placeLabels() {
@@ -162,6 +195,7 @@ export class Viewer3D {
     this.renderer.domElement.style.height = "100%";
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
+    if (this.lastFramed) this.frame(this.lastFramed);
     this.needsRender = true;
   }
 
@@ -522,13 +556,55 @@ export class Viewer3D {
   frame(obj: THREE.Object3D) {
     const box = new THREE.Box3().setFromObject(obj);
     if (box.isEmpty()) return;
+    this.lastFramed = obj;
     const c = box.getCenter(new THREE.Vector3());
-    const size = box.getSize(new THREE.Vector3()).length();
-    const dist = Math.max(size, 4) * 0.9 / Math.tan((this.camera.fov * Math.PI) / 360);
+    // a door or a few windows are shown with their surroundings: the framed box is at least 10 m wide
+    const MIN_HALF = 5;
+    box.expandByVector(new THREE.Vector3(MIN_HALF, MIN_HALF, MIN_HALF).sub(box.getSize(new THREE.Vector3()).multiplyScalar(0.5)).max(new THREE.Vector3()));
     const dir = new THREE.Vector3(0.6, 0.75, 0.9).normalize();
-    this.camera.position.copy(c).addScaledVector(dir, dist * (obj === this.root ? 0.6 : 0.85));
+    // exact fit: the closest camera distance along `dir` that keeps the elements inside the view (+ margin), so the lit
+    // elements fill the pane instead of a sphere around the box diagonal
+    const fwd = dir.clone().negate();
+    const right = fwd.clone().cross(new THREE.Vector3(0, 1, 0)).normalize();
+    const up = right.clone().cross(fwd);
+    const tanV = Math.tan((this.camera.fov * Math.PI) / 360);
+    const tanH = tanV * (this.camera.aspect || 1);
+    const margin = obj === this.root ? 1.08 : 1.25;
+    // fit on the geometry itself (sampled vertices, ≤ ~20k), not on the axis-aligned box: a building rotated on its
+    // site has empty box corners that would leave the lit part small; the expanded box's corners keep the minimum size
+    const pts: THREE.Vector3[] = [];
+    for (const x of [box.min.x, box.max.x]) for (const y of [box.min.y, box.max.y]) for (const z of [box.min.z, box.max.z]) pts.push(new THREE.Vector3(x, y, z));
+    const small = box.getSize(new THREE.Vector3()).length() <= Math.sqrt(3) * 2 * MIN_HALF + 0.01;
+    if (!small) {
+      pts.length = 0;
+      const meshes: THREE.Mesh[] = [];
+      obj.updateMatrixWorld(true);
+      obj.traverse((o) => { const m = o as THREE.Mesh; if (m.isMesh && m.visible && m.geometry?.attributes?.position) meshes.push(m); });
+      const total = meshes.reduce((n, m) => n + m.geometry.attributes.position.count, 0);
+      const step = Math.max(1, Math.ceil(total / 20000));
+      for (const m of meshes) {
+        const pos = m.geometry.attributes.position as THREE.BufferAttribute;
+        for (let i = 0; i < pos.count; i += step) pts.push(new THREE.Vector3().fromBufferAttribute(pos, i).applyMatrix4(m.matrixWorld));
+      }
+      if (!pts.length) for (const x of [box.min.x, box.max.x]) for (const y of [box.min.y, box.max.y]) for (const z of [box.min.z, box.max.z]) pts.push(new THREE.Vector3(x, y, z));
+    }
+    // centre the view on the points' extent in the camera's own axes, then back off until all of them fit
+    let [r0, r1, u0, u1] = [Infinity, -Infinity, Infinity, -Infinity];
+    for (const p of pts) {
+      const v = p.clone().sub(c);
+      const a = v.dot(right), b = v.dot(up);
+      r0 = Math.min(r0, a); r1 = Math.max(r1, a); u0 = Math.min(u0, b); u1 = Math.max(u1, b);
+    }
+    c.addScaledVector(right, (r0 + r1) / 2).addScaledVector(up, (u0 + u1) / 2);
+    let dist = 0;
+    for (const p of pts) {
+      const v = p.clone().sub(c);
+      const depth = v.dot(fwd);
+      dist = Math.max(dist, (Math.abs(v.dot(right)) * margin) / tanH - depth, (Math.abs(v.dot(up)) * margin) / tanV - depth);
+    }
+    this.camera.position.copy(c).addScaledVector(dir, dist);
     this.camera.near = Math.max(dist / 1000, 0.01);
-    this.camera.far = dist * 20;
+    this.camera.far = dist * 20 + box.getSize(new THREE.Vector3()).length() * 4;
     this.camera.updateProjectionMatrix();
     this.controls.target.copy(c);
     this.controls.update();

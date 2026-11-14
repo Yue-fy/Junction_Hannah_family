@@ -1,0 +1,19 @@
+# repaint-cost trigger wordings (R1 cycle 23, 11:2x). IN-SAMPLE: written while writing the regex, not a held-out test.
+# fire: kind 'repaint'
+What would it cost to repaint all walls on this floor?
+How much would it cost to paint the walls and ceilings of this apartment?
+Was würde es kosten, alle Wände neu zu streichen?
+Paljonko maksaisi maalata asunnon seinät?
+Combien coûterait la peinture de tous les murs ?
+Quanto costerebbe ridipingere tutte le pareti?
+Vad skulle det kosta att måla om alla väggar i lägenheten?
+Wat kost het om alle muren te schilderen?
+¿Cuánto costaría pintar todas las paredes de este piso?
+Kui palju maksaks kõikide seinte värvimine?
+Estimate the painting cost for the ceilings only.
+# must NOT fire
+What would it cost to repaint all walls at 12 €/m²?
+What paint finish is specified for the corridor walls?
+How many walls are there on this floor?
+What is the total wall area on this floor?
+How much paint is needed for the walls?
