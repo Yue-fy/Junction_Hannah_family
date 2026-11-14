@@ -28,7 +28,7 @@ KIND_WORDS: dict[str, list[str]] = {
     "bathtub": [r"bath\s?tubs?", r"baths?(?!\s?room)", r"badewannen?", r"baignoires?", r"vasch?e?\s+da\s+bagno",
                 r"vasca", r"vasche", r"badkuip(?:en)?", r"badkar"],
     "shower": [r"showers?", r"duschen", r"dusche", r"douches?", r"docci[ae]", r"docce", r"douche"],
-    "apartment": [r"apartments?", r"flats?", r"residential\s+units?", r"dwellings?", r"dwelling\s+units?",
+    "apartment": [r"apartments?", r"flats?", r"residential\s+units?", r"units?", r"dwellings?", r"dwelling\s+units?",
                   r"wohnungen", r"wohnung", r"wohneinheiten", r"appartements?", r"logements?", r"appartament[oi]",
                   r"unit[àa]\s+abitativ[ae]", r"lägenhet(?:er)?", r"woningen", r"woning"],
 }
@@ -116,15 +116,27 @@ NEG_APT_W = (r"(?:do(?:es)?\s+not|don't|doesn't|not)\s+(?:belong|lie|part|in|ins
 WHICH_CMP = (r"^\s*(?:which|welche[rs]?|quel(?:le)?|lequel|laquelle|quale|welk[e]?|vilk(?:en|et)|cu[áa]l|kumpi|kt[óo]r[ey])\b.*"
              r"\b(smaller|larger|bigger|greater|kleiner|gr[öo]sser|größer|plus\s+petit|plus\s+grand|più\s+piccol|più\s+grand|"
              r"groter|mindre|st[öo]rre|m[áa]s\s+peque[ñn]|m[áa]s\s+grande|pienempi|suurempi|mniejsz|wi[ęe]ksz)")
-COUNT_WORDS = (r"how\s+many|count|number\s+of|wie\s+viele|anzahl|combien|nombre\s+de|quant[ie]|quante|numero\s+di|hoeveel|"
+COUNT_WORDS = (r"how\s+many|count|number\s+of|wie\s+viele|anzahl|combien|nombre\s+(?:total\s+)?de|quant[ie]|quante|"
+               r"numero\s+(?:totale\s+|complessivo\s+)?di|gesamtzahl|\bzahl\s+der|lukum[äa][äa]r|\baantal\b|\bantal(?:et)?\b|"
+               r"\bliczba\b|\bpo[čc]et\b|cantidad\s+de|hoeveel|"
                r"hur\s+m[åa]nga|cu[áa]nt[oa]s|quant[oa]s|n[úu]mero\s+de|kuinka\s+monta|montako|\bile\b|kolik|h[áa]ny\b|\bmitu\b|\bka[çc]\b|"
                r"\bhvor\s+mange|\bhur\s+m[åa]nga")
-AREA_WORDS = (r"arean?\b|vloeroppervl|ytan\b|fl[äa]che|surface|superficie|oppervlak|yta\b|m²|m2\b|square\s+met|sq\.?\s*m\b|square\s+f(?:ee|oo)t|"
+SQM_W = (r"quadratmeter|\bqm\b|m[èe]tres?\s+carr[ée]s|metri\s+quadr|metros?\s+cuadrados|vierkante\s+meter|kvadratmeter|"
+         r"neli[öo]metri|metr[óo]w\s+kwadratow|metrekare|square\s+met")
+AREA_WORDS = (SQM_W + r"|arean?\b|vloeroppervl|ytan\b|fl[äa]che|surface|superficie|oppervlak|yta\b|m²|m2\b|square\s+met|sq\.?\s*m\b|square\s+f(?:ee|oo)t|"
               r"sq\.?\s*ft|ft²|ft2\b|how\s+(?:large|big)|wie\s+gross|wie\s+groß")
-FT2 = r"square\s+f(?:ee|oo)t|sq\.?\s*ft|ft²|ft2\b|\bsf\b"
+FT2 = (r"square\s+f(?:ee|oo)t|sq\.?\s*ft|ft²|ft2\b|\bsf\b|quadratfu(?:ss|ß)|pieds?\s+carr[ée]s|piedi\s+quadr|vierkante\s+voet|"
+       r"kvadratf(?:ot|ö)|neli[öo]jal|pies\s+cuadrados|p[ée]s\s+quadrados|stóp\s+kwadrat")
 DIFF = (r"how\s+many\s+more|more\s+\w+\s+than|by\s+how\s+(?:many|much)|difference|minus|larger\s+than|bigger\s+than|"
         r"greater\s+than|exceeds?|mehr\s+.*\s+als|gr[öo]sser\s+als|größer\s+als|unterschied|differenz|plus\s+de\s+.*\s+que|"
         r"plus\s+grand\w*\s+que|diff[ée]rence|più\s+.*\s+(?:di|che)|differenza|meer\s+.*\s+dan|fler\s+.*\s+än")
+# "by how much / di quanto / de combien / um wie viel / cuántos m² más" + a comparative = a difference (F 08:52: Italian
+# 'Di quanti m² il locale 1.06 è più grande del locale 1.04?' was answered max -> 'room 1.06' at 0.99)
+BYMUCH = (r"by\s+how\s+(?:many|much)|di\s+quant[oiea]\b|de\s+combien\b|um\s+wie\s+viel|cu[áa]nt[oa]s?\b|how\s+(?:many|much)\s+"
+          r"(?:square\s+(?:met(?:er|re)s?|f(?:ee|oo)t)\s+|m²\s+|m2\s+|sq\.?\s*(?:m|ft)\s+)(?:larger|bigger|greater|smaller|more|less)|"
+          r"hoeveel\s+(?:vierkante\s+meter\s+|m²\s+)?(?:groter|kleiner)|hur\s+mycket\s+(?:st[öo]rre|mindre)|kuinka\s+paljon")
+BYMUCH_CMP = (r"\b(?:bigger|larger|greater|smaller|more|less|gr[öo](?:ss|ß)er|kleiner|plus|moins|pi[uù]|meno|m[áa]s|menos|"
+              r"groter|st[öo]rre|mindre|suurempi|pienempi|mehr|weniger)\b")
 DIFF_REV = r"fewer|less\s+than|smaller\s+than|weniger|kleiner\s+als|moins\s+de|plus\s+petit\w*\s+que|meno|minder|mindre"
 MAX_W = r"largest|biggest|greatest|gr[öo]ss(?:te|ten)|größte|plus\s+grand|più\s+grande|maggiore|grootste|största"
 MIN_W = r"smallest|kleinste|plus\s+petit|più\s+piccol|minore|kleinste|minsta"
@@ -132,6 +144,11 @@ MIN_W = r"smallest|kleinste|plus\s+petit|più\s+piccol|minore|kleinste|minsta"
 EXCL_CLAUSE = (r"(?:\bexcept\b|\bexcluding\b|\bexclusive\s+of\b|\bwithout\b|\bnot\s+counting\b|\bohne\b|\bau(?:ss|ß)er\b|"
                r"\bausgenommen\b|\bexkl\.?|\bhors\b|\bsans\b|à\s+l'exclusion|\bexcept[ée]e?s?\b|\bnon\s+compris\b|"
                r"\besclus[ioae]\b|\bsenza\b|\btranne\b|\beccett\w*|\bzonder\b|\bexklusive\b|\butom\b)[^)?;:]*")
+_OUT_N = r"(?:balcon\w*|balkon\w*|loggi\w*|terra(?:ce|ss|zz)\w*|outdoor\s+\w+|shafts?|sch[äa]chte?)"
+POST_EXCL = (_OUT_N + r"(?:\s*(?:,|and|und|et|e|or|oder|ou|o|y|en|och)\s*" + _OUT_N + r")*\s+(?:are\s+|is\s+)?(?:excluded|not\s+"
+             r"included|not\s+counted|left\s+out|nicht\s+mitgerechnet|nicht\s+eingerechnet|nicht\s+inbegriffen|ausgenommen|"
+             r"ausgeschlossen|exclu(?:e|s|es)?\b|non\s+compris\w*|esclus[eiao]\b|non\s+inclus[eiao]|uitgezonderd|niet\s+meegerekend|"
+             r"exkluderade?|excluid[oa]s?)")
 # true superlatives only (not comparatives "plus grand que" / "più grande di" / "grösser als")
 SUPER_MAX = (r"\b(?:largest|biggest|greatest)\b|gr[öo](?:ss|ß)te[nrs]?\b|\b(?:le|la|les|l')\s*plus\s+grand|"
              r"\b(?:il|la|lo|i|le|l')\s*(?:\w+\s+)?pi[uù]\s+grand|\bgrootste\b|\bst[öo]rsta\b")
@@ -165,8 +182,12 @@ WHICH_Q = (r"^\s*(?:which|what\s+(?:is\s+the\s+)?(?:name|number|label)|welche[rs
 
 ROOMNUM_RE = re.compile(r"(?<![\w.])([A-Z]{0,2}\d{1,3}\.\d{1,3}(?:\.\d{1,3})?)(?![\w.]*\s*(?:m²|m2|ft|%))")
 APT_LEAD = (r"(?:apartments?|units?|flats?|wohnungen|wohnung|whg\.?|appartements?|l'appartement|appartament[oi]|"
-            r"dell'appartamento|app\.?|lägenhet(?:er(?:na)?)?|l[äa]genheten|woning(?:en)?|bostad(?:en)?|apartamentos?)")
-APT_RE = re.compile("(?i:" + APT_LEAD + r")\s+([A-Z](?:" + JOIN + r"[A-Z])*)(?![\w])")
+            r"dell'appartamento|app\.?|apts?\.?|wohneinheit(?:en)?|logements?|du\s+logement|alloggi[oa]?|unit[àa]|"
+            r"huoneisto|asunto|mieszkani[ea]|lägenhet(?:er(?:na)?)?|l[äa]genheten|woning(?:en)?|bostad(?:en)?|apartamentos?)")
+APT_RE = re.compile("(?i:" + APT_LEAD + r")(?:\s*[-–]\s*|\s+|(?<=\.))([A-Z](?:" + JOIN + r"[A-Z])*)(?![\w])")
+# letter BEFORE the noun (F 08:22: 'the D apartment', 'D apartment in m²', 'the B flat' were the whole floor at 0.95)
+APT_RE_PRE = re.compile(r"(?<![\w'’.-])([A-Z])(?:\s*[-–]\s*|\s+)(?i:apartments?|flats?|units?|dwellings?|wohnung|"
+                        r"appartements?|appartamento|logements?)\b")
 ROOM_NO_RE = re.compile(r"(?i:\b(?:room|raum|zimmer|pi[èe]ce|local[e]?|stanza|vano|kamer|ruimte|rum|rummet)\s+"
                         r"(?:no\.?\s*|nr\.?\s*|n°\s*|number\s+|nummer\s+|numéro\s+|numero\s+)?)"
                         r"([A-Z]{0,2}\d{1,4}[a-z]?)(?![\w.,]*\s*(?:m²|m2|ft|%|sq|qm|mq))(?![.\d])")
@@ -194,6 +215,7 @@ class Query:
     threshold: float | None = None  # for op count_gt / count_lt / count_ge
     consumed: list[str] = field(default_factory=list)  # regexes of question parts the parse handled (for covered())
     absolute: bool = False  # "the difference between A and B": |A - B| (symmetric wording)
+    op_sure: bool = False  # the operation word is explicit ("di quanto ... più grande"): no LLM operation check
 
     def describe(self) -> str:
         parts = []
@@ -270,17 +292,28 @@ def parse(question: str, vocab: list[str] | None = None, room_numbers: set[str] 
         for k, letter in enumerate(re.split(JOIN, m.group(1))):
             if letter:
                 apts.append((letter.strip(), m.start() + k))
+    for m in APT_RE_PRE.finditer(q):
+        lead = q[:m.start()].rstrip()
+        if m.group(1) == "A" and (not lead or lead[-1] in ".?!:;"):
+            continue  # "A flat roof ..." at the start of a sentence is the article
+        if not any(a == m.group(1) for a, _ in apts):
+            apts.append((m.group(1), m.start()))
+            notes.append(f"apartment letter written before the noun: '{m.group(0)}'")
+    apts.sort(key=lambda a: a[1])
     total_numbered = bool(re.search(TOTAL_NUMBERED, ql))
 
     # "how many times / by what factor is apartment B larger than A" compares sizes even without an area word
     if re.search(TIMES_W, ql) and (len(apts) >= 2 or len(nums) >= 2):
         is_area, is_count = True, False  # "how many times" is not a count
+    bymuch = bool(re.search(BYMUCH, ql)) and bool(re.search(BYMUCH_CMP, ql)) and not re.search(THRESH_W, ql)
+    if bymuch and (len(apts) >= 2 or len(nums) >= 2):
+        is_area, is_count = True, False  # "di quanto è più grande la stanza 2.27 rispetto alla 2.28": a size difference
     op = "sum"
     if re.search(MAX_W, ql):
         op = "max"
     elif re.search(MIN_W, ql) and not re.search(DIFF, ql):
         op = "min"
-    if re.search(DIFF, ql) or re.search(DIFF_REV, ql):
+    if re.search(DIFF, ql) or re.search(DIFF_REV, ql) or bymuch:
         op = "diff"
     rev = bool(re.search(DIFF_REV, ql)) and not re.search(r"how\s+many\s+more|larger|bigger|greater", ql)
 
@@ -350,7 +383,8 @@ def parse(question: str, vocab: list[str] | None = None, room_numbers: set[str] 
                      consumed=[THRESH_W, ROOM_NOUN, APT_RE.pattern, r"\b(?:are|is|have|has|sind|haben|sont|ont|sono|hanno)\b"])
     # room-type concepts named in the question (not inside "except balconies, loggias…", "including balconies",
     # "living area"): blank out exclusion/inclusion clauses first, keeping positions
-    qc = re.sub(EXCL_CLAUSE, lambda m: " " * len(m.group(0)), ql)
+    qc = re.sub(POST_EXCL, lambda m: " " * len(m.group(0)), ql)  # "Apartment D: ..., balconies excluded?" (F 08:22)
+    qc = re.sub(EXCL_CLAUSE, lambda m: " " * len(m.group(0)), qc)
     qc = re.sub(INCLUDE_OUT, lambda m: " " * len(m.group(0)), qc)
     concept_terms: list[Term] = []
     for c, (words, clabs) in CONCEPTS.items():
@@ -361,7 +395,8 @@ def parse(question: str, vocab: list[str] | None = None, room_numbers: set[str] 
                 continue
             concept_terms.append(Term("area_label", list(clabs), p, note=f"concept {c}"))
     # area questions -------------------------------------------------------------------------------
-    if is_area and not (is_count and not re.search(r"m²|m2\b|square|ft|area|fl[äa]che|surface|superficie|yta\b|ytan\b|arean\b|oppervl", ql)):
+    if is_area and not (is_count and not re.search(r"m²|m2\b|square|ft|area|fl[äa]che|surface|superficie|yta\b|ytan\b|arean\b|oppervl|"
+                                                    + SQM_W, ql)):
         qtype = "area"
         if not labels and not nums:
             labels = bare_labels(q, vocab) or labels
@@ -453,7 +488,8 @@ def parse(question: str, vocab: list[str] | None = None, room_numbers: set[str] 
         elif op in ("pct", "pctdiff", "pctdiff_less"):
             unit_out = "%"
         qr = Query(qtype, op, terms, unit_out, notes, include_outdoor=inc, gross=gross, consumed=consumed,
-                   absolute=op == "diff" and len(terms) == 2 and bool(re.search(DIFF_BETWEEN, ql)))
+                   absolute=op == "diff" and len(terms) == 2 and bool(re.search(DIFF_BETWEEN, ql)),
+                   op_sure=bymuch and op == "diff" and len(terms) == 2)
         if op in ("pct", "pctdiff", "pctdiff_less") or (op == "diff" and consumed):
             qr.terms.sort(key=lambda t: t.pos)
             return qr
@@ -469,8 +505,7 @@ def parse(question: str, vocab: list[str] | None = None, room_numbers: set[str] 
             ps = _find_words(words, ql)
             if ps:
                 found[kind] = ps[0]
-        if "toilet" in found and "washbasin" not in found and re.search(r"\bwc[- ]?seats?\b", ql):
-            pass
+        found, apt_scope = _drop_qualifiers(ql, found, notes)
         for w, kind in AMBIGUOUS.items():  # also as the 2nd noun: "toilets and sinks" (Q 04:48: sinks were dropped)
             ps = _find_words([w], ql)
             if ps and kind not in found:
@@ -478,7 +513,7 @@ def parse(question: str, vocab: list[str] | None = None, room_numbers: set[str] 
                 notes.append("'sink' read as washbasin (kitchen sinks are not on the FIXTURE layer rules)")
                 break
         # "bath" inside "bathtub" is the same object; "apartment" in "apartment A" is not a count of apartments
-        terms = [Term("count", k, p) for k, p in sorted(found.items(), key=lambda kv: kv[1])]
+        terms = [Term("count", k, p, scope=["*"] if apt_scope else None) for k, p in sorted(found.items(), key=lambda kv: kv[1])]
         if not terms:
             terms = [Term("count_label", lab, p) for lab, p in bare_labels(q, vocab)]
         if not terms:
@@ -493,6 +528,19 @@ def parse(question: str, vocab: list[str] | None = None, room_numbers: set[str] 
         terms = sorted(terms, key=lambda t: t.arg == "apartment")
         qr = Query("count", "ratio", terms, None, notes, consumed=[PER_W, MEAN_W, r"\beach\b"])
         return qr
+    if qtype == "count" and len(terms) == 2 and all(t.kind in ("count", "count_label") for t in terms) and \
+            re.search(RATIO_W, ql) and not apts:
+        # "the ratio of window count to door count" (W5 08:41: 1 count @0.32): first named / second named
+        return Query("count", "ratio", sorted(terms, key=lambda t: t.pos), None, notes,
+                     consumed=[RATIO_W, r"\bcount\b", r"\bto\b"])
+    if qtype == "count" and len(terms) >= 2 and all(t.kind in ("count", "count_label") for t in terms) and \
+            not re.search(TOTAL_CUE, ql) and (re.search(TWO_RESP, ql) or re.search(
+                "(?:" + COUNT_WORDS + r").{1,80}?(?:,|\band\b|\bund\b|\bet\b|\be\b|\ben\b|\boch\b|\bja\b|\by\b|\bog\b|\bi\b)\s*"
+                r"(?:the\s+|die\s+|la\s+|le\s+|il\s+|de\s+|el\s+)?(?:" + COUNT_WORDS + ")", ql)):
+        # two questions in one ("Wie viele Türen und wie viele Fenster …?", "… respectively"): one number per part
+        # (Q 08:26 / S0 D19: was the sum 64 @0.98)
+        return Query("count", "list", sorted(terms, key=lambda t: t.pos), None, notes,
+                     consumed=[TWO_RESP, COUNT_WORDS])
     # "how many rooms does apartment B have": numbered indoor rooms inside the apartment (not a count of apartments)
     if apts and terms and all(t.kind == "count" and t.arg == "apartment" for t in terms) and \
             re.search(r"\brooms?\b|\br[äa]ume\b|\blocaux\b|\blocali\b|\bkamers\b|\bruimtes\b|\brum(?:men)?\b", ql):
@@ -510,6 +558,54 @@ def parse(question: str, vocab: list[str] | None = None, room_numbers: set[str] 
         for t in terms:
             t.scope = [a for a, _ in apts]
     return _finish(Query(qtype, op if len(terms) > 1 else "sum", terms, "count", notes), rev)
+
+
+_MOD_STOP = {"have", "has", "had", "with", "without", "a", "an", "the", "and", "or", "are", "is", "do", "does", "did",
+             "contain", "contains", "und", "oder", "et", "ou", "e", "o", "mit", "ohne", "avec", "sans", "con", "senza",
+             "haben", "hat", "ont", "hanno", "ha", "of", "in", "per", "that", "which", "than", "there", "on", "to", "vs",
+             "versus", "plus", "minus", "more", "fewer", "less", "as", "en", "och", "y", "og", "ja", "are", "were"}
+_OF_APT = re.compile(r"\b(?:of|in|inside|within|der|des|de|dei|degli|delle|van|i|aux|dans)\s+(?:the\s+|all\s+(?:the\s+)?|alle[nr]?\s+|"
+                     r"les\s+|tous\s+les\s+|i\s+|gli\s+|le\s+|de\s+|het\s+|each\s+|every\s+)?$")
+INCL_CLAUSE = (r"\b(?:including|incl\.?|inclusive\s+of|einschlie(?:ss|ß)lich|inklusive|inkl\.?|y\s+compris|compris|inclus\w*|"
+               r"compres[ioae]|inclus[io]|inclusief|inklusive|inkluderat?)\b[^?;]*")
+TWO_RESP = r"respectively|jeweils|respectivement|rispettivamente|respectivamente|respectievelijk|vastaavasti|respektive|odpowiednio"
+TOTAL_CUE = (r"\bin\s+total\b|\btotal\b|altogether|together|combined|\bsum\b|insgesamt|zusammen|gesamt|au\s+total|en\s+tout|"
+             r"\bin\s+tutto\b|totale|complessiv|in\s+totaal|samman|totalt|yhteens[äa]|en\s+total|łącznie|celkem|összesen")
+RATIO_W = (r"\bratio\b|verh[äa]ltnis|(?<!par )\brapport\b|rapporto|verhouding|f[öo]rh[åa]llande|\bsuhde|proporci[óo]n|"
+           r"how\s+many\s+times")
+
+
+def _drop_qualifiers(ql: str, found: dict[str, int], notes: list[str]) -> tuple[dict[str, int], bool]:
+    """A kind word that only qualifies another counted noun is not a second class to add (F/W4 08:27-08:40: 'How many
+    doors does this floor have, including the apartment entrance doors?' was doors + apartments at 0.98):
+    'apartment (entrance) doors' (modifier right before another counted noun), 'the entrance doors of the apartments'
+    inside an including-clause. 'doors in the apartments' outside such a clause -> doors restricted to the apartments.
+    Returns (kinds kept, apartments-as-scope)."""
+    if len(found) < 2:
+        return found, False
+    incl = [m.span() for m in re.finditer(INCL_CLAUSE, ql)]
+    keep, apt_scope = dict(found), False
+    for k in list(found):
+        others = [w for kk, ws in KIND_WORDS.items() if kk != k and kk in found for w in ws]
+        real, as_scope = 0, False
+        for w in KIND_WORDS[k]:
+            for m in re.finditer(r"(?<![\w])" + w + r"(?![\w])", ql, re.I):
+                after = ql[m.end():m.end() + 50]
+                mm = re.match(r"((?:\s+[\w-]+){0,2}?)\s+(?:" + "|".join(others) + r")(?![\w])", after, re.I)
+                if mm and not any(x in _MOD_STOP for x in mm.group(1).split()):
+                    continue  # "apartment entrance doors": a modifier
+                if k == "apartment" and _OF_APT.search(ql[:m.start()]):
+                    if any(a <= m.start() < b for a, b in incl):
+                        continue  # "including the entrance doors of the apartments": a subset of the counted doors
+                    as_scope = True  # "doors in the apartments"
+                    continue
+                real += 1
+        if real == 0:
+            del keep[k]
+            apt_scope = apt_scope or as_scope
+            notes.append(f"'{k}' only qualifies another counted object here (not added as a class)"
+                         + ("; counted inside the apartments" if as_scope else ""))
+    return (keep, apt_scope) if keep else (found, False)
 
 
 def _finish(qr: Query, rev: bool) -> Query:

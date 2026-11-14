@@ -1,0 +1,47 @@
+{"path": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf", "question": "If each door costs 1,200 euros, what do all the doors on this floor plan cost in total?", "gold": 43200, "unit": "eur", "kind": "price"}
+{"path": "data/swiss_dwellings/site986_bldg2066_floor9246.pdf", "question": "If each door costs 1,200 euros, what do all the doors on this floor plan cost in total?", "gold": 51600, "unit": "eur", "kind": "price"}
+{"path": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf", "question": "Windows cost CHF 850 each. What is the total cost of the windows on this plan?", "gold": 23800, "unit": "chf", "kind": "price"}
+{"path": "data/swiss_dwellings/site986_bldg2066_floor9246.pdf", "question": "At 450 euros per washbasin, how much do all the washbasins on this floor cost?", "gold": 2700, "unit": "eur", "kind": "price"}
+{"path": "data/swiss_dwellings/site890_bldg1899_floor8405.pdf", "question": "Replacing a door costs 380 €. What would it cost to replace every door on this floor?", "gold": 11400, "unit": "eur", "kind": "price"}
+{"path": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf", "question": "Wenn jede Tür 1.200 Euro kostet, was kosten alle Türen auf diesem Grundriss zusammen?", "gold": 43200, "unit": "eur", "kind": "price"}
+{"path": "data/swiss_dwellings/site986_bldg2066_floor9246.pdf", "question": "Si chaque fenêtre coûte 650 euros, combien coûtent toutes les fenêtres de ce plan ?", "gold": 19500, "unit": "eur", "kind": "price"}
+{"path": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf", "question": "Each door in apartment A costs 900 euros. What do the doors of apartment A cost in total?", "gold": 12600, "unit": "eur", "kind": "price"}
+{"path": "data/swiss_dwellings/site986_bldg2066_floor9246.pdf", "question": "Flooring costs 45 euros per m². What does flooring apartment B cost?", "gold": 3131.55, "unit": "eur", "kind": "price"}
+{"path": "data/swiss_dwellings/site890_bldg1899_floor8405.pdf", "question": "Painting costs 12 euros per square metre of floor. What does it cost to paint the floor of apartment D?", "gold": 340.08, "unit": "eur", "kind": "price"}
+{"path": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf", "question": "How much do the bathtubs cost if one bathtub costs 2,000 euros?", "gold": 8000, "unit": "eur", "kind": "price"}
+{"path": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf", "question": "How many doors does this floor have, including the apartment entrance doors?", "gold": 36, "unit": "count", "kind": "incl"}
+{"path": "data/swiss_dwellings/site986_bldg2066_floor9246.pdf", "question": "How many doors does this floor have, including the apartment entrance doors?", "gold": 43, "unit": "count", "kind": "incl"}
+{"path": "data/swiss_dwellings/site890_bldg1899_floor8405.pdf", "question": "How many windows are there, including the kitchen windows?", "gold": 12, "unit": "count", "kind": "incl"}
+{"path": "data/swiss_dwellings/site986_bldg2066_floor9246.pdf", "question": "Count the doors, including the entrance doors of the apartments.", "gold": 43, "unit": "count", "kind": "incl"}
+{"path": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf", "question": "Wie viele Türen hat dieses Geschoss, einschliesslich der Wohnungseingangstüren?", "gold": 36, "unit": "count", "kind": "incl"}
+{"path": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf", "question": "How many doors and windows are there, including balcony doors?", "gold": 64, "unit": "count", "kind": "incl"}
+{"path": "data/swiss_dwellings/site890_bldg1899_floor8405.pdf", "question": "What is the net floor area of the D apartment?", "gold": 28.34, "unit": "m2", "kind": "apt"}
+{"path": "data/swiss_dwellings/site890_bldg1899_floor8405.pdf", "question": "What is the net floor area of D apartment in m², excluding balconies and terraces?", "gold": 28.34, "unit": "m2", "kind": "apt"}
+{"path": "data/swiss_dwellings/site986_bldg2066_floor9246.pdf", "question": "Net floor area of apartment-B?", "gold": 69.59, "unit": "m2", "kind": "apt"}
+{"path": "data/swiss_dwellings/site986_bldg2066_floor9246.pdf", "question": "What is the net floor area of apt. D?", "gold": 71.65, "unit": "m2", "kind": "apt"}
+{"path": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf", "question": "Apartment C: what is its net floor area in m², balconies excluded?", "gold": 60.22, "unit": "m2", "kind": "apt"}
+{"path": "data/swiss_dwellings/site890_bldg1899_floor8405.pdf", "question": "Apartment D: what is its net floor area in m², balconies excluded?", "gold": 28.34, "unit": "m2", "kind": "apt"}
+{"path": "data/swiss_dwellings/site986_bldg2066_floor9246.pdf", "question": "How big is the B flat in m²?", "gold": 69.59, "unit": "m2", "kind": "apt"}
+{"path": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf", "question": "What is the net floor area of apartment A in m², excluding balconies, loggias and terraces?", "gold": 80.34, "unit": "m2", "kind": "apt"}
+{"path": "data/swiss_dwellings/site986_bldg2066_floor9246.pdf", "question": "Wie viele Quadratmeter hat die Wohnung B, Balkone und Terrassen nicht mitgerechnet?", "gold": 69.59, "unit": "m2", "kind": "apt"}
+{"path": "data/swiss_dwellings/site986_bldg2066_floor9246.pdf", "question": "Combien de mètres carrés fait l'appartement D (hors balcons et terrasses) ?", "gold": 71.65, "unit": "m2", "kind": "apt"}
+{"path": "data/swiss_dwellings/site890_bldg1899_floor8405.pdf", "question": "Quanti metri quadrati ha l'appartamento B, terrazze escluse?", "gold": 31.32, "unit": "m2", "kind": "apt"}
+{"path": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf", "question": "How many doors are there on this plan, and how many windows?", "gold": "36 ; 28", "unit": null, "kind": "two"}
+{"path": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf", "question": "Wie viele Türen und wie viele Fenster sind auf diesem Grundriss eingezeichnet?", "gold": "36 ; 28", "unit": null, "kind": "two"}
+{"path": "data/swiss_dwellings/site986_bldg2066_floor9246.pdf", "question": "Combien de portes et combien de fenêtres sont dessinées sur ce plan ?", "gold": "43 ; 30", "unit": null, "kind": "two"}
+{"path": "data/swiss_dwellings/site890_bldg1899_floor8405.pdf", "question": "Quante porte e quante finestre sono disegnate su questa pianta?", "gold": "30 ; 12", "unit": null, "kind": "two"}
+{"path": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf", "question": "How many doors and windows are drawn on this floor plan in total?", "gold": 64, "unit": "count", "kind": "two-sum"}
+{"path": "data/swiss_dwellings/site986_bldg2066_floor9246.pdf", "question": "Wie viele Türen und Fenster gibt es insgesamt auf diesem Grundriss?", "gold": 73, "unit": "count", "kind": "two-sum"}
+{"path": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf", "question": "Qual è il numero totale di porte e finestre su questa pianta?", "gold": 64, "unit": "count", "kind": "cue"}
+{"path": "data/swiss_dwellings/site986_bldg2066_floor9246.pdf", "question": "Quel est le nombre total de portes sur ce plan ?", "gold": 43, "unit": "count", "kind": "cue"}
+{"path": "data/swiss_dwellings/site890_bldg1899_floor8405.pdf", "question": "Gesamtzahl der Fenster auf diesem Plan?", "gold": 12, "unit": "count", "kind": "cue"}
+{"path": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf", "question": "Ikkunoiden lukumäärä tässä pohjapiirroksessa?", "gold": 28, "unit": "count", "kind": "cue"}
+{"path": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf", "question": "Di quanti m² il locale 2.05 è più grande del locale 2.02?", "gold": 6.31, "unit": "m2", "kind": "bymuch"}
+{"path": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf", "question": "Di quanto è più grande la stanza 2.27 rispetto alla 2.28?", "gold": 5.84, "unit": "m2", "kind": "bymuch"}
+{"path": "data/swiss_dwellings/site986_bldg2066_floor9246.pdf", "question": "Di quanti metri quadrati l'appartamento A è più grande dell'appartamento B?", "gold": 6.28, "unit": "m2", "kind": "bymuch"}
+{"path": "data/swiss_dwellings/site890_bldg1899_floor8405.pdf", "question": "¿Cuántos m² más grande es la habitación 2.09 que la 2.02?", "gold": 2.66, "unit": "m2", "kind": "bymuch"}
+{"path": "data/swiss_dwellings/site986_bldg2066_floor9246.pdf", "question": "Um wie viele m² ist Raum 3.27 größer als Raum 3.24?", "gold": 3.54, "unit": "m2", "kind": "bymuch"}
+{"path": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf", "question": "What is the ratio of window count to door count on this floor?", "gold": 0.778, "unit": "ratio", "kind": "ratio"}
+{"path": "data/swiss_dwellings/site986_bldg2066_floor9246.pdf", "question": "What is the ratio of doors to windows on this plan?", "gold": 1.433, "unit": "ratio", "kind": "ratio"}
+{"path": "data/swiss_dwellings/site890_bldg1899_floor8405.pdf", "question": "Ratio of the number of windows to the number of doors?", "gold": 0.4, "unit": "ratio", "kind": "ratio"}
+{"path": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf", "question": "List the rooms of apartment A with their areas.", "gold": "15.61", "unit": null, "kind": "list"}

@@ -2,13 +2,19 @@
 gold None = unanswerable / false premise: right = abstain or conf <= 0.3.
 Usage: PYTHONPATH=. python experiments/w2/op_probe/run.py experiments/w2/op_probe/probe1.jsonl [solver args k=v]"""
 import json
+import re
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from collections import defaultdict
 
 from stoa.solvers import get_solver
 
 
 def right(gold, unit, a) -> bool:
+    if isinstance(gold, str) and " ; " in gold:  # two numbers asked: both in the answer, or conf <= 0.5 (S0 D19)
+        parts = gold.split(" ; ")
+        got = re.findall(r"\d+(?:\.\d+)?", str(a.value)) if a.value is not None else []
+        return all(p in got for p in parts) or a.value is None or a.confidence <= 0.5
     if gold is None:
         return a.value is None or a.confidence <= 0.3
     if a.value is None:
@@ -27,10 +33,12 @@ def right(gold, unit, a) -> bool:
 def main():
     rows = [json.loads(l) for l in open(sys.argv[1])]
     kw = dict(a.split("=", 1) for a in sys.argv[2:])
+    workers = int(kw.pop("workers", "4"))
     s = get_solver(kw.pop("solver", "dxf"), **kw)
     by = defaultdict(lambda: [0, 0, 0])
-    for r in rows:
-        a = s.solve(r["path"], r["question"])
+    with ThreadPoolExecutor(workers) as ex:
+        answers = list(ex.map(lambda r: s.solve(r["path"], r["question"]), rows))
+    for r, a in zip(rows, answers):
         ok = right(r["gold"], r["unit"], a)
         cw = (not ok) and a.value is not None and a.confidence >= 0.5
         b = by[r["kind"].split("-")[0]]
