@@ -427,6 +427,7 @@ async function openFile(f: FileInfo, question = "", keep: Answer | null = null, 
   if (!keep) {
     markAnswerCheck($("linked"), undefined, undefined);
     $("xbanner").hidden = true;
+    $("elsewhere").hidden = true;
     $("card").className = "card empty";
     // the first thing a visitor reads: what every answer carries
     $("card").innerHTML = `<p class="hint">Ask about this ${f.ext === ".ifc" ? "model" : "drawing"} in any language, or pick an example. Every answer
@@ -473,6 +474,22 @@ async function openFile(f: FileInfo, question = "", keep: Answer | null = null, 
     showAnswer(keep, 0);
     if (focusIndex !== null) focusEvidence(focusIndex);
   }
+}
+
+/** The answer boxes elements only on OTHER sheets (a storey list asked on 1.korrus, a room on another floor): say so
+ * on the drawing and offer those sheets, instead of an unmarked plan. */
+function showElsewhere(a: Answer) {
+  const el = $("elsewhere");
+  const here = state.file?.path ?? "";
+  const counts = new Map<string, number>();
+  for (const e of a.evidence) if (e.bbox) counts.set(e.file, (counts.get(e.file) ?? 0) + 1);
+  el.hidden = !counts.size || counts.has(here);
+  if (el.hidden) return;
+  const short = (p: string) => p.split("/").pop()!.replace(/^.*?_(plan|section|elevation)-\d*-?/, "$1 ").replace(/\.[^.]+$/, "");
+  el.innerHTML = `<span>Not on this sheet. Drawn on:</span>`
+    + [...counts.entries()].sort((x, y) => x[0].localeCompare(y[0])).slice(0, 8)
+      .map(([f, n]) => `<button type="button" data-file="${esc(f)}" title="Open ${esc(f.split("/").pop()!)}">${esc(short(f))} <b>${n}</b></button>`).join("");
+  el.querySelectorAll<HTMLButtonElement>("button").forEach((b) => b.addEventListener("click", () => void openSheet(b.dataset.file!)));
 }
 
 async function openSheet(path: string, focusIndex: number | null = null, keepAnswer = true) {
@@ -700,6 +717,7 @@ async function showAnswer(a: Answer, roundTripMs: number) {
   });
   v2d.setEvidence(a.evidence);
   v2d.frameEvidence();
+  showElsewhere(a);
   // only a storey-scoped count is the same fact as a drawing-vs-model pill (model-wide totals are not)
   const st = a.intent?.filters?.storey ? String(a.intent.filters.storey) : undefined;
   markAnswerCheck($("linked"), a.intent?.task === "count" && st ? a.intent.target : undefined, st);
