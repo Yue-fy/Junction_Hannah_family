@@ -87,6 +87,21 @@ Gemma loses on Finnish room-label reading (kitchens 35 vs 85, saunas 15 vs 50, W
 swiss plans. Not a replacement base. A Gemma counting LoRA (`experiments/r2/lora/gemma_lora.sh`, `train_lora.py
 --arch gemma4`, same TRAIN mix as cc-v3) tests whether fine-tuning closes the gap (Gemma prize, small fine-tuned model).
 
+## Language front end: `stoa.llm.to_english` (04:15)
+Sealed hard2r showed the pipeline collapsing on languages nobody wrote rules for (F: Polish cubicasa 21%, Estonian ifc
+20%). `lang_guess(q)` (stopwords + diacritics over 20 languages, quoted names ignored; 0 model calls) decides; for a
+language outside en/fi/de/fr/it (or `force=True`) ONE local 8B call translates the question to English with quoted
+names, numbers/IDs and unit letters masked as `[[n]]` and restored byte-identical (quote marks always restored; a
+lost placeholder returns the original with `ok=False`). ~250 tokens in / 40 out, ~0.4 s, cost recorded.
+| probe | pipeline as is | translated first | notes |
+|---|---|---|---|
+| lang4: 12 dev Qs × CS/HU/TR/RO, hand-written (48) | 38/48 (79.2%) | **48/48** | EN originals 12/12; 10 wins / 0 losses; 1 translation rejected (placeholder lost) → original kept |
+| hard's 175 non-English Qs (fi/de/fr/it templates; new sv/nl/pl/de wordings) | 152/175 | 146/175 (always) / **152/175** (`should_translate` trigger: fires on 0) | translating what the rules already read loses 7, wins 1 |
+Trigger (`should_translate(q, intent)`): non-English AND the intent parser failed (lang '?', no target, or task text).
+lang4 with the trigger: 48/48 (fires on 46). So: translate on parse failure only, never by language list.
+Known slips of the 8B translator: Czech "záchodové mísy" → "toilet rooms" (once), Swedish "bastur" (saunas) → "bathrooms".
+Wiring belongs in the pipeline front (W4). Honest number: sealed hard2r at test 2.
+
 ## Candidates surveyed (23:35–23:50, HF hub listing; vLLM 0.31 registry checked)
 | model | size | vLLM | why interesting | verdict |
 |---|---|---|---|---|

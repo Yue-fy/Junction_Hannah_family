@@ -154,3 +154,13 @@ def test_to_english_skips_covered_languages_and_checks_placeholders(monkeypatch)
     tr = L.to_english("Bu katta 'Bad' etiketli kaç oda var?")
     assert not tr.translated and not tr.ok and tr.text == "Bu katta 'Bad' etiketli kaç oda var?"
     L._tr_memo.clear()
+
+
+def test_should_translate_fires_only_on_unparsed_non_english():
+    from stoa.llm import should_translate
+
+    assert not should_translate("How many doors are shown on the floor plan of 'KG'?")
+    assert not should_translate("Kuinka monta WC-istuinta pohjapiirustukseen on piirretty?")  # fi template
+    assert not should_translate("Wie viele WC-Schüsseln sind auf diesem Grundriss eingezeichnet?")
+    assert should_translate("Kolik saun je na tomto půdorysu?")  # Czech: the rules can't read it
+    assert should_translate("Mekkora a(z) '00 Begane grond' szinten lévő összes fal teljes hossza méterben?")
