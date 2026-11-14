@@ -6,6 +6,7 @@ import { markAnswerCheck, renderKg } from "./kg";
 import type { Answer, FileInfo, KgRoom } from "./types";
 import { Viewer2D } from "./viewer2d";
 import type { Viewer3D } from "./viewer3d"; // loaded lazily: web-ifc + three are ~4 MB
+import tourSteps from "../fixtures/tour.json";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -172,10 +173,14 @@ const DEMO = [
 let demoFiles: FileInfo[] | null = null;
 const HISTORICAL = ["habs", "finna", "europeana", "wikimedia"];
 // Scans have no dataset questions; Stoa says the hidden set may ask about them, so offer general ones.
+// The text-grounded ones (title, scale, date) are answered from the scan's printed text (W3's text layer) with the
+// cited line boxed on the sheet.
 const GENERIC_QUESTIONS = [
   "What kind of drawing is this (floor plan, elevation, section, site plan)?",
-  "How many storeys does this building have?",
+  "What is the title of this sheet?",
   "What is the scale of this drawing?",
+  "When was this drawing made?",
+  "How many storeys does this building have?",
   "How many windows are shown on this drawing?",
 ];
 
@@ -303,7 +308,9 @@ async function loadExamples(f: FileInfo) {
       $<HTMLTextAreaElement>("question").value = pick[i].question;
       void runAsk();
     }));
-    sel.innerHTML = `<option value="">More example questions (${qs.length})…</option>` + qs.map((q) =>
+    // files without dataset questions (historical scans): the general questions, also in the menu (chips show ~2)
+    const menu = qs.length ? qs : pick.map((q) => ({ ...q, has_fixture: false }));
+    sel.innerHTML = `<option value="">${qs.length ? "More example questions" : "Questions for any drawing"} (${menu.length})…</option>` + menu.map((q) =>
       `<option value="${esc(q.question)}">${q.has_fixture ? "★ " : ""}${esc(q.question.length > 110 ? q.question.slice(0, 107) + "…" : q.question)}</option>`).join("");
   } catch {
     /* keep empty */
@@ -529,8 +536,16 @@ function applyEvidence3D(a: Answer) {
   const guids = a.evidence.filter((e) => e.ifc_guid).map((e) => e.ifc_guid!);
   const storeyIds = new Set(guids.map((g) => v.storeyOfGuid(g)).filter((s): s is number => s !== null));
   const contrast = new Set(a.evidence.filter((e) => e.ifc_guid && /^NOT in the answer:/.test(e.note ?? "")).map((e) => e.ifc_guid!));
-  const n = v.highlight(guids, true, contrast);
-  if (storeyIds.size === 1) {
+  // whole-building answers (height = its highest element, W1 ifc): the one highlighted element only makes sense in the
+  // context of the whole model, so show every storey and frame the model rather than zooming onto that element
+  const whole = (a.assumptions ?? []).some((l) => /building height|whole (building|model)/i.test(l))
+    || (guids.length > 0 && a.evidence.filter((e) => e.ifc_guid).every((e) => /\b(highest|lowest|topmost|tallest)\b/i.test(e.note ?? "")));
+  const n = v.highlight(guids, !whole, contrast);
+  if (whole) {
+    v.setStorey(null);
+    $<HTMLSelectElement>("storey").value = "";
+    v.frameAll();
+  } else if (storeyIds.size === 1) {
     const s = [...storeyIds][0];
     v.setStorey(s);
     $<HTMLSelectElement>("storey").value = String(s);
@@ -563,43 +578,9 @@ function focusEvidence(i: number) {
 }
 
 // --- demo tour: one step per key press, each one sentence for the presenter ----------------------------------------
-const TOUR: { file: string; q: string; note: string; bench?: boolean; second?: boolean; locate?: boolean }[] = [
-  { file: "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
-    q: "What is the net floor area of the room 'KORIDOR (119)' on '1.korrus', in m²?",
-    note: "Area from the IFC model, shown on the drawing and in 3D: same room, same GlobalId." },
-  { file: "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
-    q: "How many doors are shown on the floor plan of '1.korrus'?",
-    note: "Count with one box per door. The drawing and the model agree (cross-check), no model call needed." },
-  { file: "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
-    q: "How many windows are shown on the floor plan of '1.korrus'?",
-    note: "Windows: the model has 55 on this storey, the drawing shows 52. The cross-check explains the gap instead of hiding it: the plan is a cut at floor + 1.2 m, and 3 windows lie entirely above or below it (see the highlighted check below)." },
-  { file: "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
-    q: "How many doors are there in the model 'Maleva tänav 18 korterelamu (Esplanades example model)'?",
-    note: "Model-wide question: evidence on five sheets. Click a sheet chip to open it." },
-  { file: "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
-    q: "If each door costs 450 euros, what do all the doors on '1.korrus' cost in total?",
-    note: "A question no template covers, with a number in it: the IFC solver reads the price from the question, counts the 46 doors in the model and multiplies in code (46 × 450 € = 20,700 €). No model call; every counted door is evidence." },
-  { file: "data/ifc_bench/4351_arc.ifc",
-    q: "What plumbing fixtures are in this building and their respective counts?",
-    note: "A free-text answer about a model is checked against the IFC model in the browser, no model call: fixture types it names are highlighted (orange) with their counts checked; plumbing fixtures it leaves out are flagged and shown in purple." },
-  { file: "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-    q: "How many doors (interior doors and entrance doors together) are drawn on this floor plan?",
-    note: "Vector drawing: doors counted on the CAD layer and mapped back onto the PDF." },
-  { file: "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
-    q: "Wie viele Türen und Fenster sind insgesamt auf diesem Grundriss eingezeichnet?",
-    note: "A German question that combines two counts: it is split into two sub-questions, each answered and cross-checked, and the sum is done in code." },
-  { file: "data/cubicasa5k/colorful-4539.png",
-    q: "Kuinka monta makuuhuonetta (MH) pohjapiirustuksessa on?",
-    note: "A scanned Finnish apartment plan, asked in Finnish: our fine-tuned 8B vision model counts the bedrooms, a second reader reads the room names; they agree, so each counted 'MH' label is marked and the confidence goes up." },
-  { file: "data/cubicasa5k/high_quality_architectural-14797.png",
-    q: "How many saunas are on this floor plan?", locate: true,
-    note: "The fine-tuned model says 0 saunas, but the label reader disagrees, so the card says so and shows no boxes. 'Show where' marks what the reader found: 'LH' (löylyhuone, the sauna room). One glance shows the sauna: this is how a person catches a wrong answer in seconds." },
-  { file: "data/habs/vi0026_sheet_00003.jpg",
-    q: "What kind of drawing is this (floor plan, elevation, section, site plan)?", second: true,
-    note: "Historical scan (HAER, 1977) with no text layer: a local vision model answers but is unsure, so we ask NVIDIA Nemotron (hosted) for a second opinion, one paid call. Below: the other sheets of the same survey, linked." },
-  { file: "", q: "", bench: true,
-    note: "Measured on held-out drawings: accuracy per source against two baselines, generality, and cost per 1,000 questions." },
-];
+// Steps live in fixtures/tour.json (one source for this tour and fixtures/record.py, which pre-records its answers):
+// {file, q, note, bench?, second? (ask NVIDIA Nemotron too), locate? (click "Show where")}. Add a step = add a line there.
+const TOUR: { file: string; q: string; note: string; bench?: boolean; second?: boolean; locate?: boolean }[] = tourSteps;
 let tourStep = -1;
 let tourBack = false;
 // presenter keys: → next step, ← previous step (not while typing a question)

@@ -1,0 +1,10 @@
+How many rooms on '1.korrus' have no window?
+Which rooms on '1.korrus' have no window?
+How many rooms on '1.korrus' have at least one door?
+How many doors does the room 'KORIDOR (119)' have?
+How many windows does the room 'KORIDOR (119)' have?
+How many doors are there on '1.korrus'?
+PATH kit-fzk-haus_ac20-fzk-haus.ifc
+How many rooms on 'Erdgeschoss' have no window?
+Which rooms have more than one door?
+How many windows does the room 'Wohnen' have?

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import math
 import re
+from pathlib import Path
 import statistics
 
 import pandas as pd
@@ -196,10 +197,27 @@ def _where(code: str, tables: dict[str, pd.DataFrame]) -> str:
 ID_TOKEN = re.compile(r"\b(?=[A-Z0-9.-]*\d)[A-Z]{0,4}-?\d{1,4}(?:\.[A-Z0-9]{1,3})?\b")
 
 
-def _rows_mention_ids(question: str, used: list, tables: dict[str, pd.DataFrame], id_col: str) -> bool | None:
+DIM_OR_QTY = re.compile(r"\d+\s*'\s*-?\s*\d*(?:\s+\d+/\d+)?\"?|\d+(?:[.\s]\d+/?\d*)?\s*\"|"
+                        r"\d+(?:\.\d+)?\s*(?:sf|sq\.?\s*ft|ft2|ft²|m2|m²|cfm|gpm|mm|cm|m|ft|in(?:ch(?:es)?)?|%)(?![\w-])", re.I)
+
+
+PREAMBLE = re.compile(r"^\s*(?:on|in|from)\s+(?:sheet|drawing|page)\s+\S+\s+of\s+.*?(?:drawings?|set|plans?)\b"
+                      r"(?:\s*\([^)]*\))?\s*,?", re.I)
+
+
+def id_tokens(question: str, path: str = "") -> set[str]:
+    """Identifiers named in a question (P13, RAG-09, 115.A, room 201), not dimensions or quantities (12'-0", 24"x6"),
+    not the sheet/drawing named in an "On sheet A700 of the ... drawings (address)," preamble or in the file name."""
+    q = DIM_OR_QTY.sub(" ", PREAMBLE.sub(" ", question))
+    in_path = {t.upper().replace("-", "") for t in ID_TOKEN.findall(Path(path).name.upper())} if path else set()
+    return {t.upper() for t in ID_TOKEN.findall(q) if t.upper().replace("-", "") not in in_path}
+
+
+def _rows_mention_ids(question: str, used: list, tables: dict[str, pd.DataFrame], id_col: str,
+                      path: str = "") -> bool | None:
     """Do the rows a lookup used contain an identifier from the question ("RAG-09", "115.A", "201")? None = the
     question names no identifier."""
-    ids = {t.upper() for t in ID_TOKEN.findall(question)}
+    ids = id_tokens(question, path)
     if not ids:
         return None
     for df in tables.values():

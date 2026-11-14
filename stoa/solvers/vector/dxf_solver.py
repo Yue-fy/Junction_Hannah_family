@@ -510,6 +510,14 @@ class DxfSolver(BaseSolver):
                               missing=missing or ["floor total not found"])
             value = round(100.0 * known[0] / known[1], 2)
             trace.append(f"share: 100 × {known[0]:.2f} / {known[1]:.2f} = {value} %")
+        elif qr.op in ("pctdiff", "pctdiff_less"):
+            if len(known) < 2 or not known[1]:
+                return Answer(value=None, unit="%", confidence=0.0, solver=self.name,
+                              trace=trace + ["relative difference: missing reference"], missing=missing or ["reference not found"])
+            a, b = known[0], known[1]  # subject, reference ("A larger than B": (A − B) / B)
+            value = round(100.0 * ((a - b) if qr.op == "pctdiff" else (b - a)) / b, 2)
+            trace.append(f"relative difference: 100 × ({a:.2f} − {b:.2f}) / {b:.2f} = {value} %" if qr.op == "pctdiff" else
+                         f"relative difference: 100 × ({b:.2f} − {a:.2f}) / {b:.2f} = {value} %")
         elif qr.op in ("count_gt", "count_lt", "count_ge"):
             cmp = {"count_gt": lambda v: v > qr.threshold, "count_lt": lambda v: v < qr.threshold,
                    "count_ge": lambda v: v >= qr.threshold}[qr.op]
@@ -527,7 +535,7 @@ class DxfSolver(BaseSolver):
                 trace.append(f"sum: {' + '.join(str(round(v, 2)) for v in known)} = {value:.2f}")
         if qr.op == "ratio":
             unit = None
-        elif qr.op == "pct":
+        elif qr.op in ("pct", "pctdiff", "pctdiff_less"):
             unit = "%"
         elif unit == "count":
             value = int(round(value))
@@ -551,6 +559,12 @@ class DxfSolver(BaseSolver):
             missing.append("could not map DXF to the PDF page (no matching text); evidence in DXF metres")
         if fm.warnings:
             trace += [f"warning: {w}" for w in fm.warnings[:3]]
+        extra = qparse.unused_numbers(question, qr)
+        if extra:
+            conf = min(conf, 0.3)  # F/S0: a stated price/rate/constant the rules did not apply -> the agent does it
+            missing.append(f"the question states {', '.join(extra[:3])}, which this rule answer does not use (a price, "
+                           "rate or factor?); the value is the base quantity before that arithmetic")
+            trace.append(f"unused numbers in the question: {extra[:3]} -> confidence capped at 0.3")
         return Answer(value=value, unit=unit, confidence=round(min(max(conf, 0.0), 1.0), 3), evidence=evidence,
                       trace=trace, solver=self.name, assumptions=list(dict.fromkeys(assumptions)), missing=missing)
 

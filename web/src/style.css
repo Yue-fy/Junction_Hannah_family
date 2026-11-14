@@ -382,3 +382,8 @@ select, input[type="search"], textarea { border: 1px solid var(--line); border-r
 .compare .crow.win { font-weight: 700; color: var(--navy); }
 .compare .crow.win .bar i { background: var(--accent); }
 .compare .crow b { font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* agent steps: scope-drift warnings from the loop, answers rejected before any tool result */
+.steps .warn { font-size: 11px; color: #8a5a00; margin-top: 2px; }
+.steps li.refused { opacity: .7; }
+.steps li.refused .res { text-decoration: line-through; text-decoration-color: #b33; color: var(--muted); }

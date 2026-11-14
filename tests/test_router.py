@@ -222,3 +222,43 @@ def test_count_cue_with_unit_is_a_quantity():
     assert parse("Wie viele Quadratmeter hat Wohnung A?").task == "area"
     assert parse("How many doors are there?").task == "count"
     assert parse("How many rooms are larger than 10 m²?").task == "count"
+
+
+def test_derived_quantity_modifiers():
+    """Rates, prices and constants stated in the question are operators (W5 01:49: '46 count' at conf 0.97 for a
+    door-cost question); 'per apartment' stays an average and plain templates get none."""
+    from stoa.router.intent import DERIVED, modifiers
+
+    def d(q):
+        return [m for m in modifiers(q) if m in DERIVED]
+
+    assert "cost" in d("If each door costs 450 euros, how much do the doors on '1.korrus' cost in total, in euros?")
+    assert "cost" in d("Wie viel kosten die Türen im '1.korrus', wenn eine Tür 450 Euro kostet?")
+    assert d("How many square metres of floor per door are there on '1.korrus'?") == ["rate"]
+    assert d("Montako ikkunaa kerroksessa '1' on 100 neliömetriä kohden?") == ["rate"]
+    assert d("If every bedroom gets two beds, how many beds are needed for this home?") == ["given"]
+    assert d("How many litres of paint are needed for the walls of 'A' if one litre covers 8 m2 of wall?") == ["given"]
+    assert d("What is the average area per apartment?") == []
+    assert d("Quanti locali ci sono per l'appartamento A?") == []
+    assert d("How many windows are shown on this floor plan?") == []
+    assert d("How many rooms labelled 'Bad' are there on this floor?") == []
+
+
+def test_extra_structure():
+    from stoa.router.intent import extra_structure
+
+    assert not extra_structure("I need a quick count for a quantity takeoff: bedrooms (rooms marked MH) on this sheet?")
+    assert not extra_structure("Wie viele Saunen gibt es auf diesem Grundriss?")
+    assert not extra_structure("How many sinks (kitchen and bathroom combined; a double sink counts as one) are drawn?")
+    assert extra_structure("Hur många fler sovrum än badrum finns det?")
+    assert extra_structure("How many more bedrooms than bathrooms are there?")
+    assert extra_structure("How many rooms are larger than 10 m²?")
+
+
+def test_compose_yesno_comparison():
+    from stoa.router.compose import combine, decompose
+
+    p = decompose("cubicasa5k", "Does this apartment have more bedrooms (MH) than bathrooms or washrooms? Answer yes or no.")
+    assert p is not None and p.op == "gt" and p.labels == ["bedroom", "bathroom"]
+    assert combine(p, [2, 2])[0] == "no" and combine(p, [3, 1])[0] == "yes"
+    assert decompose("cubicasa5k", "Does this apartment have a sauna?").op == "exists"

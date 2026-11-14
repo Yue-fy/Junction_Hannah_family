@@ -1,0 +1,65 @@
+[
+ {
+  "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+  "q": "What is the net floor area of the room 'KORIDOR (119)' on '1.korrus', in m²?",
+  "note": "Area from the IFC model, shown on the drawing and in 3D: same room, same GlobalId."
+ },
+ {
+  "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+  "q": "How many doors are shown on the floor plan of '1.korrus'?",
+  "note": "Count with one box per door. The drawing and the model agree (cross-check), no model call needed."
+ },
+ {
+  "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+  "q": "How many windows are shown on the floor plan of '1.korrus'?",
+  "note": "Windows: the model has 55 on this storey, the drawing shows 52. The cross-check explains the gap instead of hiding it: the plan is a cut at floor + 1.2 m, and 3 windows lie entirely above or below it (see the highlighted check below)."
+ },
+ {
+  "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+  "q": "How many doors are there in the model 'Maleva tänav 18 korterelamu (Esplanades example model)'?",
+  "note": "Model-wide question: evidence on five sheets. Click a sheet chip to open it."
+ },
+ {
+  "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+  "q": "If each door costs 450 euros, what do all the doors on '1.korrus' cost in total?",
+  "note": "A question no template covers, with a number in it. A small local model plans the steps but never does the maths: it asks the pipeline how many doors (46, by rules, cross-checked), multiplies in code (46 × 450 € = 20,700 €), and the IFC solver's own reading of the whole question gives the same total: two independent derivations agree."
+ },
+ {
+  "file": "data/ifc_bench/4351_arc.ifc",
+  "q": "What plumbing fixtures are in this building and their respective counts?",
+  "note": "A free-text answer about a model is checked against the IFC model in the browser, no model call: fixture types it names are highlighted (orange) with their counts checked; plumbing fixtures it leaves out are flagged and shown in purple."
+ },
+ {
+  "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+  "q": "How many doors (interior doors and entrance doors together) are drawn on this floor plan?",
+  "note": "Vector drawing: doors counted on the CAD layer and mapped back onto the PDF."
+ },
+ {
+  "file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
+  "q": "Wie viele Türen und Fenster sind insgesamt auf diesem Grundriss eingezeichnet?",
+  "note": "A German question that combines two counts: it is split into two sub-questions, each answered and cross-checked, and the sum is done in code."
+ },
+ {
+  "file": "data/cubicasa5k/colorful-4539.png",
+  "q": "Kuinka monta makuuhuonetta (MH) pohjapiirustuksessa on?",
+  "note": "A scanned Finnish apartment plan, asked in Finnish: our fine-tuned 8B vision model counts the bedrooms, a second reader reads the room names; they agree, so each counted 'MH' label is marked and the confidence goes up."
+ },
+ {
+  "file": "data/cubicasa5k/high_quality_architectural-14797.png",
+  "q": "How many saunas are on this floor plan?",
+  "locate": true,
+  "note": "The fine-tuned model says 0 saunas, but the label reader disagrees, so the card says so and shows no boxes. 'Show where' marks what the reader found: 'LH' (löylyhuone, the sauna room). One glance shows the sauna: this is how a person catches a wrong answer in seconds."
+ },
+ {
+  "file": "data/habs/vi0026_sheet_00003.jpg",
+  "q": "What kind of drawing is this (floor plan, elevation, section, site plan)?",
+  "second": true,
+  "note": "Historical scan (HAER, 1977): no digital text at all. The local vision model reads the printed text tile by tile and answers from it, citing the lines it used: the title 'NORTH ELEVATION' is boxed on the sheet. NVIDIA Nemotron (hosted, one paid call) gives a second opinion. Below: the other sheets of the same survey, linked."
+ },
+ {
+  "file": "",
+  "q": "",
+  "bench": true,
+  "note": "Measured on held-out drawings: accuracy per source against two baselines, generality, and cost per 1,000 questions."
+ }
+]

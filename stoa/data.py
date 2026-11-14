@@ -43,32 +43,52 @@ def make_qid(path: str, question: str) -> str:
     return hashlib.sha1(f"{path}\n{question}".encode()).hexdigest()[:12]
 
 
+KNOWN_SOURCES = ("cubicasa5k", "swiss_dwellings", "ifc_models", "ifc_bench", "opening_design", "habs", "finna",
+                 "europeana", "wikimedia")
+
+
 def dataset_rel(path: str | Path, root: Path | None = None) -> str:
     """Any path to a dataset file -> the dataset-relative form ("data/<source>/...") that every cache, gate and split
-    is keyed by. Relative paths are returned unchanged. An absolute path under the dataset root is made relative; one
-    elsewhere (a copy of the dataset, another mount) is cut at its last "data/<source>/" component; any other absolute
-    path (a drawing from outside the dataset) is returned unchanged."""
+    is keyed by. Relative paths are returned unchanged. An absolute path under the dataset root is made relative. One
+    elsewhere is cut at its last "data/<source>/" component ONLY when the dataset holds that same file (a copy of the
+    dataset, another mount: same relative path and same size); otherwise it is a new drawing that merely sits in the
+    same folder layout (e.g. Stoa's own data/cubicasa5k/ folder, Q 04:13) and is returned unchanged, so solvers open
+    the real file instead of a missing or different one under $STOA_DATA. source_of() still reads its source from the
+    folder name."""
     p = Path(path)
     if not p.is_absolute():
         return str(path)
+    rootp = root or data_root()
     try:
-        return relpath(p, root)
+        return relpath(p, rootp)
     except ValueError:
         pass
     parts = p.parts
     for i in range(len(parts) - 3, -1, -1):  # need data/<source>/<file> at least
         if parts[i] == "data":
-            return str(Path(*parts[i:]))
+            cut = Path(*parts[i:])
+            twin = rootp / cut
+            try:
+                same = twin.is_file() and (not p.exists() or p.stat().st_size == twin.stat().st_size)
+            except OSError:
+                same = False
+            return str(cut) if same else str(path)
     return str(path)
 
 
 def source_of(path: str) -> str:
-    """Dataset source of a path ("cubicasa5k", "swiss_dwellings", ...); "unknown" for a file outside the dataset.
-    Accepts relative ("data/cubicasa5k/x.png") and absolute paths (R1 03:44: absolute paths used to give "/")."""
+    """Dataset source of a path ("cubicasa5k", "swiss_dwellings", ...). Accepts relative ("data/cubicasa5k/x.png") and
+    absolute paths (R1 03:44: absolute paths used to give "/"). A file outside the dataset gets the source named by a
+    ".../data/<source>/..." folder if it is a known source (Q 04:13), else "unknown"."""
     parts = Path(dataset_rel(path)).parts
-    if not parts or Path(parts[0]).is_absolute():
+    if not parts:
         return "unknown"
-    return parts[1] if len(parts) > 1 and parts[0] == "data" else parts[0]
+    if not Path(parts[0]).is_absolute():
+        return parts[1] if len(parts) > 1 and parts[0] == "data" else parts[0]
+    for i in range(len(parts) - 3, -1, -1):
+        if parts[i] == "data" and parts[i + 1] in KNOWN_SOURCES:
+            return parts[i + 1]
+    return "unknown"
 
 
 def abspath(path: str, root: Path | None = None) -> Path:
@@ -133,6 +153,16 @@ def ifc_model_for(path: str, root: Path | None = None) -> str | None:
     `resbim-N_plan.png` -> `resbim-N_model.ifc`."""
     rootp = root or data_root()
     stem = Path(path).stem
+    if Path(path).is_absolute():  # a drawing outside the dataset: its model lives next to it, not in $STOA_DATA
+        folder = Path(path).parent
+        local = sorted((q.stem for q in folder.glob("*.ifc")), key=len, reverse=True) if folder.is_dir() else []
+        for m in local:
+            if stem == m or stem.startswith(m + "_"):
+                return str(folder / f"{m}.ifc")
+        base = re.sub(r"_plan$", "", stem)
+        if base != stem and f"{base}_model" in local:
+            return str(folder / f"{base}_model.ifc")
+        return None
     stems = _ifc_models_stems(str(rootp))
     for m in stems:
         if stem == m or stem.startswith(m + "_"):

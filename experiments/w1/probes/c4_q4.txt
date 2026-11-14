@@ -1,0 +1,22 @@
+PATH bsc-duplex_duplex-a-20110907.ifc
+How many doors are there on each floor?
+Which room has the most doors?
+Gibt es mehr als 10 Türen auf 'Level 1'?
+Hay más de 5 ventanas en 'Level 2'?
+How many rooms does the building have in total?
+What is the total volume of all walls in the building?
+How many bedrooms are there in the building?
+What is the average area of the bedrooms?
+What is the smallest bedroom?
+How many interior doors are on 'Level 1'?
+How many exterior walls are on 'Level 1'?
+How many windows are on the north facade?
+What is the total area of 'Level 1' and 'Level 2'?
+Which level has the larger total room area?
+How much bigger is the largest room than the smallest room on 'Level 1'?
+What is the difference in area between 'Level 1' and 'Level 2'?
+How many stairs are there?
+What is the area of the kitchen on 'Level 1'?
+What percentage of the rooms on 'Level 1' are bathrooms?
+How many rooms are larger than 20 m² in the whole building?
+What is the total floor area of rooms smaller than 10 m² on 'Level 2'?
