@@ -33,6 +33,7 @@ _ROOM_EN = (r"(?:master\s+)?bed\s?rooms?|living\s?rooms?|lounge|sitting\s+rooms?
             r"vestibule|walk-?in(?:\s+(?:closet|wardrobe))?|closets?|wardrobes?|dressing\s+rooms?|"
             r"storage(?:\s+rooms?)?|store\s?rooms?|utility\s+rooms?|laundry(?:\s+rooms?)?|dining\s+(?:rooms?|area)|"
             r"study|office|studio\s+room|balcon(?:y|ies)|terraces?|porch(?:es)?|patio|veranda|loggia|garage|"
+            r"tv[\s-]?(?:rooms?|huone)|(?:the\s+)?rooms?\s+(?:no\.?\s*|number\s+)?\d{1,3}\b|"  # after probe v4 (used)
             r"rooms?\s+(?:labell?ed|marked|called|named)\s+\S+|rooms?\s*['\"“‘«][^'\"”’»]{1,30}['\"”’»]|"
             r"rooms?\s+[A-Z]{1,4}\d*\b")
 _DET = r"(?:the|this|that|these|those|each|every|both|all(?:\s+the)?|its|their|your|a|an|one|any)"

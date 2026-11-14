@@ -110,6 +110,12 @@ counts (windows, doors, WC seats, sinks) ask the CubiCasa5K detector (`raster_cc
 adds "✓/✗ <reader> finds N …" next to the pipeline's own cross-check; on ✗ the boxes show the reader's count, and an
 assumption says so. Hidden when the pipeline already asked the label reader and it found none.
 
+**Show where · room graph** (CubiCasa answers without evidence whose question names a room: "where is the kitchen?",
+"which room is the sauna entered from?"; `locatorFor` in `src/card.ts`, `locateRooms` in `src/main.ts`): boxes the
+rooms the question names (printed code such as '(OH)' first, else every region of that kind; EN/FI/SV/DE room words)
+from R1's room graph, no model call. A ✓/✗ line only with a verdict: the answer names a marked room, a door of the
+marked room leads to the room the answer names (that room is boxed too), or a count equals the number of rooms.
+
 **Compared candidates** (ranked answers such as "which storey has the most doors?"): when the trace has one value
 per candidate and an "argmax/argmin over …" line, the card shows a bar per candidate with the chosen one highlighted.
 

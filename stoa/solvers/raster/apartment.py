@@ -127,6 +127,24 @@ _TOTAL_LINE = re.compile(r"total|gesamt|summe|yht|yhteensä|asuinpinta|wohnfl|nu
 _NUMBERED_Q = re.compile(r"numbered|nummeriert|numérotées?|numerat[ei]|numeroid", re.I)
 
 
+def numbering_gaps(layer: T.TextLayer) -> list[str]:
+    """Room numbers missing from a sequential numbering ('2.01'..'2.31' read without '2.04', '2.24'): rooms whose label
+    the text layer did not read. Their areas are missing from any sum (floor sums with a gap: 0/10 within 2%)."""
+    by: dict[str, set[int]] = {}
+    for it in layer.items:
+        t = it.text.strip()
+        if _ROOM_ID.match(t):
+            a, b = t.split(".")
+            if b.isdigit():
+                by.setdefault(a, set()).add(int(b))
+    out = []
+    for a, nums in by.items():
+        if len(nums) >= 3:
+            w = max(len(f"{n}") for n in nums)
+            out += [f"{a}.{n:0{max(2, w)}d}" for n in range(min(nums), max(nums) + 1) if n not in nums]
+    return out
+
+
 def labelled_name(question: str) -> str | None:
     m = _LABELLED.search(question)
     return m.group(1).strip() if m else None
@@ -203,13 +221,60 @@ def room_set(path: str, layer: T.TextLayer, question: str, px_per_m: float | Non
     if not rooms:
         return None
     total = sum(r["area"]["value"] if r["area"] else r["measured"]["m2"] for r in rooms)
+    gaps = numbering_gaps(layer)
+    if scope == "unit":  # only gaps inside the unit's own number range (units are numbered in runs: 2.10-2.16)
+        mine = [r["id"] for r in rooms + dropped + unmeasured if r["id"]]
+        pref = {i.split(".")[0] for i in mine}
+        lo, hi = (min(mine), max(mine)) if mine else ("", "")
+        gaps = [g for g in gaps if g.split(".")[0] in pref and lo < g < hi]
     out = {"scope": scope, "letter": letter, "name": name, "label": lab, "value": round(total, 2), "rooms": rooms,
+           "gaps": gaps,
            "dropped": dropped, "unmeasured": unmeasured, "measured": measured, "region_box": None, "region_m2": None}
     if comp is not None:
         ys, xs = np.nonzero(comp)
         out["region_box"] = [float(xs.min()), float(ys.min()), float(xs.max() + 1), float(ys.max() + 1)]
         out["region_m2"] = round(comp.sum() / px_per_m ** 2, 2) if px_per_m else None
     return out
+
+
+def unit_region(path: str, layer: T.TextLayer, letter: str, px_per_m: float | None = None,
+                grow_m: float = 0.15) -> tuple[np.ndarray | None, T.TextItem | None]:
+    """(mask of the unit's region, its label) or (None, label-or-None) when the label or a closed boundary is missing."""
+    labels = unit_labels(layer)
+    lab = labels.get(letter)
+    if lab is None:
+        return None, None
+    rgb = np.asarray(Image.open(T._abspath(path)).convert("RGB"))
+    grow = max(3, int(round(grow_m * px_per_m))) if px_per_m else 4
+    comp = region(rgb, (int(lab.cx), int(lab.cy)), grow)
+    if comp is not None and any(k != letter and comp[int(it.cy), int(it.cx)] for k, it in labels.items()):
+        comp = None
+    return comp, lab
+
+
+_MORE = re.compile(r"\b(larg|bigg|great|more|most|größ|grös|gröss|plus grand|le plus|più grand|maggior|suurem|suurin|"
+                   r"störst|större|mayor|más grande)", re.I)
+_LESS = re.compile(r"\b(small|less|least|fewer|klein|plus petit|moins|più piccol|minor|pienem|pienin|minst|mindre|"
+                   r"menor|más pequeñ)", re.I)
+_COMPARE = re.compile(r"\b(which|welche[rs]?|quel(?:le)?|quale|mikä|vilken|cuál|is|ist|est|è|onko|är|than|als|que|di|"
+                      r"kuin|än)\b", re.I)
+
+
+def compared_units(question: str, layer: T.TextLayer) -> tuple[list[str], str] | None:
+    """A comparison of units' areas: (letters to compare, 'max'|'min'), or None. Letters: every unit label named
+    after the first unit word ('apartment A or B', 'Wohnung A als Wohnung B'); none named -> all units on the plan."""
+    labels = unit_labels(layer)
+    m = re.search(rf"(?i:\b{_UNIT_WORD})", question)
+    if not m or len(labels) < 2 or not _COMPARE.search(question):
+        return None
+    more, less = _MORE.search(question), _LESS.search(question)
+    if bool(more) == bool(less):
+        return None
+    named = [x for x in re.findall(r"(?<![\w'’])([A-Z])(?![\w])", question[m.start():]) if x in labels]
+    named = list(dict.fromkeys(named))
+    if len(named) == 1:
+        return None  # one unit: its own size, not a comparison
+    return (named or sorted(labels)), ("max" if more else "min")
 
 
 def net_area(path: str, layer: T.TextLayer, question: str, px_per_m: float | None, **kw) -> dict | None:

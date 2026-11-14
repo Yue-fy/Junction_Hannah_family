@@ -87,6 +87,11 @@ def answer(path: str, question: str, image_path: str | None = None, backend: str
             bars = [b for b in SB.bars(img_path, backend=backend, layer=tl) if b.unit in SB.UNIT_M]
         except Exception:  # noqa: BLE001 - a bar is a bonus, never a reason to fail the question
             bars = []
+    cmp = A.compared_units(question, tl)
+    if cmp:
+        got = _compare_units(img_path, question, tl, bars, cmp, solver)
+        if got is not None:
+            return got
     unit_q = _AREA_Q.search(question) and A.unit_letter(question)
     if _AREA_Q.search(question) and _sum_scope(question, tl):
         got = _unit_area_answer(img_path, question, tl, bars, solver)
@@ -118,9 +123,15 @@ def answer(path: str, question: str, image_path: str | None = None, backend: str
         (len(val) > 2 and T.match_score(val, " ".join(i.text for i in cited)) >= 0.85)
     unit = str(d.get("unit", "")).strip() or None
     value: object = val
+    um = _NUM_UNIT.match(val)
+    if um and not _NUM.match(val):  # '20,5 m²' -> 20.5 m2 (R1 08:47: such strings kept 0.75 and escaped every check)
+        val, unit = um.group(1), unit or _UNIT_OF.get(um.group(2).lower().replace(" ", ""), um.group(2))
     if _NUM.match(val):
         v = float(val.replace(",", "."))
         value = int(v) if v.is_integer() and (unit in (None, "count")) else v
+        # the literal check, decimal comma or point ('K 14,5' prints 14.5)
+        num = re.escape(val.replace(",", "."))
+        in_cited = in_cited or any(re.search(rf"(?<![\d.]){num}(?![\d])", i.text.replace(",", ".")) for i in cited)
     else:
         fm = T._FTIN.fullmatch(val.strip().rstrip('"”').strip() + '"') or T._FTIN.fullmatch(val.strip())
         if fm:  # a dimension string 187'-0" -> 187.0 ft (the printed text stays in the trace and evidence)
@@ -152,7 +163,39 @@ def answer(path: str, question: str, image_path: str | None = None, backend: str
         # the 'size' is a number the question itself names (room 0.20 -> '0.20 m²'): an echo, not a reading
         conf = 0.05
         missing = [*missing, "the answer repeats a number from the question (likely the room's number, not its size)"]
-    if unit_q and isinstance(value, (int, float)):
+    if cited and isinstance(value, (int, float)) and conf > 0.4:
+        # R1 08:47, 18 by-eye CubiCasa area Qs at a flat 0.75: 9/18 right; the right ones were single named rooms read
+        # literally; wrong: sums ('combined area of kitchen and living room' -> one term), superlatives ('largest
+        # bedroom' -> OLOHUONE 20.5) and a room word mapped to the wrong code ('sauna' -> 'RH 6.3')
+        from stoa.solvers.raster.classes import label_class, question_class, question_classes
+
+        why = None
+        qc = question_class(question)
+        # the room code is printed next to its area ('K' over '14.0'): classes of the cited lines and their neighbours
+        near = {label_class(j.text) for i in cited for j in tl.items
+                if abs(j.cx - i.cx) < 4 * max(6.0, i.box[3] - i.box[1]) and abs(j.cy - i.cy) < 3 * max(6.0, i.box[3] - i.box[1])}
+        if not in_cited:
+            why = "the number is not printed in the cited text"
+        elif _AGG_Q.search(question) or len(question_classes(question)) >= 2:
+            why = "a sum or superlative over several rooms read off the texts (each term not checked)"
+        elif qc and qc not in near:
+            why = f"the cited label{'s' if len(cited) > 1 else ''} " + ", ".join(f"'{i.text}'" for i in cited[:3]) + \
+                  f" {'are' if len(cited) > 1 else 'is'} not a {qc.replace('_', ' ')} label"
+        if why:
+            conf = 0.3 if "label" in why else 0.4
+            missing = [*missing, why]
+    if _SIZE.search(question) and not isinstance(value, (int, float)) and conf > 0.3 and re.search(r"\d", val):
+        conf = 0.3  # a size question answered with something that is not one number ('38.42.46')
+        missing = [*missing, f"the answer '{val[:30]}' is not a single number"]
+    if cmp:  # a unit comparison the boundaries could not settle: a VLM reading of sums it never did (3 misses at 0.75)
+        conf = min(conf, 0.3)
+        missing = [*missing, "could not measure every compared unit from its drawn boundary; the comparison is a "
+                             "reading of the drawing, not a measurement"]
+    if unit_q and isinstance(value, (int, float)) and A.unit_labels(tl) and unit_q not in A.unit_labels(tl):
+        conf = min(conf, 0.1)
+        missing = [*missing, f"this plan labels units {', '.join(sorted(A.unit_labels(tl)))}; there is no apartment "
+                             f"{unit_q}"]
+    elif unit_q and isinstance(value, (int, float)):
         # a whole unit's area read off the texts: the reading usually takes one room (Q 05:16: apartment B -> room 2.10
         # alone, 16.78 of 80.83 m2 at 0.75); without the unit's drawn boundary nothing checks which rooms belong to it
         conf = min(conf, 0.2)
@@ -167,6 +210,14 @@ def answer(path: str, question: str, image_path: str | None = None, backend: str
     return Answer(value=value, unit=unit, confidence=conf, evidence=ev, solver=solver, trace=trace,
                   assumptions=assumptions, missing=missing)
 
+
+_NUM_UNIT = re.compile(r"^\s*(-?\d+(?:[.,]\d+)?)\s*(m²|m2|sq\.? ?ft|ft²|ft2|m|ft|cm|mm)\.?\s*$", re.I)
+_UNIT_OF = {"m²": "m2", "m2": "m2", "sqft": "ft2", "sq.ft": "ft2", "ft²": "ft2", "ft2": "ft2", "m": "m", "ft": "ft",
+            "cm": "cm", "mm": "mm"}
+_AGG_Q = re.compile(r"\b(total|combined|sum|together|altogether|in all|both|all|largest|smallest|biggest|widest|"
+                    r"longest|most|least|yhteensä|yhteenlaskettu|kaikkien|kaikki|suurin|pienin|gesamt|insgesamt|"
+                    r"zusammen|größte|grösste|kleinste|somme|ensemble|plus grand|plus petit|totale|complessiv\w*|"
+                    r"più grande|più piccol\w*|totalt|sammanlagt|störst|minst)\b", re.I)
 
 # VLM-box measurements: Swiss PNG rooms (experiments/w3/measure_eval.py, 22 Qs) 0 within 2%, 5 within 20%, median
 # error 47%: an estimate whose box a reader can check, not a measurement
@@ -232,7 +283,9 @@ def _room_area_answer(img_path: str, question: str, tl: T.TextLayer, bars: list,
 # labelled printed 11/17 (a room whose name was not read drops out), filled 18/31.
 UNIT_CONF = {"printed": 0.85, "some": 0.5, "filled": 0.3, "partial": 0.2}
 SUM_CONF = {"unit": UNIT_CONF, "floor": {"printed": 0.85, "some": 0.6, "filled": 0.1, "partial": 0.1},
-            "labelled": {"printed": 0.6, "some": 0.5, "filled": 0.5, "partial": 0.2}}
+            "labelled": {"printed": 0.75, "some": 0.6, "filled": 0.6, "partial": 0.15}}
+# a gap in the room numbering (labels the text layer missed) makes a sum 'partial': floor 0/10, labelled 1/8, unit 2/6
+# within 2% with a gap; without: labelled printed 10/12, filled 18/28 (run 20261114-084758-...-75fe)
 
 
 def _sum_scope(question: str, tl: T.TextLayer) -> bool:
@@ -278,7 +331,8 @@ def _unit_area_answer(img_path: str, question: str, tl: T.TextLayer, bars: list,
             ev.append(Evidence(file=img_path, page=0, bbox=rm["measured"]["box"], bbox_space="image_px",
                                note=f"{name}: no printed area; flood-filled outline {rm['measured']['m2']:.2f} m²"))
     n, nm = len(r["rooms"]), len(r["measured"])
-    kind = "partial" if r["unmeasured"] else "printed" if nm == 0 else "some" if nm <= 2 and nm < n else "filled"
+    kind = "partial" if r["unmeasured"] or r["gaps"] else "printed" if nm == 0 else "some" if nm <= 2 and nm < n \
+        else "filled"
     conf = SUM_CONF[r["scope"] if not r["name"] else "labelled"][kind]
     if r["scope"] == "unit":
         assumptions = [f"apartment {r['letter']} = the area enclosed by the coloured dash-dot unit boundary around the "
@@ -306,6 +360,9 @@ def _unit_area_answer(img_path: str, question: str, tl: T.TextLayer, bars: list,
                            "2 of 25 test floors")
         missing.append(f"printed areas for {nm} room(s): a flood-filled room is within 5% for {100 * W['5%']:.0f}% of "
                        f"held-out rooms; whole units with filled rooms were within 5% for 38 of 56 (all filled)")
+    if r["gaps"]:
+        missing.append(f"room number(s) {', '.join(r['gaps'][:8])} were not read (a gap in the numbering): if they "
+                       "belong to the asked rooms, the sum is too small by their areas")
     if r["unmeasured"]:
         missing.append("no area for " + ", ".join(u["id"] or "?" for u in r["unmeasured"])
                        + " (neither printed nor measurable): the sum is too small by their areas")
@@ -319,6 +376,58 @@ def _unit_area_answer(img_path: str, question: str, tl: T.TextLayer, bars: list,
                                                                 + (f", rooms labelled '{r['name']}'" if r['name'] else "")])
                   + ["rooms: " + " + ".join(parts) + f" = {r['value']:g} m²"],
                   assumptions=assumptions, missing=missing)
+
+
+def _compare_units(img_path: str, question: str, tl: T.TextLayer, bars: list, cmp: tuple, solver: str):
+    """'Which apartment is the largest?' / 'Is apartment A larger than B?': each unit's net area (room_set), then the
+    comparison. Confidence: the least sure unit's, lowered when the two leading units are within 5% of each other."""
+    letters, how = cmp
+    if not bars:  # 'larger' is not a size word for _SIZE: get the scale bar here (rooms without a printed area)
+        try:
+            bars = [b for b in SB.bars(img_path, layer=tl) if b.unit in SB.UNIT_M]
+        except Exception:  # noqa: BLE001
+            bars = []
+    bar = next((b for b in bars if b.px_per_m), None)
+    res = {}
+    for L in letters:
+        r = A.room_set(img_path, tl, f"net floor area of apartment {L} except balconies, loggias, terraces", 
+                       bar.px_per_m if bar else None)
+        if r is None:
+            return None
+        res[L] = r
+    order = sorted(res, key=lambda L: res[L]["value"], reverse=(how == "max"))
+    best, second = order[0], order[1]
+    a, b = res[best]["value"], res[second]["value"]
+    margin = abs(a - b) / max(a, b)
+
+    def kind(r):
+        n, nm = len(r["rooms"]), len(r["measured"])
+        return "partial" if r["unmeasured"] or r["gaps"] else "printed" if nm == 0 else "some" if nm <= 2 and nm < n \
+            else "filled"
+    conf = min(UNIT_CONF[kind(r)] for r in res.values())
+    # a sum is within 5% for 69/99 units: two units closer than that can swap
+    conf = round(conf if margin >= 0.1 else min(conf, 0.5) if margin >= 0.05 else min(conf, 0.3), 2)
+    yes_no = re.match(r"\s*(is|ist|est|è|onko|är|does|has|hat)\b", question, re.I) and len(letters) == 2
+    if yes_no:  # 'Is apartment A larger than apartment B?': the first named unit vs the second
+        first = letters[0]
+        value = "yes" if first == best else "no"
+    else:
+        value = best
+    ev = []
+    for L in letters:
+        r = res[L]
+        ev += [Evidence(file=img_path, page=0, bbox=[round(x, 1) for x in r["label"].box], bbox_space="image_px",
+                        note=f"unit label '{r['label'].text}': {r['value']:g} m²"),
+               Evidence(file=img_path, page=0, bbox=[round(x, 1) for x in r["region_box"]], bbox_space="image_px",
+                        note=f"apartment {L}: the region inside its drawn boundary ({len(r['rooms'])} rooms)")]
+    sizes = ", ".join(f"{L} {res[L]['value']:g} m²" + (f" ({len(res[L]['measured'])} room(s) flood-filled)"
+                                                         if res[L]["measured"] else "") for L in order)
+    return Answer(value=value, unit=None, confidence=conf, solver=solver, evidence=ev[:14],
+                  trace=[f"compare units {letters} ({how}): {sizes}; margin {100 * margin:.1f}%"],
+                  assumptions=[f"net floor areas from the room labels inside each unit's drawn boundary, outdoor rooms "
+                               f"left out: {sizes}"],
+                  missing=([f"the two leading units differ by only {100 * margin:.1f}%; a unit sum is within 5% for "
+                            "69 of 99 test units"] if margin < 0.1 else []))
 
 
 def measure(m: dict, bar, question: str, size: tuple[int, int]):

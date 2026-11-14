@@ -115,7 +115,11 @@ def rescore(rows):
     """Score the rows the eval scorer leaves open (yes/no, multi-part, 'which', accepted text), in place."""
     for r in rows:
         k = (r.get("meta") or {}).get("kind", "")
-        if k.startswith("yesno"):
+        if k == "yesno:link":  # "do the plan and the model agree?": a bare count does not answer it
+            v = str(r["value"] or "")
+            said = "yes" if YES.search(v) else "no" if NO.search(v) else None
+            r["correct"] = said == str(r.get("gold")).lower()
+        elif k.startswith("yesno"):
             r["correct"] = yesno_ok(r["value"], r.get("gold"))
         elif (r.get("meta") or {}).get("parts"):  # v14 multi-part: every gold number must be in the answer
             r["correct"] = parts_ok(r["value"], r["meta"]["parts"])

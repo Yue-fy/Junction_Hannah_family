@@ -91,7 +91,9 @@ def model_for(path: str) -> str | None:
 # languages the parser has (template) vocabulary for, besides English: the dataset's ifc question languages
 PARSER_LANGS = ("de", "nl", "pl", "et", "it", "ro", "fi", "fr")
 _KNOWN_WORDINGS: set[str] | None = None
-_AUX_LEVEL = re.compile(r"\b(roof\w*|dach\w*|dak\w*|toit\w*|tetto|katto|katus|tak|cubierta|telhado|foundation\w*|"
+# roof words as whole words only: 'Dach' / 'Roof' / 'Katus' are roof levels, 'Dachgeschoss' / 'dakverdieping' are attic
+# FLOORS (IFC-Bench gold: ac20 5 levels incl. 'Dachgeschoss', fzk_house 2 storeys incl. 'Dachgeschoss')
+_AUX_LEVEL = re.compile(r"\b(roof|roofs|roof level|dach|dak|toit|tetto|katto|katus|tak|cubierta|telhado|foundation\w*|"
                         r"fundament\w*|vundament\w*|fdn|t/fdn|footing\w*|fondation\w*|fondazion\w*|cimentaci\w*|"
                         r"perustu\w*|site|terrain|gelande|maaiveld)\b")
 
@@ -398,11 +400,19 @@ class IfcSolver(BaseSolver):
     # ------------------------------------------------------------------------------------------------
     def solve(self, path: str, question: str) -> Answer:
         t0 = time.perf_counter()
+        from stoa.solvers.ifc.arith import ungroup_question
+
+        question = ungroup_question(question)  # "1,000 mm" -> "1000 mm" for every parser (Q bug 17)
         model = model_for(path)
         if model is None:
             return Answer.abstain(self.name, "no IFC model for this drawing", missing=["an IFC model of the building"])
         idx = load_index(model)
         llm_on = str(self.options.get("llm", "1")) != "0"
+        pv = self._plan_vs_model(path, model, idx, question)
+        if pv is not None:
+            pv.solver = self.name
+            pv.cost.wall_seconds = time.perf_counter() - t0
+            return pv
         ans, it, ctx = self._core(path, model, idx, question)
         if llm_on and str(self.options.get("translate", "1")) != "0":
             ans, it, ctx = self._cross_language(path, model, idx, question, ans, it, ctx)
@@ -418,6 +428,91 @@ class IfcSolver(BaseSolver):
         ans.solver = self.name
         ans.cost.wall_seconds = time.perf_counter() - t0
         return ans
+
+    # ------------------------------------------------------------------------------------------------
+    _PVM_AGREE = re.compile(r"\b(agree\w*|match(es)?|consistent|same (number|count)|correspond\w*|tally|differ\w*|"
+                            r"discrepan\w*|mismatch\w*)\b")
+    _PVM_PLAN = re.compile(r"\b(plan|drawing|sheet|2d)\b")
+    _PVM_MODEL = re.compile(r"\b(model|ifc|bim|3d)\b")
+    _PVM_NOTDRAWN = re.compile(r"\bnot (drawn|shown|visible)\b|\bmissing (from|on) (the |this )?(plan|drawing|sheet)\b|"
+                               r"\bin the model but not\b|\bonly in the model\b|\babsent from the (plan|drawing|sheet)\b")
+    _PVM_SHEETS = re.compile(r"\bhow many (floor )?(plan )?(sheets|plans|drawings|floor plans)\b|\bnumber of (floor )?(plan )?"
+                             r"(sheets|plans|drawings)\b")
+
+    def _plan_vs_model(self, path: str, model: str, idx: IfcIndex, question: str) -> Answer | None:
+        """Questions that need the plan AND the model (Stoa point 4, Q red-team v17): "How many windows on 'S' are in
+        the model but not drawn on this plan?", "Do the floor plan and the IFC model agree on the number of doors on
+        'S'?", "How many floor plan sheets are there for this building?". The plan's elements carry their IFC GlobalId
+        (data-guid in the SVG), so drawn vs modelled is a set difference, not a vision problem. None = not such a
+        question."""
+        from stoa.solvers.ifc.plan2d import plan_items, plans_of_model
+
+        qf = fold(_QUOTED_RX.sub(" ", question))
+        if self._PVM_SHEETS.search(qf) and not re.search(r"\b(door|window|room|wall|column)", qf):
+            plans = sorted(plans_of_model(model).items(), key=lambda kv: kv[1])
+            if not plans:
+                return None
+            names = {st.guid: st.name for st in idx.storeys}
+            ev = [Evidence(file=p, page=0, note=f"plan of storey '{names.get(g, '?')}'") for g, p in plans]
+            return Answer(value=len(plans), unit="count", confidence=0.85, evidence=ev, solver=self.name,
+                          trace=["plan sheets rendered from the model: " + ", ".join(Path(p).name for _, p in plans)],
+                          assumptions=["plan sheets = the floor plan files of this model (one per storey drawn); "
+                                       "sections and elevations not counted"], missing=[])
+        agree = bool(self._PVM_AGREE.search(qf) and self._PVM_PLAN.search(qf) and self._PVM_MODEL.search(qf))
+        notdrawn = bool(self._PVM_NOTDRAWN.search(qf))
+        if not (agree or notdrawn):
+            return None
+        it = parse(question)
+        kind = it.kind if it.kind in ("door", "window", "space", "wall", "column", "stair", "slab") else None
+        if kind is None:
+            return None
+        classes = KIND_CLASSES[kind]
+        storey = None
+        for n in it.names:
+            ms = match_storey(idx, n)
+            if ms is not None and ms.score >= 90:
+                storey = ms.obj
+                break
+        asked_plan = Path(path).suffix.lower() in (".pdf", ".svg") and "_plan-" in Path(path).stem
+        if storey is None and asked_plan:
+            storey = plan_storey(path, idx)[0]
+        if storey is None:
+            return None
+        plan = str(Path(path).with_suffix(".pdf")) if asked_plan and plan_storey(path, idx)[0] is storey else \
+            plans_of_model(model).get(storey.guid)
+        items = plan_items(plan) if plan else {}
+        if not items:
+            return None
+        on = idx.in_storey(storey.guid, *classes)
+        drawn = [e for e in on if e.guid in items]
+        missing_els = [e for e in on if e.guid not in items]
+        other = [g for g, i in items.items() if i.cls in classes and g not in {e.guid for e in on}]
+        word = kind.replace("space", "room") + "s"
+        from stoa.kg.graph import CUT_HEIGHT, _crosses, floor_offset
+
+        cut_z = (storey.elevation or 0.0) + floor_offset(idx) + CUT_HEIGHT
+        off_cut = [e for e in missing_els if _crosses(e, cut_z) is False]
+        why_nd = (f"{len(off_cut)} of them lie wholly above/below the cut plane (floor + {CUT_HEIGHT:g} m)"
+                  if off_cut else "none of them is wholly above/below the cut plane")
+        trace = [f"plan {Path(plan).name}: {len(drawn)} of the {len(on)} {word} of storey '{storey.name}' are drawn "
+                 f"(matched by IFC GlobalId); {len(missing_els)} not drawn" + (f"; the sheet also draws {len(other)} "
+                                                                             f"{word} of other storeys" if other else "")]
+        asm = ["the plan is a horizontal cut at about 1.2 m above the floor: elements entirely above or below it "
+               "(high windows, skylights, elements of split levels) are not drawn",
+               "drawn = the sheet's elements tagged with the element's IFC GlobalId"]
+        ev = [self._ev(model, e, f"{e.eff_cls} {e.name or ''} | not drawn on {Path(plan).name}") for e in missing_els]
+        if notdrawn and not agree:
+            return Answer(value=len(missing_els), unit="count", confidence=0.85, evidence=ev[:MAX_EVIDENCE],
+                          trace=trace + [f"in the model but not drawn: {len(on)} - {len(drawn)} = {len(missing_els)}; "
+                                         + why_nd],
+                          solver=self.name, assumptions=asm, missing=[])
+        same = len(drawn) == len(on) and not other
+        txt = (f"yes: the IFC model and the plan both have {len(on)} {word} on '{storey.name}'" if same else
+               f"no: the IFC model has {len(on)} {word} on '{storey.name}', the plan draws {len(drawn)}"
+               + (f" ({len(missing_els)} not drawn; {why_nd})" if missing_els else "")
+               + (f" and {len(other)} of other storeys" if other else ""))
+        return Answer(value=txt, unit=None, confidence=0.85, evidence=(ev or [self._ev(model, e, e.eff_cls) for e in drawn])[:MAX_EVIDENCE],
+                      trace=trace, solver=self.name, assumptions=asm, missing=[])
 
     # ------------------------------------------------------------------------------------------------
     def _cross_language(self, path: str, model: str, idx: IfcIndex, question: str, ans: Answer, it: Intent,
@@ -563,7 +658,9 @@ class IfcSolver(BaseSolver):
 
     _VDIST = re.compile(r"\b(floor[- ]to[- ]floor|vertical(ly)?|height difference|difference in (height|elevation|level)|"
                         r"elevation difference|level difference|how far apart|distance between|hohenunterschied|"
-                        r"hoogteverschil|korkeusero)\b")
+                        r"hoogteverschil|korkeusero|how far (?:is \S+ )?(?:above|below|over|under)|how (?:much )?(?:higher|"
+                        r"lower) (?:is|lies)|how high (?:is \S+ )?above|(?:height|elevation) of \S+ above)\b|"
+                        r"\bhow far\b.{0,30}\b(above|below)\b")
 
     def _storey_distance(self, model: str, idx: IfcIndex, question: str, trace: list[str]) -> Answer | None:
         """'Floor-to-floor height / vertical distance / height difference between storeys A and B' = |z_B - z_A|
@@ -591,6 +688,20 @@ class IfcSolver(BaseSolver):
         trace.append(f"vertical distance: '{b.name}' at {b.elevation:.3f} m - '{a.name}' at {a.elevation:.3f} m = {d:.3f} m")
         ev = [Evidence(file=model, ifc_guid=st.guid, note=f"IfcBuildingStorey {st.name} elevation {st.elevation:.3f} m")
               for st in (a, b)]
+        from stoa.solvers.ifc.arith import _AUX, _CMP, _LOWER, text_of
+
+        tq = text_of(question)
+        mc = _CMP.search(tq) if _AUX.match(tq) else None
+        if mc:
+            # "Is the floor-to-floor height between A and B more than 3 metres?" -> yes/no on the distance (Q v14 (4):
+            # answered '3.35 m' at 0.3)
+            thr = float(mc.group(2).replace(",", "."))
+            low = any(mc.group(1).startswith(x) for x in _LOWER)
+            res = d < thr if low else d > thr
+            trace.append(f"{d:.3f} m {'<' if low else '>'} {thr:g} m? -> {'yes' if res else 'no'}")
+            return Answer(value=f"{'yes' if res else 'no'} ({d:.2f} m)", unit=None, confidence=0.85, evidence=ev,
+                          trace=trace, solver=self.name,
+                          assumptions=["vertical distance = difference of the IfcBuildingStorey elevations"])
         return Answer(value=round(d, 4), unit="m", confidence=0.85, evidence=ev, trace=trace, solver=self.name,
                       assumptions=["vertical distance = difference of the IfcBuildingStorey elevations (finished floor "
                                    "levels as modelled)"])
@@ -613,6 +724,12 @@ class IfcSolver(BaseSolver):
                                                                                     if n.startswith("rank:")), 1)}
         try:
             ans = self._storey_distance(model, idx, question, trace)
+            if ans is not None and isinstance(ans.value, str):
+                from stoa.solvers.ifc.arith import _CMP, text_of
+
+                mc_ = _CMP.search(text_of(question))
+                if mc_:  # the yes/no threshold was used: not a leftover number
+                    ctx["outer"], ctx["outer_spans"] = True, [mc_.span()]
             if ans is None:
                 ans = self._relation(path, model, idx, it, question, trace, ctx)
             if ans is None:
@@ -1006,6 +1123,18 @@ class IfcSolver(BaseSolver):
                     missing.append("storey has no Elevation attribute")
                     return Answer.abstain(self.name, "no elevation", trace=trace, missing=missing)
                 assumptions.append("elevation = IfcBuildingStorey.Elevation (project units -> m)")
+                if "above_ground" in it.notes:
+                    # height above the ground floor = this elevation minus the ground floor's (the used floor nearest 0)
+                    gs = [st for st in used_storeys(idx, own_storeys(idx)) if st.elevation is not None] or \
+                        [st for st in idx.storeys if st.elevation is not None]
+                    g = min(gs, key=lambda st: abs(st.elevation))
+                    val = float(storey.elevation) - float(g.elevation)
+                    trace.append(f"above ground: {storey.name} {storey.elevation:.2f} m - ground floor {g.name} "
+                                 f"{g.elevation:.2f} m = {val:.2f} m")
+                    assumptions.append(f"ground floor = '{g.name}' (the floor nearest elevation 0); height = difference of "
+                                       "the storey elevations (finished floor levels)")
+                    ev.append(Evidence(file=model, ifc_guid=g.guid, note=f"IfcBuildingStorey {g.name} (ground floor)"))
+                    return self._final(val, "m", it, conf * 0.9, ev, trace, assumptions, missing)
                 return self._final(float(storey.elevation), "m", it, conf * 0.95, ev, trace, assumptions, missing)
             i = idx.storeys.index(storey)
             above = next((s2 for s2 in idx.storeys[i + 1:] if s2.elevation is not None
@@ -1228,6 +1357,22 @@ class IfcSolver(BaseSolver):
                         conf = min(conf, 0.875)
                         missing.append(f"whether the {len(drop)} nested {kind}(s) are separate {kind}s: counting every "
                                        f"{'/'.join(classes)} entity gives {len(els) + len(drop)}")
+            if kind == "cable_tray" and els:
+                # IfcCableCarrierSegment holds trays AND conduits (sixty5_electrical: 7252 conduits + 25 trays, no
+                # PredefinedType): keep the ones typed or named as trays/ladders/trunking
+                def nm_(e: Element) -> str:
+                    return fold(f"{e.name or ''} {e.type_name or ''} {e.object_type or ''}")
+                tray = [e for e in els if (e.predefined_type or "").upper() in ("CABLETRAYSEGMENT", "CABLELADDERSEGMENT",
+                                                                               "CABLETRUNKINGSEGMENT")
+                        or re.search(r"tray|ladder|trunking|goot|trasse|pritsche|rinne|chemin", nm_(e))]
+                cond = [e for e in els if e not in tray and ((e.predefined_type or "").upper() == "CONDUITSEGMENT"
+                                                             or re.search(r"conduit|buis|rohr|tube|pipe", nm_(e)))]
+                if tray or cond:
+                    trace.append(f"cable trays: {len(tray)} of {len(els)} cable carrier segments typed/named as trays; "
+                                 f"{len(cond)} conduits left out")
+                    assumptions.append("cable trays = IfcCableCarrierSegment typed or named tray/ladder/trunking "
+                                       f"(conduits are carriers too: {len(cond)} left out)")
+                    els = tray
             if kind == "slab" and re.search(r"\bfloor[- ]?slabs?\b|\bfloors? (slab|plate)", fold(ctx.get("question", ""))):
                 keep = [e for e in els if (e.predefined_type or "").upper() not in ("ROOF", "LANDING", "BASESLAB")
                         and not _FOUNDATION_NAME.search(fold(f"{e.name or ''} {e.type_name or ''} {e.object_type or ''}"))]
@@ -1467,7 +1612,17 @@ class IfcSolver(BaseSolver):
     _BUILDING = re.compile(r"\b(whole|entire|complete) (building|house|model|project)\b|\b(in|of|for) the (building|house)\b|"
                            r"\b(all|every) (floors|storeys|stories|levels|floor|storey|level)\b|\bbuilding[- ]wide\b|"
                            r"\bacross (all|the) (floors|storeys|levels|building)\b|\b(ganzen|gesamten) (gebaude|haus)\b|"
-                           r"\bim gebaude\b|\bhele gebouw\b|\bin het gebouw\b|\btodo el edificio\b|\bdans le batiment\b")
+                           r"\bim gebaude\b|\bhele gebouw\b|\bin het gebouw\b|\btodo el edificio\b|\bdans le batiment\b|"
+                           # Q 08:21: Italian 'in tutto l'edificio' still answered the sheet's storey; more languages
+                           r"\btutto l.?edificio\b|\bl.?intero edificio\b|\bintero edificio\b|\btutta la costruzione\b|"
+                           r"\bnell.?edificio\b|\btout le batiment\b|\bl.?ensemble du batiment\b|\bhela (byggnaden|huset)\b|"
+                           r"\bhele (bygningen|huset)\b|\bkoko (rakennukse\w*|rakennus|talo\w*)\b|\bkogu (hoone\w*|maja\w*)\b|"
+                           r"\b(calym|caly|cały) budyn\w*\b|\bcele(m)? budov\w*\b|\btodo o edificio\b|\begesz epulet\w*\b|"
+                           r"\bintreag\w* cladir\w*\b|\bwhole of the (building|house)\b")
+
+    _STOREY_WORD = re.compile(r"\b(top|highest|uppermost|lowest|bottom|ground|first|second|third|fourth|fifth|\d+(?:st|nd|rd|"
+                              r"th)?)\s+(floor|storey|story|level)\b|\b(basement|cellar|attic|loft|ground[- ]floor|"
+                              r"erdgeschoss|keller\w*|dachgeschoss|begane grond|kelder|zolder)\b")
 
     @staticmethod
     def _room_type_asked(idx: IfcIndex, question: str) -> bool:
@@ -1657,6 +1812,31 @@ class IfcSolver(BaseSolver):
                                                               r"et|ja|och|i|e|y)\b", qf):
                     it.op = "sum"
                 trace.append("storeys named without quotes: " + ", ".join(it.names))
+        # a room named WITHOUT quotes: "What is the area of Living (414B-19-001-002) on 1. Level?" (F 08:31: 3/8 per
+        # wording answered the storey total at 0.3). Labels '<long name> (<name>)' carrying a digit, longest first.
+        if not it.names and idx.by_class("IfcSpace"):
+            qfull = fold(question)
+            best = None
+            for e in idx.by_class("IfcSpace"):
+                labs = []
+                if e.long_name and e.name and e.long_name != e.name:
+                    labs.append(f"{e.long_name} ({e.name})")
+                if e.name and re.search(r"\d", e.name) and re.search(r"[a-z]", fold(e.name)) and len(e.name) >= 6:
+                    labs.append(e.name)
+                for lab in labs:
+                    fl = fold(lab)
+                    if len(fl) >= 6 and re.search(r"\d", fl) and re.search(r"(?<![\w])" + re.escape(fl) + r"(?![\w])", qfull):
+                        if best is None or len(fl) > len(fold(best)):
+                            best = lab
+            if best is not None:
+                rest_q = re.sub(re.escape(best), " ", question, flags=re.I)
+                si, _w = storey_mention(rest_q, [st.name for st in idx.storeys])
+                it.names = ([idx.storeys[si].name] if si is not None else []) + [best]
+                if it.kind in (None, "storey"):
+                    it.kind = "space"
+                if it.metric in ("text", "count") and re.search(r"\b(area|how (large|big)|size|square met|m2|sq)\b", qf):
+                    it.metric = "area"
+                trace.append(f"room named without quotes: '{best}'" + (f" on '{idx.storeys[si].name}'" if si is not None else ""))
         # "on all storeys above 'kjeller'", "below '2.etg'": the storeys strictly above/below the named one, summed
         # (W1 c5: answered the named storey itself at 0.97)
         if len(it.names) == 1 and it.kind not in (None, "storey") and not it.mod:
@@ -1678,7 +1858,10 @@ class IfcSolver(BaseSolver):
         # "in the whole building" asked on a plan sheet, no storey named: the whole model, not the sheet's storey
         # (asked on the .ifc itself, the scope is already the whole model)
         if (Path(path).suffix.lower() != ".ifc" and it.scope != "model" and not it.names and it.mod != "share" and it.kind != "storey"
-                and self._BUILDING.search(qf) and storey_mention(question, [s.name for s in idx.storeys])[0] is None):
+                and self._BUILDING.search(qf) and storey_mention(question, [s.name for s in idx.storeys])[0] is None
+                and not self._STOREY_WORD.search(qf)):
+            # a storey word beats 'of the building' (Q bug 19: the multi-part split wrote 'How many doors are on the top
+            # floor of the building model?' -> 211 whole-model doors @ 0.80; gold 39)
             it.scope = "model"
             trace.append(f"scope: '{self._BUILDING.search(qf).group(0)}' -> whole model")
         # "Which floor has the fewest windows?": a superlative over elements other than rooms is a count unless an
@@ -1796,7 +1979,9 @@ class IfcSolver(BaseSolver):
             # (Q 04:55: 'top floor' on esplanades -> 'Katus' (roof), 0 doors; a person means 5.korrus)
             occ = used_storeys(idx, sts)
             top = mt_.group(1) in ("top", "highest", "uppermost", "upper most")
-            asks_level = it.kind in (None, "storey")  # elevation / height / name of the level itself: the literal top
+            # elevation / height / name of the 'top storey/level' itself: the literal top level; 'top FLOOR' is a floor
+            # people use even in height questions (Q 08:16: 'How high above the ground floor is the top floor?' -> 13.4)
+            asks_level = it.kind in (None, "storey") and mt_.group(2) != "floor"
             pool = occ if occ and not asks_level else sts
             pick = (max if top else min)(pool, key=lambda st: st.elevation or 0.0)
             it.names = [pick.name]
@@ -1806,6 +1991,11 @@ class IfcSolver(BaseSolver):
                        and st is not pick]
             if skipped:
                 it.notes.append("top_floor_skip:" + ", ".join(repr(x) for x in skipped))
+            if re.search(r"\b(elevation|how high above|height above|above (the )?(ground|grade|street))\b", qf):
+                # "What is the elevation of the top floor?", "How high above the ground floor is the top floor?"
+                it.metric, it.kind, it.attr = "length", "storey", "elevation"
+                if re.search(r"\babove (the )?(ground|grade|street)", qf):
+                    it.notes.append("above_ground")
             trace.append(f"'{mt_.group(0)}' -> storey '{pick.name}'" + (
                 f" (highest/lowest storey with rooms or doors; {', '.join(repr(x) for x in skipped)} hold none)"
                 if skipped else ""))
@@ -2210,6 +2400,8 @@ class IfcSolver(BaseSolver):
                          f"average = {tot.value} / {cnt.value}"], f"average = total {it.metric} / number of {it.kind} elements")
 
         if it.mod == "share":
+            from stoa.solvers.ifc.parse import _kind_hits
+
             if others and storeys:  # "share of storey S's area that room R takes"
                 part, t1 = sub(others + [n for n, _ in storeys])
                 whole, t2 = sub([n for n, _ in storeys], total=True, kind="space" if it.metric == "area" else it.kind)
@@ -2223,6 +2415,29 @@ class IfcSolver(BaseSolver):
                 part, t1 = sub([n for n, _ in storeys])
                 whole, t2 = sub([n for n, _ in storeys], ctx_extra={"no_room_type": True}, kind="space")
                 wdesc = f"all rooms on '{storeys[0][0]}'"
+            elif storeys and re.search(r"\b(openings?|wall openings?|offnungen|openingen|ouvertures|aperture)\b",
+                                       qfo_ := fold(_QUOTED_RX.sub(" ", ctx.get("question", "")))) and \
+                    ({"door", "window"} & set(qk_ := [h[2] for h in _kind_hits(qfo_) if h[2] != "storey"])):
+                # "What share of the openings on S are windows?": openings = doors + windows on S (as people say it),
+                # not the model's windows (W1 c6 probe: 28 / 110 windows in the model = 25.5% at 0.89)
+                pk = next(k for k in qk_ if k in ("door", "window"))
+                sn_ = [n for n, _ in storeys]
+                part, t1 = sub(sn_, kind=pk, kinds=[pk], metric="count")
+                dd, _t = sub(sn_, kind="door", kinds=["door"], metric="count")
+                ww, _t = sub(sn_, kind="window", kinds=["window"], metric="count")
+                op_, _t = sub(sn_, kind="opening", kinds=["opening"], metric="count")
+                if any(not isinstance(a_.value, (int, float)) for a_ in (part, dd, ww)) or not (dd.value + ww.value):
+                    return None
+                tot_ = dd.value + ww.value
+                pct = float(part.value) / float(tot_) * 100.0
+                ans_ = done(pct, "%", [part, dd, ww], [f"{pk}s {part.value}", f"openings = doors {dd.value} + windows "
+                                                      f"{ww.value} = {tot_}", f"share = {part.value} / {tot_} x 100 = {pct:.2f}%"],
+                            f"share of {pk}s among the openings (doors + windows) on '{sn_[0]}'", 0.95)
+                ans_.confidence = min(ans_.confidence, 0.6)
+                if isinstance(op_.value, (int, float)) and op_.value:
+                    ans_.missing.append(f"which openings are meant: doors + windows = {tot_}; the model's IfcOpeningElement "
+                                        f"voids on '{sn_[0]}' = {op_.value} (share {float(part.value) / op_.value * 100:.1f}%)")
+                return ans_
             elif storeys:  # "share of the model's doors on storey S"
                 part, t1 = sub([n for n, _ in storeys], scope="storey")
                 whole, t2 = sub([], scope="model")
@@ -2544,10 +2759,14 @@ class IfcSolver(BaseSolver):
             pool = [e for e in idx.elements.values() if e.cls in _GENERIC_CLASSES]
             els = scoped([e for e in pool if pat.search(fold(f"{e.name or ''} {e.type_name or ''} {e.object_type or ''}"))])
             if els:
+                hit = sorted({m_.group(1) for e in els if (m_ := pat.search(fold(f"{e.name or ''} {e.type_name or ''} "
+                                                                                    f"{e.object_type or ''}")))})
+                label = {"sanitary": "sanitary fixtures", "light": "light fixtures"}.get(kind, kind.replace("_", " ") + "s")
                 trace.append(f"no {'/'.join(KIND_CLASSES.get(kind, ()))} in the model; {len(els)} proxy/generic "
                              f"elements named like '{words[0]}'")
-                assumptions.append(f"{kind}s = proxy/generic elements whose name says '{words[0]}' (the model has no "
-                                   f"{'/'.join(KIND_CLASSES.get(kind, ()))})")
+                assumptions.append(f"{label} = proxy/generic elements whose family/type name says "
+                                   + ", ".join(f"'{w}'" for w in hit[:6])
+                                   + f" (the model has no {'/'.join(KIND_CLASSES.get(kind, ()))})")
             return els
         return []
 
@@ -2583,6 +2802,7 @@ class IfcSolver(BaseSolver):
             groups, members = merged, merged_m
         total = sum(sum(v) for v in groups.values())
         noun = (it.kinds[0] if it.kinds else it.kind or "element").replace("_", " ")
+        noun = {"sanitary": "sanitary fixture", "light": "light fixture"}.get(noun, noun)
         plural = (noun[:-1] + "ies" if noun.endswith("y") and noun[-2:-1] not in "aeiou"
                   else noun + "es" if noun.endswith(("s", "x", "ch", "sh")) else noun + "s")
         fmt = (lambda x: f"{int(round(x))}") if value_of is None else (lambda x: f"{x:.2f} {unit or ''}".strip())
