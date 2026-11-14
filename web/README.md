@@ -58,11 +58,12 @@ and shows a one-line note:
 9. CubiCasa scan (colorful-4539), asked in Finnish: bedrooms → 3 from the fine-tuned 8B vision model (LoRA cc-v2);
    W3's raster label reader (one local-VLM call per drawing, shared by all its questions) reads 3 'MH' labels, so the
    pipeline cross-checks "vlm_lora 3 = raster 3 ✓", raises the confidence (86 %) and boxes each counted label.
-10. CubiCasa scan (colorful-3182, not in the CubiCasa5K detector's training list): windows → 4 at 33 % with no
-   boxes (windows are the LoRA's weakest symbol). The tour clicks **Show where · symbol detector**: R1's pretrained
-   CubiCasa5K detector (cached counts, no GPU, no tokens) marks 4 windows, "✓ CubiCasa5K detector finds 4 windows",
-   and the credit line adds the detector weights' licence (CC BY-NC 4.0). The confidence is left as the pipeline
-   calibrated it; the marks let a human check the count in seconds.
+10. CubiCasa scan (high_quality_architectural-14797): "how many saunas?" → the fine-tuned LoRA says 0 (78 %), the label
+   reader read 1, so the card shows "✗ Sources disagree" and no boxes. The tour clicks **Show where · read the room
+   labels**: the reader's box lands on "LH 2,7" (löylyhuone = sauna room) — one glance shows the sauna (gold: 1). For
+   symbol counts (windows, doors, WC seats, sinks) the same button asks R1's CubiCasa5K detector (`raster_cc5k`, cached,
+   no GPU) and the credit line adds its weights' licence (CC BY-NC 4.0); e.g. high_quality_architectural-816 doors:
+   answer 7, detector marks 9 (gold 9; that drawing is in CC5K's training list).
 11. HAER historical scan (vi0026 sheet 3, Creque Marine Railway, 1977; no questions in the dataset): "what kind
    of drawing is this?" → the local VLM says "elevation" at 20 %, and the tour clicks **Second opinion · NVIDIA
    Nemotron**: the hosted Nemotron 3.5 Super VL agrees (time, tokens and € shown; its reasoning folded). The

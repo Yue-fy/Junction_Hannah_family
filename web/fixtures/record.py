@@ -37,7 +37,7 @@ QUESTIONS = [
      "Wie viele Türen und Fenster sind insgesamt auf diesem Grundriss eingezeichnet?"),
     ("data/cubicasa5k/colorful-4539.png",
      "Kuinka monta makuuhuonetta (MH) pohjapiirustuksessa on?"),
-    ("data/cubicasa5k/colorful-3182.png", "How many windows are shown on this floor plan?"),
+    ("data/cubicasa5k/high_quality_architectural-14797.png", "How many saunas are on this floor plan?"),
     ("data/habs/vi0026_sheet_00003.jpg",
      "What kind of drawing is this (floor plan, elevation, section, site plan)?"),
 ]
@@ -53,7 +53,8 @@ SECOND_SOLVER = ("vlm_direct", {"backend": "nvidia"})
 # "Show where" on CubiCasa answers without evidence (web/src/card.ts locatorFor): room counts → the label reader
 # (raster), symbol counts → R1's pretrained CubiCasa5K detector (raster_cc5k, cached). (path, question, solver)
 LOCATE = [("data/cubicasa5k/colorful-4539.png", "Kuinka monta makuuhuonetta (MH) pohjapiirustuksessa on?", "raster"),
-          ("data/cubicasa5k/colorful-3182.png", "How many windows are shown on this floor plan?", "raster_cc5k")]
+          ("data/cubicasa5k/high_quality_architectural-14797.png", "How many saunas are on this floor plan?", "raster"),
+          ("data/cubicasa5k/high_quality_architectural-816.png", "How many doors are shown on this floor plan?", "raster_cc5k")]
 
 
 def main() -> None:

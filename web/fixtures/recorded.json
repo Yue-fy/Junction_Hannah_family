@@ -54,7 +54,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 1.2041
+    "wall_seconds": 1.359
    },
    "intent": {
     "task": "area",
@@ -69,7 +69,7 @@
     "key": "area:room:room"
    }
   },
-  "recorded_at": "2026-11-14 03:29",
+  "recorded_at": "2026-11-14 03:39",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -1073,7 +1073,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 0.0743
+    "wall_seconds": 0.0958
    },
    "intent": {
     "task": "count",
@@ -1087,7 +1087,7 @@
     "key": "count:door:storey"
    }
   },
-  "recorded_at": "2026-11-14 03:29",
+  "recorded_at": "2026-11-14 03:39",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -2281,7 +2281,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 0.0142
+    "wall_seconds": 0.0195
    },
    "intent": {
     "task": "count",
@@ -2295,7 +2295,7 @@
     "key": "count:window:storey"
    }
   },
-  "recorded_at": "2026-11-14 03:29",
+  "recorded_at": "2026-11-14 03:39",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -6761,7 +6761,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 0.016
+    "wall_seconds": 0.0176
    },
    "intent": {
     "task": "count",
@@ -6775,7 +6775,7 @@
     "key": "count:door:model"
    }
   },
-  "recorded_at": "2026-11-14 03:29",
+  "recorded_at": "2026-11-14 03:39",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -7872,7 +7872,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 0.0444
+    "wall_seconds": 0.0513
    },
    "intent": {
     "task": "area",
@@ -7887,7 +7887,7 @@
     "key": "area:room:room"
    }
   },
-  "recorded_at": "2026-11-14 03:29",
+  "recorded_at": "2026-11-14 03:39",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -7946,7 +7946,8 @@
    }
   },
   "recorded_at": "2026-11-14 03:29",
-  "api": "http://127.0.0.1:8102"
+  "api": "http://127.0.0.1:8102",
+  "note": "kept from the 03:29 recording (night 609e41c): night 8f02b13 answers 'none listed' (fact-card type names lost the Revit family, told W1)"
  },
  {
   "path": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf",
@@ -8447,7 +8448,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 0.1021
+    "wall_seconds": 0.2667
    },
    "intent": {
     "task": "count",
@@ -8459,7 +8460,7 @@
     "key": "count:door:drawing"
    }
   },
-  "recorded_at": "2026-11-14 03:29",
+  "recorded_at": "2026-11-14 03:39",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -8647,7 +8648,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 0.0177
+    "wall_seconds": 0.0298
    },
    "intent": {
     "task": "count",
@@ -8661,7 +8662,7 @@
     "key": "count:room:label"
    }
   },
-  "recorded_at": "2026-11-14 03:29",
+  "recorded_at": "2026-11-14 03:39",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -9525,7 +9526,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 0.7151
+    "wall_seconds": 0.7825
    },
    "intent": {
     "task": "count",
@@ -9548,7 +9549,7 @@
     ]
    }
   },
-  "recorded_at": "2026-11-14 03:29",
+  "recorded_at": "2026-11-14 03:39",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -9605,7 +9606,7 @@
     "vlm_lora: 3 count (conf 0.83, train hit rate)",
     "cross-check: vlm_lora 3 = raster 3 ✓ → conf 0.86 (LoRA right 29/33 on train_gate when raster agreed)",
     "[vlm_lora] kind=count unit=count",
-    "[vlm_lora] local:cc-v2 0.3s tok 2104->2",
+    "[vlm_lora] local:cc-v2 2.2s tok 2104->2",
     "[vlm_lora] raw: 3",
     "[vlm_lora] p(answer digits) = 0.91797 -> confidence 0.92",
     "[vlm_lora] cost: calls=1 tok_in=2104 tok_out=2 gpu_s=0.09 api_calls=0"
@@ -9621,7 +9622,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 2,
-    "wall_seconds": 2.4125
+    "wall_seconds": 4.6274
    },
    "intent": {
     "task": "count",
@@ -9633,55 +9634,55 @@
     "key": "count:bedroom:drawing"
    }
   },
-  "recorded_at": "2026-11-14 03:29",
+  "recorded_at": "2026-11-14 03:39",
   "api": "http://127.0.0.1:8102"
  },
  {
-  "path": "data/cubicasa5k/colorful-3182.png",
-  "question": "How many windows are shown on this floor plan?",
+  "path": "data/cubicasa5k/high_quality_architectural-14797.png",
+  "question": "How many saunas are on this floor plan?",
   "answer": {
-   "value": 4,
+   "value": 0,
    "unit": "count",
-   "confidence": 0.333,
+   "confidence": 0.778,
    "evidence": [],
    "trace": [
-    "intent: count window [drawing] (lang en)",
-    "raster_cc5k: no held-out rate for this question kind; not used",
-    "gate (train n=40): prior 10%, raster 10%, vlm_lora 15%, vlm_direct 12%; skip raster, vlm_direct",
-    "vlm_lora: 4 count (conf 0.17, train hit rate)",
-    "cross-check: vlm_lora 4 = raster 4 ✓ → conf 0.33 (LoRA right 1/4 on train_gate when raster agreed)",
+    "intent: count sauna [drawing] (lang en)",
+    "gate (train n=40): prior 42%, raster 85%, vlm_lora 98%, vlm_direct 52%",
+    "vlm_lora: 0 count (conf 0.95, train hit rate)",
+    "cross-check: vlm_lora 0 ≠ raster 1 → conf 0.78 (LoRA right 6/7 on train_gate when raster disagreed)",
     "[vlm_lora] kind=count unit=count",
-    "[vlm_lora] local:cc-v2 0.3s tok 374->2",
-    "[vlm_lora] raw: 4",
-    "[vlm_lora] p(answer digits) = 0.24534 -> confidence 0.22",
-    "[vlm_lora] cost: calls=1 tok_in=374 tok_out=2 gpu_s=0.02 api_calls=0"
+    "[vlm_lora] local:cc-v2 0.1s tok 288->2",
+    "[vlm_lora] raw: 0",
+    "[vlm_lora] p(answer digits) = 0.72970 -> confidence 0.82",
+    "[vlm_lora] cost: calls=1 tok_in=288 tok_out=2 gpu_s=0.01 api_calls=0"
    ],
    "solver": "pipeline/vlm_lora",
    "assumptions": [],
    "missing": [
+    "raster counted 1, the LoRA 0",
     "no located evidence from this solver"
    ],
    "cost": {
-    "llm_tokens_in": 374,
-    "llm_tokens_out": 2,
-    "gpu_seconds": 0.017,
+    "llm_tokens_in": 4844,
+    "llm_tokens_out": 5892,
+    "gpu_seconds": 95.43604642677307,
     "api_calls": 0,
     "api_tokens_in": 0,
     "api_tokens_out": 0,
-    "llm_calls": 1,
-    "wall_seconds": 0.3115
+    "llm_calls": 12,
+    "wall_seconds": 0.2661
    },
    "intent": {
     "task": "count",
-    "target": "window",
+    "target": "sauna",
     "scope": "drawing",
     "unit": "count",
     "filters": {},
     "lang": "en",
-    "key": "count:window:drawing"
+    "key": "count:sauna:drawing"
    }
   },
-  "recorded_at": "2026-11-14 03:29",
+  "recorded_at": "2026-11-14 03:39",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -9697,7 +9698,7 @@
     "no train gate for this kind of question: general path by file type",
     "vlm_direct: elevation  (conf 0.20)",
     "[vlm_direct] kind=text unit=None",
-    "[vlm_direct] local:qwen3-vl-8b 0.4s tok 3246->3",
+    "[vlm_direct] local:qwen3-vl-8b 2.3s tok 3246->3",
     "[vlm_direct] raw: elevation",
     "[vlm_direct] cost: calls=1 tok_in=3246 tok_out=3 gpu_s=0.13 api_calls=0"
    ],
@@ -9714,7 +9715,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 1,
-    "wall_seconds": 0.6152
+    "wall_seconds": 2.5549
    },
    "intent": {
     "task": "text",
@@ -9726,7 +9727,7 @@
     "key": "text:unknown:drawing"
    }
   },
-  "recorded_at": "2026-11-14 03:29",
+  "recorded_at": "2026-11-14 03:39",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -9739,22 +9740,22 @@
    "evidence": [],
    "trace": [
     "kind=count unit=count",
-    "nvidia:private/nvidia/nemotron-3.5-super-120b-a12b 7.2s tok 2150->157",
-    "raw:  room: There is a label \"MH\". |     *   Bottom middle room: There is a label \"MH\". |  | 2.  **Verify the count.** |     *   Room 1: Top left corner. |     *   Room 2: Top right area (next to OH). |     *   Room 3: Bottom middle area (next to ET and VH). |  | 3.  **Final Count:** 3. |  | 4.  **Format:** Single integer.3",
-    "cost: calls=1 tok_in=2150 tok_out=157 gpu_s=0.00 api_calls=1"
+    "nvidia:private/nvidia/nemotron-3.5-super-120b-a12b 5.2s tok 2150->170",
+    "raw: room: There is a label \"MH\". |  | 2.  **Verify the count.** |     *   Room 1: Top left corner area. |     *   Room 2: Top right area, next to the bathroom (PH). |     *   Room 3: Bottom middle area, next to the living room (OH) and entrance hall (ET). |  | 3.  **Final Count:** 3. |  | 4.  **Format:** Single integer.3",
+    "cost: calls=1 tok_in=2150 tok_out=170 gpu_s=0.00 api_calls=1"
    ],
    "solver": "vlm_direct",
    "assumptions": [],
    "missing": [],
    "cost": {
     "llm_tokens_in": 2150,
-    "llm_tokens_out": 157,
+    "llm_tokens_out": 170,
     "gpu_seconds": 0.0,
     "api_calls": 1,
     "api_tokens_in": 2150,
-    "api_tokens_out": 157,
+    "api_tokens_out": 170,
     "llm_calls": 1,
-    "wall_seconds": 7.5571
+    "wall_seconds": 5.5749
    },
    "intent": {
     "task": "count",
@@ -9766,7 +9767,7 @@
     "key": "count:bedroom:drawing"
    }
   },
-  "recorded_at": "2026-11-14 03:29",
+  "recorded_at": "2026-11-14 03:39",
   "api": "http://127.0.0.1:8102",
   "solver": "vlm_direct",
   "solver_args": {
@@ -9783,7 +9784,7 @@
    "evidence": [],
    "trace": [
     "kind=text unit=None",
-    "nvidia:private/nvidia/nemotron-3.5-super-120b-a12b 5.2s tok 3249->3",
+    "nvidia:private/nvidia/nemotron-3.5-super-120b-a12b 3.8s tok 3249->3",
     "raw: Elevation",
     "cost: calls=1 tok_in=3249 tok_out=3 gpu_s=0.00 api_calls=1"
    ],
@@ -9798,7 +9799,7 @@
     "api_tokens_in": 3249,
     "api_tokens_out": 3,
     "llm_calls": 1,
-    "wall_seconds": 5.3874
+    "wall_seconds": 4.0793
    },
    "intent": {
     "task": "text",
@@ -9810,7 +9811,7 @@
     "key": "text:unknown:drawing"
    }
   },
-  "recorded_at": "2026-11-14 03:29",
+  "recorded_at": "2026-11-14 03:39",
   "api": "http://127.0.0.1:8102",
   "solver": "vlm_direct",
   "solver_args": {
@@ -9886,7 +9887,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 0.0288
+    "wall_seconds": 0.0292
    },
    "intent": {
     "task": "count",
@@ -9898,78 +9899,204 @@
     "key": "count:bedroom:drawing"
    }
   },
-  "recorded_at": "2026-11-14 03:29",
+  "recorded_at": "2026-11-14 03:39",
   "api": "http://127.0.0.1:8102",
   "solver": "raster"
  },
  {
-  "path": "data/cubicasa5k/colorful-3182.png",
-  "question": "How many windows are shown on this floor plan?",
+  "path": "data/cubicasa5k/high_quality_architectural-14797.png",
+  "question": "How many saunas are on this floor plan?",
   "answer": {
-   "value": 4,
+   "value": 1,
    "unit": "count",
-   "confidence": 0.561,
+   "confidence": 0.72,
    "evidence": [
     {
-     "file": "data/cubicasa5k/colorful-3182.png",
+     "file": "data/cubicasa5k/high_quality_architectural-14797.png",
      "page": null,
      "bbox": [
-      96.0,
-      95.0,
-      152.0,
-      126.0
+      27.0,
+      469.9,
+      60.0,
+      485.6
      ],
      "bbox_space": "image_px",
      "ifc_guid": null,
-     "note": "window 1"
-    },
-    {
-     "file": "data/cubicasa5k/colorful-3182.png",
-     "page": null,
-     "bbox": [
-      222.0,
-      96.0,
-      279.0,
-      130.0
-     ],
-     "bbox_space": "image_px",
-     "ifc_guid": null,
-     "note": "window 2"
-    },
-    {
-     "file": "data/cubicasa5k/colorful-3182.png",
-     "page": null,
-     "bbox": [
-      304.0,
-      97.0,
-      362.0,
-      133.0
-     ],
-     "bbox_space": "image_px",
-     "ifc_guid": null,
-     "note": "window 3"
-    },
-    {
-     "file": "data/cubicasa5k/colorful-3182.png",
-     "page": null,
-     "bbox": [
-      432.0,
-      102.0,
-      487.0,
-      136.0
-     ],
-     "bbox_space": "image_px",
-     "ifc_guid": null,
-     "note": "window 4"
+     "note": "label 'LH 2,7' = sauna 1"
     }
    ],
    "trace": [
-    "raster_cc5k: 4 window components (cached)",
+    "class=sauna",
+    "prior (train mode for sauna) = 1 (hit rate 57%, n=6056)",
+    "gate[sauna] = labels_code (train acc {'prior': 0.53, 'labels': 0.7, 'labels_code': 0.72})",
+    "labels (shared with another question): 29 read in 61.1s: RYÖK.->-, OH 14,8->-, KEITTIÖ->kitchen, BH 3,5->-, ET->-, HM 10,0->-, TK->-, VAR.->-, 2,7->-, COL->-, WC->wc_room, VH->-, 03->-, LH 2,7->sauna, D->-, 4->-, 20,1->-, BK->-, 2A->-, 10,3->-, 10,1 3-5->-, LT 15+15->-, IKYK->-, OPU 3->-, 18+14->-, 15+14 LT->-, 20->-, 80->-, MH->bedroom",
+    "reused R1 v2 label output",
+    "tiled re-read (one-shot list truncated): bedroom/balcony labels from the 18 tiled items",
+    "cross-check vs prior 1: agrees ✓"
+   ],
+   "solver": "raster",
+   "assumptions": [
+    "counted room-name labels for sauna (Finnish codes: MH bedroom, KH/PH/PESUH bathroom, S/SAUNA/LH sauna, WC, PARV balcony, K/KK/KT kitchen); one label = one room"
+   ],
+   "missing": [],
+   "cost": {
+    "llm_tokens_in": 0,
+    "llm_tokens_out": 0,
+    "gpu_seconds": 0.0,
+    "api_calls": 0,
+    "api_tokens_in": 0,
+    "api_tokens_out": 0,
+    "llm_calls": 0,
+    "wall_seconds": 0.0033
+   },
+   "intent": {
+    "task": "count",
+    "target": "sauna",
+    "scope": "drawing",
+    "unit": "count",
+    "filters": {},
+    "lang": "en",
+    "key": "count:sauna:drawing"
+   }
+  },
+  "recorded_at": "2026-11-14 03:39",
+  "api": "http://127.0.0.1:8102",
+  "solver": "raster"
+ },
+ {
+  "path": "data/cubicasa5k/high_quality_architectural-816.png",
+  "question": "How many doors are shown on this floor plan?",
+  "answer": {
+   "value": 9,
+   "unit": "count",
+   "confidence": 0.552,
+   "evidence": [
+    {
+     "file": "data/cubicasa5k/high_quality_architectural-816.png",
+     "page": null,
+     "bbox": [
+      71.0,
+      95.0,
+      134.0,
+      106.0
+     ],
+     "bbox_space": "image_px",
+     "ifc_guid": null,
+     "note": "door 1"
+    },
+    {
+     "file": "data/cubicasa5k/high_quality_architectural-816.png",
+     "page": null,
+     "bbox": [
+      345.0,
+      180.0,
+      373.0,
+      188.0
+     ],
+     "bbox_space": "image_px",
+     "ifc_guid": null,
+     "note": "door 2"
+    },
+    {
+     "file": "data/cubicasa5k/high_quality_architectural-816.png",
+     "page": null,
+     "bbox": [
+      241.0,
+      184.0,
+      271.0,
+      189.0
+     ],
+     "bbox_space": "image_px",
+     "ifc_guid": null,
+     "note": "door 3"
+    },
+    {
+     "file": "data/cubicasa5k/high_quality_architectural-816.png",
+     "page": null,
+     "bbox": [
+      332.0,
+      194.0,
+      338.0,
+      221.0
+     ],
+     "bbox_space": "image_px",
+     "ifc_guid": null,
+     "note": "door 4"
+    },
+    {
+     "file": "data/cubicasa5k/high_quality_architectural-816.png",
+     "page": null,
+     "bbox": [
+      281.0,
+      227.0,
+      308.0,
+      232.0
+     ],
+     "bbox_space": "image_px",
+     "ifc_guid": null,
+     "note": "door 5"
+    },
+    {
+     "file": "data/cubicasa5k/high_quality_architectural-816.png",
+     "page": null,
+     "bbox": [
+      273.0,
+      296.0,
+      278.0,
+      328.0
+     ],
+     "bbox_space": "image_px",
+     "ifc_guid": null,
+     "note": "door 6"
+    },
+    {
+     "file": "data/cubicasa5k/high_quality_architectural-816.png",
+     "page": null,
+     "bbox": [
+      200.0,
+      304.0,
+      203.0,
+      324.0
+     ],
+     "bbox_space": "image_px",
+     "ifc_guid": null,
+     "note": "door 7"
+    },
+    {
+     "file": "data/cubicasa5k/high_quality_architectural-816.png",
+     "page": null,
+     "bbox": [
+      234.0,
+      388.0,
+      272.0,
+      397.0
+     ],
+     "bbox_space": "image_px",
+     "ifc_guid": null,
+     "note": "door 8"
+    },
+    {
+     "file": "data/cubicasa5k/high_quality_architectural-816.png",
+     "page": null,
+     "bbox": [
+      233.0,
+      441.0,
+      273.0,
+      455.0
+     ],
+     "bbox_space": "image_px",
+     "ifc_guid": null,
+     "note": "door 9"
+    }
+   ],
+   "trace": [
+    "raster_cc5k: 9 door components (cached)",
     "pretrained CubiCasa5K multi-task model (Kalervo et al. 2019), weights CC BY-NC 4.0"
    ],
    "solver": "raster_cc5k",
    "assumptions": [
-    "symbols segmented by the pretrained CubiCasa5K model (Kalervo et al. 2019); each box is one counted symbol"
+    "symbols segmented by the pretrained CubiCasa5K model (Kalervo et al. 2019); each box is one counted symbol",
+    "this drawing is in the model's original training list (measured: accuracy on such drawings is within a few points of held-out ones)"
    ],
    "missing": [],
    "cost": {
@@ -9984,15 +10111,15 @@
    },
    "intent": {
     "task": "count",
-    "target": "window",
+    "target": "door",
     "scope": "drawing",
     "unit": "count",
     "filters": {},
     "lang": "en",
-    "key": "count:window:drawing"
+    "key": "count:door:drawing"
    }
   },
-  "recorded_at": "2026-11-14 03:29",
+  "recorded_at": "2026-11-14 03:39",
   "api": "http://127.0.0.1:8102",
   "solver": "raster_cc5k"
  }
