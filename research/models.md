@@ -191,7 +191,9 @@ Cost of one answer (D21 item 4), measured, not assumed:
 0. One command (09:45): put Stoa's examples in eval-split format (path, question, answer or null, type, meta.kind) and run
    `experiments/r2/noon_models.sh EXAMPLES.jsonl [NEMOTRON_LIMIT=40]` → pipeline vs plain local VLM vs hosted Nemotron (1 worker,
    first N), numbers exact/2%, text by the local judge, one per-kind table + cost per run (`compare_runs.py --by kind`).
-   Tested on a 12-row mix (log $JUNCTION_SHARED/logs/R2/noon_models.log). For an unknown-folder raster, `experiments/r2/style/style.py
+   Tested on a 12-row mix (log $JUNCTION_SHARED/logs/R2/noon_models.log). Rows without gold (answer null) are predicted but not
+   scored ('-' in the table, 10:30 fix); every question with each model's answer @ confidence goes to
+   `$JUNCTION_SHARED/artifacts/R2/noon_side_by_side_<split>.txt`; F's `python -m stoa.eval.review RUN.jsonl` gives a readable review. For an unknown-folder raster, `experiments/r2/style/style.py
    FILE` (PYTHONPATH=.) says which reader family fits (cubicasa5k / swiss_dwellings / ifc_models / scan, p≥0.8 → 96.7% right).
 1. New question kinds on rasters/scans: first run `vlm_direct` (8B base, conf=logprob) and `vlm_lora` on Stoa's examples; if the LoRA
    answers a kind it was never trained on, its confidence is NOT calibrated (F 01:28) — keep W4's unseen-wording cap.
