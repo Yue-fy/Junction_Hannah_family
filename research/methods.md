@@ -366,6 +366,18 @@ fitted on the original CC5K **val** list and checked on the original **test** li
 With a second independent counter, the fixture ranges are narrower at the same coverage: 1.4–1.7 values wide
 instead of 2.0–3.5. That is the measurable value of linking two sources (Stoa point 4).
 
+**Yes/no threshold questions ("at least two toilets?").** The answer comes from one count, but its confidence
+should come from whether the second counter is on the same side of N. LoRA + CC5K, pooled over N = 1..10, fitted
+on train_gate (`threshold_side.py`, `crosscheck.threshold_confidence()`):
+
+| group | same side: conf (dev right) | straddling N: conf (dev right) |
+|---|---|---|
+| openings (windows, doors) | 0.94 (95%, n 1124) | 0.53 (59%, n 249) |
+| fixtures (WC, sinks) | 0.97 (96%, n 562) | 0.68 (69%, n 121) |
+| rooms | 0.97 (98%, n 302) | 0.80 (90%, n 40) |
+
+The pipeline today gives "at least two WC seats?" 0.82 whether the answer is right or wrong (hard2: 0.82 vs 0.79).
+
 ### 8c. Linked data as a cross-check
 - Swiss (measured, `experiments/r1/link_dxf_pdf/fit_affine.py`): DXF → PDF is one affine map per floor,
   fitted by least squares on room numbers that occur once in both the DXF `ROOM_TEXT` and the PDF words
