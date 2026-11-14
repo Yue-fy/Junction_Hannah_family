@@ -240,7 +240,23 @@ class Agent:
         results.append((n, 0.9, ev, f"rows: {c[:70]} (count)"))
         results.append((tot, 0.9, ev, f"rows: {c[:70]} (area sum)"))
         listed = ", ".join(f"{r.number or '-'} {r.name} {r.area_m2}" for r in sub.head(12).itertuples())
-        return f"{n} room(s) match, area_m2 sum {tot}: {listed}" + (" …" if n > 12 else "")
+        out = f"{n} room(s) match, area_m2 sum {tot}: {listed}" + (" …" if n > 12 else "")
+        m = re.fullmatch(r"apartment\s*==\s*['\"](\w{1,3})['\"]((?:\s+and\s+(?:not\s+outdoor|numbered|not\s+numbered))*)",
+                         c.strip())
+        if m and self.ask_fn is not None:
+            # an apartment TOTAL by hand also sums unnamed shafts/ducts; the dataset's (and dxf's) apartment net
+            # area does not (derived2: rent of apartment B from 76.17 m² instead of 65.06 m²)
+            try:
+                a = self.ask_fn(path, f"What is the net floor area of apartment {m.group(1)} in m², summing all its "
+                                      "rooms except balconies, loggias, terraces and other outdoor spaces?")
+            except Exception:  # noqa: BLE001
+                a = None
+            if a is not None and _num(a.value) is not None:
+                results.append((a.value, a.confidence, list(a.evidence), f"ask: net floor area of apartment {m.group(1)}"))
+                out += (f"\nNOTE: the official net floor area of apartment {m.group(1)} (all its rooms except outdoor "
+                        f"spaces, by {a.solver}) is {_fmt(a.value)} m² (confidence {a.confidence:.2f}); use THIS "
+                        "number for the apartment's area, not the row sum")
+        return out
 
     def _pdf(self, path: str) -> str | None:
         if path.lower().endswith(".pdf"):
@@ -312,7 +328,7 @@ class Agent:
         # scope names: the storey / model the question is about (room labels are not: a swiss room is asked by number)
         _f = parse(question).filters
         names = {str(_f[k]).strip().lower() for k in ("storey", "model") if _f.get(k)}
-        names = {n for n in names if len(n) >= 2}
+        names = {n for n in names if n}  # token match below, so short storey names ('1', '0') are safe
         for step in range(self.max_steps):
             force = step == self.max_steps - 1
             if force:
