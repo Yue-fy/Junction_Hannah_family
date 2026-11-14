@@ -146,3 +146,29 @@ def test_v20_links(solver, path, q, want):
 ])
 def test_two_questions_any_language(q, two):
     assert bool(IfcSolver._two_q(q)) is two
+
+
+GDYNIA = "data/ifc_models/bimspeed-gdynia_ruchu-oporu-18_plan-03-0.pdf"
+TUW_DG1 = "data/ifc_models/tuwien-escape-route_real-world-escape-route-test-model-zdb_plan-05-dg1.pdf"
+TUW_UG2 = "data/ifc_models/tuwien-escape-route_real-world-escape-route-test-model-zdb_plan-01-ug2.pdf"
+INST_EG = "data/ifc_models/kit-institute_ac20-institute-var-2_plan-02-erdgeschoss.pdf"
+WARM2 = "data/ifc_models/bimspeed-warmond_ar_plan-05-2-level.pdf"
+
+
+@need
+@pytest.mark.parametrize("path,q,want", [   # R1's link probe (experiments/r1/kg_qa/probe_kg.jsonl on night-R1)
+    (GDYNIA, "How many sheets in total belong to this building (plans, sections and elevations)?", r"^10$"),
+    (GDYNIA, "Is there a section drawing of this building in the set?", r"^yes"),
+    (INST_EG, "Le plan et la maquette IFC indiquent-ils le même nombre de portes au niveau 'Erdgeschoss' ?", r"^yes"),
+    (TUW_DG1, "Does the model contain more windows on storey 'DG1' than the 'DG1' floor plan shows?", r"^yes"),
+    (TUW_UG2, "Does the 'UG2' floor plan show doors that the model does not assign to 'UG2'?", r"^yes"),
+    (WARM2, "Which storeys of the model have no rooms at all?", r"^Basement; Entrance; Intermediate level 1; Intermediate level 2$"),
+    (WARM2, "Wie viele Grundrisse gibt es für dieses Gebäude?", r"^8$"),
+    (WARM2, "Kuinka monta leikkauspiirustusta tästä rakennuksesta on?", r"^2$"),
+    (SMILEY_1OG, "Welche Geschosse des Modells haben keinen eigenen Grundriss?", r"^Dach$"),
+    (SMILEY_1OG, "How many walls are there on the ground floor?", r"^81$"),  # Q 09:45: not the sheet's 1.OG (70)
+])
+def test_r1_links(solver, path, q, want):
+    a = solver.solve(path, q)
+    assert re.search(want, str(a.value)), a.value
+    assert a.confidence >= 0.8
