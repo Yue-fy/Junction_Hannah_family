@@ -198,6 +198,13 @@ has it, but `$JUNCTION_VENV` does not).
 
 ## 3. Symbol counting on raster plans (measured: Qwen3-VL-8B pointing does NOT work)
 
+**Current raster methods with measured numbers: see `stoa/solvers/raster/README.md` (W3, night-W3 1150bbd)** — not
+duplicated here. Two facts from W3 (09:36) that matter for any raster door count: (1) the swing-arc matched filter
+(`doorarcs.py`) counts doors on clean Swiss PNG renders (arc recall ~0.9 / precision ~0.95; twin-less dev doors 2/15
+exact vs vlm_direct 0/15) but is NEGATIVE on CubiCasa scans (7/40 vs the prior's 8/40), so the CC5K detector (§3a)
+stays the CubiCasa door route; (2) the Swiss DXF door gold double-counts doors on apartment boundaries (54/60 TRAIN
+floors), so any image-only door count on Swiss plans is low by ~1–10 against that gold.
+
 Measured with Qwen3-VL-8B (`experiments/r1/symbol_points/`), exact match vs the per-template prior:
 
 | Setting | Split | Windows | Doors | WC seats | Sinks | Showers+tubs |
@@ -750,3 +757,47 @@ formatter fix (3 confident misses where the text said 'no plan sheet' while the 
 it. Night's 4 confident-wrong answers on probe_kg all come from ifc as asked (sheets in total → 4 @ 0.85; FR 'même
 nombre de portes' → 18 @ 0.97; 'more windows on DG1 than the plan shows' → 'no (36 = 36)' @ 0.89; 'storeys with no
 rooms' → a room name @ 0.90), so kg_qa must run BEFORE ifc on a link question, not as a fallback after it.
+
+### 8l. Link questions: comparatives, two-part questions, storey roles, 'this sheet' (measured, cycle 21)
+Q's v23 round and W1's c8_cmp probe found four ways kg_qa (routed FIRST for link questions since W4 1b831ed) was
+confidently wrong. All four are about reading the QUESTION, not the graph, so the fixes are deterministic and the
+LLM's role stays "cite the rows":
+1. **Comparatives have a direction.** "Does this plan show fewer windows than the IFC model has on the same storey?"
+   was answered with the 'agree?' polarity ("no: 55 vs 52"), because 'same' (in 'the same storey') matched the
+   agree words. Now: 'more/fewer … than' in en/de/fi/fr/sv/it/nl/es/et → subject = the side (plan/drawn/here vs
+   model/IFC/BIM) named before 'than' (or, if neither, the opposite of the side after it) → yes iff subject {>,<}
+   other, Python on the cited C row. 'the same storey/floor/Geschoss …' is removed before the agree test.
+2. **Two-part questions** ("Which storey does this sheet show, and does its door count match the model?";
+   "Are some BIM windows missing on this sheet, and if so how many?") split on ', and/und/ja/et/och/e/en/y' + a
+   question word; each part is solved alone (the second one sees the full question with "answer ONLY its last
+   part"), answers joined with '; ', confidence = min; one part unanswered → the other at ≤ 0.5 + missing.
+3. **'this sheet' pins its storey.** When the question says this plan/sheet/drawing/here and names no other storey,
+   a C row of another storey is swapped for the same element's C row of the sheet's own storey ('windows in the 3D
+   model that this sheet does not draw' had cited 2.korrus 60 vs 53; right by luck).
+4. **Storey ROLE words** (W1's PITFALL 09:36) use W1's `parse._GROUND_Q / _GROUND_NAME / ground_reference` (+ a
+   basement rule: a storey named KG/UG/Keller/basement, else the first storey below −1 m with rooms) and add a hint
+   row "[H1] 'ground floor' = storey 'EG'"; a 'which sheet' lookup that cites another storey is redirected.
+Guards: when the LLM cites no C row on a yes/no plan-vs-model question, the storey (quoted / role / this sheet's) +
+the element word pick the row; 'Can you tell me how many …' is a count, not a yes/no; a 'how many' question is never
+answered by a storey/sheet lookup (c8: 'How many walls are there on the ground floor?' → 'EG' @ 0.85 standalone);
+sheet enumerations 'plans, sections and elevations' keep the plans; two-storey differences ('How many more doors on
+'1.korrus' than on '5.korrus'?') subtract the two storeys' model counts (was model − drawn of one row = 0).
+New trigger rule 'model vs drawn' ('… than are drawn here'): **0 fires on 128,535 dataset questions** (trigger_eval.py).
+
+| probe (pipeline end to end, same code before/after) | before | after | conf ≥ 0.8 wrong |
+|---|---|---|---|
+| Q v23 (21, Q's wordings) | 18/21 | **21/21** | 3 → 0 |
+| R1 r1v5 (15, gold committed 8368fe2 before any run) | 11/15 | **15/15** | 3 → 0 |
+| W1 c8_cmp (22, W1's comparatives; base = W1's own run) | 19/22 | **22/22** | 3 → 0 |
+| pooled | 48/58 | **58/58** (10 W / 0 L, McNemar p ≈ 0.002) | 9 → 0 |
+Standalone kg_qa: probe_kg 21/21 (kg21 'doors the model does not assign to UG2' now right), v17 9/9, v20 19/19;
+318 LLM paraphrases in 9 languages 258 → **272/318**, conf ≥ 0.8 244 @ 232 right → **247 @ 246 right** (the one left:
+Dutch 'hoogteplannen'). Cost: +8% tokens/Q on link questions (two-part questions make 2 calls). dev/hard/hard2 are
+unchanged by construction (the trigger fires on none of their questions). Runs: artifacts/eval/20261114-102506-…-
+probe_v23q-5ac3 → -103309-…-e4e5; -102517-…-probe_r1v5-b5eb → -103327-…-0369; -102051-…-c8_cmp-05db → -103343-…-9092;
+score with `python experiments/r1/kg_qa/compare.py PROBE A B`. Code: experiments/r1/kg_qa/kgqa.py (night-R1 a07af69).
+Honest caveat: v23's three misses were seen before the fix (in-sample); r1v5 and c8 are the out-of-sample evidence,
+and c8 was written by W1 for the same bug class, so the classes are known, the wordings were not.
+Still open: Swiss PDF↔DXF↔PNG and CubiCasa link questions ('Is there an IFC model for this plan?', 'do this plan and
+its DXF agree on doors?') — facts() returns [] for non-IFC files, so kg_qa abstains and the pipeline answers (right
+on v23 at 0.30–0.45). Finnish/Italian/Estonian trigger recall 54–79% on paraphrases.
