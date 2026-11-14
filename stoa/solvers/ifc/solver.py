@@ -88,6 +88,18 @@ def model_for(path: str) -> str | None:
     return None
 
 
+# languages the parser has (template) vocabulary for, besides English: the dataset's ifc question languages
+PARSER_LANGS = ("de", "nl", "pl", "et", "it", "ro", "fi", "fr")
+
+
+def _same_value(a: Answer, b: Answer) -> bool:
+    """Two rule answers say the same thing (numbers within 0.5% in the same unit, or the same text)."""
+    if isinstance(a.value, (int, float)) and isinstance(b.value, (int, float)):
+        x, y = float(a.value), float(b.value)
+        return (a.unit or "") == (b.unit or "") and abs(x - y) <= 0.005 * max(abs(x), abs(y), 1e-9)
+    return str(a.value).strip().lower() == str(b.value).strip().lower()
+
+
 def _ascii_drop(s: str) -> str:
     return re.sub(r"[^a-z0-9]+", "", (s or "").lower().encode("ascii", "ignore").decode())
 
@@ -292,13 +304,114 @@ class IfcSolver(BaseSolver):
     # ------------------------------------------------------------------------------------------------
     def solve(self, path: str, question: str) -> Answer:
         t0 = time.perf_counter()
-        trace: list[str] = []
         model = model_for(path)
         if model is None:
             return Answer.abstain(self.name, "no IFC model for this drawing", missing=["an IFC model of the building"])
+        idx = load_index(model)
+        llm_on = str(self.options.get("llm", "1")) != "0"
+        ans, it, ctx = self._core(path, model, idx, question)
+        if llm_on and str(self.options.get("translate", "1")) != "0":
+            ans, it, ctx = self._cross_language(path, model, idx, question, ans, it, ctx)
+        if llm_on:
+            ans = self._llm_stage(model, idx, question, it, ans, ctx)
+        if ans.value is not None and self.options.get("plan2d", "1") != "0":
+            try:
+                self._add_2d(path, model, it, ans, ctx.get("storey"))
+            except Exception as ex:  # noqa: BLE001 - 2D evidence is a bonus; never lose the answer over it
+                ans.trace.append(f"2D link failed: {type(ex).__name__}: {ex}")
+        ans.solver = self.name
+        ans.cost.wall_seconds = time.perf_counter() - t0
+        return ans
+
+    # ------------------------------------------------------------------------------------------------
+    def _cross_language(self, path: str, model: str, idx: IfcIndex, question: str, ans: Answer, it: Intent,
+                        ctx: dict) -> tuple[Answer, Intent, dict]:
+        """A non-English question in a wording the dataset does not use: read it twice, as is and translated to
+        English (stoa.llm.to_english, one local-LLM call), and compare the two rule answers (W1 c5, 04:50).
+
+        Why: the parser has operator words for English and only template words for de/nl/pl/et/it/ro, so a fresh
+        wording in another language loses its operator ("in feet", "what percent", "how many more", "which ... or")
+        and the base template answers at train confidence (W1 c5 probe: 11 of 108 confident-wrong in pl/et/es/
+        cs/hu/sv; S0/F 04:01 hard2r: Estonian ifc 20%). Translating alone is not safe either: on the dataset's own
+        non-English questions it changed 7 of 364 answers, all for the worse ('vloeren' -> floors, 'belek' ->
+        balconies). Rule, measured on both sets: agree -> keep; disagree on the operator/unit with the same element
+        kind -> the English reading (the raw parse missed a word); disagree on the element kind -> the parser's
+        own reading for a language it has vocabulary for, else the English one; both low confidence."""
+        from stoa import llm
+        from stoa.router.prior import known_template
+
+        lang = llm.lang_guess(question)
+        if lang == "en" or not fold(_QUOTED_RX.sub(" ", question)).strip():
+            return ans, it, ctx
+        try:
+            if known_template(question):
+                ans.trace.append(f"language: {lang}, a wording seen in train; parsed as is (no translation)")
+                return ans, it, ctx
+        except Exception:  # noqa: BLE001 - no train split on this machine: treat as unseen
+            pass
+        tr = llm.to_english(question, force=True)
+        own = lang in PARSER_LANGS
+        if not tr.translated or not tr.ok:
+            if tr.lang == "en":
+                return ans, it, ctx
+            if ans.value is not None and ans.confidence > (0.75 if own else 0.5):
+                ans.confidence = 0.75 if own else 0.5
+                ans.missing.append(f"an English reading of this {lang} question to cross-check the parse "
+                                   f"({tr.note or 'translation unavailable'})")
+                ans.trace.append(f"language: {lang} wording not seen in train and not translated -> confidence "
+                                 f"{ans.confidence}")
+            return ans, it, ctx
+        eng, it2, ctx2 = self._core(path, model, idx, tr.text)
+        eng.assumptions.append(tr.note)
+        if ans.value is None and eng.value is None:
+            return ans, it, ctx
+        if ans.value is not None and eng.value is not None and _same_value(ans, eng):
+            if eng.confidence < ans.confidence:  # a guard fired on the English reading (operator, number, relation)
+                ans.confidence = eng.confidence
+                ans.missing += [m for m in eng.missing if m not in ans.missing]
+            ans.trace.append(f"language check: the English reading \"{tr.text}\" gives the same answer ✓")
+            return ans, it, ctx
+        if ans.value is None:
+            eng.confidence = min(eng.confidence, 0.75)
+            eng.trace.insert(0, f"the {lang} question was not understood by the rules; answered its English "
+                                f"translation \"{tr.text}\" (confidence <= 0.75: the translation is a model's)")
+            return eng, it2, ctx2
+        if eng.value is None:
+            cap = 0.75 if own else 0.5
+            if ans.confidence > cap:
+                ans.confidence = cap
+                ans.missing.append(f"the English translation (\"{tr.text}\") could not be read by the rules; the "
+                                   f"{lang} wording is not one seen in train")
+            ans.trace.append(f"language check: English reading not parsed -> confidence <= {cap}")
+            return ans, it, ctx
+        # element kinds of the two readings ('storey' is what a floor word alone parses to: no element kind)
+        rk = {k for k in ([it.kind] + list(it.kinds or [])) if k not in (None, "storey")}
+        ek = {k for k in ([it2.kind] + list(it2.kinds or [])) if k not in (None, "storey")}
+        rv = f"{ans.value} {ans.unit or ''}".strip()
+        ev_ = f"{eng.value} {eng.unit or ''}".strip()
+        use_eng = rk == ek or (ek and not rk) or (not own and bool(ek))
+        if use_eng:
+            why = ("same element kind, so the raw parse missed an operator/unit word" if rk == ek else
+                   "the raw parse found no element kind" if not rk else "the parser has no vocabulary for this language")
+            eng.confidence = min(eng.confidence, 0.75 if (rk == ek or not rk) else 0.5)
+            eng.trace.insert(0, f"language check: the {lang} wording read as is gives {rv[:60]}, its English "
+                                f"translation \"{tr.text}\" gives {ev_[:60]}; {why}: using the English reading")
+            eng.missing.append(f"the {lang} wording read without translation gives {rv[:60]}")
+            return eng, it2, ctx2
+        cap = (0.75 if not ek else 0.6) if own else 0.5
+        ans.confidence = min(ans.confidence, cap)
+        ans.trace.append(f"language check: the English translation \"{tr.text}\" reads "
+                         + (f"a different element kind ({', '.join(sorted(ek))} vs {', '.join(sorted(rk))})" if ek else
+                            "no element kind") + f" and gives {ev_[:60]}; kept the {lang} reading (confidence <= {cap})")
+        ans.missing.append(f"a reading both ways agree on: the English translation gives {ev_[:60]}")
+        return ans, it, ctx
+
+    # ------------------------------------------------------------------------------------------------
+    def _core(self, path: str, model: str, idx: IfcIndex, question: str) -> tuple[Answer, Intent, dict]:
+        """Rules + guards for one wording of the question (no LLM call)."""
+        trace: list[str] = []
         if model != path:
             trace.append(f"asked on {Path(path).name}; answering from its source model {Path(model).name}")
-        idx = load_index(model)
         trace.append(f"model {Path(model).name}: {idx.schema}, {len(idx.storeys)} storeys, {len(idx.elements)} elements"
                      f" (index {idx.build_seconds:.1f}s, cached)")
         it = parse(question)
@@ -427,10 +540,13 @@ class IfcSolver(BaseSolver):
             ans.confidence = min(ans.confidence, 0.3)
         if ans.value is not None and any("proxy/generic elements named like" in x for x in ans.trace):
             ans.confidence = min(ans.confidence, 0.6)  # counted by name, not by class: names can over/under-match
-        llm_on = str(self.options.get("llm", "1")) != "0"
-        if ans.value is None and llm_on and not any("error:" in t for t in ans.trace):
+        return ans, it, ctx
+
+    def _llm_stage(self, model: str, idx: IfcIndex, question: str, it: Intent, ans: Answer, ctx: dict) -> Answer:
+        """At most one local-LLM call: free text when the rules found nothing, or a listing that was asked for."""
+        if ans.value is None and not any("error:" in t for t in ans.trace):
             ans = self._llm_fallback(model, idx, question, it, ans, storey=ctx.get("storey"))
-        elif llm_on and isinstance(ans.value, (int, float)) and wants_list(question):
+        elif isinstance(ans.value, (int, float)) and (wants_list(question) or wants_list(ctx.get("question", question))):
             # a listing/description was asked; one number is not an answer. Give the LLM the rule's value as a
             # verified fact (with its scope) plus the fact card, and keep the rule's evidence.
             rule = ans
@@ -443,13 +559,6 @@ class IfcSolver(BaseSolver):
                 ans.evidence = rule.evidence or ans.evidence
                 ans.confidence = 0.4
                 ans.trace.insert(0, f"list request: rule value {rule.value} {rule.unit or ''} passed to the LLM as a fact")
-        if ans.value is not None and self.options.get("plan2d", "1") != "0":
-            try:
-                self._add_2d(path, model, it, ans, ctx.get("storey"))
-            except Exception as ex:  # noqa: BLE001 - 2D evidence is a bonus; never lose the answer over it
-                ans.trace.append(f"2D link failed: {type(ex).__name__}: {ex}")
-        ans.solver = self.name
-        ans.cost.wall_seconds = time.perf_counter() - t0
         return ans
 
     # ------------------------------------------------------------------------------------------------
@@ -593,6 +702,13 @@ class IfcSolver(BaseSolver):
                 trace.append("storeys: " + ", ".join(f"{st.name} ({st.elevation:.2f} m)" if st.elevation is not None
                                                       else st.name for st in idx.storeys))
                 assumptions.append("storeys = IfcBuildingStorey entities (incl. foundation/roof levels if modelled)")
+                if storey is not None and any(t.startswith("storey '") and f"-> '{storey.name}'" in t for t in trace):
+                    # "How many <unread word> are on 'Level 1'?" -> the counted kind was not recognised and fell back
+                    # to storeys; storeys ON a named storey is not a question anyone asks (W1 c5: 'sammast' = columns)
+                    conf = min(conf, 0.3 / 0.85)
+                    missing.append(f"what to count on '{storey.name}': the counted element kind was not recognised "
+                                   "(the value is the model's storey count)")
+                    trace.append("guard: storeys counted although the question names one storey -> confidence 0.3")
                 return self._final(len(sts), "count", it, conf * 0.85, ev, trace, assumptions, missing)
             if storey is None:
                 return Answer.abstain(self.name, "storey not found", trace=trace, missing=["a storey name"])
