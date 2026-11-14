@@ -42,13 +42,14 @@
  {
   "file": "data/cubicasa5k/colorful-4539.png",
   "q": "Kuinka monta makuuhuonetta (MH) pohjapiirustuksessa on?",
-  "note": "A scanned Finnish apartment plan, asked in Finnish: our fine-tuned 8B vision model counts the bedrooms, a second reader reads the room names; they agree, so each counted 'MH' label is marked and the confidence goes up."
+  "note": "A Finnish apartment plan, asked in Finnish: our fine-tuned 8B vision model (LoRA) counts 3 bedrooms. To keep cost low it reads no boxes itself; 'Show where' asks a second reader for the room names, it finds the three 'MH' labels, they agree (✓), and each counted bedroom is marked.",
+  "locate": true
  },
  {
   "file": "data/cubicasa5k/high_quality_architectural-14797.png",
   "q": "How many saunas are on this floor plan?",
   "locate": true,
-  "note": "The fine-tuned model says 0 saunas, but the label reader disagrees, so the card says so and shows no boxes. 'Show where' marks what the reader found: 'LH' (löylyhuone, the sauna room). One glance shows the sauna: this is how a person catches a wrong answer in seconds."
+  "note": "The fine-tuned model says 0 saunas at 82 %, with nothing to point at. 'Show where' asks the label reader, which finds 'LH' (löylyhuone, the sauna room): the card turns the disagreement into a ✗ and marks the label. One glance shows the sauna: this is how a person catches a confident wrong answer in seconds."
  },
  {
   "file": "data/habs/vi0026_sheet_00003.jpg",
