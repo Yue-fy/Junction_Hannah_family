@@ -181,3 +181,12 @@ def test_plan_vs_model_questions(solver):
     assert s(ESPL, "Do the floor plan and the IFC model agree on the number of doors on '1.korrus'?").value.startswith("yes")
     assert s(ESPL, "How many floor plan sheets are there for this building?").value == 5
     assert s(ESPL, "How many doors are drawn on this plan?").value == 46  # ordinary counts untouched
+
+
+@pytest.mark.skipif(not abspath(WARM1).exists(), reason="dataset not available")
+def test_unquoted_room_label(solver):
+    # F 08:31: a judge types room names without quotes
+    a = solver.solve(WARM1, "What is the area of Living (414B-19-001-002) on 1. Level?")
+    assert a.value == pytest.approx(25.27, abs=0.05)
+    a = solver.solve(WARM1, "On 1. Level, how large is the room called Living (414B-19-001-002)?")
+    assert a.value == pytest.approx(25.27, abs=0.05)

@@ -1790,6 +1790,31 @@ class IfcSolver(BaseSolver):
                                                               r"et|ja|och|i|e|y)\b", qf):
                     it.op = "sum"
                 trace.append("storeys named without quotes: " + ", ".join(it.names))
+        # a room named WITHOUT quotes: "What is the area of Living (414B-19-001-002) on 1. Level?" (F 08:31: 3/8 per
+        # wording answered the storey total at 0.3). Labels '<long name> (<name>)' carrying a digit, longest first.
+        if not it.names and idx.by_class("IfcSpace"):
+            qfull = fold(question)
+            best = None
+            for e in idx.by_class("IfcSpace"):
+                labs = []
+                if e.long_name and e.name and e.long_name != e.name:
+                    labs.append(f"{e.long_name} ({e.name})")
+                if e.name and re.search(r"\d", e.name) and re.search(r"[a-z]", fold(e.name)) and len(e.name) >= 6:
+                    labs.append(e.name)
+                for lab in labs:
+                    fl = fold(lab)
+                    if len(fl) >= 6 and re.search(r"\d", fl) and re.search(r"(?<![\w])" + re.escape(fl) + r"(?![\w])", qfull):
+                        if best is None or len(fl) > len(fold(best)):
+                            best = lab
+            if best is not None:
+                rest_q = re.sub(re.escape(best), " ", question, flags=re.I)
+                si, _w = storey_mention(rest_q, [st.name for st in idx.storeys])
+                it.names = ([idx.storeys[si].name] if si is not None else []) + [best]
+                if it.kind in (None, "storey"):
+                    it.kind = "space"
+                if it.metric in ("text", "count") and re.search(r"\b(area|how (large|big)|size|square met|m2|sq)\b", qf):
+                    it.metric = "area"
+                trace.append(f"room named without quotes: '{best}'" + (f" on '{idx.storeys[si].name}'" if si is not None else ""))
         # "on all storeys above 'kjeller'", "below '2.etg'": the storeys strictly above/below the named one, summed
         # (W1 c5: answered the named storey itself at 0.97)
         if len(it.names) == 1 and it.kind not in (None, "storey") and not it.mod:
