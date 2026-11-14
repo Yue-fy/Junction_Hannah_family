@@ -37,12 +37,29 @@ code (+ R1 f13db8f count ranges, W5 web) as 95f2277 and started sealed test 1 at
 - cc5k=1 on sealed test (32c9, inflated label): accuracy flat (79.9 weighted); cubicasa answers with boxes 17% → 39%.
 - Judged ifc_bench text: dev 55.0% (after W1's dev tuning), test 57.8%: transfers.
 
+### Sealed generality on the test-1 code (aggregates only, D12/D15)
+| split | what it is | micro | conf≥0.8: share @ precision | AUROC |
+|---|---|---:|---|---:|
+| hard2 | reasoning kinds, developed on | 92.1 | 50% @ 100 | 0.83 |
+| hard2p | reworded, partly seen | 85.2 | 48% @ 98.9 | 0.88 |
+| hard2q | third wording, worn | 79.9 | 51% @ 92.7 | 0.79 |
+| **hard2r** | sealed fresh draw, 4th wording (ES/ET/PL + new EN) | **63.0** | 37% @ 84.1 | 0.73 |
+| **hard3** | sealed derived quantities (price/rate/constant/% in the question) | **34.6** | 24% @ **0.0** | **0.33** |
+
+- hard2r by wording: new English ≈ 80% (cubicasa 84.6, ifc 71.4, swiss 79.2; no confident-wrong); unseen languages
+  collapse (cubicasa Polish 20.8%, ifc Estonian 20.0% with 5 confident-wrong, swiss Spanish 70.2% with 6). Fresh draws
+  65.3 vs redrawn instances 55.6, so it is not instance difficulty. Fix family: translate-first front end for
+  languages the rules don't cover (develop on OTHER unseen languages, not ES/ET/PL).
+- hard3: 30% of all questions are answered with the BASE quantity (operation not applied, mean conf 0.72); all 37
+  answers at conf ≥ 0.8 are wrong, from dxf (19) and ifc (18). Fix family: a number in the question that the solver
+  did not consume (W4's intent.extra_structure) must cap deterministic answers and route to the composer/agent.
+
 ### New sealed split `hard3` (derived quantities; stoa/eval/hard3.py, wordings in $JUNCTION_SHARED/sealed/F/)
 156 Qs on dev drawings: 15 recipes (occupancy limit, yearly heating cost, % growth, ft² carpet price, proportional
 bill split, fixture costs; smoke detectors = bedrooms + storeys, sauna stove kW, cleaning minutes, bedrooms per WC
 seat, balcony planters; flooring + waste %, cleaning hours, door/window hardware cost, wall surface = length × height),
 8 languages. Different recipes and wordings from W4's dev probe (artifacts/W4/derived*.jsonl), which W4 tuned on.
-Rules as hard2r: only F and S0, milestones, aggregates only. Not run yet (first run after S0's test-1 batch).
+Rules as hard2r: only F and S0, milestones, aggregates only. Dummy floor 6.4%; test-1 code 34.6% (run 55fd).
 
 ### Gate (pipeline, cc5k=0; paired cluster CI from experiments/r1/stats/compare.py)
 | split | 609e41c | d764334 | paired | calibration |
