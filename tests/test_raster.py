@@ -427,3 +427,25 @@ def test_text_layer_cache_key_is_per_content_for_uploads(tmp_path, monkeypatch):
     ds = data / "data" / "swiss_dwellings" / "site1_bldg1_floor1.png"
     Image.new("RGB", (8, 8)).save(ds)
     assert T.file_tag("data/swiss_dwellings/site1_bldg1_floor1.png") == ""
+
+
+def test_window_symbols_four_line_wall_stretch(tmp_path):
+    """A wall stretch drawn as 2 dark faces + 2 grey glass lines, split by a mullion = 2 windows; hatched wall = 0."""
+    import numpy as np
+    from PIL import Image
+
+    from stoa.solvers.raster import windows as WS
+
+    g = np.full((300, 400), 255, np.uint8)
+    for x0, x1 in ((50, 120), (124, 194)):  # two windows side by side, mullion at 120..124
+        g[100, x0:x1] = 0
+        g[142, x0:x1] = 0
+        g[114, x0:x1] = 59
+        g[128, x0:x1] = 59
+    g[100:143, 120:124] = 0
+    g[200:243, 50:200] = 170  # a filled (hatched) wall: not a window
+    p = tmp_path / "w.png"
+    Image.fromarray(g).save(p)
+    dets = WS.detect(str(p), 59.0)
+    assert len(dets) == 2 and all(d["dir"] == "h" for d in dets)
+    assert dets[0]["box"][1] == 100 and dets[0]["box"][3] == 143
