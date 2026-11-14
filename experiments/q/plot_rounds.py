@@ -12,7 +12,7 @@ SIZES = [205, 78, 70, 65, 22, 10, 61, 687]  # v22: 140 upload rows (its 76 datas
 ROUNDS = [("04:15", "0589ce3"), ("04:19", "58073d5"), ("04:33", "W4 fix"), ("04:41", "cc1ca5b"), ("04:46", "dde6347"),
           ("04:59", "753eccb"), ("05:05", "+3 heads"), ("05:12", "+W1"),
           ("08:16", "test 2"), ("08:27", "+5 heads"), ("08:37", "c1d6149"), ("08:45", "+5 heads"), ("09:05", "be57171"),
-          ("09:28", "0ffd81b"), ("09:50", "7a78559"), ("10:14", "41188a4"), ("10:38", "6025963"), ("10:47", "+7 heads"), ("10:54", "+8 heads"), ("11:04", "b656826")]
+          ("09:28", "0ffd81b"), ("09:50", "7a78559"), ("10:14", "41188a4"), ("10:38", "6025963"), ("10:47", "check 10"), ("10:54", "check 11"), ("11:04", "b656826")]
 ASKED = {7: 450, 8: 494, 9: 516, 10: 564, 11: 564, 12: 647, 13: 881, 14: 881, 15: 1175}  # rounds that asked only part of a family (08:16: v14 without v15)
 DATA = [[8, None, None, None, None, None, None, None], [7, None, None, None, None, None, None, None],
         [2, None, None, None, None, None, None, None], [2, 2, None, None, None, None, None, None],
@@ -67,7 +67,7 @@ for i, (row, (t, c)) in enumerate(zip(DATA, ROUNDS)):
              f'text-anchor="middle">{bottom}</text>')
     o.append(f'<text x="{cx:.1f}" y="{T + ph + 22}" font-size="13" fill="{INK}" text-anchor="middle">{t}</text>'
              f'<text x="{cx:.1f}" y="{T + ph + 40}" font-size="12" fill="{INK2}" text-anchor="middle">{c}</text>'
-             f'<text x="{cx:.1f}" y="{T + ph + 58}" font-size="11" fill="{INK2}" text-anchor="middle">{asked} Qs</text>')
+             f'<text x="{cx:.1f}" y="{T + ph + 58}" font-size="11" fill="{INK2}" text-anchor="middle">{asked}{" Qs" if asked < 1000 else ""}</text>')
 o.append(f'<line x1="{L}" x2="{W - R}" y1="{T + ph}" y2="{T + ph}" stroke="{INK2}" stroke-width="1"/>')
 o.append("</svg>")
 open("demo/redteam-rounds.svg", "w", encoding="utf-8").write("\n".join(o))
