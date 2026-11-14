@@ -34,7 +34,7 @@ API cache (`DEMO_WARM=0` skips that; `fixtures/recorded.json` is not changed). T
 Deep links: `/?file=<dataset-relative path>&q=<question>` opens a file and asks right away, e.g.
 `/?file=data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf&q=How many doors are shown on the floor plan of '1.korrus'?`
 
-## Demo script (12 steps, ~2 min; steps 1–3 + 6 + 10 + 12 for a short pitch)
+## Demo script (13 steps, ~2 min; steps 1–3 + 6 + 10 + 12 + 13 for a short pitch)
 
 Click **Demo tour ▸** (top left), or press → / ← (when not typing). Each step opens a file, asks one question
 and shows a one-line note:
@@ -85,7 +85,11 @@ and shows a one-line note:
    knowledge-graph strip links the other sheets of the same survey, named from the Library of Congress titles
    ("West Elevation", "South Elevation", "Machinery, North Elevation"). Finna scans link the drawings filed
    under the same address ("drawing 2 of 13").
-12. "How well it works": accuracy per source on held-out drawings against "just ask the VLM" and the template
+12. Finna scan of the Helsinki Olympic Stadium site plan (Lindegren & Jäntti, Architecture & Design Museum, CC BY
+   4.0), asked in Finnish: "Mikä on piirustuksen mittakaava?" → 1/500 (0.75), read from the hand-lettered note
+   "ASEMAPIIRROS M.K. 1/500", which is boxed. Also try "Mistä rakennuksesta tai paikasta piirustus on?" → Stadion
+   and "Millainen piirustus tämä on…?" → asemapiirros, each with its line boxed (~5 s, local model only).
+13. "How well it works": accuracy per source on held-out drawings against "just ask the VLM" and the template
    prior, the hard (generality) split, new question kinds (hard2, plus the clean held-out rewording hard2q as an
    aggregate), cost per 1,000 questions, the share answered by rules alone, and calibration. Read live from the
    stoa.eval leaderboard (`STOA_LEADERBOARD`; pipeline rows from S0's integration runs), else

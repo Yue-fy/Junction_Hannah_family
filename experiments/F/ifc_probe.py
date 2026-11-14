@@ -196,3 +196,56 @@ def write(out_path: str | None = None, max_storeys: int = 3) -> None:
 
 if __name__ == "__main__" and len(sys.argv) > 1 and sys.argv[1] == "write":
     write()
+
+
+def space_label(sp) -> str | None:
+    """Dataset style: 'LongName (Name)' when both exist (e.g. 'Kitchen (414B-5-003-007)'), else the one that exists."""
+    ln, nm = (sp.LongName or "").strip(), (sp.Name or "").strip()
+    return f"{ln} ({nm})" if ln and nm and ln != nm else (ln or nm or None)
+
+
+def write_area(out_path: str | None = None, max_storeys: int = 3, rooms_per_storey: int = 4) -> None:
+    """W1 04:19: area crash/None/zero probe on the same 29 unseen models. Gold = the explicit Qto NetFloorArea
+    (GrossFloorArea fallback) when the model has one (W1's rule and the dataset's, S0 D15 B); rows without it carry
+    no answer (predicted, not scored), so they still show crashes, None, zero and ~1 m2 placeholders."""
+    import hashlib
+    import random
+    out_path = out_path or os.path.join(os.environ.get("JUNCTION_SHARED", "/home/fangy4/work/projects/junction-shared"),
+                                        "artifacts", "F", "ifc_area_probe.jsonl")
+    rng = random.Random(11)
+    rows = []
+    for mp in candidates():
+        try:
+            m = model(mp)
+        except Exception as ex:  # noqa: BLE001
+            print("skip", mp, type(ex).__name__, file=sys.stderr)
+            continue
+        storeys = [s.Name for s in m.by_type("IfcBuildingStorey") if s.Name]
+        for st in [s for s in dict.fromkeys(storeys) if storeys.count(s) == 1][:max_storeys]:
+            sps = spaces_on(m, st)
+            if not sps:
+                continue
+            areas = [space_area(sp) for sp in sps]
+            tot = round(sum(areas), 2) if all(areas) else None  # gold only when EVERY space has an explicit Qto
+            rows.append((mp, f"What is the total net floor area of all rooms (spaces) on '{st}', in m²?", tot, "storey"))
+            labels = collections.Counter(space_label(sp) for sp in sps)
+            uniq = [sp for sp in sps if space_label(sp) and labels[space_label(sp)] == 1]
+            for sp in rng.sample(uniq, min(rooms_per_storey, len(uniq))):
+                a = space_area(sp)
+                rows.append((mp, f"What is the net floor area of the room '{space_label(sp)}' on '{st}', in m²?",
+                             round(a, 2) if a else None, "room"))
+        _CACHE.pop(mp, None)
+    with open(out_path, "w", encoding="utf-8") as fh:
+        for mp, qq, a, lvl in rows:
+            r = {"qid": "ia" + hashlib.sha1(f"{mp}\n{qq}".encode()).hexdigest()[:10], "path": mp, "question": qq,
+                 "unit": "m2", "type": "area", "meta": {"kind": "ifc-area-probe", "level": lvl,
+                                                         "gold": "qto" if a is not None else "none"}}
+            if a is not None:
+                r["answer"] = a
+            fh.write(json.dumps(r, ensure_ascii=False) + "\n")
+    c = collections.Counter((r[0].split("/")[1], r[3], r[2] is not None) for r in rows)
+    print(len(rows), "questions on", len({r[0] for r in rows}), "models;", dict(c), "->", out_path)
+
+
+if __name__ == "__main__" and len(sys.argv) > 1 and sys.argv[1] == "write_area":
+    write_area()

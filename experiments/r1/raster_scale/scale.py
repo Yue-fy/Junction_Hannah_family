@@ -215,3 +215,17 @@ def printed_areas(path: str, backend: str = "local") -> list[dict]:
     for it in items:
         it["total"] = bool(TOTAL.search(it["text"])) or it["m2"] >= 40
     return items
+
+
+def region_dims_m(region: dict, sc: dict) -> dict:
+    """Width x depth (m) of a region's bounding box under the door scale, with the 80% length band.
+
+    Exact for rectangular rooms up to the scale error (lengths err half as much as areas in log terms); L-shaped rooms
+    get their bounding box, so say 'about'. The band is the scale band only (segmentation error not included).
+    For one named room pass sc = door_scale(path, room=True) (regions are smaller than printed rooms)."""
+    x0, y0, x1, y1 = region["bbox"]
+    lo, hi = sc["length_factor_80"]
+    w, d = (x1 - x0) / sc["px_per_m"], (y1 - y0) / sc["px_per_m"]
+    return {"width_m": round(w, 2), "depth_m": round(d, 2),
+            "width_80": [round(w * lo, 2), round(w * hi, 2)], "depth_80": [round(d * lo, 2), round(d * hi, 2)],
+            "rectangularity": round(region["px"] / max(1, (x1 - x0) * (y1 - y0)), 2)}
