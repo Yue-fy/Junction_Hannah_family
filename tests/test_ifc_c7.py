@@ -134,3 +134,15 @@ def test_ground_floor_role(solver, path, q, n):
 def test_v20_links(solver, path, q, want):
     a = solver.solve(path, q)
     assert re.search(want, str(a.value)), a.value
+
+
+@pytest.mark.parametrize("q,two", [
+    ("Montako ovea ja montako ikkunaa kerroksessa '1.korrus' on?", True),
+    ("Ile drzwi i ile okien jest na kondygnacji '1.korrus'?", True),
+    ("Quante porte e quante finestre ci sono su '1.korrus'?", True),
+    ("How many doors and how many windows are there on '1.korrus'?", True),
+    ("Which window types are present in this building, including their sizing and quantities?", False),
+    ("How many doors and windows are there on '1.korrus'?", False),
+])
+def test_two_questions_any_language(q, two):
+    assert bool(IfcSolver._two_q(q)) is two

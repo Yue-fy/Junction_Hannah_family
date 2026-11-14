@@ -497,7 +497,10 @@ class IfcSolver(BaseSolver):
         if llm_on and str(self.options.get("translate", "1")) != "0":
             ans, it, ctx = self._cross_language(path, model, idx, question, ans, it, ctx)
         if llm_on and ctx.get("two_questions"):
-            ans = self._multi_part(path, model, idx, ctx.get("question_en") or ctx.get("question", question), ans)
+            q_split = ctx.get("question_en") or ctx.get("question", question)
+            if ctx.get("question_en") and not self._two_q(ctx["question_en"]) and self._two_q(question):
+                q_split = question  # the translation merged the two questions: split the original (parts in English)
+            ans = self._multi_part(path, model, idx, q_split, ans)
         if llm_on:
             ans = self._llm_stage(model, idx, question, it, ans, ctx)
         if ans.value is not None and self.options.get("plan2d", "1") != "0":
@@ -801,8 +804,19 @@ class IfcSolver(BaseSolver):
 
     _SPLIT_SYSTEM = ("Split a question about a building model into self-contained questions, one per quantity asked. "
                      "Repeat the place (storey, room, model) and the element kind in every part, replacing pronouns "
-                     "('their', 'them', 'it') by what they refer to. Keep quoted names and numbers verbatim. If only "
-                     "one thing is asked, return just that question. Answer with JSON {\"questions\": [...]}.")
+                     "('their', 'them', 'it') by what they refer to. Keep quoted names and numbers verbatim. Write every "
+                     "part in English. If only one thing is asked, return just that question. Answer with JSON "
+                     "{\"questions\": [...]}.")
+    _HM = (r"how many|how much|wie viele|wie viel\w*|hoeveel|montako|kuinka (?:monta|paljon)|mitu|ile|combien|"
+           r"hur (?:manga|mycket)|hvor (?:mange|meget)|cuant[aeo]s?|quant[aeio]s?|cate|cati|cat")
+    _TWO_Q = re.compile(r"\b(" + _HM + r"|what|which)\b[^?]{3,80}?\b(?:and|und|en|ja|ning|i|et|och|og|y|e|si)\s+(" + _HM
+                        + r"|what|which|how (?:big|large|long|tall|high|wide))\b")
+
+    @classmethod
+    def _two_q(cls, question: str):
+        """Two questions in one, in any language: 'How many doors and how many windows …', 'Montako ovea ja montako
+        ikkunaa …' (fi), 'Ile drzwi i ile okien …' (pl). (The Finnish translation merged them: 101 = 46 + 55.)"""
+        return cls._TWO_Q.search(fold(_QUOTED_RX.sub(" ", question)))
 
     def _multi_part(self, path: str, model: str, idx: IfcIndex, question: str, ans: Answer) -> Answer:
         """'How many rooms are on X and what is their total area?': one local-LLM call splits it into
@@ -1213,8 +1227,7 @@ class IfcSolver(BaseSolver):
                 ans.missing.append(f"the relation '{rel[0]} {rel[1]}' between element kinds is not modelled; the "
                                    "value counts one kind only")
                 ans.trace.append(f"guard: relation '{rel[0]} {rel[1]}' not modelled -> confidence 0.3")
-        m2q = re.search(r"\b(how many|how much|what|which|wie viele|hoeveel)\b[^?]{3,80}?\band\s+(how many|how much|what|which|"
-                        r"how (?:big|large|long|tall|high|wide)|wie viel\w*|hoeveel)\b", fold(_QUOTED_RX.sub(" ", question)))
+        m2q = self._two_q(question)
         if ans.value is not None and m2q and not isinstance(ans.value, str) and ans.confidence > 0.5:
             # "How many windows and what total window area ...": two questions, one number
             ctx["two_questions"] = True
