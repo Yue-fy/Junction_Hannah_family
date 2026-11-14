@@ -157,6 +157,7 @@ def main():
     ap.add_argument("--n", type=int, default=60)
     ap.add_argument("--show", default="")
     ap.add_argument("--min_m", type=float, default=0.3)
+    ap.add_argument("--keep_red", action="store_true")
     a = ap.parse_args()
     D = os.environ["STOA_DATA"]
     rows = [json.loads(l) for l in open(GOLD)][: a.n]
@@ -166,7 +167,8 @@ def main():
         if a.show and r["stem"] != a.show:
             continue
         png = os.path.join(D, r["png"])
-        dets = detect(png, r["px_per_m"], min_m=a.min_m)
+        from stoa.solvers.raster import windows as WS
+        dets = WS.detect(png, r["px_per_m"], min_m=a.min_m, red=not a.keep_red)
         gold = r["windows"]
         tp = _match(dets, gold, r["px_per_m"])
         T += tp

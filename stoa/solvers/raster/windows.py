@@ -5,7 +5,8 @@ lines told apart by ink mass (a tilted 1-px line is antialiased over 2 px, so it
 matching columns = one window (a mullion breaks the run; tilted walls are followed).
 TRAIN Swiss floors at 1:100 (experiments/w3/doorwin/windows.py; DXF window items mapped to PNG px): thresholds set on
 20 floors; held-out 32 floors exact 10 (31%), +-1 15, within 10% 18; all 51: recall 0.85, precision 0.93.
-1:200 sheets (~30 px/m) merge the 4 lines (3 px apart): None there.
+1:200 sheets (~30 px/m): recall 0.65, 0/9 exact (the glass lines render as dark as the faces; relaxing the ink test
+and rejecting a 5th equally spaced line (stairs) cost 1:100 3 exact floors and did not fix 1:200): None there.
 
 detect(png, px_per_m) -> [{"box": [x0, y0, x1, y1], "dir": "h"|"v"}] in image px.
 """
@@ -97,10 +98,14 @@ def _segments(hits, min_len: int, tol: float = 1.5, max_gap: int = 1):
     return [(s[0], s[1], s[4], s[5]) for s in done if s[1] - s[0] + 1 >= min_len]
 
 
-def detect(png: str, px_per_m: float, min_m: float = 0.3, gap_m: tuple[float, float] = (0.03, 0.35)) -> list[dict]:
+def detect(png: str, px_per_m: float, min_m: float = 0.3, gap_m: tuple[float, float] = (0.03, 0.35),
+           red: bool = True) -> list[dict]:
     from stoa.solvers.raster.doorarcs import legend_cut
 
-    g = np.asarray(Image.open(png).convert("L"))
+    rgb = np.asarray(Image.open(png).convert("RGB")).astype(np.int16)
+    g = np.asarray(Image.fromarray(rgb.astype(np.uint8)).convert("L")).copy()
+    if red:  # the red apartment boundary runs along wall faces and merges with them: drop coloured ink
+        g[(rgb[..., 0] - np.maximum(rgb[..., 1], rgb[..., 2])) > 60] = 255
     cut = legend_cut((g < 210).astype(np.float32))
     g = g[:cut]
     smin, smax = max(2.0, gap_m[0] * px_per_m), gap_m[1] * px_per_m

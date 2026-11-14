@@ -358,15 +358,14 @@ class RasterSolver(BaseSolver):
         ev = [Evidence(file=path, page=0, bbox=[round(float(v), 1) for v in d["box"]], bbox_space="image_px",
                        note=f"window {k + 1}: 4-line window symbol in a {'horizontal' if d['dir'] == 'h' else 'vertical'}"
                             f" wall")
-              for k, d in enumerate(dets)]
-        if bar.box:
-            ev.append(Evidence(file=path, page=0, bbox=[round(v, 1) for v in bar.box], bbox_space="image_px",
-                               note=f"scale bar: {bar.px_per_m:.1f} px per m"))
+              for k, d in enumerate(dets)]  # one box per counted window, nothing else (boxes = the answer)
+        where = f" at {[round(v) for v in bar.box]} px" if bar.box else ""
         trace.append(f"window symbols: {len(dets)} (scale {bar.px_per_m:.1f} px/m)")
         return Answer(value=len(dets), unit="count", confidence=WS.CONF, evidence=ev, solver=self.name, trace=trace,
                       assumptions=["a window = a wall stretch >= 0.3 m drawn as 4 thin parallel lines (wall faces + "
                                    "glass), as in Swiss-style renders; a window split by a mullion counts as two; "
-                                   "other window symbols are missed"],
+                                   "other window symbols are missed",
+                                   f"scale {bar.px_per_m:.1f} px per m from the drawing's scale bar{where}"],
                       missing=["a vector twin (DXF/PDF) of this plan for an exact count: the image alone matched the "
                                "exact count on 10 of 32 held-out TRAIN floors"])
 
