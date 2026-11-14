@@ -1011,6 +1011,18 @@ class IfcSolver(BaseSolver):
                     missing.append("storey has no Elevation attribute")
                     return Answer.abstain(self.name, "no elevation", trace=trace, missing=missing)
                 assumptions.append("elevation = IfcBuildingStorey.Elevation (project units -> m)")
+                if "above_ground" in it.notes:
+                    # height above the ground floor = this elevation minus the ground floor's (the used floor nearest 0)
+                    gs = [st for st in used_storeys(idx, own_storeys(idx)) if st.elevation is not None] or \
+                        [st for st in idx.storeys if st.elevation is not None]
+                    g = min(gs, key=lambda st: abs(st.elevation))
+                    val = float(storey.elevation) - float(g.elevation)
+                    trace.append(f"above ground: {storey.name} {storey.elevation:.2f} m - ground floor {g.name} "
+                                 f"{g.elevation:.2f} m = {val:.2f} m")
+                    assumptions.append(f"ground floor = '{g.name}' (the floor nearest elevation 0); height = difference of "
+                                       "the storey elevations (finished floor levels)")
+                    ev.append(Evidence(file=model, ifc_guid=g.guid, note=f"IfcBuildingStorey {g.name} (ground floor)"))
+                    return self._final(val, "m", it, conf * 0.9, ev, trace, assumptions, missing)
                 return self._final(float(storey.elevation), "m", it, conf * 0.95, ev, trace, assumptions, missing)
             i = idx.storeys.index(storey)
             above = next((s2 for s2 in idx.storeys[i + 1:] if s2.elevation is not None
@@ -1488,7 +1500,17 @@ class IfcSolver(BaseSolver):
     _BUILDING = re.compile(r"\b(whole|entire|complete) (building|house|model|project)\b|\b(in|of|for) the (building|house)\b|"
                            r"\b(all|every) (floors|storeys|stories|levels|floor|storey|level)\b|\bbuilding[- ]wide\b|"
                            r"\bacross (all|the) (floors|storeys|levels|building)\b|\b(ganzen|gesamten) (gebaude|haus)\b|"
-                           r"\bim gebaude\b|\bhele gebouw\b|\bin het gebouw\b|\btodo el edificio\b|\bdans le batiment\b")
+                           r"\bim gebaude\b|\bhele gebouw\b|\bin het gebouw\b|\btodo el edificio\b|\bdans le batiment\b|"
+                           # Q 08:21: Italian 'in tutto l'edificio' still answered the sheet's storey; more languages
+                           r"\btutto l.?edificio\b|\bl.?intero edificio\b|\bintero edificio\b|\btutta la costruzione\b|"
+                           r"\bnell.?edificio\b|\btout le batiment\b|\bl.?ensemble du batiment\b|\bhela (byggnaden|huset)\b|"
+                           r"\bhele (bygningen|huset)\b|\bkoko (rakennukse\w*|rakennus|talo\w*)\b|\bkogu (hoone\w*|maja\w*)\b|"
+                           r"\b(calym|caly|cały) budyn\w*\b|\bcele(m)? budov\w*\b|\btodo o edificio\b|\begesz epulet\w*\b|"
+                           r"\bintreag\w* cladir\w*\b|\bwhole of the (building|house)\b")
+
+    _STOREY_WORD = re.compile(r"\b(top|highest|uppermost|lowest|bottom|ground|first|second|third|fourth|fifth|\d+(?:st|nd|rd|"
+                              r"th)?)\s+(floor|storey|story|level)\b|\b(basement|cellar|attic|loft|ground[- ]floor|"
+                              r"erdgeschoss|keller\w*|dachgeschoss|begane grond|kelder|zolder)\b")
 
     @staticmethod
     def _room_type_asked(idx: IfcIndex, question: str) -> bool:
@@ -1699,7 +1721,10 @@ class IfcSolver(BaseSolver):
         # "in the whole building" asked on a plan sheet, no storey named: the whole model, not the sheet's storey
         # (asked on the .ifc itself, the scope is already the whole model)
         if (Path(path).suffix.lower() != ".ifc" and it.scope != "model" and not it.names and it.mod != "share" and it.kind != "storey"
-                and self._BUILDING.search(qf) and storey_mention(question, [s.name for s in idx.storeys])[0] is None):
+                and self._BUILDING.search(qf) and storey_mention(question, [s.name for s in idx.storeys])[0] is None
+                and not self._STOREY_WORD.search(qf)):
+            # a storey word beats 'of the building' (Q bug 19: the multi-part split wrote 'How many doors are on the top
+            # floor of the building model?' -> 211 whole-model doors @ 0.80; gold 39)
             it.scope = "model"
             trace.append(f"scope: '{self._BUILDING.search(qf).group(0)}' -> whole model")
         # "Which floor has the fewest windows?": a superlative over elements other than rooms is a count unless an
@@ -1817,7 +1842,9 @@ class IfcSolver(BaseSolver):
             # (Q 04:55: 'top floor' on esplanades -> 'Katus' (roof), 0 doors; a person means 5.korrus)
             occ = used_storeys(idx, sts)
             top = mt_.group(1) in ("top", "highest", "uppermost", "upper most")
-            asks_level = it.kind in (None, "storey")  # elevation / height / name of the level itself: the literal top
+            # elevation / height / name of the 'top storey/level' itself: the literal top level; 'top FLOOR' is a floor
+            # people use even in height questions (Q 08:16: 'How high above the ground floor is the top floor?' -> 13.4)
+            asks_level = it.kind in (None, "storey") and mt_.group(2) != "floor"
             pool = occ if occ and not asks_level else sts
             pick = (max if top else min)(pool, key=lambda st: st.elevation or 0.0)
             it.names = [pick.name]
@@ -1827,6 +1854,11 @@ class IfcSolver(BaseSolver):
                        and st is not pick]
             if skipped:
                 it.notes.append("top_floor_skip:" + ", ".join(repr(x) for x in skipped))
+            if re.search(r"\b(elevation|how high above|height above|above (the )?(ground|grade|street))\b", qf):
+                # "What is the elevation of the top floor?", "How high above the ground floor is the top floor?"
+                it.metric, it.kind, it.attr = "length", "storey", "elevation"
+                if re.search(r"\babove (the )?(ground|grade|street)", qf):
+                    it.notes.append("above_ground")
             trace.append(f"'{mt_.group(0)}' -> storey '{pick.name}'" + (
                 f" (highest/lowest storey with rooms or doors; {', '.join(repr(x) for x in skipped)} hold none)"
                 if skipped else ""))

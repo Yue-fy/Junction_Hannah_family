@@ -157,3 +157,14 @@ def test_derived_fresh_wordings(solver):
     a = s(WARM1, "What share of the openings on '1. Level' are windows, in percent?")
     assert a.value == pytest.approx(100 * wins / (wins + doors), abs=0.01) and a.confidence <= 0.6
     assert s(WARM1, "Each door weighs 35 kg. What is the total weight of the doors on '1. Level'?").unit == "kg"
+
+
+@pytest.mark.skipif(not abspath(ESPL).exists(), reason="dataset not available")
+def test_q_v14_v15_storey_scope(solver):
+    s = solver.solve
+    assert s(ESPL, "How high above the ground floor is the top floor?").value == pytest.approx(13.4)
+    assert s(ESPL, "What is the elevation of the top floor?").value == pytest.approx(13.4)  # 5.korrus, not 'Katus'
+    assert s(ESPL, "What is the elevation of the top storey?").value == pytest.approx(17.0)  # the literal top level
+    assert s(ESPL, "How many doors are on the ground floor of the building?").value == 46  # storey word beats 'building'
+    assert s(ESPL, "Quante porte ci sono in tutto l'edificio?").value == 211
+    assert s(SMILEY, "Quante porte ci sono in tutto l'edificio?").value == 170
