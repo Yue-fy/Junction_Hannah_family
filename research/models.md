@@ -7,7 +7,7 @@ Hardware: 1× RTX PRO 6000 Blackwell 96 GB. Shared server budget ≈ 45 GB (`--g
 ## TL;DR for the captain (09:45, end of night)
 - **Small fine-tuned beats big general.** A LoRA on our own 8B (cc-v2, 2 output tokens per answer) is the night's largest gain on
   SEALED test: CubiCasa +8.8 [+6.0, +11.9], weighted 73.8 → 79.8, at ~$0.02 per 1k questions. A 4× bigger base VLM (Qwen3.6-35B-A3B)
-  and hosted Nemotron 3.5 Super VL both count WORSE than the fine-tuned 8B (−21 and worse than base on every bucket).
+  and hosted Nemotron 3.5 Super VL both count WORSE (35B base: −21 vs cc-v2 on dev CubiCasa; Nemotron: below even the base 8B on smoke).
 - **Bigger model only where it measurably helps:** free-text IFC answers (fact cards) on Qwen3.6-35B-A3B (:8002): judged 62.0 vs 54.5,
   hosted Nemotron as independent judge on the disagreements 6 vs 0, +20% GPU-s per question. Everything else stays on the 8B.
 - **Hosted Nemotron = visible second opinion** (demo button), not a bulk tier: as planner it ties at 9× cost, as translator 25× slower.
