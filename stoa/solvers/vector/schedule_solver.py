@@ -342,10 +342,14 @@ class ScheduleSolver(BaseSolver):
             # "11' - 3 1/8\"" read as 11.0: a length printed in feet-inches is answered as printed (A200 held-out)
             used_txt = " ".join(str(v) for df in tables.values() if "row_id" in df.columns
                                 for v in df[df["row_id"].isin(res.get("used", []))].drop(columns="row_id").to_numpy().ravel())
-            m = re.search(rf"(?<![\d.]){int(value)}' ?- ?(\d+(?: \d+/\d+)?)\"", used_txt)
-            if m and m.group(1) not in ("0",):
-                trace.append(f"the query returned {value:g}, the feet part of the printed {m.group(0)}; answered as printed")
-                value, unit = m.group(0).replace("' - ", "'-"), None
+            dims = re.findall(r"-?\d+' ?- ?\d+(?: \d+/\d+)?\"", used_txt)
+            hit = [d for d in dict.fromkeys(dims)
+                   if re.match(rf"-?{int(value)}'", d) and not re.search(r"- ?0\"$", d)]
+            via_inch = [d for d in dict.fromkeys(dims) if re.search(rf"- ?{int(value)}(?: \d+/\d+)?\"$", d)]
+            if len(hit) == 1 or (not hit and len(via_inch) == 1):
+                d = (hit or via_inch)[0]
+                trace.append(f"the query returned {value:g}, a part of the printed {d}; answered as printed")
+                value, unit = d.replace("' - ", "'-"), None
         if unit not in ("count", "ft2", "m2", "ft", "m", None):
             unit = None
         row_label = {}
