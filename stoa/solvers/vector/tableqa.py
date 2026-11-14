@@ -103,15 +103,18 @@ WHICH = re.compile(r"^\s*(which|welche[rs]?|quel(?:le)?s?\s+(?:appartement|pièc
 
 def _render(tables: dict[str, pd.DataFrame], max_rows: int = 160, sep: str = ",") -> str:
     """sep="|": values are shown as printed, without CSV quote doubling (a 14"x6" cell is not shown doubled)."""
-    import csv
-
     out = []
     for name, df in tables.items():
         if df.empty:
             out.append(f"{name}: (empty)")
             continue
-        body = (df.head(max_rows).to_csv(index=False) if sep == "," else
-                df.head(max_rows).to_csv(index=False, sep=sep, quoting=csv.QUOTE_NONE, escapechar="\\"))
+        if sep == ",":
+            body = df.head(max_rows).to_csv(index=False)
+        else:  # by hand: csv.QUOTE_NONE would still escape quotes (14\"x6\")
+            def cell(v):
+                return "" if v is None or (isinstance(v, float) and v != v) else str(v).replace(sep, "/").replace("\n", " ")
+            body = "\n".join([sep.join(map(str, df.columns))] +
+                             [sep.join(cell(v) for v in r) for r in df.head(max_rows).itertuples(index=False)]) + "\n"
         out.append(f"{name} ({len(df)} rows{', columns separated by ' + repr(sep) if sep != ',' else ''}):\n" + body)
     return "\n".join(out)
 
@@ -190,6 +193,25 @@ def _where(code: str, tables: dict[str, pd.DataFrame]) -> str:
     return ("; where those words occur (case-insensitive): " + "; ".join(hints)) if hints else ""
 
 
+ID_TOKEN = re.compile(r"\b(?=[A-Z0-9.-]*\d)[A-Z]{0,4}-?\d{1,4}(?:\.[A-Z0-9]{1,3})?\b")
+
+
+def _rows_mention_ids(question: str, used: list, tables: dict[str, pd.DataFrame], id_col: str) -> bool | None:
+    """Do the rows a lookup used contain an identifier from the question ("RAG-09", "115.A", "201")? None = the
+    question names no identifier."""
+    ids = {t.upper() for t in ID_TOKEN.findall(question)}
+    if not ids:
+        return None
+    for df in tables.values():
+        if id_col not in df.columns:
+            continue
+        for _, r in df[df[id_col].isin(used)].iterrows():
+            cells = {str(v).strip().upper() for v in r.values}
+            if ids & cells or any(i in c.split() for i in ids for c in cells):
+                return True
+    return False
+
+
 def ask(question: str, tables: dict[str, pd.DataFrame], backend: str = "local", tries: int = 3, doc: str = DOC,
         id_col: str = "room_id", units: str = '"count", "m2"', lookup_text: bool = False, sep: str = ",") -> dict:
     """lookup_text: a typed-in string that is a table cell is sent back once ("look it up"); if the lookup fails,
@@ -224,6 +246,9 @@ def ask(question: str, tables: dict[str, pd.DataFrame], backend: str = "local", 
                 raise ValueError(f"the question asks WHICH one, but answer = {res['value']!r}; set answer to the "
                                  "identifier string (apartment letter / room number / name)")
             res.update(code=code, error=None)
+            if typed is not None and res["value"] != typed["value"] and \
+                    _rows_mention_ids(question, res["used"], tables, id_col) is False:
+                return typed  # the lookup read a row that is not the one the question names: keep the typed value
             return res
         except Exception as e:  # noqa: BLE001 - feed the error back once
             last = {"value": None, "unit": None, "used": [], "code": code, "error": f"{type(e).__name__}: {e}"}

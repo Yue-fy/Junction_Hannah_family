@@ -24,7 +24,8 @@ from stoa.solvers.vector.pdftables import pdf_tables
 DOC = """Tables rebuilt from the text layer of one construction drawing sheet (US units; values are strings exactly
 as printed, e.g. "108 SF", "3' - 0\\"", "A1"; empty string = blank cell; multi-line headers are joined; a header
 may be wrong or "colN", so look at the values). Each table has a `row_id` column (unique across tables).
-Count/quantity/area columns are numbers; for values like "108 SF" a parsed twin column `<col>_num` exists; all
+Count/quantity/area columns are numbers; for values like "108 SF" or "110 CFM" a parsed twin column `<col>_num`
+exists (NaN where blank); all
 other columns (ids, room numbers, types) are strings: compare them with strings ("118", not 118).
 Use double quotes for strings that contain an apostrophe ("WOMEN'S LOCKER").
 Counting rows: one row = one item unless a Count/Qty column says otherwise (then sum that column over the rows).
@@ -41,6 +42,7 @@ and what total), answer one string with both ("3 rooms, 4541 SF"); include those
 
 NUM_RE = re.compile(r"^-?\d[\d,]*(?:\.\d+)?$")
 QTY_RE = re.compile(r"^(-?\d[\d,]*(?:\.\d+)?)\s*(SF|S\.F\.|sq\.?\s*ft|ft²|ft2|m²|m2|LF|EA)\.?$", re.I)
+ANY_QTY_RE = re.compile(r"^(-?\d[\d,]*(?:\.\d+)?)\s+([A-Za-z][A-Za-z/]{0,5})\.?$")
 UNIT_MAP = {"sf": "ft2", "sqft": "ft2", "sq ft": "ft2", "ft²": "ft2", "ft2": "ft2", "m²": "m2", "m2": "m2",
             "count": "count", "ft": "ft", "m": "m"}
 
@@ -58,6 +60,12 @@ def _typed(df: pd.DataFrame) -> pd.DataFrame:
         elif sum(bool(QTY_RE.match(v)) for v in vals) >= 0.6 * len(vals):
             df[f"{c}_num"] = pd.to_numeric(df[c].astype(str).str.extract(QTY_RE.pattern.strip("^$"), flags=re.I)[0]
                                            .str.replace(",", ""), errors="coerce")
+        else:  # "110 CFM", "1.5 KW", "40 GPM": one consistent unit word -> parsed twin
+            m = [ANY_QTY_RE.match(v) for v in vals]
+            units = {x.group(2).upper() for x in m if x}
+            if sum(bool(x) for x in m) >= 0.6 * len(vals) and len(units) == 1:
+                df[f"{c}_num"] = pd.to_numeric(df[c].astype(str).str.extract(ANY_QTY_RE.pattern.strip("^$"))[0]
+                                               .str.replace(",", ""), errors="coerce")
     return df
 
 

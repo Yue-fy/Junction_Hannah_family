@@ -267,26 +267,30 @@ def _build(rows: list[Row], run: list[int], h: float, _depth: int = 0) -> Table 
 
 
 def _group_headers(head: list[str], xs: list[float], head_cells: list[tuple[int, Cell]]) -> list[str]:
-    """Grouped headers: "Door | Frame" over "Type Matl | Matl Type" gives two "Matl" columns. A duplicated name is
-    a sign of a group label on a higher header line: prefix each duplicate with the nearest label above it
-    ("Door Matl", "Frame Matl"). Words repeated by stacked lines are dropped ("Door Door Type" -> "Door Type")."""
-    head = [re.sub(r"\b([A-Za-z]{2,})(?:\s+\1\b)+", r"\1", re.sub(r"\s+", " ", h).strip(), flags=re.I) for h in head]
+    """Grouped headers: "Door | Frame" over "Type Matl | Matl Type" gives two columns whose bottom header line is the
+    same ("Matl"). Prefix each such column with the nearest label from the lines above ("Door Matl", "Frame Matl").
+    Words repeated by stacked lines are dropped ("Door Door Type" -> "Door Type")."""
+    def clean(h: str) -> str:
+        return re.sub(r"\b([A-Za-z]{2,})(?:\s+\1\b)+", r"\1", re.sub(r"\s+", " ", h).strip(), flags=re.I)
+
+    head = [clean(h) for h in head]
     upper = [c for line, c in head_cells if line >= 2]
+    base: dict[int, str] = {}
+    for line, c in head_cells:
+        if line == 1:
+            k = min(range(len(xs)), key=lambda j: abs(xs[j] - c.xc))
+            base[k] = (base.get(k, "") + " " + c.text).strip()
     groups: dict[str, list[int]] = {}
-    for k, h in enumerate(head):
-        if h:
-            groups.setdefault(h.lower(), []).append(k)
+    for k, b in base.items():
+        groups.setdefault(b.lower(), []).append(k)
     for ks in groups.values():
         if len(ks) < 2 or not upper:
             continue
-        pref = []
-        for k in ks:
-            near = min(upper, key=lambda c: abs(c.xc - xs[k]))
-            pref.append(near.text.strip())
-        if len(set(p.lower() for p in pref)) == len(ks):  # every duplicate gets its own group label
+        pref = [min(upper, key=lambda c: abs(c.xc - xs[k])).text.strip() for k in ks]
+        if len({p.lower() for p in pref}) == len(ks):  # every duplicate gets its own group label
             for k, p in zip(ks, pref):
-                if not head[k].lower().startswith(p.lower()):
-                    head[k] = f"{p} {head[k]}"
+                if p.lower() not in head[k].lower():
+                    head[k] = clean(f"{p} {head[k]}")
     return head
 
 
