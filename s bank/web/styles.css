@@ -795,3 +795,6 @@ html[data-current-view="coach"] .persona-panel { position: absolute; top: 56px; 
 @keyframes coach-pulse { 50% { opacity: .25; transform: translateY(-2px); } }
 @media (prefers-reduced-motion: reduce) { .coach-typing i { animation: none; } }
 @media (min-width: 720px) { #coach-view .coach-starters { grid-template-columns: repeat(2,minmax(0,1fr)); } }
+
+/* V3: offline answer tag */
+.offline-tag{display:inline-block;margin:0 0 .5rem;padding:.15rem .5rem;border-radius:999px;background:var(--wash);color:var(--muted);font-size:.75rem;font-weight:600}

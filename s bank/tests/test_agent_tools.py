@@ -1,3 +1,4 @@
+from decimal import Decimal
 import json
 
 from agent_helper import AgentFixture
@@ -40,7 +41,12 @@ class AgentToolsTests(AgentFixture):
         result = self.tool('get_overview', month='2026-08')
         raw = analytics.money_map(self.conn, self.customer, '2026-08')
         self.assertEqual(result['consumption_cents'], raw['consumption_cents'])
-        self.assertEqual(result['baskets'], self.ctx.sanitize(analytics.three_basket_profile(self.conn, self.customer, '2026-08')['baskets']))
+        baskets = [{k: v for k, v in row.items() if k != 'share_percent'} for row in result['baskets']]
+        self.assertEqual(baskets, self.ctx.sanitize(analytics.three_basket_profile(self.conn, self.customer, '2026-08')['baskets']))
+        # Shares are precomputed so the model never derives percentages itself.
+        total = sum(row['amount_cents'] for row in result['baskets'])
+        for row in result['baskets']:
+            self.assertEqual(row['share_percent'], format((Decimal(row['amount_cents']) * 100 / total).quantize(Decimal('.1')), 'f'))
         self.assertEqual(result['balance_cents'], transactions(self.conn, self.customer, end='2026-08-31')[-1]['balance_after_cents'])
         self.assertLess(result['balance_date'], '2026-09-01')
 

@@ -1688,6 +1688,12 @@ const RECAP_MESSAGES = {
 };
 for (const [key, values] of Object.entries(RECAP_MESSAGES)) { EN['home.recap.'+key]=values[0]; FI['home.recap.'+key]=values[1]; SV['home.recap.'+key]=values[2]; }
 
+// V3 strings (docs/COACH_V3_PLAN.md). Keys are exposed as 'v3.<key>'.
+const V3_MESSAGES = {
+  offlineAnswer:['Quick answer (offline)','Pikavastaus (offline)','Snabbsvar (offline)'],
+};
+for (const [key, values] of Object.entries(V3_MESSAGES)) { EN['v3.'+key]=values[0]; FI['v3.'+key]=values[1]; SV['v3.'+key]=values[2]; }
+
 export const MESSAGES = Object.freeze({
   en: Object.freeze(EN),
   fi: Object.freeze(FI),

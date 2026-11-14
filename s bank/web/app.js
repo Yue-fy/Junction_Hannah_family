@@ -721,6 +721,8 @@ async function askCoach(message,context=captureContext(),wish=null){
       explanation_blocks:[{text:declaredPreference.field==='focus'?copy('A direction is enough to start. You can keep this as a wish without choosing an amount or deadline. Would you like to explore your spending first, or keep the wish for later?','Suunta riittää alkuun. Voit säilyttää tämän toiveena ilman summaa tai määräaikaa. Haluatko ensin tutkia menojasi vai säilyttää toiveen myöhemmäksi?','En riktning räcker för att börja. Du kan spara önskan utan belopp eller datum. Vill du utforska dina utgifter först eller spara önskan till senare?'):copy('You choose how your coach helps. Confirm the preference below to use it; nothing has been remembered yet.','Sinä päätät, miten valmentajasi auttaa. Vahvista toive alta, jos haluat käyttää sitä. Mitään ei ole vielä tallennettu.','Du väljer hur din coach hjälper. Bekräfta önskemålet nedan om du vill använda det. Inget har sparats ännu.')}],
     }:(continuingPurchase||state.queryScope)?await request(context,'post','/api/coach',{message:requestMessage,month:context.month,locale:context.locale,...(state.queryScope&&!continuingPurchase?{previous_query:state.queryScope}:{})}):envelope.legacy;
     if(!response)throw new Error(t('error.generic'));
+    // Mark answers that fell back from the AI coach so testers can tell them apart.
+    if(response.source!=='agent'&&envelope.fallback_reason&&envelope.fallback_reason!=='not_configured')response={...response,agent_fallback:envelope.fallback_reason};
     if(response.source!=='agent')response=await completeCoachAnswer(response,context);
     assertCurrent(context);
     if(context.locale!==i18n.locale||sequence!==coachSequence)return;
@@ -741,7 +743,8 @@ async function askCoach(message,context=captureContext(),wish=null){
       const turnAction=document.createElement('button');
       const retainedAction=index<state.conversation.length-1&&configureCoachAction(turn,turnAction)?`<button type="button" class="text-button coach-turn-action" data-coach-turn-action="${turn.id}">${esc(turnAction.textContent)}</button>`:'';
       const options=turn.response.clarification_options?.length?`<div class="clarification-options">${turn.response.clarification_options.map(option=>`<button type="button" data-direct-question="${esc(option)}">${esc(option)}</button>`).join('')}</div>`:'';
-      return `<article class="coach-turn"><p class="coach-turn-user">${esc(turn.message)}</p><div class="coach-turn-answer" data-coaching-style="${coachingStyle}">${explanation}${support}${retainedAction}${options}</div></article>`;
+      const offline=turn.response.agent_fallback?`<span class="offline-tag" title="${esc(turn.response.agent_fallback)}">${esc(t('v3.offlineAnswer'))}</span>`:'';
+      return `<article class="coach-turn"><p class="coach-turn-user">${esc(turn.message)}</p><div class="coach-turn-answer" data-coaching-style="${coachingStyle}">${offline}${explanation}${support}${retainedAction}${options}</div></article>`;
     }).join('');
     const scope=response.query_scope;
     if(scope)$('coach-response').insertAdjacentHTML('beforeend',`<p class="query-scope-caption">${esc(copy('Using','Käytössä','Använder'))}: ${dateLabel(scope.start)}–${dateLabel(scope.end)} · ${esc(scope.filters?.category?categoryName(scope.filters.category):scope.concept||u('spending.all'))}</p>`);

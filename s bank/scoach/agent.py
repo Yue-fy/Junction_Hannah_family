@@ -3,6 +3,7 @@ import copy
 import json
 import queue
 import re
+import sys
 import threading
 import time
 
@@ -128,6 +129,25 @@ def _transport_call(transport, contents, system, timeout):
     return result
 
 
+def _log(reason, steps, started, detail=''):
+    """One diagnostic line per fallback; never the customer's message."""
+    tools = ','.join(step['tool'] for step in steps) or '-'
+    print(f'[agent] fallback={reason} tools={tools} ms={int((time.monotonic() - started) * 1000)}'
+          + (f' detail={detail}' if detail else ''), file=sys.stderr, flush=True)
+
+
+def _sentences(text):
+    return [part for part in re.split(r'(?<=[.!?])\s+(?=\S)|\n\s*\n', text) if part.strip()]
+
+
+def _without_unverified(text, results, message, history, scope):
+    """Keep verified sentences only; a second unsupported figure must never reach the customer."""
+    kept = [sentence for sentence in _sentences(text)
+            if not unverified_numbers(sentence, results, message, history, scope)]
+    # A lone caveat is not an answer; require at least one sentence with a sourced figure or two sentences.
+    return ' '.join(kept).strip() if len(kept) >= 2 or any(re.search(r'\d', item) for item in kept) else ''
+
+
 def _fallback(conn, customer_id, ctx, locale, message, reason):
     from .api import Application
     from .coach import interpret
@@ -165,9 +185,14 @@ def run_agent(conn, customer_id, month, locale, message, history, *, transport=N
     validate_request(message, locale, history)
     if type(max_steps) is not int or max_steps < 1 or not 0 < deadline_s <= 25:
         raise ValueError('Invalid agent execution budget')
-    deadline = time.monotonic() + deadline_s
+    started = time.monotonic()
+    deadline = started + deadline_s
     ctx = ToolContext(conn, customer_id, month, message=message, history=history)
-    fallback = lambda reason: _fallback(conn, customer_id, ctx, locale, message, reason)
+    steps = []
+
+    def fallback(reason, detail=''):
+        _log(reason, steps, started, detail)
+        return _fallback(conn, customer_id, ctx, locale, message, reason)
     if transport is None and not agent_configured():
         return fallback('not_configured')
     from .api import Application
@@ -184,15 +209,15 @@ def run_agent(conn, customer_id, month, locale, message, history, *, transport=N
     contents = [{'role': 'model' if turn['role'] == 'coach' else 'user',
                  'parts': [{'text': ctx.sanitize(turn['text'])}]} for turn in history]
     contents.append({'role': 'user', 'parts': [{'text': ctx.sanitize(message)}]})
-    steps, violations_seen, call_count = [], False, 0
+    violations_seen, call_count, trimmed = False, 0, False
     scope = {'start': ctx.start, 'end': ctx.end, 'reference_date': ctx.reference_date}
     for _ in range(min(max_steps, 6)):
         try:
             content = _transport_call(transport or generate, contents, system, deadline - time.monotonic())
         except TimeoutError:
             return fallback('timeout')
-        except Exception:
-            return fallback('unavailable')
+        except Exception as error:
+            return fallback('unavailable', type(error).__name__ + ': ' + ctx.sanitize(str(error))[:120])
         if time.monotonic() >= deadline:
             return fallback('timeout')
         if (not isinstance(content, dict) or content.get('role', 'model') != 'model' or
@@ -235,7 +260,12 @@ def run_agent(conn, customer_id, month, locale, message, history, *, transport=N
         violations = unverified_numbers(text, ctx.results, message, history, scope)
         if violations:
             if violations_seen:
-                return fallback('unverified_numbers')
+                text = _without_unverified(text, ctx.results, message, history, scope)
+                if not text:
+                    return fallback('unverified_numbers', ','.join(violations[:6]))
+                _log('trimmed_unverified', steps, started, ','.join(violations[:6]))
+                trimmed, violations = True, []
+        if violations:
             violations_seen = True
             contents.append({'role': 'user', 'parts': [{'text': 'These figures were not in tool results: ' + ', '.join(violations) + '. Use only tool figures or call a tool. Do not repeat unsupported figures.'}]})
             continue
@@ -255,5 +285,5 @@ def run_agent(conn, customer_id, month, locale, message, history, *, transport=N
                 'answer': [part.strip() for part in re.split(r'\n\s*\n', text) if part.strip()],
                 'highlight': selected('highlight'), 'chart': selected('chart'),
                 'steps': steps, 'evidence': evidence, 'actions': ctx.actions, 'suggestions': suggestions,
-                'scope': scope}
+                'scope': scope, 'verification': 'trimmed' if trimmed else 'complete'}
     return fallback('max_steps')

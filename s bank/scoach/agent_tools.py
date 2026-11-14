@@ -170,6 +170,18 @@ def _finish(conn, customer_id, ctx, result, period, basis, query=None, label=Non
     return safe
 
 
+def _share(part, whole):
+    return format((Decimal(part) * 100 / whole).quantize(Decimal('.1')), 'f') if whole else None
+
+
+def _add_shares(rows, field):
+    """Precompute shares so the model never needs percentage arithmetic."""
+    whole = sum(row[field] for row in rows)
+    for row in rows:
+        row['share_percent'] = _share(row[field], whole)
+    return rows
+
+
 def _calculate(expression, ctx):
     try:
         tree = ast.parse(expression, mode='eval')
@@ -262,6 +274,8 @@ def dispatch(conn, customer_id, ctx, name, args):
                       observed_start=ctx.scope['observed_start'], observed_end=ctx.scope['observed_end'],
                       baskets=analytics.three_basket_profile(conn, customer_id, month)['baskets'],
                       top_categories=sorted(tops, key=lambda r: -r['total_cents']))
+        _add_shares(result['baskets'], 'amount_cents')
+        _add_shares(result['top_categories'], 'total_cents')
         result['chart'] = {'kind': 'baskets', 'title': 'Three spending baskets', 'series': [{'label': r['role'], 'value_cents': r['amount_cents']} for r in result['baskets']]}
         query = {'start': period[0], 'end': period[1]}
     elif name == 'monthly_trend':

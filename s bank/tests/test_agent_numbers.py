@@ -43,3 +43,28 @@ class AgentNumberTests(unittest.TestCase):
         from scoach.agent_numbers import unverified_numbers
         self.assertEqual(unverified_numbers('-€45.14 and 45.15', [{'delta_cents': -4514}, {'total_cents': 4514}]), [])
         self.assertEqual(unverified_numbers('45.16', [{'total_cents': 4514}]), ['45.16'])
+
+
+from scoach.agent_numbers import unverified_numbers
+
+
+class ApproximationAndTrimTests(unittest.TestCase):
+    def test_sourced_percentages_may_be_rounded(self):
+        results = [{'share_percent': '67.4'}]
+        self.assertEqual(unverified_numbers('About 67% went to must-pays.', results), [])
+        self.assertEqual(unverified_numbers('Exactly 67.4% went to must-pays.', results), [])
+        self.assertEqual(unverified_numbers('About 70% went to must-pays.', results), ['70'])
+
+    def test_approximate_euros_need_an_approximation_word(self):
+        results = [{'total_cents': 187866}]
+        self.assertEqual(unverified_numbers('You spent about €1,900 this month.', results), [])
+        self.assertEqual(unverified_numbers('Noin 1 900 € kului.', results), [])
+        self.assertEqual(unverified_numbers('You spent €1,900 this month.', results), ['1900'])
+        self.assertEqual(unverified_numbers('You spent about €2,000 this month.', results), ['2000'])
+
+    def test_second_violation_keeps_only_verified_sentences(self):
+        from scoach.agent import _without_unverified
+        results = [{'total_cents': 22570}]
+        text = 'You spent €225.70 on eating out. That is 31% of your spending. Small changes add up.'
+        self.assertEqual(_without_unverified(text, results, '', (), {}), 'You spent €225.70 on eating out. Small changes add up.')
+        self.assertEqual(_without_unverified('That is 31% of your spending.', results, '', (), {}), '')
