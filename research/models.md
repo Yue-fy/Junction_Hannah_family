@@ -4,9 +4,23 @@ Hardware: 1× RTX PRO 6000 Blackwell 96 GB. Shared server budget ≈ 45 GB (`--g
 **Bandwidth is the real constraint tonight:** this machine downloads from Hugging Face at only ~2.5 MB/s total
 (Wi-Fi; measured with 8 parallel range requests), i.e. ~2 h per 19 GB. Every download must be chosen carefully.
 
+## TL;DR for the captain (09:45, end of night)
+- **Small fine-tuned beats big general.** A LoRA on our own 8B (cc-v2, 2 output tokens per answer) is the night's largest gain on
+  SEALED test: CubiCasa +8.8 [+6.0, +11.9], weighted 73.8 → 79.8, at ~$0.02 per 1k questions. A 4× bigger base VLM (Qwen3.6-35B-A3B)
+  and hosted Nemotron 3.5 Super VL both count WORSE than the fine-tuned 8B (−21 and worse than base on every bucket).
+- **Bigger model only where it measurably helps:** free-text IFC answers (fact cards) on Qwen3.6-35B-A3B (:8002): judged 62.0 vs 54.5,
+  hosted Nemotron as independent judge on the disagreements 6 vs 0, +20% GPU-s per question. Everything else stays on the 8B.
+- **Hosted Nemotron = visible second opinion** (demo button), not a bulk tier: as planner it ties at 9× cost, as translator 25× slower.
+- **Language front end**: translate only what the rules can't read (`should_translate`); held-out languages (nb/hr/el/lt) 78 → 84.5
+  in the pipeline (F), 0 dataset questions touched.
+- **Cost honesty:** every local call is billed from tokens at measured GPU throughput (not wall time, which includes queueing).
+- Negative results are listed under each section and in board/R2.md ("don't repeat").
+
 ## Serving now
 | what | value |
 |---|---|
+| :8002 (since 09:40, D21) | Qwen3.6-35B-A3B-FP8 `qwen3.6-35b-a3b`, util 0.48; ONLY via `llm.text_backend()` (STOA_TEXT_BACKEND=local2), falls back to :8001 |
+| :8001 adapters | LoRAs `cc-v2` (CubiCasa counts) and `cc-v3` (+ Swiss PNG), loaded by `serving/start.sh` |
 | model | Qwen3-VL-8B-Instruct (bf16), from the text encoder inside Qwen-Image-2.1 (full VLM: vision tower + lm_head; same config as Qwen3-VL-8B-Instruct) |
 | URL | http://127.0.0.1:8001/v1, model `default` or `qwen3-vl-8b` |
 | context | 32k tokens, KV cache 169k tokens (~5 concurrent full-length requests; dozens of short ones) |
@@ -265,3 +279,6 @@ pretrained CC5K net never saw them) minus drawings in the LoRA's training data m
 9. Language front end: translate a question with the local 8B ONLY when it is non-English and the rule parser fails
    (`should_translate`); ~0.4 s, ~700 tokens, on 0.03% of dataset questions; held-out languages 50 → 81%.
 10. Agent planner: the local 8B; hosted Nemotron as planner ties at 9× the cost.
+11. Free-text answers (IFC fact cards): Qwen3.6-35B-A3B on :8002 via `llm.text_backend()` (D21), +20% GPU-s, judged +7.5.
+12. Files outside our folders (uploads, a hidden set in new folders): `experiments/r2/style` guesses the reader family from the
+    image (p≥0.8 → 96.7% right); filing an upload under the guess keeps accuracy and restores boxes + the cheap path.
