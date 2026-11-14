@@ -8,6 +8,7 @@ Cross-check (linked data): a room's DXF polygon area vs. the "16.78 m²" printed
 
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 
@@ -443,7 +444,37 @@ class DxfSolver(BaseSolver):
             return None, "no DXF sibling", None
         return load_floor(str(abspath(dxf_rel))), dxf_rel, None
 
+    # "the whole building" on a plan of ONE floor (every swiss_dwellings building in the data has exactly one floor
+    # drawn: 1,040 buildings x 1 floor). Q 04:58/08:45: 36 doors @0.99 for "in the whole building".
+    BUILDING_W = re.compile(
+        r"\b(?:whole|entire|complete) (?:building|house)\b|\ball (?:the )?(?:floors|storeys|stories|levels)\b|"
+        r"\bevery (?:floor|storey|story|level)\b|\b(?:does|do) the building have\b|\bthe building (?:as a whole|in total)\b|"
+        r"\b(?:ganzen?|gesamten?|komplette[nm]?) (?:Gebäude|Haus)|\balle[nm]? (?:Geschosse|Stockwerke[n]?|Etagen)\b|"
+        r"\b(?:tout le|l'ensemble du) bâtiment|\bbâtiment (?:entier|complet)|\btous les étages\b|"
+        r"\b(?:l')?intero edificio|\btutto l'edificio|\bedificio intero|\btutti i piani\b|"
+        r"\b(?:het )?(?:hele|gehele) (?:gebouw|pand)|\balle verdiepingen\b|\bhela (?:byggnaden|huset)\b|\balla våningar\b|"
+        r"\bkoko (?:rakennu|talo)|\bkaikki(?:ssa)? kerrok|\btodo el edificio\b|\bedificio (?:entero|completo)\b|"
+        r"\btodas las plantas\b|\btodos los pisos\b", re.I)
+
     def solve(self, path: str, question: str) -> Answer:
+        ans = self._solve_guarded(path, question)
+        if ans.value is not None and (self.BUILDING_W.search(question) or
+                                      any(self.BUILDING_W.search(str(t)) for t in ans.assumptions[:1])):
+            m = re.search(r"site(\d+)_bldg(\d+)_floor(\d+)", path)
+            floors = sorted({re.search(r"_floor(\d+)", f).group(1) for f in
+                             (os.listdir(abspath(path).parent) if m else [])
+                             if f.startswith(f"site{m.group(1)}_bldg{m.group(2)}_floor")}) if m else []
+            if len(floors) <= 1:
+                where = f"floor {m.group(3)} of building {m.group(2)}" if m else "one floor"
+                ans.confidence = round(min(ans.confidence, 0.5), 3)
+                ans.assumptions = [*ans.assumptions, f"only {where} is drawn (no other floor of this building is in "
+                                                     "the data); the answer counts this floor only"]
+                ans.missing = [*ans.missing, "the other floors of the building are not in the data, so the whole-building "
+                                             "total is unknown"]
+                ans.trace.append("guard: the question asks about the whole building, the data has one floor -> conf <= 0.5")
+        return ans
+
+    def _solve_guarded(self, path: str, question: str) -> Answer:
         """Translate-first for languages the rules were never written for (S0/F 04:05: the sealed hard2r drop is
         language), then the rule/table-QA answer, then guards that check the answer fits what was asked."""
         tr = _translate(question, self.backend) if self.llm else None
