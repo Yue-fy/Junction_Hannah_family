@@ -63,6 +63,18 @@ function fmtValue(a: Answer) {
 }
 
 /** "cross-check: … ✓/✗" lines from evidence notes and trace (D4: no contract change). */
+/** W4's room-segmentation reading on CubiCasa count answers (trace "room segmentation (pretrained CubiCasa5K): 3 bedroom
+ *  region(s) = the answer ✓"; when it differs: "…: 1 sauna region(s); no boxes attached"): an independent second count. */
+function segChecks(a: Answer): { text: string; ok: boolean }[] {
+  return (a.trace ?? []).flatMap((l) => {
+    const m = l.match(/^room segmentation \(([^)]+)\):\s*(\d+) ([\w -]+?) region\(s\)\s*(=\s*the answer)?/i);
+    if (!m || /cross-?check/i.test(l)) return [];
+    const n = Number(m[2]);
+    const what = `${n} ${m[3]} region${n === 1 ? "" : "s"} in the room segmentation (${m[1]})`;
+    return [m[4] ? { text: `${what} = the answer`, ok: true } : { text: `${what}; the answer says ${a.value}`, ok: String(n) === String(a.value) }];
+  });
+}
+
 export function crossChecks(a: Answer, asks: string[] = []): { text: string; ok: boolean }[] {
   // Compound answers prefix each evidence note with its part ("door: door 1; cross-check: answer 36 vs …").
   const parts = new Set(a.plan?.parts ?? []);
@@ -82,7 +94,7 @@ export function crossChecks(a: Answer, asks: string[] = []): { text: string; ok:
   // Exception: boxes added by "Show where" (notes start with the locator's name) carry the locator's check only;
   // the solver's own check (e.g. "vlm_lora 4 = raster 4") is then in the trace, so keep it next to it.
   const fromEv = parse(a.evidence.map((e) => e.note ?? ""));
-  const fromTrace = parse(a.trace ?? []);
+  const fromTrace = [...parse(a.trace ?? []), ...segChecks(a)];
   const located = a.evidence.some((e) => LOCATED_NOTE.test(e.note ?? ""));
   const key = (t: string) => t.split("→")[0].replace(/\s+/g, " ").trim().slice(0, 24);
   // "label reader (raster) finds 1 …" already says what the pipeline's "vlm_lora 0 ≠ raster 1" says: keep one line
@@ -452,6 +464,9 @@ export function secondOpinionHtml(a: Answer, b: Answer, ms: number) {
  * reader (raster, local VLM, cached per drawing); symbols → R1's pretrained CubiCasa5K detector (cached, no GPU). */
 const ROOM_TARGETS = new Set(["bedroom", "kitchen", "bathroom", "sauna", "wc_room", "balcony"]);
 const SYMBOL_TARGETS = new Set(["window", "door", "wc", "sink"]);
+/** `missing` without "no located evidence …" when the answer does carry located evidence (boxes or GUIDs). */
+const missingNow = (a: Answer) => (a.missing ?? []).filter((t) => !(/^no located evidence\b/i.test(t) && a.evidence.some((e) => e.bbox || e.ifc_guid)));
+
 export const LOCATED_NOTE = /^(label reader|CubiCasa5K detector): /;
 export interface Locator { solver: string; name: string; button: string; title: string; noun: string }
 const NOUNS: Record<string, string> = { window: "windows", door: "doors", wc: "WC seats", sink: "sinks", wc_room: "WC room labels" };
@@ -545,7 +560,7 @@ export function renderCard(el: HTMLElement, a: Answer, opts: CardOpts) {
     : `<details class="sec" open><summary>Why <small>${(a.trace ?? []).length} steps</small></summary>
       ${traceHtml(a.trace ?? [])}</details>`}
     ${(a.assumptions ?? []).length ? `<details class="sec" open><summary>Assumptions</summary><ul class="assume">${a.assumptions!.map((t) => `<li>${esc(t)}</li>`).join("")}</ul></details>` : ""}
-    ${(a.missing ?? []).length ? `<details class="sec" open><summary>What would make it certain</summary><ul class="missing">${a.missing!.map((t) => `<li>${esc(t)}</li>`).join("")}</ul></details>` : ""}
+    ${missingNow(a).length ? `<details class="sec" open><summary>What would make it certain</summary><ul class="missing">${missingNow(a).map((t) => `<li>${esc(t)}</li>`).join("")}</ul></details>` : ""}
     ${sheetsHtml(ev, opts.currentFile)}
     <details class="sec" open><summary>Evidence <small>${groups.length} item${groups.length === 1 ? "" : "s"}${groups.length < ev.length ? ` (${ev.length} boxes/elements)` : ""} · click to zoom${esc(partialEvidence(run, a))}</small></summary>
       <ul class="evidence">${shown.map((g, n) => evLabel(ev, g, n + 1, opts.describeGuid, asks)).join("")}${groups.length > shown.length ? `<li class="more">+ ${groups.length - shown.length} more</li>` : ""}</ul></details>
