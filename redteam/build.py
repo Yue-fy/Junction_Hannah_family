@@ -898,6 +898,82 @@ def main():
                  ("How many rooms on '1.korrus' have a net floor area under 4 m²?", 3),
                  ("How many rooms on '1.korrus' are between 20 and 25 m²?", 3)]:
         out.append(row(E, q, g, "count", "count", "list:control", "same", note="count of the list"))
+    # v19b: the same list kinds on three other models (dev: warmond; train: digitalhub, clinic; never a test drawing);
+    # gold = the dataset's per-room net areas, complete for these storeys (area questions = the storey's room count).
+    WM = "data/ifc_models/bimspeed-warmond_ar_plan-03-1-level.pdf"
+    DH = "data/ifc_models/rwth-digitalhub_digitalhub-fm-arc-v2_plan-02-e00-okrd.pdf"
+    CL = "data/ifc_models/bsc-clinic_clinic-architectural.ifc"
+    for path, q, items, not_items, kind, note in [
+        (WM, "Which rooms on '1. Level' are larger than 30 m²?", [r"414B-13-001-001"], [r"414B-1-001-002|414B-7-001-003"],
+         "list:ifc-b", "36.22; next 25.27"),
+        (WM, "List the living rooms on '1. Level' that are smaller than 30 m².", [r"414B-1-001-002", r"414B-7-001-003",
+         r"414B-19-001-002"], [r"414B-13-001-001", r"Bedroom|Storage|Stair|Bathroom"], "list:ifc-b",
+         "three Living at 25.27; the fourth is 36.22; other room kinds excluded by the name"),
+        (DH, "Welche Räume im Geschoss 'E00_OKRD' sind größer als 100 m²?", [r"Eingangsbereich|\b1-1\b",
+         r"Cafeteria|\b1-2\b", r"Open Workspace|\b1-7\b"], [r"Veranstaltungsraum|\b1-12\b"], "list:ifc-b-de",
+         "383.61 / 114.45 / 113.16; next 76.48"),
+        (DH, "Which rooms on 'E00_OKRD' are smaller than 5 m²?", [r"\b302\b", r"\b402\b", r"\b301\b", r"\b401\b"],
+         [r"Aufzug|\b300\b|\b400\b"], "list:ifc-b", "4.5 / 4.5 / 3.99 / 3.99; lifts 5.15"),
+        (CL, "Which rooms on 'First Floor' are larger than 100 m²?", [r"1DC1", r"1AC1", r"1E24"], [r"1F01"], "list:ifc-b",
+         "178.22 / 136.8 / 115.12; next 78.92"),
+        (CL, "Which rooms on 'First Floor' are smaller than 1 m²?", [r"1C11"], [r"1A11|1D17|1D01|1D39|1E15"],
+         "list:ifc-b", "only ELEC. CL. (1C11) 0.54; next 1.66"),
+    ]:
+        r_ = row(path, q, "; ".join(items), None, "text", kind, "same", note=note)
+        r_["meta"]["items"] = items
+        r_["meta"]["not_items"] = not_items
+        out.append(r_)
+
+    # ===== v20 (09:22): link questions in wordings / languages / models v17 did not use (R1 09:06 asked for it) ======
+    # Facts reused from v17 (esplanades '1.korrus': 46 doors drawn = 46 IfcDoor; 52 of 55 windows drawn; smiley-west
+    # '1.OG': 50 doors drawn = 50 IfcDoor) + sheet facts from the dataset's file names (esplanades plan-01..05; warmond
+    # 8 plans + 4 elevations + 2 sections; smiley-west 4 plans KG/EG/1.OG/2.OG) + room → storey from the dataset's
+    # per-room area questions. yes/no answers must open with the word (any language).
+    WM8 = "data/ifc_models/bimspeed-warmond_ar_plan-03-1-level.pdf"
+    for path, q, g, typ, kind, rx, note in [
+        (E, "Are all the doors of '1.korrus' in the IFC model drawn on this plan?", "yes", "text", "yesno:link", None,
+         "46 = 46"),
+        (E, "Are all the windows of '1.korrus' in the IFC model drawn on this plan?", "no", "text", "yesno:link", None,
+         "52 of 55"),
+        (E, "Is the window count on this sheet consistent with the BIM model?", "no", "text", "yesno:link", None,
+         "sheet = 1.korrus; 52 vs 55"),
+        (E, "How many of the model's windows on '1.korrus' does this drawing not show?", 3, "count", "link20:count", None,
+         "55 - 52"),
+        (E, "Vastaako tämän pohjapiirustuksen ovien määrä IFC-mallia?", "yes", "text", "yesno:link-fi", None, "46 = 46"),
+        (E, "Kas sellel plaanil on sama palju aknaid kui mudelis korrusel „1.korrus“?", "no", "text", "yesno:link-et",
+         None, "52 vs 55"),
+        (E, "Stimmen Grundriss und IFC-Modell bei der Anzahl der Fenster überein?", "no", "text", "yesno:link-de", None,
+         "52 vs 55"),
+        (E, "Which sheet is the floor plan of '3.korrus'?", None, "text", "link20:which", r"plan[- _]?0?3\b",
+         "plan-03-3-korrus"),
+        (E, "On which sheet can I find the room 'PESUKODA (115)'?", None, "text", "link20:which",
+         r"plan[- _]?0?1\b", "PESUKODA only on 1.korrus = plan-01"),
+        (E, "How many drawings belong to this building model?", 5, "count", "link20:count", None, "plan-01 … plan-05"),
+        (SM, "Is every door of '1.OG' in the model drawn on this floor plan?", "yes", "text", "yesno:link", None,
+         "50 = 50"),
+        (SM, "Stimmen Grundriss und IFC-Modell bei der Anzahl der Türen im Geschoss '1.OG' überein?", "yes", "text",
+         "yesno:link-de", None, "50 = 50"),
+        (SM, "How many floor plan sheets are there for this building?", 4, "count", "link20:count", None,
+         "plan-01-kg … plan-04-2-og"),
+        (SM, "Which sheet shows the storey 'KG'?", None, "text", "link20:which", r"plan[- _]?0?1\b",
+         "plan-01-kg"),
+        (WM8, "How many floor plan sheets are there for this building?", 8, "count", "link20:count", None,
+         "plan-01-basement … plan-08-attic"),
+        (WM8, "How many elevation drawings are there for this building?", 4, "count", "link20:count", None,
+         "elevation-east/north/south/west"),
+        (WM8, "How many section drawings belong to this model?", 2, "count", "link20:count", None,
+         "section-east-west, section-north-south"),
+        (WM8, "Which sheet shows the attic?", None, "text", "link20:which", r"plan[- _]?0?8\b", "plan-08-attic"),
+        (WM8, "On which sheet is the room 'Stair (414B-XX-001-001)'?", None, "text", "link20:which",
+         r"plan[- _]?0?3\b", "only on '1. Level' = plan-03"),
+    ]:
+        r_ = row(path, q, g if g is not None else note, "count" if typ == "count" else None, typ, kind, "same",
+                 note=note)
+        if rx:
+            r_["meta"]["accept_re"] = rx
+            # a refusal that only echoes the storey/room name does not name a sheet
+            r_["meta"]["reject_re"] = r"does not contain|no (sheet |drawing )?information|not include|cannot (be )?determine|no plan sheet"
+        out.append(r_)
 
     with open(OUT, "w", encoding="utf-8") as f:
         for r in out:

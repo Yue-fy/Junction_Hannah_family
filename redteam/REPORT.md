@@ -1,27 +1,32 @@
 # Red team report (agent Q) — can we break the pipeline?
 
-**609 adversarial questions** (`redteam/questions.jsonl`, built by `redteam/build.py`, analysed by `redteam/analyze.py`),
-in eighteen families written one after another tonight; each new family was aimed at the mechanism the last one exposed.
+**647 adversarial questions** (`redteam/questions.jsonl`, built by `redteam/build.py`, analysed by `redteam/analyze.py`),
+in twenty families written one after another tonight; each new family was aimed at the mechanism the last one exposed.
 Builds on F's `hard` (translations/paraphrases/compositions/ft²) and `hard2` (new operators) and covers what those
 don't. The first 205 rows start from dev questions the pipeline had **right at conf ≥ 0.8**, so a failure there is
 caused by the perturbation, not by the drawing.
 
-## Now (09:00) — the short version
-- **Latest code (night 62754aa + the owners' 08:41–08:50 commits, 609 questions): 351 of 352 scored answers
-  at confidence ≥ 0.8 are right; 4 confident misses left** — "whole building" asked on a single-floor plan (×3, the plan
-  shows one floor; W2) and "how many windows are in the model but not drawn on this plan?" (297, W1/W4). Night
-  62754aa itself: 336/337. The test-2 build bb94fe4: 283/290 on 494 questions.
+## Now (09:15) — the short version
+- **Latest night be57171 (609 questions v1–v18): 360 of 360 scored answers at confidence ≥ 0.8 are right**; 94.7 % of
+  the scored rows right (62754aa: 91.9 %, 337/339); 17 won / 1 lost (a known flake at 0.45) since 62754aa. Still
+  answered confidently: 3 false premises ("whole building" asked on a single-floor plan; W2). Pre-merge #8 (be57171 +
+  the W2/W3/W4/F heads of 09:00): 0 lost, 361/361. Cost $0.16 per 1,000 adversarial questions.
+- **Two new families this hour, written before any run:** v19 *list answers* (19 rows): every plain "which rooms are
+  larger / smaller than X m²" list is right on 4 IFC models in EN/ET/DE; 4 confident misses where a room type or the
+  counted thing is dropped ("which living rooms < 30 m²" → every room; "floors with more than 55 rooms" → rooms > 55 m²;
+  bug 22, W1). v20 *link questions in new wordings* (19 rows): 6/19 on night; "How many of the model's windows does
+  this drawing not show?" → 297 at 0.98 (bug 21 under a new wording), German "agree?" → a bare 55 at 0.88; every
+  "which sheet …?" → "no sheet information" (W1). R1's kg_qa (not routed yet) gets 12/19 with 0 losses, but its 3
+  confident misses print "no plan sheet" next to evidence that is the right sheet (bug 23, R1).
 - **Fixed tonight, verified on the same rows:** false premises (7/24 confident → 0/24), storeys in everyday words,
-  "whole building" in 8 of 9 languages, "1,200 euros", "how many floors", "how many X and how many Y" (summed → listed, in
-  every language), storey heights, size comparisons, twin-less PNG areas. Every owner commit since 08:14 was checked
-  before or right after S0 merged it (pre-merge checks #3–#7): no right answer lost except one flaky LLM-code row
-  (Swiss price × doors, 0.45) and one CubiCasa LoRA flip that fell to confidence 0.20.
-- **Still weak (not confident, but wrong):** questions *about the links* between plan, model and sheets (v17: 2/9 —
-  the knowledge graph checks answers but doesn't answer "do they agree?" / "which sheet?"), Italian "in tutto
-  l'edificio", door/window counts on PNG-only plans, cost under attack (+51 % since 05:05).
-- **Holds:** rewording, typos, injections, rotated/gray/low-res images, HABS scans in other languages and rotated
-  (36/36), plans handed over as a lone PDF (22/24).
-- Demo: the 21 script/tour questions give the same answers on bb94fe4, c1d6149 and 62754aa (`demo/LIVE-CHECK.md`).
+  "whole building" in all 9 languages, "1,200 euros", "how many floors", "how many X and how many Y" (in every
+  language), storey heights and distances, size comparisons, twin-less PNG areas, plan-vs-model "do they agree?"
+  (v17 2/9 → 7/9). Every owner commit since 08:14 was checked before or right after S0 merged it (pre-merge #3–#8).
+- **Holds:** rewording, typos, injections, rotated/gray/low-res images, HABS scans in other languages and rotated,
+  plans handed over as a lone PDF. **Weak but not confident:** door/window counts on PNG-only plans, "which sheet".
+- Demo: the 21 script/tour questions give the same answers on bb94fe4, c1d6149, 62754aa and be57171; two new demo
+  questions work ("Do the floor plan and the IFC model agree on the number of windows?" → "no: 55 vs 52 drawn",
+  "Which rooms are larger than 50 m²?") — `demo/LIVE-CHECK.md`.
 
 ## Verdict (08:20, night bb94fe4 = the test-2 build) — the detailed version
 1. **What holds.** Rewording, casing, extra context, distractor numbers, typos, prompt injection, rotated / gray /
@@ -701,6 +706,91 @@ text layer → "2" from no text lines at 0.30). Still cheap in absolute terms; t
 steps on adversarial wordings (W4 told). Dollar cost is computed from tokens, so it does not depend on server load;
 latency does.
 
+## Night 4fb47c9 (09:03) and pre-merge check #8 (09:05): 4fb47c9 + W1 a33ca05 + W2 fdcc3c3 + W3 1c120cb + W4 b91c2d1 + F c07ae13
+**Night 4fb47c9 vs 62754aa** (all 609 rows v1–v18; run `20261114-085915-pipeline-questions-v18-4c86` vs `59a3` + `dd7a`
++ `08d8`): **10 won, 1 lost; scored 91.9 → 93.5 % (521 → 530 of 567); scored answers at ≥ 0.8: 337/339 → 354/355
+right**; core 283 rows 98.1 %, 187/187 at ≥ 0.8, 0/24 premises; 0 errors. Won: Italian "in tutto l'edificio" ×3 (W1
+bug-19 commit: 46/50/20 → 211/170/69 at 0.98), "how many X and how many Y" in DE/FR/IT/FI ("door: 36; window: 28" at
+0.99), the Finnish two-number IFC question, "doors on the ground floor and on the top floor" (no longer 211), the
+storey height to the top floor (13.4 at 0.85). Lost: a 90°-rotated HABS sheet, "How many sheets are in this drawing
+set?" 3 at 0.75 → 2 at 0.49 — raster now reads 3 at 0.40 (W3's calibration), the pipeline calls it unsure and asks the
+agent, whose own check answers "no" before it concludes "assume standard practice for small sets → 2" (an invented
+answer after a failed check; W3/W4). Right answers whose confidence moved: injection variants 0.99 / 0.95 → 0.30 (safe
+direction), lone-PNG apartment counts 0.75 → 0.40, CubiCasa FI/DE compositions 0.90 → 0.65.
+**Cost on the same rows:** 609 rows $0.159 → $0.170 per 1,000 (+7 %); the 440 rows of the 05:05 measurement $0.084 →
+$0.108 (+29 %), LLM calls per question 1.10 → 1.25 (the rise came with the pre-#7 heads; see "Cost under attack").
+
+**Pre-merge #8** (all 622 rows incl. v19; run `20261114-090322-pipeline-questions-v19-fa3e`, vs 4fb47c9 on the 609):
+**8 won, 0 lost; scored 93.5 → 94.9 %; 361 of 361 scored answers at ≥ 0.8 right**; $0.158 per 1,000; AUROC 0.975.
+Won: v17 linking 2/9 → 7/9 (W1 f17bcaa: "Do the floor plan and the IFC model agree on the number of windows on
+'1.korrus'?" → "no: the IFC model has 55 windows, the plan draws 52 (3 not drawn; they lie wholly above/below the cut
+plane)" at 0.85; bug 21 297 at 0.98 → 3 at 0.59; "How many floor plan sheets?" 1 → 5 at 0.85), storey distances
+("How far is '2.OG' above 'KG'?" 8.04 at 0.85), the Finnish unquoted KORIDOR (119) area (142 → 63.84, still 0.29), and
+the rotated-scan row back (3 at 0.89, agent: a flake in both directions). Still answered at ≥ 0.8 and wrong: the
+one-floor "whole building" premises ×3 (dxf, W2) and v19 (below). Merge-safe from the red team's side.
+
+## v19 (09:02): answers that are lists — 19 Qs
+Stoa said the hidden test's answers are "not so simple". A list is the simplest not-simple answer: "Which rooms on
+'1.korrus' are larger than 50 m²?", "List the rooms … under 4 m²", "between 20 and 25 m²", "the three largest rooms",
+"Which floors have more than 55 rooms?", "On which floors is there a room called MAGAMISTUBA?", the same in Estonian
+and German, and the same kinds on three other models (warmond '1. Level' dev, digitalhub 'E00_OKRD' and clinic 'First
+Floor' train; never a test drawing). Gold = the dataset's own per-room net areas (complete for those storeys: one
+area question per room) and per-storey door / room counts; an answer is right when it names every gold item and none
+of the excluded ones (the rooms just across the threshold, or other room kinds). Runs on night 4fb47c9 / be57171
+(`…-090250-…-v19-7403`, `…-090553-…-v19b-9098`), identical on pre-merge #8.
+**15 of 19 right. Every plain threshold list is right on all four models, in EN/ET/DE, with the areas printed next to
+the names** (0.92; 0.75 in ET/DE) — a good live demo question. **4 confident misses, one mechanism:**
+
+### 22. A list question answers a neighbouring question: the room word or the counted thing is dropped (HIGH) — owner W1 (`ifc` threshold op)
+- "Which ELUTUBA+KÖÖK rooms on '1.korrus' are smaller than 25 m²?" → "34 rooms with area < 25 m2: TUALETTRUUM …" at
+  0.92 (gold: only ELUTUBA+KÖÖK (6-1), 22.05). Warmond: "List the living rooms on '1. Level' that are smaller than
+  30 m²." → 58 rooms at 0.92 (gold: the three 'Living' at 25.27). The threshold branch takes "every room of the
+  storey" and never filters by the room word.
+- "Which floors have more than 55 rooms?" → "4 rooms with area > 55 m2" at 0.92 (gold: 2./3./4.korrus, 60 rooms each):
+  a count threshold over storeys read as an area threshold over rooms.
+- "On which floors is there a room called MAGAMISTUBA?" → "MAGAMISTUBA (23-2) (18.50 m²)" at 0.90 (gold 2.–5.korrus).
+Same root cause as bugs 9–21: the computed list is checked, not whether it is the list that was asked for. Also right
+but unsure: "Which floors have fewer than 42 doors?" → 5.korrus at 0.30; "the three largest rooms" at 0.40.
+Cosmetic: "between 20 and 25" prints "3 rooms with area between 20 m2".
+
+## Night be57171 (09:05) = 4fb47c9 + W1 a33ca05 (link questions by GUID set difference)
+All 622 rows (run `20261114-090509-pipeline-questions-v19b-a85a`): **vs 62754aa 17 won, 1 lost; vs 4fb47c9 8 won, 1
+lost. On the 609 rows v1–v18: scored 94.7 % (537/567); 360 of 360 scored answers at ≥ 0.8 right**; core 283 98.1 %,
+186/186 at ≥ 0.8, 0/24 premises; AUROC 0.975; $0.160 per 1,000 (440 older rows $0.100, LLM calls/Q 1.25); 0 errors.
+The one loss is the dxf "1,200 euros per door" flake (91,200 at 0.45; it flips back on pre-merge #8). Answered at ≥ 0.8
+and wrong: the one-floor "whole building" premises ×3 (W2) and 3 v19 list rows (bug 22, W1). The same 8 wins as
+pre-merge #8 (v17 2/9 → 7/9 etc.). Demo pre-flight on be57171: `demo/LIVE-CHECK.md` (all script answers unchanged).
+
+## v20 (09:09): link questions in wordings, languages and models v17 did not use — 19 Qs (R1 asked for it)
+W1's f17bcaa answers v17's own wordings; R1's kg_qa (not routed yet) claims 9/9 on v17. Are they general? Same facts
+as v17 (esplanades '1.korrus' 46 = 46 doors, 52 of 55 windows drawn; smiley-west '1.OG' 50 = 50 doors) asked as "Are
+all the windows … drawn on this plan?", "Is the window count on this sheet consistent with the BIM model?", "How many
+of the model's windows … does this drawing not show?", in Finnish / Estonian / German, plus sheet questions answered by
+the dataset's file names on three models ("How many elevation / section drawings …?" on warmond: 4 / 2; "Which sheet
+is the floor plan of '3.korrus'?", "On which sheet can I find the room 'PESUKODA (115)'?", "Which sheet shows the
+attic?"). A "which sheet" answer that refuses and only echoes the storey name is scored wrong.
+**Night be57171 (run `20261114-090934-pipeline-v20-f10b`): 6 of 19; 2 confident misses:**
+- "How many of the model's windows on '1.korrus' does this drawing not show?" → **297 at 0.98** — bug 21 again under a
+  new wording (W1's set-difference path fires on "in the model but not drawn", not on "does this drawing not show").
+- German "Stimmen Grundriss und IFC-Modell bei der Anzahl der Fenster überein?" → a bare **55 at 0.88** (a yes/no
+  was asked). Finnish and Estonian "agree?" are right ("no: … 55 … 52") but at 0.50.
+- Not confident but wrong: "Are all the doors / windows … drawn on this plan?" → 46 / 55 (0.30); smiley "Is every
+  door of '1.OG' … drawn?" → 50; every "which sheet" question → "the model has no sheet information" (the sheet ↔
+  storey ↔ space links exist in the project graph); "How many elevation / section drawings?" → 0.
+Right: "Is the window count on this sheet consistent with the BIM model?" (no, 0.85), "How many drawings belong to
+this building model?" (5), "How many floor plan sheets?" on smiley-west (4) and warmond (8), all at 0.85.
+**R1's kg_qa (night-R1 b44392a, not routed; its `pipeline_kg` wrapper on night 31397eb, run
+`20261114-091100-pipeline_kg-v20-kg-82a4`): 12 of 19, 9 won / 0 lost vs the pipeline; 13 of 19 routed to it.** It
+answers the German "agree?" ("no (… 55 … 52 …)" at 0.85), elevation / section drawing counts (4 / 2), and "On which
+sheet can I find the room 'PESUKODA (115)'?" → plan-01-1-korrus. Its 3 confident misses share one mechanism:
+
+### 23. The answer text contradicts its own evidence (HIGH, judge-visible) — owner R1 (`kg_qa` sheet/storey formatter)
+"Which sheet is the floor plan of '3.korrus'?" → "storey '3.korrus' (no plan sheet for it)" at 0.85, while the trace
+says "row F4 = …plan-03-3-korrus.pdf" and the evidence box IS that file; the same for "Which sheet shows the attic?"
+(evidence plan-08-attic.pdf) and "Which sheet shows the storey 'KG'?" → "KG". A person who opens the evidence sees the
+right sheet next to an answer that denies it. Neither path answers "How many of the model's windows on '1.korrus'
+does this drawing not show?" (297 at 0.98 both; kg_qa's trigger doesn't fire on that wording).
+
 ## For Saturday noon: red-team Stoa's example questions in one command (`redteam/from_examples.py`)
 Put Stoa's examples in a jsonl (`path`, `question`, and `answer` / `unit` when known; a path may be absolute), then
 ```
@@ -726,8 +816,8 @@ stayed 3 but moved confidence band (0.75 → 0.35 / 0.92).
 - Rotated, grayscale, heavily compressed and half-resolution copies of a plan: 30/30 right, at the same confidence.
 
 ## Re-run
-`questions.jsonl` now has 609 rows: v1 (174) + v2 (31) + v3 Swiss compositions (42) + v4 CubiCasa compositions (36) +
-v5 natural references (70) + v6 judge questions on the demo drawings (21) + v7 scope words in 9 languages (36) + v8 scope premises (8) + v9 Finnish judge (14) + v10 scan follow-ups (8) + v11 number formats (10) + v12 Estonian labels (5) + v13 lone PDF/PNG (8) + v14 two-part / comparisons / heights / which (31) + v15 bug-18 probe (22) + v16 Swiss dev plans alone as PNG/PDF (48) + v17 linking (9) + v18 scans (36) = 609; earlier rows are byte-identical across builds (checked with cmp), so runs on the first 205 /
+`questions.jsonl` now has 647 rows: v1 (174) + v2 (31) + v3 Swiss compositions (42) + v4 CubiCasa compositions (36) +
+v5 natural references (70) + v6 judge questions on the demo drawings (21) + v7 scope words in 9 languages (36) + v8 scope premises (8) + v9 Finnish judge (14) + v10 scan follow-ups (8) + v11 number formats (10) + v12 Estonian labels (5) + v13 lone PDF/PNG (8) + v14 two-part / comparisons / heights / which (31) + v15 bug-18 probe (22) + v16 Swiss dev plans alone as PNG/PDF (48) + v17 linking (9) + v18 scans (36) + v19 lists (19) + v20 link wordings (19) = 647; earlier rows are byte-identical across builds (checked with cmp), so runs on the first 205 /
 283 rows compare directly (`python3 $JUNCTION_SHARED/artifacts/Q/subset_stats.py <run> 283`). Build with
 `PYTHONHASHSEED=0 PYTHONPATH=.`; v5 calls the ifc solver for its gold (deterministic, < 1 s per row).
 ```

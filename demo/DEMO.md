@@ -126,44 +126,51 @@ new surface (storeys in everyday words, "whole building" in Swedish, "1,200 euro
   extra step. Fix in place: detect the unexplained operation, compute it in code or lower the confidence (derived
   probe 29.5 % → 56.8 %, 100 % right when confident). Test 2 measures it on the sealed sets (hard2r, hard3).
 
-### If a judge types their own question (measured 08:37 on night c1d6149, run `…-083658-…-v16-cabe`; `redteam/REPORT.md` v6–v16)
-On an older build (the test-2 build bb94fe4) more of these break: see the git history of this file (08:20 version).
+### If a judge types their own question (measured 09:05 on night be57171, run `…-090509-…-v19b-a85a`; `redteam/REPORT.md` v6–v20)
+On older builds more of these break: see the git history of this file (08:20 and 08:37 versions).
 - **Esplanades IFC sheet — safe:** "How many rooms / columns are on this floor?" (50 / 37), "How many doors are on the
-  ground floor?" (46, 0.98), "How many windows does the whole building have?" (297, also Finnish "koko
-  rakennuksessa"), "How many more windows than doors are there on this floor?" (9), "Which floor has the most doors?"
-  (1.korrus), "Does '1.korrus' have more windows than doors?" (yes), "How many doors and how many windows are on
-  '1.korrus'?" ("door: 46; window: 55"), "What is the floor-to-floor height between '1.korrus' and '2.korrus'?"
-  (3.35 m), prices of any format: "If each door costs €1,500, what do all the doors on '1.korrus' cost?" (69,000).
-  Right but shown as unsure (0.53–0.63; fine to type, the card says why): "How many floors does this building have?"
-  (5), "How many doors are on the top floor?" (39), "1.korrus and 2.korrus together" (88).
-  **Steer away from:** "How many doors are on the ground floor, and how many on the top floor?" (211 twice, 0.77),
-  "How high above the ground floor is the top floor?" (15.1 m, 0.50: 'top floor' = the roof level for heights),
-  "Which floor has the fewest doors?" (names the foundation/roof levels), Italian "in tutto l'edificio" (the sheet's
-  storey, 0.68), and **questions about the links themselves** (v17): "Do the plan and the model agree on the number of
-  windows?" (answers 55 instead of "no: 52 drawn, 3 above/below the cut plane" — point at the cross-check line
-  instead, it says exactly that), "How many windows are in the model but not drawn on this plan?" (297 at 0.98),
-  "Which sheet shows the server room?", "How many floor plan sheets are there?" (1). If one of these comes up, open
-  the evidence and say it: "the trace shows what it computed — this is a
-  known failure, it's on the failure slide."
+  ground floor?" (46, 0.98), "How many windows does the whole building have?" (297; also Finnish "koko
+  rakennuksessa", Italian "in tutto l'edificio"), "How many more windows than doors are there on this floor?" (9),
+  "Which floor has the most / the fewest doors?" (1.korrus / 5.korrus, 0.89), "Does '1.korrus' have more windows than
+  doors?" (yes), "How many doors and how many windows are on '1.korrus'?" ("door: 46; window: 55"), "What is the
+  floor-to-floor height between '1.korrus' and '2.korrus'?" (3.35 m), "How high above the ground floor is the top
+  floor?" (13.4 m, 0.85), prices of any format ("If each door costs €1,500 …" 69,000).
+  **New and worth typing (Stoa: linking earns points):** "Do the floor plan and the IFC model agree on the number of
+  windows on '1.korrus'?" → "no: the model has 55, the plan draws 52 (3 lie wholly above/below the cut plane)" at 0.85
+  with the 3 GUIDs; the same with doors → "yes: both 46"; "How many floor plan sheets are there for this building?" (5).
+  **Lists:** "Which rooms on '1.korrus' are larger than 50 m²?" → 4 rooms with their areas at 0.92 (also "under 4 m²",
+  "between 20 and 25 m²", in Estonian/German).
+  Right but shown as unsure (fine to type, the card says why): "How many floors does this building have?" (5, 0.60),
+  "How many doors are on the top floor?" (39, 0.53), "1.korrus and 2.korrus together" (88, 0.63), "How many windows
+  on '1.korrus' are in the model but not drawn on this plan?" (3, 0.59), "On which floor is the laundry room
+  (PESUKODA)?" (1.korrus, 0.30).
+  **Steer away from:** a list with a room type ("Which living rooms / ELUTUBA+KÖÖK rooms are smaller than 25 m²?" lists
+  every room at 0.92), "Which floors have more than 55 rooms?" (read as rooms > 55 m², 0.92), "On which floors is there
+  a MAGAMISTUBA?" (one room's area, 0.90) — bug 22, W1; "Does this drawing show every window that the model has?"
+  (297 at 0.30), "Which sheet shows the server room?" ("no sheet information"), "How big is the laundry room?" (870 at
+  0.30). If one of these comes up, open the evidence and say it: "the trace shows what it computed — this is a known
+  failure, it's on the failure slide."
 - Esplanades rooms are labelled in Estonian; English room words work and the card says which labels it used:
   "How many kitchens are on this floor?" → 10 ('ELUTUBA+KÖÖK'), "How many toilets …?" → 13, "How big is the server
-  room?" → 4.26 m². Avoid "laundry room" (PESUKODA isn't mapped; flagged at 0.30).
+  room?" → 4.26 m². Typed without quotes, "how big is the corridor KORIDOR (119) on 1.korrus?" is now right (63.84 at
+  0.95) but goes through the agent (11 s): type the dataset wording on stage.
 - **Swiss plan — safe:** apartments (4), "combined area of apartments A and B" (161.17 m²), "how many square feet is
   apartment B" (870), "by how many m² is B larger than A" (0.49), "Which apartment has the largest kitchen?" (A),
   "Is apartment A's kitchen bigger than apartment B's?" (yes, 0.87), "How many doors and how many windows are drawn
-  on this floor plan?" ("door: 36; window: 28", 0.98), "… in total?" (64). **Avoid:** "How many doors are there in
-  the whole building?" on this single-floor plan (answers the floor's 36 at 0.99 instead of saying the plan shows one
-  floor), the same two-number question in German/Finnish/French ("Wie viele Türen und wie viele Fenster …" → 64 summed;
-  Finnish → doors only at 0.95), two-part area questions ("how many 'Zimmer' in apartment C and their total area"),
-  "How big is the Küche?" (several kitchens: total at ≤ 0.5 with a per-room list).
+  on this floor plan?" ("door: 36; window: 28", 0.99 — now also in German, French, Italian and Finnish), "… in total?"
+  (64). **Avoid:** "How many doors are there in the whole building?" on this single-floor plan (answers the floor's 36
+  at 0.99 instead of saying the plan shows one floor; W2), two-part area questions ("how many 'Zimmer' in apartment C
+  and their total area"), "How big is the Küche?" (several kitchens: total at 0.50 with a per-room list), prices
+  written "1,200 euros" on this plan (right about half the time, at 0.45).
 - **A Finnish judge:** "Kuinka monta huonetta tässä kerroksessa on?" 50, "Montako ikkunaa ensimmäisessä kerroksessa
   on?" 55, "Montako kerrosta rakennuksessa on?" 5 (0.60), "Paljonko tämän kerroksen ovet maksavat yhteensä, jos yksi
   ovi maksaa 450 euroa?" 20,700, "Mikä on asunnon B pinta-ala?" 80.83, "Onko asunnossa sauna?" yes, "Montako
-  WC-istuinta ja pesuallasta piirustuksessa on yhteensä?" 8. Avoid "Mikä on käytävän KORIDOR (119) pinta-ala?" (142 at
-  0.30), "Montako ovea pohjapiirroksessa on?" on the Swiss plan (0 at 0.32) and "Montako ovea ja montako ikkunaa …".
-- **CubiCasa plan:** "How big is this apartment?" gives ≈ 84 m² at confidence 0.05 with "no known scale: estimate" —
-  a good moment to show "we know what we don't know". "How many bedrooms and how many bathrooms?" → "3 bedrooms and
-  1 bathroom" (agent, 0.58). Avoid "How many windows does this apartment have?" (4 at 0.13; gold 8).
+  WC-istuinta ja pesuallasta piirustuksessa on yhteensä?" 8, "Montako ovea ja montako ikkunaa kerroksessa '2.korrus'
+  on?" ("door: 42; window: 60", 0.53). "Mikä on käytävän KORIDOR (119) pinta-ala?" is now right (63.84) but at 0.29.
+  Avoid "Montako ovea pohjapiirroksessa on?" on the Swiss plan (0 at 0.32).
+- **CubiCasa plan:** "How big is this apartment?" gives an estimate at low confidence (0.05–0.40) with "no known
+  scale" — a good moment to show "we know what we don't know". "How many bedrooms and how many bathrooms?" →
+  "bedroom: 3; bathroom: 1" (0.92). Avoid "How many windows does this apartment have?" (11 at 0.30; gold 8).
 
 ## 2:55–3:00 · Close
 > "Answers you can verify in seconds, a confidence you can trust, and an honest list of what we don't know yet."
