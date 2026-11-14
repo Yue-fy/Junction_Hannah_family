@@ -1,7 +1,7 @@
 # Red team report (agent Q) — can we break the pipeline?
 
-**564 adversarial questions** (`redteam/questions.jsonl`, built by `redteam/build.py`, analysed by `redteam/analyze.py`),
-in sixteen families written one after another tonight; each new family was aimed at the mechanism the last one exposed.
+**573 adversarial questions** (`redteam/questions.jsonl`, built by `redteam/build.py`, analysed by `redteam/analyze.py`),
+in seventeen families written one after another tonight; each new family was aimed at the mechanism the last one exposed.
 Builds on F's `hard` (translations/paraphrases/compositions/ft²) and `hard2` (new operators) and covers what those
 don't. The first 205 rows start from dev questions the pipeline had **right at conf ≥ 0.8**, so a failure there is
 caused by the perturbation, not by the drawing.
@@ -637,6 +637,23 @@ single-floor Swiss plan → the floor's 36 / 4 at 0.99 (×3, dxf, W2).** Side ef
 not errors): two prompt-injection rows 0.99 / 0.95 → 0.25 / 0.30; IFC two-number questions via compose at 0.39 (ifc's own
 split gave 0.80; the list op multiplies part confidences).
 
+## v17 (08:50): linking the plan, the model and the sheet set — 9 Qs (Stoa: "linking earns extra points")
+Run `20261114-084703-pipeline-v17-dd7a` on night 62754aa. Gold: the dataset's plan sheets (plan-01 … plan-05),
+ifcopenshell containment, the plan's drawn symbols (46 doors; 52 of 55 windows: 3 lie wholly above/below the 1.2 m cut
+plane — tour step 3). **2 of 9 really answered**: "How many more doors are on '1.korrus' than on '5.korrus'?" 7 at
+0.89, "On which floor is the laundry room (PESUKODA)?" 1.korrus at 0.30. "Do the floor plan and the IFC model agree on
+the number of doors / windows?" → a bare 46 / 55 / 50 at 0.53–0.68 (a yes/no was asked; scored wrong); "Which sheet
+shows the server room?" → "the model has no sheet information" at 0.30; "How many floor plan sheets are there for this
+building?" → 1 at 0.71 (vlm_direct; gold 5).
+
+### 21. "In the model but not drawn on this plan" is read as the whole model (HIGH) — owners W1 (`ifc` scope, `stoa.kg`), W4 (routing)
+"How many windows on '1.korrus' are in the model but not drawn on this plan?" → **297 at 0.98** (gold 3 = 55 − 52).
+The words "in the model" switch the IFC rules to whole-model scope and the plan clause is dropped — while the
+cross-check already computes "model 55, plan 52 (3 outside the cut plane)" for the same storey. More generally the
+knowledge graph (sheets ↔ storeys ↔ spaces ↔ GUIDs, plan-vs-model checks) is used to *verify* answers but never to
+*answer* a question about the links themselves ("do they agree?", "which sheet?", "how many sheets?"). Those are the
+questions a judge asks right after the demo shows "drawing 46 = model 46 ✓".
+
 ## For Saturday noon: red-team Stoa's example questions in one command (`redteam/from_examples.py`)
 Put Stoa's examples in a jsonl (`path`, `question`, and `answer` / `unit` when known; a path may be absolute), then
 ```
@@ -662,8 +679,8 @@ stayed 3 but moved confidence band (0.75 → 0.35 / 0.92).
 - Rotated, grayscale, heavily compressed and half-resolution copies of a plan: 30/30 right, at the same confidence.
 
 ## Re-run
-`questions.jsonl` now has 564 rows: v1 (174) + v2 (31) + v3 Swiss compositions (42) + v4 CubiCasa compositions (36) +
-v5 natural references (70) + v6 judge questions on the demo drawings (21) + v7 scope words in 9 languages (36) + v8 scope premises (8) + v9 Finnish judge (14) + v10 scan follow-ups (8) + v11 number formats (10) + v12 Estonian labels (5) + v13 lone PDF/PNG (8) + v14 two-part / comparisons / heights / which (31) + v15 bug-18 probe (22) + v16 Swiss dev plans alone as PNG/PDF (48) = 564; earlier rows are byte-identical across builds (checked with cmp), so runs on the first 205 /
+`questions.jsonl` now has 573 rows: v1 (174) + v2 (31) + v3 Swiss compositions (42) + v4 CubiCasa compositions (36) +
+v5 natural references (70) + v6 judge questions on the demo drawings (21) + v7 scope words in 9 languages (36) + v8 scope premises (8) + v9 Finnish judge (14) + v10 scan follow-ups (8) + v11 number formats (10) + v12 Estonian labels (5) + v13 lone PDF/PNG (8) + v14 two-part / comparisons / heights / which (31) + v15 bug-18 probe (22) + v16 Swiss dev plans alone as PNG/PDF (48) + v17 linking (9) = 573; earlier rows are byte-identical across builds (checked with cmp), so runs on the first 205 /
 283 rows compare directly (`python3 $JUNCTION_SHARED/artifacts/Q/subset_stats.py <run> 283`). Build with
 `PYTHONHASHSEED=0 PYTHONPATH=.`; v5 calls the ifc solver for its gold (deterministic, < 1 s per row).
 ```

@@ -139,7 +139,11 @@ On an older build (the test-2 build bb94fe4) more of these break: see the git hi
   **Steer away from:** "How many doors are on the ground floor, and how many on the top floor?" (211 twice, 0.77),
   "How high above the ground floor is the top floor?" (15.1 m, 0.50: 'top floor' = the roof level for heights),
   "Which floor has the fewest doors?" (names the foundation/roof levels), Italian "in tutto l'edificio" (the sheet's
-  storey, 0.68). If one of these comes up, open the evidence and say it: "the trace shows what it computed — this is a
+  storey, 0.68), and **questions about the links themselves** (v17): "Do the plan and the model agree on the number of
+  windows?" (answers 55 instead of "no: 52 drawn, 3 above/below the cut plane" — point at the cross-check line
+  instead, it says exactly that), "How many windows are in the model but not drawn on this plan?" (297 at 0.98),
+  "Which sheet shows the server room?", "How many floor plan sheets are there?" (1). If one of these comes up, open
+  the evidence and say it: "the trace shows what it computed — this is a
   known failure, it's on the failure slide."
 - Esplanades rooms are labelled in Estonian; English room words work and the card says which labels it used:
   "How many kitchens are on this floor?" → 10 ('ELUTUBA+KÖÖK'), "How many toilets …?" → 13, "How big is the server
