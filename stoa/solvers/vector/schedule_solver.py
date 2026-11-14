@@ -275,8 +275,9 @@ class ScheduleSolver(BaseSolver):
                 trace.append("legend: " + "; ".join(f"{c} = {m}" for c, m, _ in found))
                 evidence += [Evidence(file=path, page=0, bbox=[round(v, 1) for v in b], bbox_space="pdf_pt",
                                       note=f"legend: {c} = {m}") for c, m, b in found]
-        # calibrated on dev (opening_design, local model): 78% right overall; answers that cite rows are right more often
-        conf = 0.8 if n_rows_used else 0.5
+        # dev opening_design (v10, tuned on it): 100% of answers that cite rows right; self-written probes on 3 unlabelled
+        # sheets: ~85-90% (the first look at a new sheet 8/11). Typed-in answers whose lookup failed are less sure.
+        conf = (0.7 if res.get("typed") else 0.85) if n_rows_used else 0.5
         missing = [] if n_rows_used else ["the query did not report which rows it used"]
         about_table = re.search(r"schedul|listed|table|legend|\bkey\b|specified|finish", question, re.I)
         about_drawing = re.search(r"\b(drawn|shown|depicted|visible)\b|\bin\s+(?:the\s+)?(?:enlarged\s+)?plan\b",
