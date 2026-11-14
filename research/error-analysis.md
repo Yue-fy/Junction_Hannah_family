@@ -31,7 +31,11 @@ code (+ R1 f13db8f count ranges, W5 web) as 95f2277 and started sealed test 1 at
   models (bsc-molio, 7/197; the model is wholly in test, so inspecting it is S0's call).
 - Cubicasa by concept (diagnostic only, never tune on it): symbol counts transfer (windows 19 → 21, doors 33 → 35,
   WC 76 → 79, sinks 69 → 65); room-label concepts drop (saunas 93 → 80, bedrooms 90 → 82, separate WC rooms
-  100 → 90; together 94 → 84 on ~140 Qs each): choices made while watching dev are a few points optimistic there.
+  100 → 90; together 94 → 84 on ~140 Qs each). R2: no checkpoint/temperature search on dev; on train_gate (never
+  used for selection) these concepts are 90.0% (120 Qs), so dev was ~4 pts lucky and test is ~1.5 SE below train_gate.
+- LoRA ablation on sealed test (lora=0 e96f vs 9709): cubicasa +8.8 [+6.0, +11.9] (dev +11.9), weighted 73.8 → 79.8.
+- cc5k=1 on sealed test (32c9, inflated label): accuracy flat (79.9 weighted); cubicasa answers with boxes 17% → 39%.
+- Judged ifc_bench text: dev 55.0% (after W1's dev tuning), test 57.8%: transfers.
 
 ### New sealed split `hard3` (derived quantities; stoa/eval/hard3.py, wordings in $JUNCTION_SHARED/sealed/F/)
 156 Qs on dev drawings: 15 recipes (occupancy limit, yearly heating cost, % growth, ft² carpet price, proportional
