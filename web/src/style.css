@@ -387,3 +387,19 @@ select, input[type="search"], textarea { border: 1px solid var(--line); border-r
 .steps .warn { font-size: 11px; color: #8a5a00; margin-top: 2px; }
 .steps li.refused { opacity: .7; }
 .steps li.refused .res { text-decoration: line-through; text-decoration-color: #b33; color: var(--muted); }
+
+/* free-text answer about an IFC model, its element types counted in the browser (card.ts checkedHtml) */
+.value-row.rich .rich-body { grid-column: 1 / -1; grid-row: 2; margin-top: 8px; }
+.rich-body .value.text.rich { margin-top: 4px; max-height: 260px; }
+table.checked { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.checked td { padding: 4px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+table.checked td:first-child { font-weight: 600; overflow-wrap: anywhere; }
+table.checked td.num { text-align: right; font-weight: 750; font-variant-numeric: tabular-nums; font-size: 15px; width: 3em; }
+table.checked td:last-child { font-size: 12px; white-space: nowrap; }
+table.checked tfoot td { border-bottom: 0; border-top: 2px solid var(--ink); font-weight: 750; }
+table.checked tr.contrast td:first-child { color: #6b3fa0; }
+table.checked .ok { color: var(--ok); font-weight: 650; }
+table.checked .bad { color: var(--bad); font-weight: 650; }
+table.checked .muted { color: var(--muted); }
+.checked-src { font-size: 11.5px; color: var(--muted); margin: 6px 0 2px; }
+.llm-words summary { cursor: pointer; color: var(--muted); font-size: 12px; margin-top: 4px; }

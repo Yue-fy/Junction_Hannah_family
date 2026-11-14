@@ -201,6 +201,32 @@ function evLabel(ev: Evidence[], g: { idx: number[]; first: number }, n: number,
   return `<li class="ev-item${notIn ? " contrast" : ""}" data-i="${g.idx.find((i) => ev[i].bbox) ?? g.first}" title="${esc([...files].join(" · "))}"><span class="n">${n}</span><span class="t">${step}${esc(note.replace(/\s*\|\s*projected: not drawn on this plan\s*$/i, ""))}${projected ? `<span class="proj" title="Not drawn on this plan (cut at 1.2 m): box = the element's footprint from the IFC model">projected</span>` : ""}</span><span class="w">${where}</span></li>`;
 }
 
+/** A free-text answer about an IFC model whose element types were counted in the browser (main.ts sets a.checked):
+ *  the counts the model itself gives, each checked against the answer. Shown before the language model's wording,
+ *  which is folded when every count matches (it may hedge, e.g. "not listed in the model facts", while the counts
+ *  it then gives are right). */
+function checkedHtml(a: Answer, text: string) {
+  const rows = a.checked ?? [];
+  const lines = text.split(/\n+/).filter((l) => l.trim()).length;
+  const ok = (r: (typeof rows)[number]) => !r.notInAnswer && (r.said === null || r.said === r.model);
+  const allOk = rows.every(ok);
+  const named = rows.filter((r) => !r.notInAnswer);
+  const counted = named.filter((r) => r.said !== null);
+  const mark = (r: (typeof rows)[number]) => (r.notInAnswer ? `<span class="bad">✗ not in the answer</span>`
+    : r.said === null ? `<span class="muted">named, no count</span>`
+      : r.said === r.model ? `<span class="ok">✓ answer says ${r.said}</span>` : `<span class="bad">✗ answer says ${r.said}</span>`);
+  const total = rows.reduce((s, r) => s + r.model, 0);
+  const said = counted.reduce((s, r) => s + (r.said ?? 0), 0);
+  const foot = rows.length > 1 ? `<tfoot><tr><td>Total</td><td class="num">${total}</td><td>${counted.length === rows.length
+    ? (said === total ? `<span class="ok">✓ answer says ${said}</span>` : `<span class="bad">✗ answer says ${said}</span>`) : ""}</td></tr></tfoot>` : "";
+  return `<span class="rich-lbl">Counted in the IFC model · ${rows.length} type${rows.length > 1 ? "s" : ""}</span>
+    <div class="rich-body">
+      <table class="checked"><tbody>${rows.map((r) => `<tr class="${r.notInAnswer ? "contrast" : ""}"><td>${esc(r.name)}</td><td class="num">${r.model}</td><td>${mark(r)}</td></tr>`).join("")}</tbody>${foot}</table>
+      <div class="checked-src">${allOk && counted.length ? `Every count in the answer matches the model.` : allOk ? "" : "The model and the answer differ (✗)."} Counted in your browser from the loaded model: no model call.</div>
+      <details class="llm-words"${allOk ? "" : " open"}><summary>The language model's text answer · ${lines} line${lines === 1 ? "" : "s"}</summary><div class="value text rich">${richText(text)}</div></details>
+    </div>`;
+}
+
 /** Long text answers (often "- item" lists from the model fact card): a compact list, folded after 8 lines. */
 function richText(v: string) {
   const lines = v.split(/\n+/).map((l) => l.trim()).filter(Boolean);
@@ -493,10 +519,11 @@ export function renderCard(el: HTMLElement, a: Answer, opts: CardOpts) {
   el.className = `card answer ${a.value === null ? "refused" : ""}`;
   el.innerHTML = `
     <div class="value-row${rich ? " rich" : ""}">
-      ${rich ? `<span class="rich-lbl">Text answer · ${String(a.value).split(/\n+/).filter((l) => l.trim()).length} line(s)</span><div class="value text rich">${richText(String(a.value))}</div>`
+      ${rich && a.checked?.length ? checkedHtml(a, String(a.value))
+        : rich ? `<span class="rich-lbl">Text answer · ${String(a.value).split(/\n+/).filter((l) => l.trim()).length} line(s)</span><div class="value text rich">${richText(String(a.value))}</div>`
         : `<div class="value ${isText ? "text" : ""} ${isText && String(a.value).length > 40 ? "long" : ""}">${esc(fmtValue(a))}${unit ? `<span class="unit">${esc(unit)}</span>` : ""}${rangeHtml(a)}${yesNoBasis(a)}</div>`}
-      <div class="conf ${confClass}" title="Calibrated confidence">
-        <div class="conf-num">${conf}%</div><div class="conf-bar"><i style="width:${conf}%"></i></div><div class="conf-lbl">confidence</div>
+      <div class="conf ${confClass}" title="${a.checked?.length ? "The pipeline's calibrated confidence in its text answer, before the browser counted the types it names in the model (table)" : "Calibrated confidence"}">
+        <div class="conf-num">${conf}%</div><div class="conf-bar"><i style="width:${conf}%"></i></div><div class="conf-lbl">${a.checked?.length ? "before the check" : "confidence"}</div>
       </div>
     </div>
     ${scopeWarning(a)}
