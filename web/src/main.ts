@@ -399,6 +399,7 @@ async function uploadFiles(files: File[]) {
     $<HTMLSelectElement>("source").value = "";
     $<HTMLInputElement>("search").value = "";
     await refreshFiles();
+    $("landing").hidden = true; // an upload from the project page opens it right away
     await openFile(first);
     $("question").focus();
   } catch (e) {
@@ -423,6 +424,15 @@ function uploadMeta(f: FileInfo) {
   const others = (f.set ?? []).filter((p) => p !== f.path).map((p) => p.split("/").pop()!);
   const set = model ? ` · linked to ${model.split("/").pop()}` : others.length ? ` · uploaded with ${others.join(", ")}` : "";
   return `your upload${style}${set} · not in the dataset`;
+}
+/** Customer view: an upload, in plain words, before the first question. */
+function uploadIntro(f: FileInfo) {
+  const model = f.ext !== ".ifc" ? f.siblings?.[".ifc"]?.split("/").pop() : undefined;
+  if (model) return `<b>Your drawing is linked to its 3D model (${esc(model)}).</b> Answers come from the model, for the floor this sheet shows, and the counted elements light up in 3D.`;
+  if (f.ext === ".ifc") return `<b>Your 3D model is ready.</b> Ask about doors, rooms, floors or sizes: the answers are counted in the model and lit up in 3D.`;
+  const style = f.style ? " It looks like a Nordic apartment plan, so the readers trained on such plans help." : "";
+  return `<b>Your drawing is new to us:</b> no template and no 3D model behind it, so answers are a best estimate and say so.${style}`
+    + (f.ext === ".pdf" ? ` <span class="tip">Tip: upload the sheet and its .ifc model together for exact answers from the model.</span>` : "");
 }
 /** What happens to an upload, said before the first question. */
 function uploadHint(f: FileInfo) {
@@ -477,8 +487,8 @@ async function openFile(f: FileInfo, question = "", keep: Answer | null = null, 
   $("credit").innerHTML = creditLine(f);
   projectChrome(f);
   if (!keep) {
-    $("hero").hidden = true;
-    $("hero").innerHTML = "";
+    $("hero").hidden = !(isCustomer() && f.source === "upload");
+    $("hero").innerHTML = isCustomer() && f.source === "upload" ? `<div class="hero-intro">${uploadIntro(f)}</div>` : "";
     document.body.classList.remove("answered");
     markAnswerCheck($("linked"), undefined, undefined);
     $("xbanner").hidden = true;
@@ -580,10 +590,11 @@ async function loadExamples(f: FileInfo) {
     for (let k = 0; interleaved.length < uniq.length; k++)
       for (const l of byType.values()) if (l[k]) interleaved.push(l[k]);
     const proj = isCustomer() ? projectOf(f.path) : undefined;
+    const pchips = proj ? (f.ext === ".ifc" && proj.modelChips ? proj.modelChips : proj.chips) : [];
     if (proj) {
-      chips.innerHTML = proj.chips.map((q) => `<button type="button" class="chip" title="${esc(q)}">${esc(q)}</button>`).join("");
+      chips.innerHTML = pchips.map((q) => `<button type="button" class="chip" title="${esc(q)}">${esc(q)}</button>`).join("");
       chips.querySelectorAll<HTMLButtonElement>(".chip").forEach((b, i) => b.addEventListener("click", () => {
-        $<HTMLTextAreaElement>("question").value = proj.chips[i];
+        $<HTMLTextAreaElement>("question").value = pchips[i];
         void runAsk();
       }));
     }
@@ -591,6 +602,7 @@ async function loadExamples(f: FileInfo) {
       : f.style ? APARTMENT_QUESTIONS : UPLOAD_QUESTIONS) : GENERIC_QUESTIONS;
     const pick = qs.length ? [...english.filter((q) => q.has_fixture), ...interleaved.filter((q) => !q.has_fixture)].slice(0, 4)
       : general.map((question) => ({ question, type: "", unit: null }));
+    if (isCustomer() && !proj) pick.splice(4); // 3–4 suggestions, not a menu
     if (!proj) chips.innerHTML = pick.map((q) => `<button type="button" class="chip" title="${esc(q.question)}">${esc(q.question.length > 64 ? q.question.slice(0, 61) + "…" : q.question)}</button>`).join("");
     if (!proj) chips.querySelectorAll<HTMLButtonElement>(".chip").forEach((b, i) => b.addEventListener("click", () => {
       $<HTMLTextAreaElement>("question").value = pick[i].question;
@@ -880,6 +892,8 @@ function applyEvidence3D(a: Answer) {
   }
   const pane = $("pane3d");
   pane.dataset.found = String(n);
+  // the same circled numbers as the answer's short list (customer view; CSS hides them in the expert view)
+  v.setNumbers(numbered(a.evidence).map((i) => a.evidence[i].ifc_guid).filter((g): g is string => !!g));
 }
 
 function focusEvidence(i: number) {
@@ -1024,7 +1038,8 @@ function projectChrome(f: FileInfo) {
   const p = projectOf(f.path);
   $("projHead").hidden = !isCustomer();
   $("projName").textContent = p?.name ?? (f.source === "upload" ? "Your drawing" : f.title || f.path.split("/").pop()!);
-  $("projPlace").textContent = p ? `${p.place} · ${p.contents}` : f.source === "upload" ? "your upload, kept only on this computer" : "";
+  const files = (f.set?.length ? f.set : [f.path]).map((x) => x.split("/").pop()).join(" + ");
+  $("projPlace").textContent = p ? `${p.place} · ${p.contents}` : f.source === "upload" ? `${files} · kept only on this computer` : "";
   const tabs = $("sheetTabs");
   tabs.hidden = !isCustomer() || !p || p.sheets.length < 2;
   tabs.innerHTML = p ? p.sheets.map((s) => `<button type="button" role="tab" class="${s.path === f.path ? "on" : ""}" data-path="${esc(s.path)}">${esc(s.label)}</button>`).join("") : "";

@@ -33,6 +33,8 @@ export interface Project {
   sheets: ProjectSheet[];
   /** example questions, the way people talk (3–4) */
   chips: string[];
+  /** example questions for the project's 3D model tab (whole-building questions), when it also has sheets */
+  modelChips?: string[];
   /** one-line credit for the footer */
   credit: string;
   /** a small picture for the card: the file rendered by the viewer (first sheet) */

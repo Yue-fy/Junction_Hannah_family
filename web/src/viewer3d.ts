@@ -76,6 +76,9 @@ export class Viewer3D {
   onPick: (guid: string, label: string, props: Record<string, string>) => void = () => {};
   private loadToken = 0;
   private needsRender = true;
+  /** Customer view: circled numbers ①…⑤ over the elements the answer lists (HTML labels, placed on every render). */
+  private labels: { el: HTMLDivElement; p: THREE.Vector3 }[] = [];
+  private labelLayer = document.createElement("div");
 
   constructor(el: HTMLElement) {
     this.el = el;
@@ -102,9 +105,52 @@ export class Viewer3D {
       if (this.needsRender) {
         this.renderer.render(this.scene, this.camera);
         this.needsRender = false;
+        this.placeLabels();
       }
     };
     loop();
+  }
+
+  /** Number these elements ① ② ③ … (GlobalIds in the order of the answer's list); [] clears. */
+  setNumbers(guids: string[]) {
+    this.ensureGuidIndex();
+    for (const l of this.labels) l.el.remove();
+    this.labels = [];
+    if (!this.labelLayer.isConnected) {
+      this.labelLayer.className = "v3d-labels";
+      this.el.append(this.labelLayer);
+    }
+    const CIRC = "①②③④⑤⑥⑦⑧⑨";
+    const mat = new THREE.MeshBasicMaterial();
+    guids.forEach((g, k) => {
+      const id = this.guidToId.get(g);
+      if (id === undefined) return;
+      const m = this.elementMesh(id, mat);
+      if (!m) return;
+      const box = new THREE.Box3().setFromObject(m);
+      m.geometry.dispose();
+      if (box.isEmpty()) return;
+      const p = box.getCenter(new THREE.Vector3());
+      p.y = box.max.y;
+      const el = document.createElement("div");
+      el.className = "v3d-num";
+      el.textContent = CIRC[k] ?? String(k + 1);
+      this.labelLayer.append(el);
+      this.labels.push({ el, p });
+    });
+    mat.dispose();
+    this.needsRender = true;
+  }
+
+  private placeLabels() {
+    if (!this.labels.length) return;
+    const w = this.renderer.domElement.clientWidth, h = this.renderer.domElement.clientHeight;
+    for (const l of this.labels) {
+      const v = l.p.clone().project(this.camera);
+      const vis = v.z < 1 && Math.abs(v.x) <= 1.02 && Math.abs(v.y) <= 1.02;
+      l.el.style.display = vis ? "" : "none";
+      if (vis) l.el.style.transform = `translate(${((v.x + 1) / 2) * w}px, ${((1 - v.y) / 2) * h}px) translate(-50%, -110%)`;
+    }
   }
 
   private resize() {
