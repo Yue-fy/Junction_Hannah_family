@@ -32,6 +32,8 @@ Code: night c1d6149 (S0 cycle 37 merges incl. W4 0319d93 apartment normalisation
 | comp_ml_cc (CubiCasa hard/hard2 count compositions FI/SV) | 399 | 45.4 | FI = control (7/7 recipes); SV 42.1 vs 51.9 | 2 | **SV 'våtrum (badrum, separata toaletter och bastur)' → 'sauna' via LoRA @0.75 (0/25); 'sovrum och badrum … sammanlagt' → 'bedroom'** (no sv sum cues; front end skips because a target was found) |
 | apt_wording_syn (Swiss fixture synonyms EN) | 660 | 99.1 | 98.8 vs 100 | 0 | 'tubs' 36/40, 'loos' 36/38 (vlm_direct ≤0.34, calibrated) |
 | apt_wording_typo (quick typing: lower-case ids, misspellings, decimal comma) | 534 | 78.6 | **72.8 vs 98.6** | 2 | 'room 5,11' 2/30; 'apartment d' 12/30; 'apartmnet' 14/30; 'appartment' 19/30; 'sq m' 11/30 (all ≤0.6: accuracy, not calibration) |
+| apt_wording_scope (IFC storey by role: 'ground floor' / 'basement', plan sheets) | 114 | 100 | = control | 0 | none (sheet implies the storey) |
+| apt_wording_scope_model (same, asked on the .ifc model path; night 31397eb) | 114 | 95.6 | 109/114 | 5 | **smiley-west 'on the ground floor' / 'at ground level' → whole model (walls 281 vs EG 81 @0.97; slabs 522 vs 105 m³ @0.95)**; '0', '00 Begane grond', basement → KG/-1/Basement fine (W1 told) |
 
 \* first run had a probe bug (sanitary item list always 'bathtubs'; English bases vary bathtubs/showers): 15 false
 losses, fixed; clean re-run 20261114-084910-pipeline-comp_ml-a0c6 = the baseline (all 36 confident-wrong are the FR
