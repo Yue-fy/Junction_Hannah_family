@@ -94,7 +94,8 @@ headless chromium, numbers from `redteam/REPORT.md`). **Say only this (≈ 20 s,
 > that don't exist, questions no drawing can answer. Every confident mistake had one cause: we checked the number,
 > not that it answered what was asked. Each bar is a round of fixes. On the build we're showing, all 360 confident
 > answers are right — and it never just refuses."
-(Numbers by stage build — say the line for the build on stage: be57171 (09:05): "609 … all 360"; bb94fe4 (test 2):
+(Numbers by stage build — say the line for the build on stage: be57171 / 31397eb: "609 … all 360"; once the 09:10–09:20
+owner heads are merged (pre-merge #9): "609 … all 364, and no confident answer to a trick question"; bb94fe4 (test 2):
 "494 … 283 of 290"; c1d6149: "564 … 338 of 339"; 62754aa: "609 … 337 of 339". "Never just refuses": 0 of 647
 answers on be57171 are a bare refusal, and every wrong one carries an assumption or a "missing" line — see backup.)
 
