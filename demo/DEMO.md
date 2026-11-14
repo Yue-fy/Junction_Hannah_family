@@ -2,8 +2,7 @@
 
 Written by agent Q, 14 Nov 04:10; updated 05:00 to follow W5's demo tour (`web/fixtures/tour.json`, 13 steps — the
 "step N" references below are its numbering); updated 08:20 for **the test-2 build, night bb94fe4** (S0 started
-sealed test 2 on it at 08:12). Slide-3 numbers are still test 1 (night 95f2277, aggregates only): replace them with
-S0's test-2 aggregates when MORNING.md has them. **Every live question below and every tour question was run through
+sealed test 2 on it at 08:12). Slide 3 has the test-2 aggregates (S0, 08:26). **Every live question below and every tour question was run through
 the pipeline on bb94fe4 at 08:16 (`demo/live_questions.jsonl` → `demo/LIVE-CHECK.md`, 19/21 as expected, the same
 21 answers as on dde6347 and 753eccb), so the answers are known in advance; the "typed live" variants check that a
 slightly different wording still works.**
@@ -71,18 +70,22 @@ Type: **Kuinka monta makuuhuonetta (MH) pohjapiirustuksessa on?** ("How many bed
   'ASEMAPIIRROS M.K. 1/500' (3 s, local model only); step 11, a 1977 HAER sheet → "elevation" from its printed title.
 
 ## 2:05–2:35 · The numbers (slide 3)
-| | sealed test (2,199 Qs, unseen drawings) | dev |
+Sealed test 2 = S0's run b391 on the test-2 build bb94fe4 (08:12, aggregates only, `logs/S0/scorecard-test2.md`).
+| | sealed test 2 (2,199 Qs, unseen drawings) | dev |
 |---|---:|---:|
 | "Just ask a VLM" (Qwen3-VL-8B, image only) | — | 32.0 % micro / 44.1 % weighted |
 | Hosted Nemotron 3.5 Super VL 120B, image only | — | 33.2 % micro (smoke, 206 Qs) |
-| **Ours** | **87.4 % micro / 79.8 % weighted** | 88.5 % / 81.7 % |
-| Ours without the fine-tuned 8B model | 83.9 % / 73.8 % | |
+| **Ours** | **87.7 % micro / 79.7 % weighted** | 89.8 % / 83.4 % |
+| Ours without the fine-tuned 8B model (test-1 code) | 83.9 % / 73.8 % | |
+| **New wordings of the same kinds** (sealed, nobody tuned on it) | **80.4 %** (test 1: 63.0) | |
+| **Derived quantities: prices, rates, shares** (sealed) | **62.2 %** (test 1: 34.6) | |
 
-By source on sealed test: Swiss vector plans 98 % areas / 100 % counts; IFC models 97–100 %; scanned apartment plans
-(CubiCasa) 70.5 % (a VLM alone: 50 % on dev).
-> "When we say we're sure (confidence ≥ 0.8, 78 % of answers), we are right 98 % of the time. Calibration error
-> 0.017. Cost: €0.24 per 1,000 questions; 64 % of questions never call a model." (Tour step 13 shows the same bench;
-> replace with the test-2 numbers if S0 publishes them before the pitch.)
+By source on sealed test 2: Swiss vector plans 99.0 %, IFC models 100 % (397/397), scanned apartment plans
+(CubiCasa) 70.4 % (a VLM alone: 50 % on dev).
+> "When we say we're sure — 79 % of answers — we are right 98 % of the time; calibration error 0.02. Cost: 3 cents
+> per 1,000 questions, ten times less than this morning, because 56 % of questions never call a model. And the
+> failure analysis paid off: on wordings nobody had seen, 63 → 80 %." (Tour step 13 shows W5's bench snapshot:
+> check that it shows the test-2 numbers, or say these.)
 
 ## 2:35–2:55 · Where it breaks, and why (slide 4 — the failure analysis)
 Slide image: `demo/redteam-rounds.png` (SVG next to it; regenerate with `python3 experiments/q/plot_rounds.py` and
