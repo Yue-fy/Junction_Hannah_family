@@ -510,6 +510,14 @@ class DxfSolver(BaseSolver):
                               missing=missing or ["floor total not found"])
             value = round(100.0 * known[0] / known[1], 2)
             trace.append(f"share: 100 × {known[0]:.2f} / {known[1]:.2f} = {value} %")
+        elif qr.op in ("pctdiff", "pctdiff_less"):
+            if len(known) < 2 or not known[1]:
+                return Answer(value=None, unit="%", confidence=0.0, solver=self.name,
+                              trace=trace + ["relative difference: missing reference"], missing=missing or ["reference not found"])
+            a, b = known[0], known[1]  # subject, reference ("A larger than B": (A − B) / B)
+            value = round(100.0 * ((a - b) if qr.op == "pctdiff" else (b - a)) / b, 2)
+            trace.append(f"relative difference: 100 × ({a:.2f} − {b:.2f}) / {b:.2f} = {value} %" if qr.op == "pctdiff" else
+                         f"relative difference: 100 × ({b:.2f} − {a:.2f}) / {b:.2f} = {value} %")
         elif qr.op in ("count_gt", "count_lt", "count_ge"):
             cmp = {"count_gt": lambda v: v > qr.threshold, "count_lt": lambda v: v < qr.threshold,
                    "count_ge": lambda v: v >= qr.threshold}[qr.op]
@@ -527,7 +535,7 @@ class DxfSolver(BaseSolver):
                 trace.append(f"sum: {' + '.join(str(round(v, 2)) for v in known)} = {value:.2f}")
         if qr.op == "ratio":
             unit = None
-        elif qr.op == "pct":
+        elif qr.op in ("pct", "pctdiff", "pctdiff_less"):
             unit = "%"
         elif unit == "count":
             value = int(round(value))

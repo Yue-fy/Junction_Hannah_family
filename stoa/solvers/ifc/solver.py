@@ -361,6 +361,9 @@ class IfcSolver(BaseSolver):
                 ans.confidence = 0.3
                 ans.missing.append(f"the question gives the number(s) {', '.join(left[:3])}, which the rules did not use")
                 ans.trace.append(f"guard: number(s) {', '.join(left[:3])} in the question not used -> confidence 0.3")
+        if ans.value is not None and ctx.get("assumed_count") and ans.unit == "count" and ans.confidence > 0.3:
+            ans.confidence = 0.3
+            ans.missing.append("the question has no counting word; a count was assumed")
         if ans.value is not None and ctx.get("room_type_missing") and it.kind in (None, "space") \
                 and ans.confidence > 0.3:
             ans.confidence = 0.3
@@ -457,9 +460,17 @@ class IfcSolver(BaseSolver):
         storey, storey_name, rooms, model_named = None, None, [], False
         groups: list[tuple[str, list[Element]]] = []
         cands = []
+        def digits_ok(asked: str, label: str | None) -> bool:
+            # '7. Level' is not '1. Level', 'KORIDOR (219)' is not 'KORIDOR (119)' (Q red team 04:13)
+            return re.findall(r"\d+", asked) == re.findall(r"\d+", label or "") or not re.findall(r"\d+", asked)
+
         for n in it.names:
             ms = match_storey(idx, n)
+            if ms is not None and ms.method == "fuzzy" and not digits_ok(n, ms.label):
+                trace.append(f"'{n}': fuzzy storey match '{ms.label}' rejected (numbers differ)")
+                ms = None
             sp = match_space(idx, n) if it.kind == "space" or it.metric == "area" or it.attr == "room_height" else []
+            sp = [m_ for m_ in sp if m_.method != "fuzzy" or digits_ok(n, m_.label)]
             mm = match_model(idx, n)
             cands.append((n, ms, sp, mm))
         # storey: the best exact/normalised storey match, else the best fuzzy one that isn't a better room match
@@ -496,9 +507,19 @@ class IfcSolver(BaseSolver):
                 model_named = True
                 trace.append(f"'{n}' taken as the model's name" + (f" (~'{mm.label}')" if mm else
                              " (not in IfcProject/IfcBuilding names; the file is the model)"))
+                stem_words = set(re.findall(r"[a-z]{3,}", fold(" ".join([idx.path, path, idx.project_name or "",
+                                                                          idx.project_long_name or "",
+                                                                          *(idx.building_names or [])]))))
+                asked_words = set(re.findall(r"[a-z]{3,}", fold(n))) - {"the", "model", "building", "house", "project"}
+                if not (mm and mm.score >= 60) and asked_words and not (asked_words & stem_words):
+                    # 'Empire State Building' asked on smiley-west: a false premise, not a nickname (Q 04:13)
+                    conf = min(conf, 0.3)
+                    assumptions.append(f"the question names the model '{n}', which matches no project/building name; "
+                                       "answered for this file")
             else:
                 trace.append(f"'{n}': no storey, room or model of that name")
-                assumptions.append(f"could not resolve '{n}'")
+                assumptions.append(f"could not resolve '{n}'; the model's storeys are: "
+                                   + ", ".join(st_.name for st_ in idx.storeys[:12]))
                 conf = min(conf * 0.6, 0.3)
         if storey is None and not it.names and it.scope != "model" and getattr(it, "question", ""):
             i, why = storey_mention(it.question, [s.name for s in idx.storeys])
@@ -543,6 +564,7 @@ class IfcSolver(BaseSolver):
             if it.kind is not None and it.names:
                 it.metric = "count"  # "Count the walls on storey X." style imperatives without a count word
                 trace.append("no metric word; assuming a count")
+                ctx["assumed_count"] = True
             else:
                 return Answer.abstain(self.name, "free-text question: no deterministic rule", trace=trace,
                                       missing=["a quantity question (count/area/volume/length)"])
@@ -1212,6 +1234,13 @@ class IfcSolver(BaseSolver):
                 w = mt1.group(1)
                 it.threshold = ("lt" if w in _LOW1 else "gt", float(mt1.group(2).replace(",", ".")))
                 it.mod, it.op, it.kind, it.metric, it.yes_no = "threshold", None, "space", "area", False
+        # "How big is the room 'X'?", "what size is …": an area, not a count (Q 04:18)
+        if it.metric in ("text", "count") and not re.search(r"\b(how many|number of|count)\b", qf) and re.search(
+                r"\bhow (big|large)\b|\bwhat size\b|\bsize of\b|\bwie gross\b|\bhoe groot\b|\bkui suur\b|"
+                r"\bjak duz\w*\b|\bque tamano\b|\bquanto (e )?grande\b|\bquelle (est la )?taille\b|\bkuinka iso\b", qf):
+            it.metric = "area"
+            if it.kind in (None, "storey"):
+                it.kind = "space"
         # "How much bigger is the largest room than the smallest?" -> largest minus smallest
         if re.search(r"\b(largest|biggest)\b.{0,60}\b(than|and|vs|minus)\b.{0,30}\b(smallest|tiniest)\b|"
                      r"\b(difference|range)\b.{0,30}\b(largest|biggest)\b.{0,30}\b(smallest)\b", qf):
@@ -2168,6 +2197,9 @@ class IfcSolver(BaseSolver):
             elif it.asked_unit == "ft3" and unit == "m3":
                 val, unit = val * FT_PER_M ** 3, "ft3"
                 trace.append("converted m³ -> ft³ as asked")
+            elif it.asked_unit in ("mm", "cm") and unit == "m":
+                val, unit = val * (1000.0 if it.asked_unit == "mm" else 100.0), it.asked_unit
+                trace.append(f"converted m -> {unit} as asked")
             elif it.asked_unit == "l" and unit == "m3":
                 val, unit = val * 1000.0, "l"
                 trace.append("converted m³ -> litres as asked")

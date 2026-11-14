@@ -936,6 +936,24 @@ def _restore(text: str, spans: list[str]) -> tuple[str, bool]:
     return text, ok and not re.search(r"\[\[\d+\]\]", text)
 
 
+def should_translate(question: str, intent: Any = None) -> bool:
+    """The measured trigger for to_english(question, force=True): a non-English question the rule-based intent
+    parser could not read (unknown language, no target, or fell back to a free-text task). R2 04:20: on the CS/HU/TR/RO
+    probe this fires on 46/48 and lifts the pipeline 38 -> 48/48; on hard's 175 non-English questions (fi/de/fr/it
+    templates + new sv/nl/pl/de wordings the rules already read) it fires on 0 and changes nothing, whereas
+    translating every non-English question there LOSES 7 answers to translation slips ("vasche da bagno" -> bathrooms,
+    "bastur" -> bathrooms, "vloeren" -> floors). After translating, re-parse; keep the translation only if the
+    re-parse finds a target. `intent` = stoa.router.intent.parse(question) (parsed here when None)."""
+    if lang_guess(question) == "en":
+        return False
+    if intent is None:
+        from stoa.router.intent import parse
+
+        intent = parse(question)
+    return (getattr(intent, "lang", "?") == "?" or getattr(intent, "target", None) in (None, "unknown")
+            or getattr(intent, "task", None) == "text")
+
+
 def to_english(question: str, *, keep: Sequence[str] = COVERED_LANGS, force: bool = False,
                backend: str = "local", model: str = "default") -> Translation:
     """Translate a question into English unless its language is in `keep` (default: the languages our rules cover).
@@ -944,7 +962,9 @@ def to_english(question: str, *, keep: Sequence[str] = COVERED_LANGS, force: boo
     otherwise. Quoted names, IDs and numbers are masked as [[n]] before the call and restored after, so they are
     byte-identical; if the model loses one, the original question is returned with ok=False (caller: keep the
     original route and lower the confidence). Memoised in-process; disk-cached with STOA_LLM_CACHE=1.
-    `force=True` translates any non-English question (e.g. when intent parsing failed on a covered language)."""
+    `force=True` translates any non-English question. Recommended use (measured, see should_translate):
+        if should_translate(q, intent): tr = to_english(q, force=True); re-parse tr.text; use it if that finds a target
+    Translating questions the rules already read loses answers (hard: 7 losses / 1 win on 175)."""
     guess = lang_guess(question)
     if guess == "en" or (not force and guess in keep):
         return Translation(question, guess, False, True, question)

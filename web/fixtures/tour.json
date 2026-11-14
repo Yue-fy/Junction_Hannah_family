@@ -22,7 +22,7 @@
  {
   "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
   "q": "If each door costs 450 euros, what do all the doors on '1.korrus' cost in total?",
-  "note": "A question no template covers, with a number in it: the IFC solver reads the price from the question, counts the 46 doors in the model and multiplies in code (46 × 450 € = 20,700 €). No model call; every counted door is evidence."
+  "note": "A question no template covers, with a number in it. A small local model plans the steps but never does the maths: it asks the pipeline how many doors (46, by rules, cross-checked), multiplies in code (46 × 450 € = 20,700 €), and the IFC solver's own reading of the whole question gives the same total: two independent derivations agree."
  },
  {
   "file": "data/ifc_bench/4351_arc.ifc",

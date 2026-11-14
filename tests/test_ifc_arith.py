@@ -220,3 +220,30 @@ def test_fresh_wordings_of_operators(solver):
     n = s(ESPL, "How many rooms are there on '1.korrus'?").value
     assert s(ESPL, "Divide the total room area of '1.korrus' by its number of rooms. What do you get?").value == \
         pytest.approx(a1 / n, abs=0.01)
+
+
+@pytest.mark.skipif(not abspath(ESPL).exists(), reason="dataset not available")
+def test_false_premises_and_units(solver):
+    s = solver.solve
+    smiley = "data/ifc_models/kit-smiley-west_ac-20-smiley-west-10-bldg.ifc"
+    assert s(smiley, "How many doors are in the model 'Empire State Building'?").confidence <= 0.3
+    assert s(smiley, "Count all columns in the model 'Smiley West (terraced houses)'.").confidence > 0.9  # a nickname
+    a = s(ESPL, "What is the total net floor area of all rooms on '7.korrus'?")  # no such storey: not '1.korrus'
+    assert a.value is None or a.confidence <= 0.3
+    m = s(ESPL, "What is the total length of the walls on '1.korrus'?")
+    mm = s(ESPL, "What is the total length of the walls on '1.korrus', in millimetres?")
+    assert mm.unit == "mm" and mm.value == pytest.approx(m.value * 1000, rel=1e-6)
+
+
+def test_how_big_is_an_area(solver):
+    import glob
+
+    from stoa.data import data_root
+
+    hits = glob.glob(str(data_root() / "data/ifc_models/bimspeed-gdynia*.ifc"))
+    if not hits:
+        pytest.skip("dataset not available")
+    g = "data/ifc_models/" + hits[0].rsplit("/", 1)[-1]
+    big = solver.solve(g, "How big is the room 'Hall (0.1)' on '0'?")
+    sq = solver.solve(g, "How many square metres is 'Hall (0.1)' on '0'?")
+    assert big.unit == "m2" and big.value == pytest.approx(sq.value)

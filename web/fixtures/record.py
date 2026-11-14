@@ -49,6 +49,8 @@ LOCATE = [("data/cubicasa5k/colorful-4539.png", "Kuinka monta makuuhuonetta (MH)
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--api", default="http://127.0.0.1:8100")
+    ap.add_argument("--no-write", action="store_true",
+                    help="only ask (warms the API's answer cache before a demo, web/demo.sh); recorded.json unchanged")
     args = ap.parse_args()
     out = []
     jobs = ([(p, q, None) for p, q in QUESTIONS] + [(p, q, SECOND_SOLVER) for p, q in SECOND]
@@ -69,6 +71,8 @@ def main() -> None:
         out.append(rec)
         print(f"{path.split('/')[-1][:48]:48} {ans.get('value')!s:>10} {ans.get('unit')} conf={ans.get('confidence')} "
               f"{ans.get('solver')} ev={len(ans.get('evidence', []))}")
+    if args.no_write:
+        return
     # entries marked "pinned": true (a known-good answer kept on purpose, e.g. when a regression is being fixed) stay
     # as they are and replace the fresh recording of the same (path, question, solver)
     try:
