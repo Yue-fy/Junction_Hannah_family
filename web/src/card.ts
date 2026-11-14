@@ -119,9 +119,11 @@ function compareHtml(a: Answer) {
 
 /** R1's calibrated 90% range for counts ("interval90: [lo, hi]" in the trace): shown under the value when lo < hi. */
 function rangeHtml(a: Answer) {
-  const m = (a.trace ?? []).map((l) => l.match(/interval90:\s*\[\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*\]/)).find((x) => x);
-  if (!m || typeof a.value !== "number" || Number(m[1]) >= Number(m[2])) return "";
-  return `<span class="range" title="Calibrated 90% range: on held-out drawings the true count lies in this range 9 times in 10">90% range ${esc(m[1])}–${esc(m[2])}</span>`;
+  // "interval90: [lo, hi]" (R1's count range) or any other level, e.g. "interval80: [58.7, 121.5]" (area estimate)
+  const m = (a.trace ?? []).map((l) => l.match(/interval(\d{2}):\s*\[\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*\]/)).find((x) => x);
+  if (!m || typeof a.value !== "number" || Number(m[2]) >= Number(m[3])) return "";
+  const lvl = Number(m[1]);
+  return `<span class="range" title="Calibrated ${lvl}% range: on held-out drawings the true value lies in this range ${lvl}% of the time">${lvl}% range ${esc(m[2])}–${esc(m[3])}</span>`;
 }
 
 /** Why a yes/no answer is yes or no, in one line under it: the compared quantity and the threshold, read from the
@@ -133,6 +135,14 @@ export function yesNoBasis(a: Answer): string {
   const NUM = String.raw`(-?\d[\d,]*(?:\.\d+)?)`;
   const lines = [...(a.assumptions ?? []), ...(a.trace ?? []).filter((l) => /yes|no\b|→/i.test(l))];
   for (const l of lines) {
+    // W4's composer: "combine: bedroom 2 > bathroom 1 → yes"
+    const c = l.match(new RegExp(String.raw`combine:\s*([A-Za-z_ ]{2,30}?)\s+${NUM}\s*${OP}\s*([A-Za-z_ ]{2,30}?)\s+${NUM}\s*(?:→|->)\s*(?:yes|no)`, "i"));
+    if (c) {
+      const [, wa, xa, op, wb, xb] = c;
+      const pl = (w: string, n: string) => `${n} ${w.trim().replace(/_/g, " ")}${Number(n) === 1 ? "" : "s"}`;
+      const sym = ({ ">=": "≥", "<=": "≤", "==": "=", "!=": "≠" } as Record<string, string>)[op] ?? op;
+      return `<span class="range basis" title="${esc(l)}">${esc(pl(wa, xa))} ${esc(sym)} ${esc(pl(wb, xb))}</span>`;
+    }
     const m = l.match(new RegExp(String.raw`quantity\s*\(\s*${NUM}\s*([^)]*)\)\s*${OP}\s*${NUM}`, "i"))
       ?? l.match(new RegExp(String.raw`${NUM}\s*(m2|m²|m3|m³|m|count|%)?\s*${OP}\s*${NUM}\s*(?:→|->|=>|:)\s*(?:yes|no|true|false)`, "i"));
     if (!m) continue;
