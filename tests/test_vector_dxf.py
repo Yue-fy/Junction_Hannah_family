@@ -302,3 +302,18 @@ def test_dxf_false_premise_and_guards():
     assert a.confidence >= 0.9
     a = s.solve(P, "What is the fire rating of the doors?")
     assert a.value is None or a.confidence <= 0.2
+
+
+def test_qparse_conjunctions_and_singular_labels():
+    from stoa.solvers.vector import qparse
+    q = "How many toilets and sinks are there in total on this floor plan?"
+    qr = qparse.parse(q, ["Bad"], room_numbers=set())
+    assert [t.arg for t in qr.terms] == ["toilet", "washbasin"] and qparse.unparsed_conjunct(q, qr) is None
+    q = "How many doors and elevators are there on this floor?"
+    assert qparse.unparsed_conjunct(q, qparse.parse(q, ["Bad"], room_numbers=set())) == "elevators"
+    for q in ["I need a quick count for a quantity takeoff: windows on this sheet?",
+              "How many doors (interior doors and entrance doors together) are drawn on this floor plan?"]:
+        assert qparse.unparsed_conjunct(q, qparse.parse(q, ["Bad"], room_numbers=set())) is None, q
+    assert qparse.singular_label("How big is the Küche?")
+    assert not qparse.singular_label("What is the total net floor area of all rooms labelled 'Küche' in m²?")
+    assert not qparse.singular_label("How big are the kitchens?")

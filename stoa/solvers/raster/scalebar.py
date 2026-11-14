@@ -34,7 +34,7 @@ UNIT_M = {"ft": 0.3048, "m": 1.0, "cm": 0.01, "km": 1000.0, "mi": 1609.344, "yd"
 _UNIT_WORDS = [
     ("ft", r"FEET|FOOT|FT|PIEDS?|PIES|FUSS|FUß"), ("m", r"METERS?|METRES?|MÈTRES?|METRI|METROS?|MTR|M\.?T\.?R|METRIA|M"),
     ("cm", r"CM"), ("km", r"KM|KILOMET(?:ER|RE)S?"), ("mi", r"MILES?"), ("yd", r"YARDS?|YDS?"),
-    ("in", r"INCHES|INCH|IN"), ("fot", r"FOT|FOTT|JALKAA|JALK"), ("aln", r"ALN|ALNAR|KYYNÄRÄÄ|KYYNARAA")]
+    ("in", r"INCHES|INCH"), ("fot", r"FOT|FOTT|JALKAA|JALK"), ("aln", r"ALN|ALNAR|KYYNÄRÄÄ|KYYNARAA")]
 _UNIT_RE = re.compile(r"(?<![A-ZÀ-Ý])(" + "|".join(f"(?P<{u}>{p})" for u, p in _UNIT_WORDS) + r")\.?(?![A-ZÀ-Ý])")
 # one bar label: a number, optionally followed by a unit ('20', '20.', '80. M.', '50 Meter', "100'")
 _LABEL = re.compile(r"^\s*(\d{1,5}(?:[.,]\d+)?)\s*\.?\s*([A-Za-zÀ-ÿ.'’ ]{0,12})\s*$")

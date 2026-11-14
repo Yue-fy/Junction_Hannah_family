@@ -41,6 +41,10 @@ export interface Answer {
   intent?: Intent | null;
   plan?: { op: string; parts: string[]; sub_questions: string[] } | null;
   cached?: boolean;
+  /** web only (set in main.ts, never from the API): the element types a free-text answer about an .ifc names,
+   *  counted in the loaded model in the browser. said = the count the answer gives (null: named without a count);
+   *  notInAnswer = a type of the same kind the answer leaves out. */
+  checked?: { name: string; model: number; said: number | null; notInAnswer?: boolean }[];
 }
 
 export interface Intent {

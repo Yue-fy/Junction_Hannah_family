@@ -84,8 +84,25 @@ at saturation), not HTTP wall time (which includes queueing behind other agents)
 | smoke micro / weighted (206) | 28.3 / 31.2 | 37.0 / 42.4 |
 | tokens in per cubicasa Q | 1,169 (1,100 image) | 770 |
 Gemma loses on Finnish room-label reading (kitchens 35 vs 85, saunas 15 vs 50, WC seats 5–15 vs 45–65) and ties on
-swiss plans. Not a replacement base. A Gemma counting LoRA (`experiments/r2/lora/gemma_lora.sh`, `train_lora.py
---arch gemma4`, same TRAIN mix as cc-v3) tests whether fine-tuning closes the gap (Gemma prize, small fine-tuned model).
+swiss plans. Not a replacement base.
+
+**Gemma 4 E4B counting LoRA `gemma-cc-v1` (04:00–04:48, `experiments/r2/lora/gemma_lora.sh`):** same TRAIN mix as
+cc-v3, 50 min, ~2,700 samples, r16 on the language model only; vLLM 0.31 serves the Gemma4 LoRA directly
+(`merge_lora.py` = CPU fallback, not needed).
+| set | gemma-cc-v1 | Gemma base | cc-v3 (Qwen 8B) |
+|---|---|---|---|
+| train_gate cubicasa (480) | **76.5** | 31.7 | 76.2 |
+| dev cubicasa (800) | 70.9 | | 74.6 (paired −3.8 [−6.5, −1.1]) |
+| cc5k_heldout_notLoRA (200) | 74.5 | | 79.5 |
+| swiss PNG dev (200) | 50.5 | 39.5 | 56.5 |
+As a cross-check it adds nothing (agree 78% → 85% right; but p-map × agreement AUROC 0.908 vs 0.901 dev, 0.925 vs 0.928
+held-out; max-p ensemble 73.6 vs 73.9 dev). Verdict: the Gemma-prize "small fine-tuned model" story (32 → 77% on
+unseen drawings in 50 min), optional Gemma-only demo mode; the pipeline keeps cc-v2/cc-v3.
+
+## Agent planner: local 8B vs hosted Nemotron (04:01–04:35)
+W4's `agent` solver on derived3 (44 derived-quantity Qs), atomic tools local: local 8B planner 40/44; Nemotron planner on
+the 32 it finished 27 vs 32 for local (the 5 misses = empty answers from NVIDIA 429s; tie on the 27 completed), $5.18 vs
+$0.56 per 1k, 103 vs 28 s/Q. No Nemotron planner tier. Two concurrent Nemotron jobs triggered sustained 429s.
 
 ## Language front end: `stoa.llm.to_english` (04:15)
 Sealed hard2r showed the pipeline collapsing on languages nobody wrote rules for (F: Polish cubicasa 21%, Estonian ifc
@@ -99,7 +116,12 @@ lost placeholder returns the original with `ok=False`). ~250 tokens in / 40 out,
 | hard's 175 non-English Qs (fi/de/fr/it templates; new sv/nl/pl/de wordings) | 152/175 | 146/175 (always) / **152/175** (`should_translate` trigger: fires on 0) | translating what the rules already read loses 7, wins 1 |
 Trigger (`should_translate(q, intent)`): non-English AND the intent parser failed (lang '?', no target, or task text).
 lang4 with the trigger: 48/48 (fires on 46). So: translate on parse failure only, never by language list.
-Known slips of the 8B translator: Czech "záchodové mísy" → "toilet rooms" (once), Swedish "bastur" (saunas) → "bathrooms".
+Known slips of the 8B translator: Czech "záchodové mísy" → "toilet rooms" (once), Swedish "bastur" (saunas) → "bathrooms",
+Polish "belek" (beams) → "balconies". Prompt v2 (+ English domain terms, "never add/drop a qualifier") and v3 (+ source-language
+hints for ~17 building nouns in pl/et/cs/hu/ro/es/sv/fi/de/nl/da) — concept match with the English base on F's
+hardL_open: none 129, v2 139, **v3 141/158**; F's 11 pl/ro ifc trigger questions through the pipeline 10 → **11/11**.
+F's held-out hardL (nb/hr/el/lt; v1 prompt): 50.0 → 80.6% (English 90.0), 52 wins / 3 losses. Hosted Nemotron as the
+translator: 47/48 on lang4 (8B v1 46, v3 47) at 10 s vs 0.4 s → keep the 8B. Wired by W4 (Pipeline._front_end).
 Wiring belongs in the pipeline front (W4). Honest number: sealed hard2r at test 2.
 
 ## Candidates surveyed (23:35–23:50, HF hub listing; vLLM 0.31 registry checked)
@@ -167,4 +189,8 @@ pretrained CC5K net never saw them) minus drawings in the LoRA's training data m
    LoRA count → confidence + located evidence. Agreement adds little beyond the LoRA's own p (R1 01:56), so use it
    for evidence and for the 'missing' note, not for a second model call.
 7. Nemotron (hosted) stays a visible second opinion on low-confidence image answers (W5's button), not a bulk tier.
-8. Gemma 4 E4B base is weaker than the 8B (cubicasa 31.7 vs 46.2); its role depends on the Gemma LoRA result.
+8. Gemma 4 E4B base is weaker than the 8B (cubicasa 31.7 vs 46.2); its LoRA reaches 76.5 on train_gate (Qwen LoRA 76.7)
+   but is 4–5 points lower on dev/held-out and adds nothing as a cross-check → Gemma-prize story / Gemma-only demo mode.
+9. Language front end: translate a question with the local 8B ONLY when it is non-English and the rule parser fails
+   (`should_translate`); ~0.4 s, ~700 tokens, on 0.03% of dataset questions; held-out languages 50 → 81%.
+10. Agent planner: the local 8B; hosted Nemotron as planner ties at 9× the cost.

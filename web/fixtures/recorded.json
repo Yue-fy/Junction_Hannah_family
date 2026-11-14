@@ -54,7 +54,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 0.207
+    "wall_seconds": 0.0471
    },
    "intent": {
     "task": "area",
@@ -69,7 +69,7 @@
     "key": "area:room:room"
    }
   },
-  "recorded_at": "2026-11-14 04:37",
+  "recorded_at": "2026-11-14 05:07",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -1073,7 +1073,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 0.0204
+    "wall_seconds": 0.0186
    },
    "intent": {
     "task": "count",
@@ -1087,7 +1087,7 @@
     "key": "count:door:storey"
    }
   },
-  "recorded_at": "2026-11-14 04:37",
+  "recorded_at": "2026-11-14 05:07",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -2283,7 +2283,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 0.0246
+    "wall_seconds": 0.0212
    },
    "intent": {
     "task": "count",
@@ -2297,7 +2297,7 @@
     "key": "count:window:storey"
    }
   },
-  "recorded_at": "2026-11-14 04:37",
+  "recorded_at": "2026-11-14 05:07",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -6763,7 +6763,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 0.1238
+    "wall_seconds": 0.021
    },
    "intent": {
     "task": "count",
@@ -6777,7 +6777,7 @@
     "key": "count:door:model"
    }
   },
-  "recorded_at": "2026-11-14 04:37",
+  "recorded_at": "2026-11-14 05:07",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -6786,7 +6786,7 @@
   "answer": {
    "value": 20700.0,
    "unit": "EUR",
-   "confidence": 0.886,
+   "confidence": 0.9215,
    "evidence": [
     {
      "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
@@ -6799,7 +6799,7 @@
      ],
      "bbox_space": "pdf_pt",
      "ifc_guid": "3Z0LniWg2KrPAx$bJQIbx5",
-     "note": "How many doors are shown on the floor plan of '1.korrus — IfcDoor ARUKS - 012; cross-check: answer 46 vs IFC model: 46 IfcDoor on storey '1.korrus' ✓; plan drawing: 46 symbols ✓"
+     "note": "IfcDoor ARUKS - 012"
     },
     {
      "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
@@ -6812,7 +6812,7 @@
      ],
      "bbox_space": "pdf_pt",
      "ifc_guid": "1HfzM2TPPQajbINaHMIdrb",
-     "note": "How many doors are shown on the floor plan of '1.korrus — IfcDoor ARSU"
+     "note": "IfcDoor ARSU"
     },
     {
      "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
@@ -6825,7 +6825,7 @@
      ],
      "bbox_space": "pdf_pt",
      "ifc_guid": "1UobiwPyx$YwsduZKXbAna",
-     "note": "How many doors are shown on the floor plan of '1.korrus — IfcDoor ARSU"
+     "note": "IfcDoor ARSU"
     },
     {
      "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
@@ -6838,7 +6838,7 @@
      ],
      "bbox_space": "pdf_pt",
      "ifc_guid": "2WXJ26xsfFGaO1yi1nLt1B",
-     "note": "How many doors are shown on the floor plan of '1.korrus — IfcDoor ARSU"
+     "note": "IfcDoor ARSU"
     },
     {
      "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
@@ -6851,7 +6851,7 @@
      ],
      "bbox_space": "pdf_pt",
      "ifc_guid": "2fMlzbCqxHKUCKoBWlddYd",
-     "note": "How many doors are shown on the floor plan of '1.korrus — IfcDoor ARSU"
+     "note": "IfcDoor ARSU"
     },
     {
      "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
@@ -6864,34 +6864,925 @@
      ],
      "bbox_space": "pdf_pt",
      "ifc_guid": "1x7Sic5Nh2IT78CYC3Vi8W",
-     "note": "How many doors are shown on the floor plan of '1.korrus — IfcDoor ARSU"
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      774.53,
+      460.38,
+      817.6,
+      489.91
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "1_tpU8prPjGgB0lUIsykwO",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      488.86,
+      367.31,
+      518.73,
+      411.68
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "0egLHXa__bOCbI0xhrpZGj",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      228.46,
+      221.96,
+      258.33,
+      266.32
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "3H3ZS8zC_qgdRfJQRNyfaP",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      300.23,
+      262.02,
+      330.1,
+      306.39
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "2iwe4T4N7O1Blpw5E57z_x",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      557.66,
+      405.72,
+      587.53,
+      450.08
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "2PcxFY6dsh0i4g2neEY1Ol",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      746.28,
+      511.0,
+      776.15,
+      555.37
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "2yv34AexuSNI7MBHIevU4k",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      812.6,
+      548.02,
+      842.47,
+      592.39
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "2UsMzcvdMJpMCi1uniOqFD",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      928.96,
+      570.99,
+      965.58,
+      629.33
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "3FxEsmg7kYi8lwtrBtGaep",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      864.37,
+      715.17,
+      908.74,
+      745.04
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "3sy9qKBZRJdJh4SMTZ4rND",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      901.67,
+      648.34,
+      946.04,
+      678.21
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "22tGbVqqBSKqlC3sOBWiy$",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      979.26,
+      787.02,
+      1013.81,
+      841.64
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "12s74hya9irS457S7GpdhY",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      1057.67,
+      642.84,
+      1094.29,
+      701.17
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "2TjD19x0Tc6zqJOOaD2cU6",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      302.71,
+      310.59,
+      331.25,
+      353.1
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "1tWOvenmxcjmerlqi0_Tu9",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      716.44,
+      549.81,
+      759.82,
+      578.58
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "2JwK9k_bVb1HCkeTFs_ulq",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      361.37,
+      187.91,
+      400.89,
+      214.2
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "1PbIWDZLO6hL5GR$UwH4V3",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      861.21,
+      846.39,
+      911.27,
+      875.02
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "0UFl9l1USZWtSg0b36q4d7",
+     "note": "IfcDoor ARVU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      1332.37,
+      885.34,
+      1360.91,
+      927.85
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "36MjCAKbtIkccudGHdSrOI",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      1488.69,
+      980.88,
+      1532.06,
+      1009.64
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "3Fq$ZLJn_K34Vpk9vdQ6bj",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      201.61,
+      262.44,
+      244.99,
+      291.2
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "2_5Oovi2yFYGhQs$YNO3eA",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      627.49,
+      322.94,
+      663.15,
+      346.76
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "3KXBSstlehA_owbjkD3RJL",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      1231.27,
+      837.19,
+      1274.65,
+      865.96
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "3g13QxGnl6fgpzfpiyIzcU",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      1103.81,
+      577.49,
+      1130.76,
+      618.5
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "3RjKE18SPB1R7L_ae362yh",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      729.35,
+      309.86,
+      773.72,
+      339.73
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "3$ePWtxSJNTMzLx0ZD2_8z",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      1010.01,
+      374.42,
+      1051.2,
+      399.37
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "2I5IuUT6CGJgARshpW5Byy",
+     "note": "IfcDoor ARVU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      958.03,
+      345.41,
+      999.22,
+      370.36
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "0651gemSsFD$J1nTzBg7gK",
+     "note": "IfcDoor ARVU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      1336.84,
+      855.49,
+      1379.91,
+      885.02
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "1SKU8wqJ8Abdh$JEi4NS1O",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      1523.47,
+      959.66,
+      1566.53,
+      989.19
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "3ek36IDfW$QNFsDooZ1XL_",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      1594.76,
+      999.46,
+      1637.82,
+      1028.98
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "3rrINjQVpuO7IMSNwddKyW",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      1135.12,
+      742.89,
+      1178.18,
+      772.41
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "3x15KKi1YokPuJJ1BKSFVe",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      1266.05,
+      815.97,
+      1309.12,
+      845.5
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "2YTHyxHuENTTjHWpJTwCOO",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      1506.76,
+      861.74,
+      1536.63,
+      906.11
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "3_crOfIzrthCNsE0BeYMvV",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      1378.29,
+      790.03,
+      1408.16,
+      834.4
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "2_LsQ0vPvT7tiRn8CtVNbp",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      1463.93,
+      837.84,
+      1493.8,
+      882.2
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "2OwgnooYHo2R6IQYN2PaSC",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      1165.43,
+      671.21,
+      1206.43,
+      698.16
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "0rdhm0PGmsgOUPcOIsdL6B",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      1421.11,
+      813.93,
+      1450.98,
+      858.3
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "1HuZqwqC1JRo7bO$1hnKPa",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      226.32,
+      186.18,
+      255.0,
+      234.06
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "2auFlRE$FCzNMLlWrw0qRu",
+     "note": "IfcDoor ARVU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      1635.81,
+      972.95,
+      1664.49,
+      1020.83
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "28PCzbmvvl91jBwlolqXI8",
+     "note": "IfcDoor ARVU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      1589.78,
+      1029.03,
+      1618.32,
+      1071.54
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "2jbjr1e0N$T4rP1J_YQ$X4",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      459.03,
+      406.13,
+      502.4,
+      434.89
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "15YzZ2iuR$vktpHCsqJcwV",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
+     "page": 0,
+     "bbox": [
+      560.12,
+      454.28,
+      588.66,
+      496.79
+     ],
+     "bbox_space": "pdf_pt",
+     "ifc_guid": "0roVlhvnNz0HMFDYwDtXOP",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "3Z0LniWg2KrPAx$bJQIbx5",
+     "note": "IfcDoor ARUKS - 012"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "1HfzM2TPPQajbINaHMIdrb",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "1UobiwPyx$YwsduZKXbAna",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "2WXJ26xsfFGaO1yi1nLt1B",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "2fMlzbCqxHKUCKoBWlddYd",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "1x7Sic5Nh2IT78CYC3Vi8W",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "1_tpU8prPjGgB0lUIsykwO",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "0egLHXa__bOCbI0xhrpZGj",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "3H3ZS8zC_qgdRfJQRNyfaP",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "2iwe4T4N7O1Blpw5E57z_x",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "2PcxFY6dsh0i4g2neEY1Ol",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "2yv34AexuSNI7MBHIevU4k",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "2UsMzcvdMJpMCi1uniOqFD",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "3FxEsmg7kYi8lwtrBtGaep",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "3sy9qKBZRJdJh4SMTZ4rND",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "22tGbVqqBSKqlC3sOBWiy$",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "12s74hya9irS457S7GpdhY",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "2TjD19x0Tc6zqJOOaD2cU6",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "1tWOvenmxcjmerlqi0_Tu9",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "2JwK9k_bVb1HCkeTFs_ulq",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "1PbIWDZLO6hL5GR$UwH4V3",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "0UFl9l1USZWtSg0b36q4d7",
+     "note": "IfcDoor ARVU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "36MjCAKbtIkccudGHdSrOI",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "3Fq$ZLJn_K34Vpk9vdQ6bj",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "2_5Oovi2yFYGhQs$YNO3eA",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "3KXBSstlehA_owbjkD3RJL",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "3g13QxGnl6fgpzfpiyIzcU",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "3RjKE18SPB1R7L_ae362yh",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "3$ePWtxSJNTMzLx0ZD2_8z",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "2I5IuUT6CGJgARshpW5Byy",
+     "note": "IfcDoor ARVU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "0651gemSsFD$J1nTzBg7gK",
+     "note": "IfcDoor ARVU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "1SKU8wqJ8Abdh$JEi4NS1O",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "3ek36IDfW$QNFsDooZ1XL_",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "3rrINjQVpuO7IMSNwddKyW",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "3x15KKi1YokPuJJ1BKSFVe",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "2YTHyxHuENTTjHWpJTwCOO",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "3_crOfIzrthCNsE0BeYMvV",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "2_LsQ0vPvT7tiRn8CtVNbp",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "2OwgnooYHo2R6IQYN2PaSC",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "0rdhm0PGmsgOUPcOIsdL6B",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "1HuZqwqC1JRo7bO$1hnKPa",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "2auFlRE$FCzNMLlWrw0qRu",
+     "note": "IfcDoor ARVU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "28PCzbmvvl91jBwlolqXI8",
+     "note": "IfcDoor ARVU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "2jbjr1e0N$T4rP1J_YQ$X4",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "15YzZ2iuR$vktpHCsqJcwV",
+     "note": "IfcDoor ARSU"
+    },
+    {
+     "file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc",
+     "page": null,
+     "bbox": null,
+     "bbox_space": null,
+     "ifc_guid": "0roVlhvnNz0HMFDYwDtXOP",
+     "note": "IfcDoor ARSU"
     }
    ],
    "trace": [
     "intent: text door [storey] (storey=1.korrus) (lang en)",
     "operator question (modifier cost+given (comparison/operator over named things))",
-    "ifc (question as asked): 20700.0 EUR by rules, but the question asks a derived quantity (cost+given): kept as a second opinion at conf 0.40",
-    "general agent first: modifier cost+given (comparison/operator over named things); not a known template",
-    "agent: general tool-using path (3 steps, 3 LLM calls)",
-    "think: Find number of doors on '1.korrus', multiply by 450. → ask(How many doors are shown on the floor plan of '1.korrus'?): 46 count (confidence 0.98, by pipeline/ifc)",
-    "think: Multiply 46 doors by 450 euros per door. → calc(46 * 450): 20700",
-    "think: Total cost of all doors on '1.korrus' is 20700 euros. → answer 20700 EUR",
-    "cross-check: agent 20700.0 = ifc 20700.0 ✓"
+    "ifc (question as asked): 20700.0 EUR (conf 0.92; the solver read the question itself, no LLM needed)",
+    "[ifc] asked on bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf; answering from its source model bsc-esplanades_1807-ep-ar-v18.ifc",
+    "[ifc] model bsc-esplanades_1807-ep-ar-v18.ifc: IFC2X3, 7 storeys, 2249 elements (index 14.7s, cached)",
+    "[ifc] parsed: metric=text kind=door scope=storey names=['1.korrus']",
+    "[ifc] outer operation: factor 450 EUR per door",
+    "[ifc] storey '1.korrus' -> '1.korrus' (exact, 100) guid 1oZ0wPs_PE8ANCPg3bIs4j",
+    "[ifc] 46 elements of IfcDoor in storey '1.korrus'",
+    "[ifc] 46 count x 450 = 20700.00 EUR",
+    "[ifc] 2D link: 46/46 evidence elements drawn on bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf"
    ],
-   "solver": "pipeline/agent",
+   "solver": "pipeline/ifc",
    "assumptions": [
-    "value computed in code from the tool results above (calc: 46 * 450)"
+    "factor 450 EUR per door: model quantity x the factor given in the question",
+    "elements whose spatial container is storey '1.korrus'"
    ],
    "missing": [],
    "cost": {
-    "llm_tokens_in": 2464,
-    "llm_tokens_out": 146,
-    "gpu_seconds": 3.53,
+    "llm_tokens_in": 0,
+    "llm_tokens_out": 0,
+    "gpu_seconds": 0.0,
     "api_calls": 0,
     "api_tokens_in": 0,
     "api_tokens_out": 0,
-    "llm_calls": 3,
-    "wall_seconds": 3.5933
+    "llm_calls": 0,
+    "wall_seconds": 0.1919
    },
    "intent": {
     "task": "text",
@@ -6905,7 +7796,7 @@
     "key": "text:door:storey"
    }
   },
-  "recorded_at": "2026-11-14 04:37",
+  "recorded_at": "2026-11-14 05:07",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -6951,7 +7842,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 1,
-    "wall_seconds": 3.8516
+    "wall_seconds": 3.6367
    },
    "intent": {
     "task": "text",
@@ -6963,7 +7854,7 @@
     "key": "text:unknown:drawing"
    }
   },
-  "recorded_at": "2026-11-14 04:37",
+  "recorded_at": "2026-11-14 05:07",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -7465,7 +8356,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 0.0994
+    "wall_seconds": 0.0597
    },
    "intent": {
     "task": "count",
@@ -7477,7 +8368,7 @@
     "key": "count:door:drawing"
    }
   },
-  "recorded_at": "2026-11-14 04:37",
+  "recorded_at": "2026-11-14 05:07",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -8341,7 +9232,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 0.9175
+    "wall_seconds": 0.9029
    },
    "intent": {
     "task": "count",
@@ -8364,7 +9255,7 @@
     ]
    }
   },
-  "recorded_at": "2026-11-14 04:37",
+  "recorded_at": "2026-11-14 05:07",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -8381,9 +9272,9 @@
     "vlm_lora: 3 count (conf 0.83, train hit rate)",
     "vlm_lora: its own calibrated confidence 0.92 used",
     "[vlm_lora] kind=count unit=count",
-    "[vlm_lora] local:cc-v2 0.5s tok 2104->2",
+    "[vlm_lora] local:cc-v2 0.1s tok 2104->2",
     "[vlm_lora] raw: 3",
-    "[vlm_lora] p(answer digits) = 0.92578 -> confidence 0.92",
+    "[vlm_lora] p(answer digits) = 0.92308 -> confidence 0.92",
     "[vlm_lora] cost: calls=1 tok_in=2104 tok_out=2 gpu_s=0.09 api_calls=0"
    ],
    "solver": "pipeline/vlm_lora",
@@ -8399,7 +9290,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 1,
-    "wall_seconds": 1.8841
+    "wall_seconds": 0.4231
    },
    "intent": {
     "task": "count",
@@ -8411,7 +9302,7 @@
     "key": "count:bedroom:drawing"
    }
   },
-  "recorded_at": "2026-11-14 04:37",
+  "recorded_at": "2026-11-14 05:07",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -8428,9 +9319,9 @@
     "vlm_lora: 0 count (conf 0.95, train hit rate)",
     "vlm_lora: its own calibrated confidence 0.82 used",
     "[vlm_lora] kind=count unit=count",
-    "[vlm_lora] local:cc-v2 0.2s tok 288->2",
+    "[vlm_lora] local:cc-v2 0.1s tok 288->2",
     "[vlm_lora] raw: 0",
-    "[vlm_lora] p(answer digits) = 0.72983 -> confidence 0.82",
+    "[vlm_lora] p(answer digits) = 0.72984 -> confidence 0.82",
     "[vlm_lora] cost: calls=1 tok_in=288 tok_out=2 gpu_s=0.01 api_calls=0"
    ],
    "solver": "pipeline/vlm_lora",
@@ -8446,7 +9337,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 1,
-    "wall_seconds": 0.1827
+    "wall_seconds": 0.107
    },
    "intent": {
     "task": "count",
@@ -8458,7 +9349,7 @@
     "key": "count:sauna:drawing"
    }
   },
-  "recorded_at": "2026-11-14 04:37",
+  "recorded_at": "2026-11-14 05:07",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -8514,7 +9405,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 7,
-    "wall_seconds": 0.2009
+    "wall_seconds": 0.2107
    },
    "intent": {
     "task": "text",
@@ -8526,14 +9417,14 @@
     "key": "text:unknown:drawing"
    }
   },
-  "recorded_at": "2026-11-14 04:37",
+  "recorded_at": "2026-11-14 05:07",
   "api": "http://127.0.0.1:8102"
  },
  {
   "path": "data/finna/mfa.81125dbb-8b52-48e3-bc9d-1128e233ac93.jpg",
   "question": "Mikä on piirustuksen mittakaava?",
   "answer": {
-   "value": "1/500",
+   "value": "1:500",
    "unit": null,
    "confidence": 0.75,
    "evidence": [
@@ -8552,24 +9443,27 @@
     }
    ],
    "trace": [
-    "intent: text unknown [drawing] (lang fi)",
+    "language front end: question translated from Finnish by the local model: \"What is the scale of the drawing?\"",
+    "intent: text stair [drawing] (lang en)",
     "no train gate for this kind of question: general path by file type",
-    "raster: 1/500  (conf 0.75)",
+    "raster: 1:500  (conf 0.75)",
     "[raster] text layer: 49 texts in 6 tile(s); No scale note was found in the texts.",
-    "[raster] answer '1/500' from text lines [5] (literal match)"
+    "[raster] answer '1:500' from text lines [5]"
    ],
    "solver": "pipeline/raster",
-   "assumptions": [],
+   "assumptions": [
+    "question translated from Finnish by the local model: \"What is the scale of the drawing?\""
+   ],
    "missing": [],
    "cost": {
-    "llm_tokens_in": 26960,
-    "llm_tokens_out": 2122,
-    "gpu_seconds": 3.2004,
+    "llm_tokens_in": 28021,
+    "llm_tokens_out": 2142,
+    "gpu_seconds": 3.2628000000000004,
     "api_calls": 0,
     "api_tokens_in": 0,
     "api_tokens_out": 0,
-    "llm_calls": 7,
-    "wall_seconds": 0.7122
+    "llm_calls": 8,
+    "wall_seconds": 0.9587
    },
    "intent": {
     "task": "text",
@@ -8581,7 +9475,7 @@
     "key": "text:unknown:drawing"
    }
   },
-  "recorded_at": "2026-11-14 04:37",
+  "recorded_at": "2026-11-14 05:07",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -9678,7 +10572,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 0.117
+    "wall_seconds": 0.0892
    },
    "intent": {
     "task": "area",
@@ -9693,7 +10587,7 @@
     "key": "area:room:room"
    }
   },
-  "recorded_at": "2026-11-14 04:37",
+  "recorded_at": "2026-11-14 05:07",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -9881,7 +10775,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 0.0312
+    "wall_seconds": 0.0202
    },
    "intent": {
     "task": "count",
@@ -9895,7 +10789,7 @@
     "key": "count:room:label"
    }
   },
-  "recorded_at": "2026-11-14 04:37",
+  "recorded_at": "2026-11-14 05:07",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -9951,7 +10845,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 1,
-    "wall_seconds": 0.1826
+    "wall_seconds": 0.1897
    },
    "intent": {
     "task": "text",
@@ -9963,7 +10857,7 @@
     "key": "text:unknown:drawing"
    }
   },
-  "recorded_at": "2026-11-14 04:37",
+  "recorded_at": "2026-11-14 05:07",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -10006,7 +10900,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 1,
-    "wall_seconds": 0.1876
+    "wall_seconds": 0.1742
    },
    "intent": {
     "task": "text",
@@ -10018,7 +10912,7 @@
     "key": "text:stair:drawing"
    }
   },
-  "recorded_at": "2026-11-14 04:37",
+  "recorded_at": "2026-11-14 05:07",
   "api": "http://127.0.0.1:8102"
  },
  {
@@ -10061,7 +10955,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 1,
-    "wall_seconds": 0.218
+    "wall_seconds": 0.174
    },
    "intent": {
     "task": "text",
@@ -10073,35 +10967,35 @@
     "key": "text:unknown:drawing"
    }
   },
-  "recorded_at": "2026-11-14 04:37",
+  "recorded_at": "2026-11-14 05:07",
   "api": "http://127.0.0.1:8102"
  },
  {
   "path": "data/cubicasa5k/colorful-4539.png",
   "question": "Kuinka monta makuuhuonetta (MH) pohjapiirustuksessa on?",
   "answer": {
-   "value": 3,
+   "value": 4,
    "unit": "count",
    "confidence": 0.3,
    "evidence": [],
    "trace": [
     "kind=count unit=count",
-    "nvidia:private/nvidia/nemotron-3.5-super-120b-a12b 6.8s tok 2150->168",
-    "raw: ddle-left room: There is a label \"MH\". |  | 2.  **Verify the count.** |     *   Room 1: Top left corner area. |     *   Room 2: Top right area, next to the bathroom (PH). |     *   Room 3: Bottom area, next to the entrance hall (ET) and storage (VAR). |  | 3.  **Final Count:** 3. |  | 4.  **Format:** Single integer.3",
-    "cost: calls=1 tok_in=2150 tok_out=168 gpu_s=0.00 api_calls=1"
+    "nvidia:private/nvidia/nemotron-3.5-super-120b-a12b 10.2s tok 2150->2",
+    "raw: 4",
+    "cost: calls=1 tok_in=2150 tok_out=2 gpu_s=0.00 api_calls=1"
    ],
    "solver": "vlm_direct",
    "assumptions": [],
    "missing": [],
    "cost": {
     "llm_tokens_in": 2150,
-    "llm_tokens_out": 168,
+    "llm_tokens_out": 2,
     "gpu_seconds": 0.0,
     "api_calls": 1,
     "api_tokens_in": 2150,
-    "api_tokens_out": 168,
+    "api_tokens_out": 2,
     "llm_calls": 1,
-    "wall_seconds": 21.9493
+    "wall_seconds": 10.4649
    },
    "intent": {
     "task": "count",
@@ -10113,7 +11007,7 @@
     "key": "count:bedroom:drawing"
    }
   },
-  "recorded_at": "2026-11-14 04:29",
+  "recorded_at": "2026-11-14 05:08",
   "api": "http://127.0.0.1:8102",
   "solver": "vlm_direct",
   "solver_args": {
@@ -10130,7 +11024,7 @@
    "evidence": [],
    "trace": [
     "kind=text unit=None",
-    "nvidia:private/nvidia/nemotron-3.5-super-120b-a12b 10.9s tok 3249->3",
+    "nvidia:private/nvidia/nemotron-3.5-super-120b-a12b 5.3s tok 3249->3",
     "raw: Elevation",
     "cost: calls=1 tok_in=3249 tok_out=3 gpu_s=0.00 api_calls=1"
    ],
@@ -10145,7 +11039,7 @@
     "api_tokens_in": 3249,
     "api_tokens_out": 3,
     "llm_calls": 1,
-    "wall_seconds": 102.4755
+    "wall_seconds": 10.318
    },
    "intent": {
     "task": "text",
@@ -10157,7 +11051,7 @@
     "key": "text:unknown:drawing"
    }
   },
-  "recorded_at": "2026-11-14 04:42",
+  "recorded_at": "2026-11-14 05:08",
   "api": "http://127.0.0.1:8102",
   "solver": "vlm_direct",
   "solver_args": {
@@ -10233,7 +11127,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 1,
-    "wall_seconds": 1.5235
+    "wall_seconds": 1.7851
    },
    "intent": {
     "task": "count",
@@ -10245,7 +11139,7 @@
     "key": "count:bedroom:drawing"
    }
   },
-  "recorded_at": "2026-11-14 04:42",
+  "recorded_at": "2026-11-14 05:08",
   "api": "http://127.0.0.1:8102",
   "solver": "raster"
  },
@@ -10293,7 +11187,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 6,
-    "wall_seconds": 0.0736
+    "wall_seconds": 0.0723
    },
    "intent": {
     "task": "count",
@@ -10305,7 +11199,7 @@
     "key": "count:sauna:drawing"
    }
   },
-  "recorded_at": "2026-11-14 04:42",
+  "recorded_at": "2026-11-14 05:08",
   "api": "http://127.0.0.1:8102",
   "solver": "raster"
  },
@@ -10456,7 +11350,7 @@
     "api_tokens_in": 0,
     "api_tokens_out": 0,
     "llm_calls": 0,
-    "wall_seconds": 0.2896
+    "wall_seconds": 0.2946
    },
    "intent": {
     "task": "count",
@@ -10468,7 +11362,7 @@
     "key": "count:door:drawing"
    }
   },
-  "recorded_at": "2026-11-14 04:42",
+  "recorded_at": "2026-11-14 05:08",
   "api": "http://127.0.0.1:8102",
   "solver": "raster_cc5k"
  }
