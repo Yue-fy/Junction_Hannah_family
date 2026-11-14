@@ -341,6 +341,34 @@ def rooms_named(idx: IfcIndex, question: str) -> tuple[list[Element], str]:
     return found, how
 
 
+_EXCL_RX = re.compile(r"\b(?:except(?: for)?|apart from|other than|excluding|exclusive of|besides|but not|without|not|"
+                      r"ausser|ausgenommen|ohne|behalve|zonder|sauf|hormis|excepto|salvo|tranne|eccetto|paitsi|lukuun ottamatta|"
+                      r"valja arvatud|v\u00e4lja arvatud|utom|bortsett fran|oprocz|poza)\s+(?:the |die |de |le |la |les |los |"
+                      r"las |i |gli |a |an )?((?:[^\s,?;:.]+\s*){1,6}?)(?=,|\?|;|\.|\bwhich\b|\bwhat\b|\bare\b|\bis\b|"
+                      r"\bon\b|\bin\b|\blarger\b|\bsmaller\b|\bwith\b|$)")
+
+
+def room_exclusions(idx: IfcIndex, question: str) -> tuple[str, set[str], list[str]]:
+    """Room sets a question EXCLUDES ('Apart from the living rooms and kitchens, which rooms …', '… are not living
+    rooms', 'except the bedrooms'): (question without those phrases, excluded space GUIDs, what was excluded). Q v24:
+    'which rooms larger than 10 m² are not living rooms' was read as the living rooms (0.89)."""
+    base = fold(question)
+    masked = _QUOTED_RX.sub(lambda m: "_" * len(m.group(0)), base)  # same length: offsets stay valid
+    out_q, ex, what = base, set(), []
+    for m in _EXCL_RX.finditer(masked):
+        phrase = m.group(1)
+        for part in re.split(r"\s*(?:,|\band\b|\bor\b|\bund\b|\ben\b|\bet\b|\by\b|\be\b|\bja\b|\boch\b)\s*", phrase):
+            if not part.strip():
+                continue
+            w, grp, _ = room_filter(idx, part)
+            if w:
+                ex |= {e.guid for e in grp}
+                what.append(w)
+        if what:
+            out_q = out_q[:m.start()] + " " * (m.end() - m.start()) + out_q[m.end():]
+    return (out_q if ex else question), ex, what
+
+
 _OUTLINE_CLASSES = ("IfcSpace", "IfcWall", "IfcWallStandardCase", "IfcColumn", "IfcCurtainWall")
 
 
@@ -2295,6 +2323,14 @@ class IfcSolver(BaseSolver):
                      f"{where_s}: {lab} {v0:.2f} m²")
         ev = [self._ev(model, e0, f"{lab} {v0:.2f} m²")]
         if it.op.startswith("arg") or it.which:
+            # ties (Q v24: four bedrooms of duplex 'Level 2' at 22.04 m² -> one named): name every room within 0.05 m²
+            tied = [(v, e) for v, e in vals if abs(v - v0) <= 0.005 + 0.0002 * abs(v0)] if rank == 1 else [(v0, e0)]
+            if len(tied) > 1:
+                trace.append(f"tie: {len(tied)} rooms at {v0:.2f} m² (equal to the centimetre)")
+                return Answer(value=f"tie, {len(tied)} rooms at {v0:.2f} m²: " + "; ".join(lab_of(e) for _, e in tied),
+                              unit=None, confidence=conf * 0.9, evidence=[self._ev(model, e, f"{lab_of(e)} {v:.2f} m²")
+                                                                           for v, e in tied],
+                              trace=trace, solver=self.name, assumptions=assumptions, missing=missing)
             return Answer(value=f"{lab} ({v0:.2f} m²)", unit=None, confidence=conf * 0.9, evidence=ev,
                           trace=trace, solver=self.name, assumptions=assumptions, missing=missing)
         return self._final(v0, "m2", it, conf * 0.95, ev, trace, assumptions, missing)
@@ -2462,8 +2498,8 @@ class IfcSolver(BaseSolver):
             it.notes.append("between")
         mt0 = _TH0.search(qf)
         if (mt0 or mb) and it.kind in ("space", None) and re.search(
-                r"^\s*(which|what|list|name|show|give|welche\w*|millised|milliste|quels?|quelles?|cuales|quali|welke|"
-                r"vilka|mitka|ktore)\b", qf) and \
+                r"^\s*(?:[^?,]{3,70},\s*)?(which|what|list|name|show|give|welche\w*|millised|milliste|quels?|quelles?|cuales|"
+                r"quali|welke|vilka|mitka|ktore)\b", qf) and \
                 (re.search(r"\b(rooms|spaces|raume|raeume|ruumid|pieces|kamers|ruimtes|stanze|locali|habitaciones|"
                            r"huoneet|rummen|pomieszczenia)\b", qf) or room_filter(idx, question)[0]) and \
                 not re.search(r"\b(how many|number of|total|sum)\b", qf):  # 'Which bedrooms …' (Q v19)
@@ -3011,8 +3047,16 @@ class IfcSolver(BaseSolver):
                     whole_m = it.scope == "model" or ps is None
                     els = idx.by_class("IfcSpace") if whole_m else idx.in_storey(ps.guid, "IfcSpace")
                     trace.append("threshold over every room " + ("of the model" if whole_m else f"on the sheet's storey '{ps.name}'"))
+                # 'Apart from the living rooms and kitchens …', '… are not living rooms': those rooms are left out (Q v24)
+                q_pos, ex_guids, ex_what = room_exclusions(idx, ctx.get("question", "") or it.question or "")
+                if ex_guids:
+                    n0 = len(els)
+                    els = [e for e in els if e.guid not in ex_guids]
+                    trace.append(f"excluded {', '.join(repr(x) for x in ex_what)}: {n0 - len(els)} of {n0} rooms")
+                    ctx.setdefault("threshold_assumptions", []).append("left out: " + ", ".join(ex_what))
+                    ctx["rest_applied"] = True
                 # 'Which ELUTUBA+KÖÖK rooms …', 'the living rooms …', 'How many bedrooms …': only that room set (Q v19)
-                rf_what, rf_grp, rf_how = room_filter(idx, ctx.get("question", "") or it.question or "")
+                rf_what, rf_grp, rf_how = room_filter(idx, q_pos)
                 if rf_what:
                     keep = {e.guid for e in rf_grp}
                     n0, els = len(els), [e for e in els if e.guid in keep]

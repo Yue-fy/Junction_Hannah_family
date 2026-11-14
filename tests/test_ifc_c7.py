@@ -172,3 +172,20 @@ def test_r1_links(solver, path, q, want):
     a = solver.solve(path, q)
     assert re.search(want, str(a.value)), a.value
     assert a.confidence >= 0.8
+
+
+DUPLEX_IFC = "data/ifc_models/bsc-duplex_duplex-a-20110907.ifc"
+
+
+@need
+@pytest.mark.parametrize("q,want,not_want", [   # Q v24 (duplex lists)
+    ("Apart from the living rooms and kitchens, which rooms on 'Level 1' are larger than 10 m²?", [r"A101", r"B101"],
+     [r"A102", r"A103", r"B103"]),
+    ("Which rooms on 'Level 1' larger than 10 m² are not living rooms?", [r"A101", r"A103"], [r"A102", r"B102"]),
+    ("What is the largest room on 'Level 2'?", [r"tie", r"A202", r"A203", r"B202", r"B203"], []),
+    ("What is the smallest room on 'Level 2'?", [r"B205"], [r"A205", r"tie"]),   # 1.40 vs 1.42 is not a tie
+])
+def test_v24_lists(solver, q, want, not_want):
+    v = str(solver.solve(DUPLEX_IFC, q).value)
+    assert all(re.search(x, v) for x in want), v
+    assert not any(re.search(x, v) for x in not_want), v
