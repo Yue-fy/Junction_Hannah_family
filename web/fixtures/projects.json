@@ -37,9 +37,9 @@
     ],
     "chips": [
       "How many doors are on this floor?",
+      "How big is room 119?",
       "Which is the biggest room on this floor?",
-      "Do the plan and the 3D model agree on the windows on this floor?",
-      "How many windows in the whole building?"
+      "Do the plan and the 3D model agree on the windows on this floor?"
     ],
     "credit": "Drawings and model: Esplan (esplan.ee), CC BY 4.0",
     "kind": "building",
