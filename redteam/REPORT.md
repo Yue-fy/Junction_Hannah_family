@@ -7,12 +7,12 @@ don't. The first 205 rows start from dev questions the pipeline had **right at c
 caused by the perturbation, not by the drawing.
 
 ## Now (09:00) — the short version
-- **Latest code (night 62754aa + the owners' 08:41–08:50 commits, 609 questions): 351 of 352 answers we give at
-  confidence ≥ 0.8 are right; 4 confident misses left** — "whole building" asked on a single-floor plan (×3, the plan
+- **Latest code (night 62754aa + the owners' 08:41–08:50 commits, 609 questions): 351 of 352 scored answers
+  at confidence ≥ 0.8 are right; 4 confident misses left** — "whole building" asked on a single-floor plan (×3, the plan
   shows one floor; W2) and "how many windows are in the model but not drawn on this plan?" (297, W1/W4). Night
   62754aa itself: 336/337. The test-2 build bb94fe4: 283/290 on 494 questions.
 - **Fixed tonight, verified on the same rows:** false premises (7/24 confident → 0/24), storeys in everyday words,
-  "whole building" in 9 languages, "1,200 euros", "how many floors", "how many X and how many Y" (summed → listed, in
+  "whole building" in 8 of 9 languages, "1,200 euros", "how many floors", "how many X and how many Y" (summed → listed, in
   every language), storey heights, size comparisons, twin-less PNG areas. Every owner commit since 08:14 was checked
   before or right after S0 merged it (pre-merge checks #3–#7): no right answer lost except one flaky LLM-code row
   (Swiss price × doors, 0.45) and one CubiCasa LoRA flip that fell to confidence 0.20.
