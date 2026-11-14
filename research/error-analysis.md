@@ -1,6 +1,6 @@
 # Error analysis (E = agent F)
 
-Updated 08:45, 14 Nov 2026 (sections newest first). Regenerate the tables with
+Updated 08:20, 14 Nov 2026 (sections newest first). Regenerate the tables with
 `/data/User/fangy4/envs/junction/bin/python -m stoa.eval.analyze <run_id> --baseline <dummy run_id> --top 20`.
 For paired significance use `python3 experiments/r1/stats/compare.py RUN_A RUN_B --by template` (cluster CI).
 
@@ -13,7 +13,7 @@ answer) vs `20261113-234812-dummy-dev` (template prior), both on dev v2 (hash f4
 | dummy (prior) | 26.1% | 40.4% | 0 | 0% |
 | vlm_direct | 32.0% (28.0–36.5) | 44.1% | 200 (all IFC) | 0% |
 
-## LATEST (08:45, cycle 224): the wired language front end on held-out languages; "both readings" fixes its underconfidence; one English confident-wrong
+## LATEST (08:20, cycle 224): the wired language front end on held-out languages; "both readings" fixes its underconfidence; one English confident-wrong
 
 Context: all agents were stopped by the org spend limit 05:20–08:10, so night is still bb94fe4 (S0 cycle 19) and
 sealed test 2 started only at 08:12 (S0). S0's last gate on bb94fe4: dev 89.9 / 83.6 w, hard 84.7, hard2 92.1,
