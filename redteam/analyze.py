@@ -105,6 +105,9 @@ def main():
         k = (r.get("meta") or {}).get("kind", "")
         if k.startswith("yesno"):
             r["correct"] = yesno_ok(r["value"], r.get("gold"))
+        elif (r.get("meta") or {}).get("accept"):  # v10 scan text: any accepted substring in the answer
+            norm2 = lambda x: re.sub(r"\s+", "", str(x or "").lower())
+            r["correct"] = any(norm2(a_) in norm2(r["value"]) for a_ in r["meta"]["accept"])
         elif k == "judge:ifc-text":  # v6 'which floor': the storey name must appear in the answer
             norm = lambda x: re.sub(r"[\s.]+", "", str(x or "").lower())
             r["correct"] = norm(r.get("gold")) in norm(r["value"])
@@ -161,7 +164,7 @@ def main():
         p(f"| {k} | {n} | {f_} | {fc} |")
 
     # v5: natural references — show every storey / room-name / yes-no row with its first assumption
-    v5 = [r for r in rows if (r.get("meta") or {}).get("kind", "").startswith(("storey", "room-name", "yesno", "judge"))]
+    v5 = [r for r in rows if (r.get("meta") or {}).get("kind", "").startswith(("storey", "room-name", "yesno", "judge", "scan", "scope"))]
     if v5:
         p("")
         p("Natural references (v5): every row, with the first assumption / missing line:")

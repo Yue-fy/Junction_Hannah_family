@@ -423,6 +423,17 @@ yhteensä, jos yksi ovi maksaa 450 euroa?" 20,700 (ifc rules, 0.75), Swiss apart
 (119) pinta-ala?" → 142.24 at 0.30 (all corridors summed; same as the unquoted English), "Montako kerrosta
 rakennuksessa on?" → 7 at 0.75, Swiss "Montako ovea pohjapiirroksessa on?" → 0 at 0.32 (dxf's LLM-written query).
 
+## v10 (05:05): follow-ups on the two tour scans — 8 Qs, run `20261114-050357-pipeline-v10-4c94` (night 753eccb)
+- Printed facts **4/4** (all at 0.75, read from W3's text layer): HABS vi0026 sheet 3 "When was this drawing made?"
+  1977, "Who drew this sheet?" Chalmers G. Long, Jr., scale 1:48 (printed 1/4" = 1'-0"); Olympic Stadium site plan
+  scale 1:500.
+- False premises: "How many bedrooms are shown on this floor plan?" on the HABS **elevation** → routed to the
+  CubiCasa-trained LoRA → "0" at 0.75, no note that the sheet is an elevation; "How many seats does the stadium have?"
+  (site plan) → **514 invented** at 0.34 with an empty `missing`; "total floor area of the residence" (elevation) →
+  1200 at 0.05, empty `missing`; "How many doors are on this floor plan?" (1:500 site plan) → 4 at 0.34, flagged.
+  Same as bug 5: low confidence, but no reason given and a made-up number. Owners W4 (routing, agent), W3 (drawing
+  type from the text layer as a veto). Scan questions cost $0.87 per 1,000 (3.5 LLM calls each) vs $0.06 overall.
+
 ## Verification on night 753eccb (05:00; W1 74728cf cross-language check, R2 glossary, W2 15ad113, W4 1431466)
 Run `20261114-045855-pipeline-questions-93c5`, all 418 rows; subsets by `subset_stats.py <run> N`.
 
@@ -450,8 +461,8 @@ many floors" → 7; v8 scope premises ×5.
 - Rotated, grayscale, heavily compressed and half-resolution copies of a plan: 30/30 right, at the same confidence.
 
 ## Re-run
-`questions.jsonl` now has 432 rows: v1 (174) + v2 (31) + v3 Swiss compositions (42) + v4 CubiCasa compositions (36) +
-v5 natural references (70) + v6 judge questions on the demo drawings (21) + v7 scope words in 9 languages (36) + v8 scope premises (8) + v9 Finnish judge (14) = 432; earlier rows are byte-identical across builds (checked with cmp), so runs on the first 205 /
+`questions.jsonl` now has 440 rows: v1 (174) + v2 (31) + v3 Swiss compositions (42) + v4 CubiCasa compositions (36) +
+v5 natural references (70) + v6 judge questions on the demo drawings (21) + v7 scope words in 9 languages (36) + v8 scope premises (8) + v9 Finnish judge (14) + v10 scan follow-ups (8) = 440; earlier rows are byte-identical across builds (checked with cmp), so runs on the first 205 /
 283 rows compare directly (`python3 $JUNCTION_SHARED/artifacts/Q/subset_stats.py <run> 283`). Build with
 `PYTHONHASHSEED=0 PYTHONPATH=.`; v5 calls the ifc solver for its gold (deterministic, < 1 s per row).
 ```

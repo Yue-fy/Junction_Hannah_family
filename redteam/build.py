@@ -572,6 +572,30 @@ def main():
         kind = "yesno:fi-judge" if typ == "text" else "judge-fi:" + path.split("/")[1].split("_")[0]
         out.append(row(path, q, g, unit, typ, kind, "same", note=note))
 
+    # ===== v10 (05:10): follow-up questions on the two historical scans in the tour ===============================
+    # Gold for HABS vi0026 sheet 3 from its printed title block (W5 04:10: 'HEAD HOUSE AND RESIDENCE NORTH ELEVATION',
+    # 'SCALE 1/4"=1'-0"', 'DELINEATED BY: CHALMERS G. LONG, JR., 1977'); text rows are scored by meta.accept
+    # (any listed substring in the answer, case/space-insensitive). False premises expect a flag.
+    H = "data/habs/vi0026_sheet_00003.jpg"
+    FN = "data/finna/mfa.81125dbb-8b52-48e3-bc9d-1128e233ac93.jpg"
+    scans = [
+        (H, "When was this drawing made?", ["1977"]),
+        (H, "Who drew this sheet?", ["Chalmers", "Long"]),
+        (H, "What is the scale of this drawing?", ["1/4", "1:48", "1 : 48"]),
+        (FN, "What is the scale of this drawing?", ["1:500", "1/500", "1 : 500"]),
+    ]
+    for path, q, acc in scans:
+        r_ = row(path, q, acc[0], None, "text", "scan:text", "same", note="printed on the sheet")
+        r_["meta"]["accept"] = acc
+        out.append(r_)
+    for path, q, note in [
+        (H, "How many bedrooms are shown on this floor plan?", "the sheet is an elevation, not a floor plan"),
+        (H, "What is the total floor area of the residence in square metres?", "an elevation shows no floor area"),
+        (FN, "How many seats does the stadium have?", "a site plan does not show seats"),
+        (FN, "How many doors are on this floor plan?", "it is a 1:500 site plan, not a floor plan"),
+    ]:
+        out.append(row(path, q, None, None, "other", "scan:premise", "flag", note=note))
+
     with open(OUT, "w", encoding="utf-8") as f:
         for r in out:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
