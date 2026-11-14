@@ -105,3 +105,32 @@ Pitfalls are in KNOWLEDGE.md (W1 entries).
   storeys above/below a named storey; basement / underground level by name (else highest storey below 0); datum
   elevations (no storey at 0) for above/below ground; area-zone spaces left out of "largest room"; vertical
   distance between two named storeys = elevation difference. Probes: `experiments/w1/probes/c5_q2..q4.txt`.
+
+## Numbers, rates, storey words, calibration (cycle 6, 08:11–09:00)
+Fixes for red-team / teammate reports, each checked on probes written before the fix
+(`experiments/w1/probes/c6_q1.txt` 22 Qs, `c6_q2.txt` 21 Qs on 4 models in en/de/nl/pl/et/fi; 43/43 right after,
+also end to end through `pipeline`). ifc_models train/dev/hard/hard2 stay 100% with 0 answers changed.
+- **Digit grouping** (`arith.ungroup`, applied in `text_of`): '1,200 euros' / '1.200 €' / "1'200 CHF" / '1 200 euroa' /
+  '1,250.50' / '1.250,50' -> plain numbers. A comma + 3 digits groups, a dot + 3 digits groups only next to a
+  currency or with several groups ('1.200 m' stays 1.2 m), a space only next to a currency. Was: 55.2 EUR at 0.92.
+- **Rates and units**: '15 metres of wall per day' -> wall length / 15 = days (`Outer.rate`; was 'add 15');
+  'a door takes 1.5 hours' -> h, '45 minutes' -> min, kg, l (`unit_word`); verb-final wording kept by translations
+  ('if each door 450 euros costs').
+- **Storey words**: two-storey yes/no ('Does A have more windows than B?' -> 'no (55 < 60)', ops gt2/lt2);
+  unresolved ordinals ('7th floor' on a 5-storey model) -> 0.3; 'basement floor' (-1) no longer matches '1.OG';
+  'KG' = basement; Finnish/Swedish/Polish/... basement words; unquoted storey pairs ('EG and 1.OG combined') summed.
+- **Used floors** (`used_storeys`): storeys with a door, or rooms while not named roof/foundation. 'How many floors /
+  storeys / levels' = used floors at 0.6, total IfcBuildingStorey count in `missing` (IFC-Bench smiley_west 'number of
+  levels' gold 4 = used floors of 5; esplanades 5 of 7, duplex 2 of 4). 'top/lowest floor' for element questions =
+  highest/lowest used floor (capped 0.85, skipped level named); 'elevation of the top storey' = the literal top level.
+  'Which floor has the fewest X' ranks used floors only.
+- **Calibration**: Qto ≠ shape cap 0.7 -> 0.85 (gold follows the explicit Qto, S0 D15 B; F's area probe 36 -> 68 of
+  78 right answers at ≥0.8, 0 wrong); a few stairs nested in another stair -> 0.85 + raw count (count probe AUROC
+  0.478 -> 0.957).
+- **Cost**: the cross-language LLM check skips dataset wordings of train/dev/hard/hard2 (`_known_wording`): dev ifc
+  LLM calls 152 -> 0, $0.027 -> $0.002 per 1k.
+- **Plumbing fixtures**: 'plumbing fixture(s)' = sanitary kind; 'their respective counts' -> breakdown by type from
+  the model (4351: 21 with GUIDs) instead of the fact-card LLM.
+- Exclusions by quote position: storey 'Attic' vs room 'Attic (414B-…)' (W4); no 'exclusion NOT applied' line when
+  the rest rule applied it.
+Tests: `tests/test_ifc_c6.py`.
