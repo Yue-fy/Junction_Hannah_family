@@ -424,3 +424,7 @@ table.checked .muted { color: var(--muted); }
 .rg-legend b { font-weight: 700; }
 .rg-legend small { display: block; color: var(--muted); font-size: 11px; margin-top: 3px; }
 .rg-legend .rg-hub { color: var(--accent); cursor: default; }
+
+/* bench: overnight progress line (previous sealed test → this one) */
+.bn-progress { margin: 2px 0 14px; padding: 9px 12px; border-radius: 8px; background: #eef5ff; border: 1px solid #cfe0f7; font-size: 13px; line-height: 1.45; color: var(--ink); }
+.bn-progress b { font-weight: 700; }

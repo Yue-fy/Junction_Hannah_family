@@ -26,6 +26,12 @@ const apply = (m: Mat, x: number, y: number): [number, number] => [m[0] * x + m[
 /** Room-graph regions worth drawing: unlabelled regions with no door and no open link are segmentation fragments
  *  (a strip along a wall, the CubiCasa logo), not rooms of the graph. */
 export const roomShown = (r: RoomGraphRoom) => !!r.label || (r.door_to ?? []).length > 0 || (r.open_to ?? []).length > 0;
+/** Plain-English kind of a room-graph region (CC5K classes; 'undefined' = a room the model could not type). */
+const KIND: Record<string, string> = { living: "living room", bedroom: "bedroom", kitchen: "kitchen", bath: "bathroom", entry: "hall",
+  storage: "storage", garage: "garage", sauna: "sauna", outdoor: "outdoor", undefined: "room" };
+export const roomKind = (r: RoomGraphRoom) => KIND[r.cls] ?? r.cls;
+/** "bedroom 'MH'": the kind a jury reads plus the code printed on the plan. */
+export const roomName = (r: RoomGraphRoom) => (r.label ? `${roomKind(r)} '${r.label}'` : roomKind(r));
 
 export class Viewer2D {
   readonly el: HTMLElement;
@@ -201,7 +207,7 @@ export class Viewer2D {
       return n;
     };
     const byId = new Map(g.rooms.map((r) => [r.id, r]));
-    const name = (r: RoomGraphRoom) => r.label || r.cls;
+    const name = roomName;
     const rooms = el("g", { class: "rg-rooms" });
     const links = el("g", { class: "rg-links" });
     const doors = el("g", { class: "rg-doors" });
@@ -241,17 +247,18 @@ export class Viewer2D {
       const [x0, y0, x1, y1] = r.bbox;
       const box = el("rect", { x: x0, y: y0, width: x1 - x0, height: y1 - y0, class: `rg-room k-${r.cls}` }, rooms);
       const to = (r.door_to ?? []).map((id) => (byId.get(id) ? name(byId.get(id)!) : id));
-      el("title", {}, box).textContent = `${name(r)} (${r.cls})${r.m2 ? ` · ~${r.m2} m²${r.m2_80 ? ` (80%: ${r.m2_80[0]}–${r.m2_80[1]})` : ""}` : ""}`
+      el("title", {}, box).textContent = `${name(r)}${r.m2 ? ` · ~${r.m2} m²${r.m2_80 ? ` (80%: ${r.m2_80[0]}–${r.m2_80[1]})` : ""}` : ""}`
         + `${to.length ? ` · doors to: ${to.join(", ")}` : ""}${(r.open_to ?? []).length ? ` · open to: ${r.open_to!.map((id) => (byId.get(id) ? name(byId.get(id)!) : id)).join(", ")}` : ""}`
         + `${(r.windows ?? []).length ? ` · ${r.windows!.length} window${r.windows!.length > 1 ? "s" : ""}` : ""}`;
       boxes.set(r.id, box);
       box.addEventListener("mouseenter", () => this.focusRoom(r.id));
       box.addEventListener("mouseleave", () => this.focusRoom(null));
       if (r.cls === "outdoor" && !r.label) continue;
-      const t = el("text", { x: r.centroid[0], y: r.centroid[1] - fs * 0.15, "font-size": fs, class: "rg-label" }, labels);
-      t.textContent = name(r);
+      // English kind + ~m² just BELOW the centre: the printed code ('MH') usually sits at the centre and stays readable
+      const t = el("text", { x: r.centroid[0], y: r.centroid[1] + fs * 1.35, "font-size": fs * 0.8, class: "rg-label" }, labels);
+      t.textContent = roomKind(r);
       if (r.m2) {
-        const m = el("text", { x: r.centroid[0], y: r.centroid[1] + fs * 0.95, "font-size": fs * 0.72, class: "rg-label sub" }, labels);
+        const m = el("text", { x: r.centroid[0], y: r.centroid[1] + fs * 2.1, "font-size": fs * 0.68, class: "rg-label sub" }, labels);
         m.textContent = `~${r.m2} m²`;
       }
     }

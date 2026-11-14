@@ -4,7 +4,7 @@ import { renderBench } from "./bench";
 import { agentAsks, crossChecks, renderCard } from "./card";
 import { markAnswerCheck, renderKg } from "./kg";
 import type { Answer, FileInfo, KgRoom, RoomGraph } from "./types";
-import { roomShown, Viewer2D } from "./viewer2d";
+import { roomName, roomShown, Viewer2D } from "./viewer2d";
 import type { Viewer3D } from "./viewer3d"; // loaded lazily: web-ifc + three are ~4 MB
 import tourSteps from "../fixtures/tour.json";
 
@@ -179,7 +179,7 @@ async function showRooms(on: boolean) {
 }
 function roomLegend(g: RoomGraph) {
   const byId = new Map(g.rooms.map((r) => [r.id, r]));
-  const name = (id: string) => { const r = byId.get(id); return r ? (r.label ? `${r.label} (${r.cls})` : r.cls) : id; };
+  const name = (id: string) => { const r = byId.get(id); return r ? roomName(r) : id; };
   const inside = g.rooms.filter((r) => r.cls !== "outdoor" && roomShown(r));
   const hub = [...inside].sort((a, b) => (b.door_to ?? []).filter((x) => x !== "outside").length - (a.door_to ?? []).filter((x) => x !== "outside").length)[0];
   const nHub = (hub?.door_to ?? []).filter((x) => x !== "outside").length;
