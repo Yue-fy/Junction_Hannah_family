@@ -135,7 +135,9 @@ def translate(base: list[dict], workers: int = 6) -> dict[str, dict[str, str]]:
 
     done = 0
     with ThreadPoolExecutor(workers) as ex:
-        for qid, have in ex.map(one, base):
+        # compositions first: they are the part the hard2r drop was about, and the hosted API may run out
+        order = sorted(base, key=lambda b: (b["origin"] != "hard2", len(tr.get(b["qid"], {})) == len(langs)))
+        for qid, have in ex.map(one, order):
             tr[qid] = have
             done += 1
             path.parent.mkdir(parents=True, exist_ok=True)
