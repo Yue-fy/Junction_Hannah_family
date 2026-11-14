@@ -1,0 +1,20 @@
+[
+  {"file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf", "q": "How many doors are on this floor?",
+   "note": "An apartment building in Tallinn: 5 floor plans and the 3D model. Ask the way you talk. The answer comes first, with where it comes from, numbered on the plan."},
+  {"file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf", "q": "Which is the biggest room on this floor?",
+   "note": "Rooms too: the biggest one, the next ones, and each of them marked. Click a line to zoom to it."},
+  {"file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf", "q": "How many windows in the whole building?",
+   "note": "The whole building at once, from the 3D model: every window counted and lit up."},
+  {"file": "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf", "q": "How many windows on floor 1 are in the 3D model but not drawn on this plan?",
+   "note": "Differences found: the drawings and the 3D model are checked against each other, floor by floor. Here 3 windows sit above the height where the plan is cut. One click shows them."},
+  {"file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf", "q": "How big is apartment B?",
+   "note": "A floor plan from Switzerland: the size of one apartment, with its rooms marked, in a fraction of a second instead of a quarter of an hour by hand."},
+  {"file": "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf", "q": "Wie viele Türen und Fenster sind insgesamt auf diesem Grundriss eingezeichnet?",
+   "note": "Any language: asked in German, answered and marked the same way."},
+  {"file": "data/cubicasa5k/colorful-4539.png", "q": "Is there a sauna?",
+   "note": "A scanned Finnish apartment plan, read from the image alone."},
+  {"file": "data/habs/vi0026_sheet_00003.jpg", "q": "When was this drawing made?",
+   "note": "Old drawings too: a historic survey sheet, answered from its own title block, the line it read marked."},
+  {"file": "", "q": "", "bench": true,
+   "note": "How accurate is it? Measured on drawings the system never saw while it was built, against simpler approaches, with the cost per question."}
+]

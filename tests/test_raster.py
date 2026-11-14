@@ -449,3 +449,65 @@ def test_window_symbols_four_line_wall_stretch(tmp_path):
     dets = WS.detect(str(p), 59.0)
     assert len(dets) == 2 and all(d["dir"] == "h" for d in dets)
     assert dets[0]["box"][1] == 100 and dets[0]["box"][3] == 143
+
+
+def test_window_symbols_none_found_abstains(tmp_path, monkeypatch):
+    """No 4-line symbol on a drawing with a metric bar = another convention: abstain, never '0 windows'."""
+    import numpy as np
+    from PIL import Image
+
+    from stoa.solvers.raster import RasterSolver
+    from stoa.solvers.raster import scalebar as SB
+    from stoa.solvers.raster import textlayer as T
+
+    p = tmp_path / "plan.png"
+    g = np.full((200, 300), 255, np.uint8)
+    g[40:44, 30:270] = 0  # a plain wall, no window symbol
+    Image.fromarray(g).save(p)
+    bar = SB.Bar(unit="m", px_per_unit=59.0, labels=[], box=[0, 0, 10, 10], residual=0.0, source="t")
+    monkeypatch.setattr(T, "text_layer", lambda *a, **k: None)
+    monkeypatch.setattr(SB, "bars", lambda *a, **k: [bar])
+    s = RasterSolver(prescan=0)
+    trace: list[str] = []
+    assert s._window_symbols(str(p), trace) is None
+    assert any("none of the known" in t for t in trace)
+
+
+def test_window_prescan_skips_text_layer(tmp_path, monkeypatch):
+    """A clean render without any 4-line symbol at a guessed scale abstains BEFORE the text layer (0 tokens)."""
+    import numpy as np
+    from PIL import Image
+
+    from stoa.solvers.raster import RasterSolver
+    from stoa.solvers.raster import textlayer as T
+
+    p = tmp_path / "plan.png"
+    g = np.full((200, 300), 255, np.uint8)
+    g[40:44, 30:270] = 0
+    Image.fromarray(g).save(p)
+
+    def boom(*a, **k):
+        raise AssertionError("text layer read")
+
+    monkeypatch.setattr(T, "text_layer", boom)
+    trace: list[str] = []
+    assert RasterSolver()._window_symbols(str(p), trace) is None
+    assert any("any common scale" in t for t in trace)
+
+
+def test_clean_render_gate(tmp_path):
+    """A flat render passes; a noisy 'scan' (paper texture, many grey levels) does not."""
+    import numpy as np
+    from PIL import Image
+
+    from stoa.solvers.raster import windows as WS
+
+    g = np.full((200, 200), 255, np.uint8)
+    g[50:52, 20:180] = 0
+    g[100, 20:180] = 59
+    Image.fromarray(g).save(tmp_path / "r.png")
+    assert WS.clean_render(str(tmp_path / "r.png"))[0]
+    rng = np.random.default_rng(0)
+    s = np.clip(225 + rng.normal(0, 12, (200, 200)), 0, 255).astype(np.uint8)
+    Image.fromarray(s).save(tmp_path / "s.png")
+    assert not WS.clean_render(str(tmp_path / "s.png"))[0]

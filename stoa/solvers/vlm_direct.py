@@ -4,7 +4,8 @@ Render the drawing (PNG/JPEG as is, PDF page -> PNG with PyMuPDF), ask the quest
 IFC files are not handled (abstain), unless a sibling PDF/PNG of the same drawing exists.
 
 Options (pass via the eval tool's solver kwargs, e.g. `--solver vlm_direct -k backend=nvidia`):
-  backend      "local" (default, shared vLLM on :8001) or "nvidia" (hosted Nemotron; rate-limited)
+  backend      "local" (default, shared vLLM on :8001), "nvidia" (hosted Nemotron; rate-limited) or "gemini"
+               (hosted Gemini; daily call cap + purpose log in stoa.llm; demo / small probes only)
   model        override the backend's default model id
   max_pixels   image budget (default 3.2 Mpx)
   dpi          PDF render dpi before downscaling (default 150)
@@ -36,6 +37,8 @@ from pathlib import Path
 from stoa.contract import Answer, Evidence
 from stoa.solvers import register
 from stoa.solvers.base import BaseSolver
+
+_HOSTED = ("nvidia", "gemini")  # hosted reasoning models: thinking tokens count against max_tokens
 
 # Raw answer-digit probability -> calibrated confidence, per answer kind: (upper edge of p bin, accuracy).
 # Fit on 1,500 TRAIN questions (Qwen3-VL-8B, run 20261114-010141-vlm_direct-train-n1500-2461, experiments/r2/fit_conf.py):
@@ -333,21 +336,21 @@ class VlmDirect(BaseSolver):
 
         try:
             r = llm.chat(prompt, images=[img], system=self.system, backend=self.backend, model=self.model,
-                         max_tokens=(self.max_tokens if self.backend == "nvidia"  # Nemotron reasons in the answer anyway
+                         max_tokens=(self.max_tokens if self.backend in _HOSTED  # hosted models reason in the answer
                                      else 64 if direct and kind != "text" else 256 if direct else
                                      max(self.max_tokens, 2048) if grounded else self.max_tokens),
                          thinking=self.thinking, max_pixels=self.max_pixels,
                          logprobs=5 if (direct and self.samples <= 1 and llm.is_local(self.backend)
                                         and self.conf_mode != "const" and kind != "text") else 0,
                          **({"n": self.samples, "temperature": 0.7} if (direct and self.samples > 1) else {}))
-            if r.finish_reason == "length" and (not direct or self.backend == "nvidia") and "ANSWER:" not in r.text:
+            if r.finish_reason == "length" and (not direct or self.backend in _HOSTED) and "ANSWER:" not in r.text:
                 # rambling/looping CoT: ask for the answer only, keeping what it saw so far
                 trace.append("cot hit max_tokens; asking for the final answer")
                 msgs = [{"role": "user", "content": prompt},
                         {"role": "assistant", "content": r.text[-3000:]},
                         {"role": "user", "content": DIRECT[kind].format(unit="ft²" if unit == "ft2" else "m²")}]
                 r2 = llm.chat(msgs, images=[img], system=self.system, backend=self.backend, model=self.model,
-                              max_tokens=(1024 if self.backend == "nvidia" else 64), thinking=False,
+                              max_tokens=(1024 if self.backend in _HOSTED else 64), thinking=False,
                               max_pixels=self.max_pixels)
                 r = r2
         except Exception as e:  # noqa: BLE001

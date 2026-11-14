@@ -30,7 +30,12 @@ EXTRA = [
     ("data/habs/vi0026_sheet_00003.jpg", "What is the scale of this drawing?"),
     ("data/habs/vi0026_sheet_00003.jpg", "When was this drawing made?"),
 ]
-QUESTIONS = [(t["file"], t["q"]) for t in TOUR if t.get("file") and t.get("q")] + EXTRA
+# The customer view (default since the captain's redesign): its tour and every project's example chips.
+TOUR_CUSTOMER = json.loads((HERE / "tour-customer.json").read_text())
+PROJECTS = json.loads((HERE / "projects.json").read_text())
+PROJECT_CHIPS = [(p["sheets"][0]["path"], q) for p in PROJECTS for q in p["chips"]] + [
+    (s["path"], q) for p in PROJECTS for s in p["sheets"] if s["path"].endswith(".ifc") for q in p.get("modelChips", [])]
+QUESTIONS = list(dict.fromkeys([(t["file"], t["q"]) for t in TOUR + TOUR_CUSTOMER if t.get("file") and t.get("q")] + EXTRA + PROJECT_CHIPS))
 
 
 # On-demand second opinions (hosted NVIDIA Nemotron) the tour may click: (path, question).
