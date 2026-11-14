@@ -273,8 +273,8 @@ class Pipeline(BaseSolver):
     def __init__(self, accept: float | str = 0.6, agree: str = "cheap", api: int | str = 0, margin: float | str = 0.03,
                  max_tries: int | str = 3, vlm_args: str | dict | None = None, use_gate: int | str = 1,
                  compose: int | str = 1, normalise: int | str = 1, crosscheck: int | str = 1, agent: int | str = 1,
-                 raw_first: int | str = 1, raw_accept: float | str = 0.45, cc5k: int | str = 1, lora: int | str = 1,
-                 lora_second: int | str = 0, lora_conf: str = "own", translate: int | str = 1,
+                 raw_first: int | str = 1, raw_accept: float | str = 0.45, raster_first: int | str = 1,
+                 cc5k: int | str = 1, lora: int | str = 1, lora_second: int | str = 0, lora_conf: str = "own", translate: int | str = 1,
                  translate_cap: float | str = 0.9, **kwargs):
         super().__init__(**kwargs)
         # R2's language front end (stoa.llm.should_translate / to_english): a non-English question the rules can't read
@@ -298,6 +298,7 @@ class Pipeline(BaseSolver):
         # dxf's own table-QA answers carry 0.45-0.6 and are right far more often than the agent on held-out wordings
         # (W2: hard2q swiss dxf alone 85% vs pipeline 72.5%); "operator not applied" is capped at 0.3 by dxf and ifc
         self.raw_accept = float(raw_accept)
+        self.raster_first = bool(int(raster_first))
         self.cc5k = bool(int(cc5k))
         self.lora = bool(int(lora))  # R2's counting LoRA (vlm_lora) on cubicasa; 0 = never call it
         # raster as a second reader of every LoRA count (503463a) cost x20 on cubicasa (S0 03:56: $0.021 -> $0.417/1k)
@@ -397,6 +398,8 @@ class Pipeline(BaseSolver):
                 ans.trace.append(f"a count question answered with a fraction ({ans.value}): confidence capped at 0.3")
                 ans.confidence = 0.3
                 ans.missing = [*ans.missing, "a count should be a whole number; this answer may read the wrong quantity"]
+        if ans.value is not None:
+            self._sheet_veto(path, asked, ans)
         if ans.value is not None and ans.confidence < 0.4 and not ans.missing:
             # Q 05:04: "How many seats does the stadium have?" -> agent 514 @ 0.34 with nothing in missing. A low
             # confidence must say what is missing (Stoa: best estimate + what would make it sure)
@@ -562,6 +565,63 @@ class Pipeline(BaseSolver):
         ans.cost.wall_seconds = round(time.perf_counter() - t0, 4)
         return ans
 
+    @staticmethod
+    def _sheet_veto(path: str, question: str, ans: Answer) -> None:
+        """W3 05:17 (Q v10): "How many bedrooms are shown on this floor plan?" on a HABS ELEVATION sheet -> vlm_lora
+        '0' @ 0.75. W3's sheet-kind veto (rooms asked about, sheet shows no plan; non-cubicasa/swiss rasters only;
+        free when the text layer is cached) caps any path's answer and says why."""
+        if Path(path).suffix.lower() not in IMG_EXT or source_of(path) in ("cubicasa5k", "swiss_dwellings"):
+            return
+        try:
+            from stoa.solvers.raster.sheet import veto
+        except Exception:  # noqa: BLE001  (W3's module not merged yet)
+            return
+        try:
+            v = veto(path, question)
+        except Exception:  # noqa: BLE001
+            return
+        if not v:
+            return
+        ans.trace.append(f"sheet check: {v['note']} -> confidence capped at 0.05")
+        ans.confidence = round(min(ans.confidence, 0.05), 3)
+        ans.evidence = [*v.get("evidence", []), *ans.evidence]
+        if v["note"] not in ans.assumptions:
+            ans.assumptions = [*ans.assumptions, v["note"]]
+        if v.get("missing") and v["missing"] not in ans.missing:
+            ans.missing = [*ans.missing, v["missing"]]
+
+    def _raster_first(self, path: str, question: str, intent: Intent, cands: list[str], trace: list[str]):
+        """A raster of an unseen style with no vector/IFC twin (HABS/Finna/Europeana scans, PNG-only plans): raster
+        reads printed text, dimension strings and graphic scale bars itself from a cached text layer (W3), cheaply.
+        W5 05:11: "How long is the south elevation, in feet?" -> agent look() '187 m' (vision, 0.05) -> 613.5 ft;
+        raster alone: 187 ft @ 0.75 from the printed 187'-0" and the bar '0 5 10 15 20 FEET'.
+        -> (accepted answer | None, (name, answer) to keep as an unsure second reading | None)."""
+        if not self.raster_first or "raster" not in cands or any(TIER.get(c) == "deterministic" for c in cands):
+            return None, None
+        if Path(path).suffix.lower() not in IMG_EXT or source_of(path) == "cubicasa5k":
+            return None, None
+        if intent.task == "count" and intent.target != "unknown":
+            return None, None  # symbol counts of known classes: the LoRA's measured order stays (route())
+        r = self._get("raster")
+        if r is None:
+            return None, None
+        try:
+            a = r.solve(path, question)
+            if not isinstance(a, Answer):
+                a = Answer.model_validate(a)
+        except Exception as e:  # noqa: BLE001
+            trace.append(f"raster (question as asked): error {type(e).__name__}")
+            return None, None
+        if a.value is None:
+            trace.append(f"raster (question as asked): abstained ({(a.missing or ['?'])[0][:80]})")
+            return None, None
+        if a.confidence >= self.raw_accept and _fits(intent.task, a):
+            trace.append(f"raster (question as asked): {a.value} {a.unit or ''} (conf {a.confidence:.2f}; read from "
+                         "the sheet's printed text / scale bar, no agent needed)")
+            return a, None
+        trace.append(f"raster (question as asked): {a.value} {a.unit or ''} at conf {a.confidence:.2f}, unsure")
+        return None, ("raster", a)
+
     def _solve_atomic(self, path: str, question: str, allow_agent: bool = True) -> Answer:
         t0 = time.perf_counter()
         intent = parse(question)
@@ -586,6 +646,15 @@ class Pipeline(BaseSolver):
                                                            for m in unsure[1].missing):
                 # the solver itself says the question has an operation it did not apply: the agent's job
                 why = f"{unsure[0]} flagged an operation it did not apply"
+        if unsure is None:
+            pre, unsure = self._raster_first(path, question, intent, cands, trace)
+            if pre is not None:
+                best = pre.model_copy(deep=True)
+                best.cost = _cost_of(pre)
+                best.cost.wall_seconds = round(time.perf_counter() - t0, 4)
+                best.trace = trace + [f"[raster] {t}" for t in best.trace[-8:]]
+                best.solver = "pipeline/raster"
+                return best
         if why:
             ans = self._run_agent(path, question, why, t0)
             if ans is not None:
