@@ -940,6 +940,9 @@ _LETTER = re.compile(r"(?:(?<=\s)|^)[A-Z](?=[\s,.;:?!)]|$)")  # apartment/unit l
 _ONE_LETTER_WORDS = {"cs": "ovszkuai", "sk": "ovszkuai", "pl": "wzioau", "hu": "a", "sv": "i", "es": "yao",
                      "it": "eaio", "ro": "a", "pt": "aoe", "fr": "a", "lt": "ir", "lv": "ar"}
 _QCHARS = "'\"‘’“”„«»"
+# grouped thousands (Swiss 1'200 / 1’200, 1 200 with a (thin/no-break) space): ONE number, masked before quotes so
+# the apostrophe can never pair with a quote mark (Q 05:08: "1'200 CHF" came out as 1 and 200)
+_THOUSANDS = re.compile(r"(?<![\w'’.,])\d{1,3}(?:['’\u00a0\u202f ]\d{3})+(?:[.,]\d+)?(?![\w'’])")
 
 
 def _protect(q: str) -> tuple[str, list[str]]:
@@ -966,7 +969,8 @@ def _protect(q: str) -> tuple[str, list[str]]:
     def letter(m: re.Match) -> str:
         return m.group(0) if (m.start() == 0 and m.group(0).lower() in one_letter) else keep(m.group(0))
 
-    masked = _QUOTED.sub(quoted, q)
+    masked = _THOUSANDS.sub(lambda m: keep(m.group(0)), q)
+    masked = _QUOTED.sub(quoted, masked)
     parts = re.split(r"(\[\[\d+\]\])", masked)  # outside the masked names only
     masked = "".join(p if re.fullmatch(r"\[\[\d+\]\]", p) else _LETTER.sub(letter, _IDNUM.sub(idnum, p))
                      for p in parts)
