@@ -82,22 +82,54 @@ KINDS = {
         "total": ("What is the total window count on this plan?", False),
         "count_imp": ("Count the windows in this drawing.", False),
     }),
+    # IFC (08:33): room by name + storey, per-storey counts and totals
+    "ifc_room": (r"^What is the net floor area of the room '(?P<R>[^']+)' on '(?P<S>[^']+)', in m²\?$", {
+        "unquoted": ("What is the area of {R} on {S}?", False),
+        "room_storey": ("What's the floor area of the '{R}' room on the '{S}' storey?", False),
+        "fronted": ("Room '{R}' ({S}): area in square metres?", False),
+        "called": ("On {S}, how large is the room called {R}?", False),
+        "space_level": ("Give me the net area of space '{R}' on level '{S}'.", False),
+        "no_storey": ("How big is room '{R}'?", True),
+    }),
+    "ifc_count": (r"^How many (?P<K>walls|doors|windows|rooms \(spaces\)) are shown on the floor plan of '(?P<S>[^']+)'\?$", {
+        "on": ("How many {N} are on {S}?", False),
+        "number_storey": ("Number of {N} on storey '{S}'?", False),
+        "count_level": ("Count the {N} on level {S}.", False),
+        "there": ("How many {N} are there on the '{S}' floor?", False),
+    }),
+    "ifc_room_total": (r"^What is the total net floor area of all rooms \(spaces\) on '(?P<S>[^']+)', in m²\?$", {
+        "combined": ("What is the combined room area on {S}?", False),
+        "sum": ("Sum of all room areas on storey '{S}' in m²?", False),
+        "how_much": ("How much net floor area do the rooms on '{S}' have?", False),
+    }),
+    "ifc_wall_side": (r"^What is the total net side area of all walls on '(?P<S>[^']+)', in m²\?$", {
+        "surface": ("How much wall surface (net side area) is there on {S}?", False),
+        "sum": ("Total net side area of the walls on storey '{S}'?", False),
+    }),
+    "ifc_slab_vol": (r"^What is the total net volume of all slabs on '(?P<S>[^']+)', in m³\?$", {
+        "how_much": ("How much slab volume is on {S}, in cubic metres?", False),
+        "sum": ("Total volume of the slabs on level '{S}'?", False),
+    }),
 }
 
 
 def main():
     n = int(sys.argv[1]) if len(sys.argv) > 1 else 30
-    dev = [q for q in load_split("dev") if q.source == "swiss_dwellings"]
+    dev_all = load_split("dev")
     out = os.path.join(os.environ["JUNCTION_SHARED"], "artifacts", "F", "apt_wording.jsonl")
     total = 0
     with open(out, "w", encoding="utf-8") as f:
         for kind, (rx, wordings) in KINDS.items():
             bases, seen = [], set()
-            for q in dev:
-                m = re.match(rx, q.question)
+            source = "ifc_models" if kind.startswith("ifc_") else "swiss_dwellings"
+            for q in dev_all:
+                m = re.match(rx, q.question) if q.source == source else None
                 if m and q.path not in seen:
                     seen.add(q.path)
-                    bases.append((q, m.groupdict()))
+                    g = m.groupdict()
+                    if "K" in g:
+                        g["N"] = g["K"].replace(" (spaces)", "")
+                    bases.append((q, g))
             random.Random(7).shuffle(bases)
             for q, g in bases[:n]:
                 for name, (tpl, amb) in wordings.items():
