@@ -22,3 +22,7 @@ echo "pipeline: $P"; echo "vlm_direct (local 8B): $V"; echo "vlm_direct (hosted 
 "$PY" experiments/r2/compare_runs.py "$P" "$V" --by kind
 echo "--- on the Nemotron subset:"
 "$PY" experiments/r2/compare_runs.py "$P" "$V" "$N" --by kind
+# every question with each model's answer @ confidence (rows without gold are shown, not scored)
+SBS="$JUNCTION_SHARED/artifacts/R2/noon_side_by_side_$(basename "$SPLIT" .jsonl).txt"
+"$PY" experiments/r2/compare_runs.py "$P" "$V" --by kind --show > "$SBS"
+echo "side by side (pipeline vs local VLM, all questions): $SBS"
