@@ -50,7 +50,9 @@ _WHICH_SHEET = (r"\b(which|what|welche[rsm]?|auf welche\w*|in welche\w*|mill\w*|
 _COUNT_SHEETS = (r"\b(how many|wie viele|kuinka monta|montako|combien de|combien d'|hur många|quant[ei]|hoeveel|mitu)\s+"
                  + _SHEETN + r"\b")
 _NO_PLAN = r"\b(no|without|keine\w*|ohne|ei|ilman|sans|aucun\w*|utan|senza|geen|zonder|pole)\b.{0,30}\b(" + _SHEETS + r")\b"
-_OTHER_DATASET = r"\b(another|other|anderen?|toise\w*|autre|annan|altro|ander)\b.{0,20}\b(dataset|data ?set|datensatz|aineisto\w*|jeu de données)\b"
+_OTHER_DATASET = (r"\b(another|other|anderen?|toise\w*|autre|annan|annat|altro|ander|teis\w*|otro)\b.{0,20}"
+                  r"\b(dataset\w*|data ?set|datensatz|aineisto\w*|jeu de données|andmebaas\w*|andmekogu\w*|"
+                  r"conjunto de datos|insieme di dati|datamängd)")
 _ROOM_STOREY = (r"\b((on|in) which|which|what|in welche\w*|auf welche\w*|welche\w*|missä|mill\w*|à quel\w*|"
                 r"sur quel\w*|quel\w*|på vilke\w*|vilke\w*|a quale|su quale|in quale|quale|op welk\w*|welk\w*|"
                 r"millisel)\s+(floor|storey|story|level|geschoss|stockwerk|etage|ebene|kerroksessa|kerroksella|"
@@ -60,8 +62,9 @@ _NO_ROOMS = r"\b(no|without|keine|ohne|ei|ilman|aucune?|sans|utan|senza|geen)\b.
 
 _YESNO = (r"^(do|does|did|is|are|was|were|has|have|can|ist|sind|stimm\w*|hat|haben|gibt|zeigt|onko|ovatko|näkyykö|"
           r"est-ce|le |la |les |y a-t-il|finns|är|stämmer|visar|è|sono|ci sono|is|zijn|klopt|kas|on)\b")
-_AGREE_ONLY = (r"\b(agree|match|consistent|same|übereinstimm\w*|stimmen\w*|täsmää\w*|sama\w*|même|identiques?|"
-               r"överens|stämmer|coincid\w*|overeen\w*|every|all|alle|kaikki|tous|toutes|alla|tutt[ie])\b")
+_AGREE_ONLY = (r"\b(agree|match\w*|consistent|same|aligned|übereinstimm\w*|stimmen\w*|täsmää\w*|sama\w*|même|"
+               r"identiques?|accord|conformes?|överens|stämmer|coincid\w*|overeen\w*|every|all|alle|kaikki|tous|"
+               r"toutes|alla|tutt[ie]|todas|todos|kõik\w*|fully|complete\w*|vollständig\w*|entire\w*)\b")
 
 
 def _sheet_kinds(question: str) -> set[str]:
@@ -70,14 +73,36 @@ def _sheet_kinds(question: str) -> set[str]:
     if re.search(r"\b(floor ?plans?|plans?|grundriss\w*|pohjapiirustu\w*|pohj\w*|planritning\w*|piant\w*|"
                  r"plattegrond\w*|plan d'étage|plans d'étage)\b", q):
         want.add("plan")
-    if re.search(r"\b(sections?|schnitt\w*|leikkau\w*|coupes?|sektion\w*|sezion\w*|doorsnede\w*|lõiked?)\b", q):
+    if re.search(r"\b(sections?|sectional|schnitt\w*|leikkau\w*|coupes?|sektion\w*|snitt\w*|sezion\w*|doorsnede\w*|"
+                 r"lõike\w*|secci\w*|corte\w*)\b", q):
         want.add("section")
     if re.search(r"\b(elevations?|ansicht\w*|julkisivu\w*|façades?|facades?|fasad\w*|prospett\w*|gevel\w*)\b", q):
         want.add("elevation")
     if re.search(r"\b(in total|all|altogether|insgesamt|alle|yhteensä|kaikki|au total|tous|totalt|alla|in totale|"
                  r"tutti|totaal|kokku)\b", q) and re.search(r"\b(sheets?|drawings?|blätter|piirustu\w*|feuilles?)\b", q):
         want |= {"plan", "section", "elevation"}
+    elif "plan" in want and want & {"section", "elevation"}:
+        want.discard("plan")  # 'plans de coupe', 'section plans', 'Schnittpläne': the specific kind wins
     return want
+
+
+# broader, language-general signals (tuned on half A of the LLM paraphrases, tested on half B; 0 dataset fires)
+_MODEL2 = r"\b(ifc|bim)\b|\bmodel\w*|\bmodell\w*|\bmalli\w*|\bmodèle\w*|\bmodello\w*|\bmudel\w*|\bmodelo\w*|\bmoodl\w*"
+_PLAN2 = (r"\b(plan|plans|planen|plano|planos|floor ?plan\w*|drawing\w*|sheet\w*|zeichnung\w*|grundriss\w*|"
+          r"piirustu\w*|piirro\w*|pohjapiirro\w*|dessin\w*|feuillet\w*|disegn\w*|piant\w*|fogli\w*|ritning\w*|"
+          r"tekening\w*|plattegrond\w*|joonis\w*|dibujo\w*|blad\w*|lehe\w*|plaan\w*|vloerpl\w*|korrusplaan\w*)\b")
+_SET = (r"(drawing ?set|set of (drawings|sheets|plans)|plan ?set|sheet ?set|zeichnungs(satz|set|reihe)\w*|plansatz|"
+        r"piirustus(joukko|sarja)\w*|ensemble (des|de) (plans|dessins)|jeu de plans|(insieme|set) (dei|di) disegni|"
+        r"ritnings?uppsättning\w*|teckningsuppsättning\w*|tekenreeks|tekeningen ?set|set tekeningen|"
+        r"joonis\w* (komplekt|üksus)\w*|conjunto de (dibujos|planos))")
+_SHEET3 = (r"\b(which|what|welche[rsm]?|quel(le)?s?|quale|vilke[nt]?|welke|mikä|mill\w*|mis|qué|en qué|cuál)\s+"
+           r"(zeichnung|feuillet|foglio|ritning|tekening|hoja|plano|paperi|lehe\w*|blad|sheet|drawing|plan)\b")
+_STOREYS = (r"\b(storeys|stories|floors|levels|stockwerke|geschosse|ebenen|kerrokset|kerrat|kerroksi\w*|niveaux|étages|"
+            r"piani|livelli|våningar|plan|verdiepingen|korruseid|korrused|plantas|pisos|niveles)\b")
+_NEG = (r"\b(no|zero|without|devoid|none|keine\w*|ohne|ei|eivät|yhtään|aucune?|sans|nessun\w*|non|inga|utan|geen|"
+        r"ühtegi|pole|ningun\w*|sin)\b")
+_ROOMW = (r"(\brooms?\b|\bspaces?\b|räume|\braum|huone|\bpièces?|\bespaces?|\bstanze|\bspazi|\brum\b|kamers|ruimtes|"
+          r"ruumi|habitaci\w*|espacios)")
 
 
 def is_link_question(question: str) -> dict:
@@ -108,6 +133,15 @@ def is_link_question(question: str) -> dict:
                                                      r"flest|fler|più|meno|meer|minder|rohkem)\b", q) and (re.search(r"['\"‘’“”]", q) or re.search(
             r"(\broom|raum\b|huone|\bpièce|\bsalle|\blocal|rum(met)?\b|\bstanza|ruimte\b|ruum\b)", q)):
         why.append("room -> storey/sheet")
+    if not why and re.search(_MODEL2, q) and re.search(_PLAN2, q):
+        why.append("plan and model named")
+    if not why and re.search(_SET, q):
+        why.append("drawing set")
+    if not why and re.search(_SHEET3, q) and not re.search(r"\b(scale|maßstab|mittakaava|échelle|scala|skala|schaal|"
+                                                          r"escala|mõõtkava)\b", q):
+        why.append("which sheet")
+    if not why and re.search(_STOREYS, q) and re.search(_NEG, q) and re.search(_ROOMW, q):
+        why.append("storeys without rooms")
     return {"fire": bool(why), "why": ", ".join(why)}
 
 
@@ -178,9 +212,14 @@ def _retrieve(rows: list[dict], question: str, k: int = 12) -> list[dict]:
         name = r["name"].lower()
         s = sum(1 for t in toks if t in name) + sum(2 for t in toks if t == name or f"'{t}'" in question.lower()
                                                     and t in name)
+        ql = question.lower()
+        s += sum(1 for nt in re.findall(r"[a-zäöüõåéèà]{4,}", name) if nt[:5] in ql)
         if s:
             scored.append((s, r))
     scored.sort(key=lambda x: -x[0])
+    rooms = [r for r in rows if r["id"][0] == "R"]
+    if not scored and len(rooms) <= 80:
+        return base + rooms  # no name overlap (e.g. 'Heizkesselraum' vs 'Boiler room'): let the model map it
     return base + [r for _, r in scored[:k]]
 
 
@@ -234,6 +273,16 @@ def solve(path: str, question: str, backend: str = "local") -> Answer:
                              f"{[Path(r['path']).name for r in got]} (deterministic, no model call)"],
                       assumptions=["the drawing set = every sheet rendered from this IFC model in the dataset"],
                       cost=Cost(wall_seconds=round(time.perf_counter() - t0, 3)))
+    counting_q = bool(re.search(r"\b(how many|wie viele|kuinka monta|montako|combien|quant[ie]|hur många|hoeveel|mitu|"
+                                r"kui palju|cuánt[oa]s)\b", question.lower()))
+    if hit["why"] in ("storeys without rooms", "storeys without a plan") and not counting_q:
+        key = "rooms" if hit["why"] == "storeys without rooms" else "plan"
+        got = [r for r in rows if r["id"][0] == "S" and not r.get(key)]
+        return Answer(value=", ".join(r["storey"] for r in got) if got else "none", confidence=0.8, solver="kg_qa",
+                      evidence=[Evidence(file=ctx.get("model") or path, note=r["text"][:120]) for r in got][:12],
+                      trace=[f"kg_qa: {hit['why']} -> storeys of the IFC model with no {key}: "
+                             f"{[r['storey'] for r in got]} (deterministic, no model call)"],
+                      cost=Cost(wall_seconds=round(time.perf_counter() - t0, 3)))
     view = _retrieve(rows, question)
     byid = {r["id"]: r for r in rows}
     with cost_meter() as m:
@@ -243,12 +292,16 @@ def solve(path: str, question: str, backend: str = "local") -> Answer:
     if isinstance(js, list):
         js = next((x for x in js if isinstance(x, dict)), {})
     op = js.get("op", "none")
-    yesno = bool(re.match(_YESNO, question.strip().lower()))
-    if yesno and op == "diff":
-        op = "agree" if re.search(_AGREE_ONLY, question.lower()) else "greater"
-        trace_fix = f"yes/no question: diff -> {op}"
-    else:
-        trace_fix = None
+    ql = question.strip().lower()
+    counting = bool(re.search(r"\b(how many|how much|count|number of|wie viele|anzahl|kuinka monta|montako|combien|"
+                              r"nombre de|quant[ie]|numero di|hur många|antal|hoeveel|aantal|mitu|kui palju|cuánt[oa]s|"
+                              r"número de)\b", ql))
+    yesno = bool(re.match(_YESNO, ql)) or (not counting and op == "diff")
+    trace_fix = None
+    if yesno and op in ("diff", "greater") and re.search(_AGREE_ONLY, ql):
+        op, trace_fix = "agree", f"yes/no 'all/every/agree' question: {op} -> agree"
+    elif yesno and op == "diff":
+        op, trace_fix = "greater", "yes/no question: diff -> greater"
     cited = [byid[i.strip("[] ")] for i in js.get("rows", []) if i.strip("[] ") in byid]
     trace = [f"kg_qa: {len(rows)} fact rows ({len(view)} shown); op {op} on {[r['id'] for r in cited]}"]
     if trace_fix:
@@ -307,6 +360,11 @@ def solve(path: str, question: str, backend: str = "local") -> Answer:
             if a == "none" or b == "none" or a == b:
                 a, b = "model", "drawn"
             va, vb = c.get(a), c.get(b)
+            if re.search(r"(not|n't|nicht|ei|pas|non|inte|niet|no)\b.{0,40}(assign|belong|zugeordnet|kuulu|attribu|"
+                         r"assegn|tilldela|toegewezen|asign|recogni|määrat)", question.lower()):
+                # elements DRAWN on this plan that the model puts on another storey (crossing the cut plane)
+                a, va, b, vb = "drawn from other storeys", c.get("drawn_other", 0), "zero", 0
+                trace.append("kg_qa: question asks about drawn elements of other storeys -> drawn_other")
             if va is not None and vb is not None:
                 if op == "diff":
                     value, unit, conf = va - vb, "count", 0.8

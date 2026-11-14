@@ -87,9 +87,12 @@ def score():
 
     with ThreadPoolExecutor(6) as ex:
         res = list(ex.map(run, rows))
+    origs = sorted({r["meta"]["orig_qid"] for r in rows})
+    half_a = set(origs[0::2])  # same split as trigger_eval.py: A = tuning, B = held out
     by = defaultdict(lambda: [0, 0, 0, 0, 0])  # n, fired, right, conf>=0.8, conf>=0.8 right
     for r, (fire, via, ok, conf, val) in zip(rows, res):
-        for k in (r["meta"]["lang"], "ALL"):
+        half = "A" if r["meta"]["orig_qid"] in half_a else "B"
+        for k in (r["meta"]["lang"], "ALL", "half " + half):
             b = by[k]
             b[0] += 1
             b[1] += fire
