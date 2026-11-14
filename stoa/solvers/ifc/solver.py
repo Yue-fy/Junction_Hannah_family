@@ -3319,6 +3319,19 @@ class IfcSolver(BaseSolver):
         asked_plan = Path(path).suffix.lower() in (".pdf", ".svg") and "_plan-" in Path(path).stem
         model_scope = it.scope == "model" or storey is None
         plans: list[str] = []
+        other_sheet = False
+        if asked_plan and not model_scope:
+            # 'walls on the ground floor' asked on the 1.OG sheet (Q 09:45): box and cross-check on the asked storey's
+            # own plan, not on this sheet (it showed 70 walls of 1.OG against the 81 of EG and lowered a right answer)
+            from stoa.solvers.ifc.index import load_index as _li
+
+            ps_, _ = plan_storey(path, _li(model))
+            own = plans_of_model(model).get(storey.guid)
+            if ps_ is not None and ps_.guid != storey.guid and own:
+                ans.trace.append(f"the question is about storey '{storey.name}', not this sheet's '{ps_.name}': "
+                                 f"2D evidence on {Path(own).name}")
+                asked_plan, other_sheet = False, True
+                plans.append(own)
         if asked_plan:
             plans.append(str(Path(path).with_suffix(".pdf")))
         if model_scope:
@@ -3381,7 +3394,7 @@ class IfcSolver(BaseSolver):
                     ans.confidence = 0.75
                     ans.missing.append(f"the plan drawing shows {len(drawn)} symbols where the model counts "
                                        f"{ans.value}")
-        ans.evidence = (ev2d + ans.evidence) if asked_plan else (ans.evidence + ev2d)
+        ans.evidence = (ev2d + ans.evidence) if (asked_plan or other_sheet) else (ans.evidence + ev2d)
 
     @staticmethod
     def _floor_area(e: Element, it: Intent, trace: list[str]) -> tuple[float | None, str]:
