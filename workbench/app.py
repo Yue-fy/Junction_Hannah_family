@@ -170,7 +170,8 @@ def audit_items():
     rows = []
     for it in _audit_items():
         v = verdicts.get(it["item_id"])
-        rows.append({"item_id": it["item_id"], "source": it["source"], "type": it["type"],
+        group = it.get("batch_label") or ("Harder questions" if it.get("split") not in (None, "dev") else "Dev sample")
+        rows.append({"item_id": it["item_id"], "source": it["source"], "type": it["type"], "group": group,
                      "verdict": v.get("verdict") if v else None})
     return {"items": rows, "more_available": len(_more_items()), "batches": _pending_batches()}
 

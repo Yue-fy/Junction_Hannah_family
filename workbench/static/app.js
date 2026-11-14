@@ -289,6 +289,19 @@ const audit = {
     $("#audit-more").hidden = !(this.moreN && done === this.items.length);
     $("#audit-more-n").textContent = this.moreN;
     $("#audit-progress").textContent = `${done} / ${this.items.length} checked`;
+    // one chip per batch (dev sample, harder questions, Stoa's examples ...): progress + jump to its first unchecked item
+    const groups = [];
+    this.items.forEach((it, i) => {
+      let g = groups.find((x) => x.name === it.group);
+      if (!g) groups.push((g = { name: it.group, n: 0, done: 0, first: -1, start: i }));
+      g.n++; if (it.verdict) g.done++; else if (g.first < 0) g.first = i;
+    });
+    const gel = $("#audit-groups");
+    gel.hidden = groups.length < 2;
+    gel.innerHTML = groups.map((g, k) => `<button class="ghost" data-k="${k}" title="go to its first unchecked item">${esc(g.name)}: ${g.done}/${g.n}</button>`).join("");
+    $$("button", gel).forEach((b) => b.addEventListener("click", () => {
+      const g = groups[+b.dataset.k]; this.idx = g.first >= 0 ? g.first : g.start; this.show();
+    }));
     $("#audit-bar").style.width = `${(100 * done) / this.items.length}%`;
   },
   async get(id) {

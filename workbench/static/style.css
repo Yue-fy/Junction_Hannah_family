@@ -154,3 +154,5 @@ select { font: inherit; width: 100%; padding: .45rem .6rem; border: 1px solid va
 .viewer .empty { cursor: default; overflow: auto; }
 #audit-correct { margin-top: .4rem; }
 .ans .cost { font-size: 0.85em; color: var(--muted, #666); margin-top: 2px; }
+.groups { display: flex; flex-wrap: wrap; gap: .35rem; margin: .3rem 0 .5rem; }
+.groups button { font-size: .8rem; padding: .2rem .55rem; }
