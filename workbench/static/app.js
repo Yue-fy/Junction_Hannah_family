@@ -247,7 +247,7 @@ const audit = {
   viewer: new Viewer($("#audit-viewer")), items: [], idx: 0, cur: null, cache: new Map(),
   async init() {
     const r = await api("api/audit/items");
-    this.items = r.items;
+    this.items = r.items; this.moreN = r.more_available || 0;
     if (!this.items.length) {
       $("#audit-question").textContent = "No items to check yet.";
       this.viewer.empty("The audit sample has not been prepared yet.");
@@ -260,6 +260,8 @@ const audit = {
   },
   progress() {
     const done = this.items.filter((it) => it.verdict).length;
+    $("#audit-more").hidden = !(this.moreN && done === this.items.length);
+    $("#audit-more-n").textContent = this.moreN;
     $("#audit-progress").textContent = `${done} / ${this.items.length} checked`;
     $("#audit-bar").style.width = `${(100 * done) / this.items.length}%`;
   },
@@ -272,13 +274,17 @@ const audit = {
     let d;
     try { d = await this.get(it.item_id); } catch (e) { this.viewer.empty(`Could not load: ${esc(e.message)}`); return; }
     this.cur = d;
-    $("#audit-meta").textContent = `Item ${this.idx + 1} of ${this.items.length} · ${d.source} · ${d.type} · ${d.drawing_name}`;
+    $("#audit-meta").innerHTML = `Item ${this.idx + 1} of ${this.items.length} · ${esc(d.source)} · ${esc(d.type)} · ${esc(d.drawing_name)}` +
+      (d.split && d.split !== "dev" ? `<span class="split-tag" title="reference answer made by our agents">harder · ${esc(d.recipe || d.split)}</span>` : "");
+    $("#audit-ref").previousElementSibling.textContent = d.split && d.split !== "dev" ? "Reference answer (made by our agents)" : "Reference answer (dataset)";
     $("#audit-question").textContent = d.question;
     $("#audit-answer").textContent = d.answer;
     $("#audit-conf").textContent = confWords(d.confidence);
     $("#audit-ref").textContent = d.reference;
     $("#audit-match").textContent = d.matches_reference === true ? "our answer matches it" :
-      d.matches_reference === false ? "our answer differs" : "free-text answer: please compare";
+      d.matches_reference === false ? "our answer differs" :
+      d.text_match === true ? "free text: looks the same, please compare" :
+      d.text_match === false ? "free text: looks different, please compare" : "free-text answer: please compare";
     renderNotes($("#audit-assumptions"), d.assumptions, d.missing);
     $("#audit-trace").innerHTML = d.trace.map((t) => `<li>${esc(t)}</li>`).join("");
     $("#audit-comment").value = "";
@@ -325,6 +331,10 @@ const audit = {
   move(d) { const j = this.idx + d; if (j >= 0 && j < this.items.length) { this.idx = j; this.show(); } },
 };
 $$(".verdicts .v").forEach((b) => b.addEventListener("click", () => audit.verdict(b.dataset.v)));
+$("#audit-more-btn").addEventListener("click", async () => {
+  try { const r = await api("api/audit/more", { method: "POST" }); flash(`${r.added} new items`); } catch (e) { alert(e.message); return; }
+  await audit.init();
+});
 $("#audit-prev").addEventListener("click", () => audit.move(-1));
 $("#audit-next").addEventListener("click", () => audit.move(1));
 document.addEventListener("keydown", (e) => {

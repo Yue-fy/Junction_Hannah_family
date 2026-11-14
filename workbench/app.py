@@ -125,7 +125,32 @@ def audit_items():
         v = verdicts.get(it["item_id"])
         rows.append({"item_id": it["item_id"], "source": it["source"], "type": it["type"],
                      "verdict": v.get("verdict") if v else None})
-    return {"items": rows}
+    return {"items": rows, "more_available": len(_more_items())}
+
+
+def _more_items() -> list[dict]:
+    """The next (harder) batch, from human/audit_items_more.jsonl, minus items already in the sample."""
+    p = store.human_dir() / "audit_items_more.jsonl"
+    if not p.exists():
+        return []
+    have = {r["item_id"] for r in _audit_items()}
+    rows = [json.loads(line) for line in p.read_text(encoding="utf-8").splitlines() if line.strip()]
+    return [r for r in rows if r.get("item_id") not in have]
+
+
+_MORE_LOCK = threading.Lock()
+
+
+@app.post("/api/audit/more")
+def audit_more():
+    with _MORE_LOCK:
+        more = _more_items()
+        if more:
+            p = store.human_dir() / "audit_items.jsonl"
+            with open(p, "a", encoding="utf-8") as f:
+                for r in more:
+                    f.write(json.dumps(r, ensure_ascii=False, default=str) + "\n")
+    return {"ok": True, "added": len(more)}
 
 
 @app.get("/api/audit/item/{item_id}")
@@ -139,9 +164,11 @@ def audit_item(item_id: str):
         if r.get("item_id") == item_id:
             last = r
     return {"item_id": item_id, "path": it["path"], "source": it["source"], "type": it["type"],
+            "split": it.get("split", "dev"), "recipe": (it.get("meta") or {}).get("recipe"),
             "question": it["question"], "answer": _fmt_value(it.get("value"), it.get("unit")),
             "value": it.get("value"), "unit": it.get("unit"), "confidence": it.get("confidence"),
             "reference": _fmt_value(it.get("gold"), it.get("gold_unit")), "matches_reference": it.get("correct"),
+            "text_match": it.get("text_fuzzy"),
             "assumptions": it.get("assumptions") or [], "missing": it.get("missing") or [],
             "trace": it.get("trace") or [], "solver": it.get("solver"), "views": views, "other_evidence": other,
             "drawing_name": catalog.human_name(it["path"]), "credit": catalog.credit_line(it["path"]),
