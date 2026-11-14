@@ -4,6 +4,7 @@
 
 --agent B      the general agent's planner (stoa.router.agent.Agent default backend) -> B
 --translate B  stoa.llm.to_english default backend -> B
+--factcard B   ifc free-text answers (stoa/solvers/ifc/factcard.py llm.chat calls) -> B; the eval's judge stays on :8001
 Everything else (atomic solvers, LoRA counts, rules) stays on the shared :8001.
 """
 import argparse
@@ -15,6 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 ap = argparse.ArgumentParser()
 ap.add_argument("--agent")
 ap.add_argument("--translate")
+ap.add_argument("--factcard")
 a, rest = ap.parse_known_args()
 rest = [x for x in rest if x != "--"]
 
@@ -37,6 +39,18 @@ if a.translate:
         i = names.index("backend") - (len(names) - len(d))
         d[i] = a.translate
         L.to_english.__defaults__ = tuple(d)
+
+if a.factcard:
+    import stoa.llm as L2
+
+    _chat = L2.chat
+
+    def _routed(*args, **kw):
+        if sys._getframe(1).f_code.co_filename.endswith("factcard.py") and "backend" not in kw:
+            kw["backend"] = a.factcard
+        return _chat(*args, **kw)
+
+    L2.chat = _routed
 
 from stoa.eval.runner import main  # noqa: E402
 

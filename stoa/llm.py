@@ -337,6 +337,29 @@ def _client(backend: str):
         return _clients[backend]
 
 
+_TB_SEEN: dict[str, tuple[bool, float]] = {}
+
+
+def text_backend(default: str = "local") -> str:
+    """Backend for long FREE-TEXT answers (e.g. ifc fact-card answers): $STOA_TEXT_BACKEND (e.g. "local2" = Qwen3.6-35B-A3B
+    on :8002) when that server answers /v1/models (re-checked every 60 s), else `default`. Unset -> `default`, so callers
+    can use it unconditionally. R2 09:07: ifc_bench dev free text, 35B vs 8B on the same fact cards: 8B judge 62.0 vs 54.5
+    (21 wins / 6 losses); hosted Nemotron re-judging the 27 discordant pairs: 6 vs 0."""
+    want = os.environ.get("STOA_TEXT_BACKEND", "").strip()
+    if not want or want == default or want not in BACKENDS:
+        return default
+    now = time.time()
+    ok, seen = _TB_SEEN.get(want, (False, 0.0))
+    if now - seen > 60:
+        try:
+            _client(want).with_options(timeout=3.0).models.list()
+            ok = True
+        except Exception:  # noqa: BLE001  (second server down: fall back silently)
+            ok = False
+        _TB_SEEN[want] = (ok, now)
+    return want if ok else default
+
+
 def served_model(backend: str = "local") -> str:
     """The concrete model id behind the "default" alias (first id listed by /v1/models)."""
     try:
