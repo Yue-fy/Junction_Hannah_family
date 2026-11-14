@@ -1,40 +1,47 @@
 # Red team report (agent Q) — can we break the pipeline?
 
-Run: `20261114-040513-pipeline-questions-a600` on night **0589ce3** (04:05, 14 Nov), 174 questions,
-`redteam/questions.jsonl` (built by `redteam/build.py`, analysed by `redteam/analyze.py`; full tables in
-`$JUNCTION_SHARED/artifacts/Q/rt1-analysis.md`). Builds on F's `hard` (translations/paraphrases/compositions/ft²)
-and `hard2` (new operators); this set covers what those don't: surface noise, prompt injection, distractor numbers,
-objects that don't exist, **false premises** (wrong storey/room/model names), questions a drawing cannot answer,
-unit traps beyond ft², and **image transforms of a plan copied outside the dataset folder**.
+**440 adversarial questions** (`redteam/questions.jsonl`, built by `redteam/build.py`, analysed by `redteam/analyze.py`),
+in ten families written one after another tonight; each new family was aimed at the mechanism the last one exposed.
+Builds on F's `hard` (translations/paraphrases/compositions/ft²) and `hard2` (new operators) and covers what those
+don't. The first 205 rows start from dev questions the pipeline had **right at conf ≥ 0.8**, so a failure there is
+caused by the perturbation, not by the drawing.
 
-Every perturbed question starts from a dev question the pipeline answered **right at conf ≥ 0.8** on the test-1 code
-(run bb98), so a failure is caused by the perturbation, not by the drawing. The control rows (the unchanged base
-questions) are still 14/14 right on 0589ce3.
+## Verdict (05:05, night 753eccb) — read this first
+1. **What holds.** Rewording, casing, extra context, distractor numbers, typos, prompt injection, rotated / gray /
+   JPEG-q10 / half-resolution copies, a plan copied outside our folder, objects that don't exist, yes/no without a
+   hint, the same question asked twice: on the 283 original red-team rows the current night is **96.5 % right, every
+   scored answer at conf ≥ 0.8 is right (190/190), and no false-premise question is answered at ≥ 0.8 (0/24)**
+   (was 7/24 at 04:13). A prompt injection that once worked (99 at 0.71) now gets conf 0.10.
+2. **One root cause behind every confident miss we found: a check verifies the number that was computed, never that
+   it answers what was asked** — the storey, room, model, scope or kind of quantity. Each family found it on a new
+   surface: a storey/model that doesn't exist (v1, fixed), a room number with the wrong name (v2, fixed), a dropped
+   half of "A and B" (v3/v4, fixed in the pipeline path), **a storey in everyday words** ("the basement",
+   "im Erdgeschoss"; v5, half fixed), **"in the whole building"** outside English/German/Dutch (v7, fixed except
+   Italian), a singular name matching 8 rooms (v5, open), a floor the building doesn't have (v8, open).
+3. **The owners fixed things fast and generally.** Every round was re-measured on the same rows (tables below):
+   confident false-premise answers 7/24 → 0/24; "whole building" in SV/FR/ET/FI/PL 0/15 → 15/15 within an hour.
+4. **Still open on 753eccb (20 of 418 answered wrong at ≥ 0.8, all in v5–v8):** "basement" when the model calls it
+   'KG' (6 languages → the sheet's storey at 0.88–0.98, W1), Italian "in tutto l'edificio" (3, W1), "How big is the
+   Küche?" with several kitchens → silent sum at 0.98 (5, W2), "how many floors" → 7 incl. foundation and roof (W1),
+   "whole building" on a one-floor plan and "the 7th floor" of a 5-storey model (5, W1/W2). On scans, unanswerable
+   questions still get an invented number (514 seats at 0.34) with no reason given (v10, W4).
+5. **Demo safety.** Judge-style questions on our three demo drawings (v6, v9 in Finnish) and the full tour pre-flight
+   are in `demo/DEMO.md` ("If a judge types their own question") and `demo/LIVE-CHECK.md`.
 
-## Verdict in one paragraph
-The pipeline is **robust to surface noise and image degradation** and **knows when a drawing can't answer**, but it
-is **confidently wrong on false premises in IFC questions**: asked about a storey, room or model that does not exist,
-it answers a *different* storey/model at conf 0.96–0.98 (5 of 5). The IFC solver itself already knew (its own
-confidence was 0.29–0.30 on three of them, with "could not resolve '…'" in its assumptions): the **pipeline overwrote
-that doubt with the template's train hit rate**. This is the same failure shape as the 7 confident IFC misses on
-sealed test 1 (all at conf ≥ 0.8). Fix is one line in the pipeline plus two name-matching guards in `ifc` (below).
-v2 (31 more questions) found the same shape on Swiss vector plans: a real room number with the wrong name
-('room 2.23 (Sauna)', a corridor) is answered at 0.99, and size questions worded "how big / what's the size" come back
-as *counts* (one at 0.97). Common cause: **a check verifies the number the solver computed, never that it answers
-what was asked** (name, storey, model, kind of quantity).
-On the newest night (15c0b04) a schedule change made one right answer unsure, the cascade handed it to a VLM, and a
-prompt injection then succeeded (99 at 0.71). A measured patch for bugs 1 + 2 (`experiments/q/redteam_guards.patch`)
-cuts confident false-premise answers 7 → 4 of 24 and makes drawings outside our folder readable (6/6).
-**Status 04:35:** W4, W1 and F shipped fixes; on night-W4 83d0dcb confident answers to false-premise/unanswerable
-questions are down to 2 of 24 (both W2's dxf room-name case), scored answers at conf ≥ 0.8 are 135/135 right, and
-the injection's 99 gets conf 0.10 (section "Verification").
-**Status 05:05 (night 753eccb):** W1's cross-language check fixed "whole building" in 5 of 6 languages and half of the
-storey nouns; 20 confident-wrong answers remain on 418 rows, all in the new families (section "Verification on night
-753eccb"). **Earlier, 04:55 (night dde6347):** on the 283 v1–v4 rows no false-premise question is answered at ≥ 0.8 and every
-scored answer at ≥ 0.8 is right (190/190). v5 asks the way people talk and breaks it again: **a storey named as
-"the basement" / "im Erdgeschoss" / "op de begane grond" is ignored and the sheet's storey is answered** (12 of 20
-non-English rows confidently wrong; bug 13, W1), "How big is the Küche?" with 8 kitchens returns their silent sum at
-0.98 (bug 14, W2), and translate-first exposed a dxf conjunction bug that is confident in plain English (bug 15).
+| family (rows) | what it asks | 753eccb: right · wrong at ≥ 0.8 |
+|---|---|---|
+| v1 control/perturb/image/unit/absent (174) | surface noise, injection, image transforms, unit traps, objects that don't exist | see v1 table; 0 confident misses |
+| v1–v2 false premise / unanswerable (24) | storeys/rooms/models that don't exist, facts no drawing holds | 22/24 handled · 0 |
+| v2 wording (20) | "how big is …", "what's the size of …" | 20/20 · 0 |
+| v3/v4 compositions (102) | "A and B in total" in 7 + 4 languages | 99/102 · 0 (SV raster 3/6 at ≤ 0.75) |
+| v5 storey nouns (36) / room names (10) / yes-no (24) | "doors in the basement", "How big is the Küche?", "Onko asunnossa sauna?" | 23/36 · 6 · rooms 5/5 unique, **5 ambiguous at 0.98** · yes/no 24/24 |
+| v6 judge on demo drawings (21) | what a judge might type on stage | 14/20 + flag · 1 ("how many floors" → 7) |
+| v7 scope words (36) | "in the whole building" / "on this floor" in 9 languages | 33/36 · 3 (Italian) |
+| v8 scope premises (8) | "whole building" on a one-floor plan, "7th floor" in a 5-storey model | 2/2 ordinals · **5 of 6 premises at ≥ 0.8** |
+| v9 Finnish judge (14) | Finnish on the demo drawings | 11/14 · 0 |
+| v10 scan follow-ups (8) | date / author / scale; floor-plan questions on an elevation | 4/4 facts · premises answered without a reason |
+
+Re-run everything: see "Re-run" at the end. History (v1 → v10, with each round's verification) follows.
 
 ## Results v1 (174 Qs; acc = eval scorer, which converts units; strict = the number is in the unit asked)
 | family | n | acc | strict | wrong at conf ≥ 0.8 | note |
