@@ -148,3 +148,24 @@ def test_room_type_scope_thresholds_and_ranges(solver):
     assert s(DUPLEX_L1, "Which room has the most doors?").confidence <= 0.3
     share = s(DUPLEX_L1, "What percentage of the rooms on 'Level 1' are bathrooms?")
     assert share.unit == "%" and 0 < share.value < 50
+
+
+ESPL2 = "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-02-2-korrus.pdf"
+
+
+@pytest.mark.skipif(not abspath(ESPL2).exists(), reason="dataset not available")
+def test_lists_ranks_heights_and_storeys(solver):
+    s = solver.solve
+    big = s(ESPL2, "Which rooms on '2.korrus' are larger than 40 m²?")
+    assert isinstance(big.value, str) and big.value.startswith("3 rooms") and "KORIDOR (202)" in big.value
+    first = s(ESPL2, "What is the area of the largest room on '2.korrus'?").value
+    second = s(ESPL2, "How many square metres is the second largest room on '2.korrus'?").value
+    assert 0 < second < first
+    assert s(ESPL2, "What is the median room area on '2.korrus'?").unit == "m2"
+    assert s(ESPL2, "What is the ceiling height of the rooms on '2.korrus'?").value == pytest.approx(3.0, abs=0.05)
+    assert s(ESPL2, "How many storeys does the building have above ground level?").value == 6  # not 'Vundament'
+    assert s(ESPL2, "What is the elevation of the top storey?").value == pytest.approx(17.0)
+    assert s(ESPL2, "Is the building taller than 15 m?").value == "yes"
+    cmpd = s(ESPL2, "How many doors are there on '2.korrus' compared to '3.korrus'?")
+    assert "2.korrus" in cmpd.value and "3.korrus" in cmpd.value
+    assert s(ESPL2, "How many doors does the room 'KORIDOR (219)' have?").confidence <= 0.3

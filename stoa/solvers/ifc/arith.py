@@ -158,6 +158,10 @@ def detect(question: str) -> Outer | None:
     if m:
         op = "sub" if m.group("rm") else "add"
         return Outer(op, float(m.group("n")), None, spans=[m.span()], why=f"{op} {m.group('n')}")
+    # "Is the building taller than 15 m?"
+    m = re.search(r"\b(building|house)\b.{0,25}?\b(taller|higher)\s+than\s+(?P<n>\d+(?:[.,]\d+)?)", t)
+    if m:
+        return Outer("height", _num(m.group("n")), "m", cmp="gt", spans=[m.span()], why=f"building height > {m.group('n')}?")
     # building height / perimeter / footprint: geometry of the whole building, no element kind needed
     m = re.search(r"\bhow (tall|high) is the (building|house)\b|\bheight of the (building|house)\b|\bbuilding'?s? "
                   r"height\b|\b(total|overall) height\b|\bgebaudehohe\b|\bhohe des gebaudes\b|\bhoogte van het gebouw\b|"
