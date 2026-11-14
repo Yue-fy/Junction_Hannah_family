@@ -4,9 +4,23 @@ Hardware: 1× RTX PRO 6000 Blackwell 96 GB. Shared server budget ≈ 45 GB (`--g
 **Bandwidth is the real constraint tonight:** this machine downloads from Hugging Face at only ~2.5 MB/s total
 (Wi-Fi; measured with 8 parallel range requests), i.e. ~2 h per 19 GB. Every download must be chosen carefully.
 
+## TL;DR for the captain (09:45, end of night)
+- **Small fine-tuned beats big general.** A LoRA on our own 8B (cc-v2, 2 output tokens per answer) is the night's largest gain on
+  SEALED test: CubiCasa +8.8 [+6.0, +11.9], weighted 73.8 → 79.8, at ~$0.02 per 1k questions. A 4× bigger base VLM (Qwen3.6-35B-A3B)
+  and hosted Nemotron 3.5 Super VL both count WORSE (35B base: −21 vs cc-v2 on dev CubiCasa; Nemotron: below even the base 8B on smoke).
+- **Bigger model only where it measurably helps:** free-text IFC answers (fact cards) on Qwen3.6-35B-A3B (:8002): judged 62.0 vs 54.5,
+  hosted Nemotron as independent judge on the disagreements 6 vs 0, +20% GPU-s per question. Everything else stays on the 8B.
+- **Hosted Nemotron = visible second opinion** (demo button), not a bulk tier: as planner it ties at 9× cost, as translator 25× slower.
+- **Language front end**: translate only what the rules can't read (`should_translate`); held-out languages (nb/hr/el/lt) 78 → 84.5
+  in the pipeline (F), 0 dataset questions touched.
+- **Cost honesty:** every local call is billed from tokens at measured GPU throughput (not wall time, which includes queueing).
+- Negative results are listed under each section and in board/R2.md ("don't repeat").
+
 ## Serving now
 | what | value |
 |---|---|
+| :8002 (since 09:40, D21) | Qwen3.6-35B-A3B-FP8 `qwen3.6-35b-a3b`, util 0.48; ONLY via `llm.text_backend()` (STOA_TEXT_BACKEND=local2), falls back to :8001 |
+| :8001 adapters | LoRAs `cc-v2` (CubiCasa counts) and `cc-v3` (+ Swiss PNG), loaded by `serving/start.sh` |
 | model | Qwen3-VL-8B-Instruct (bf16), from the text encoder inside Qwen-Image-2.1 (full VLM: vision tower + lm_head; same config as Qwen3-VL-8B-Instruct) |
 | URL | http://127.0.0.1:8001/v1, model `default` or `qwen3-vl-8b` |
 | context | 32k tokens, KV cache 169k tokens (~5 concurrent full-length requests; dozens of short ones) |
@@ -140,6 +154,16 @@ Conclusion: like the Nemotron planner (04:01), a stronger planner/translator doe
 a 4× bigger base VLM on our counting. :8001 stays Qwen3-VL-8B + cc-v2/cc-v3. EXCEPTION: long free-text answers, where the 35B wins
 (above) → `llm.text_backend()` (opt-in via STOA_TEXT_BACKEND=local2, falls back to :8001); permanent :8002 is S0's decision (09:08).
 
+**D21 (09:28): YES. :8002 serves qwen3.6-35b-a3b permanently since 09:40** (`PORT=8002 GPU_UTIL=0.48 SERVED_NAME=qwen3.6-35b-a3b
+serving/start.sh qwen36-35b-a3b`, 130 s; GPU 94.6 of 97.9 GB with :8001). Demo/API env sets STOA_TEXT_BACKEND=local2; gates don't.
+Cost of one answer (D21 item 4), measured, not assumed:
+- Throughput on this GPU, 16 concurrent requests (`experiments/r2/tput.py`): 35B prefill 25.3k tok/s, decode 722 tok/s; 8B at the
+  same time (under other agents' load) 14.5k / 856. A3B = ~3B active parameters, so per token the 35B costs about what the 8B does.
+- The meter bills local2 at 25k prefill / 700 decode tok/s (8B: 25k / 1k), `stoa.llm.PER_BACKEND_TPS`.
+- dev ifc_bench (200 Qs; 0.58 fact-card calls per question): 2.6k tokens in / ~90 out per question either way → **0.235 GPU-s per
+  question on the 35B vs 0.196 on the 8B (+20%)**; per fact-card call ≈ 4.5k in / 155 out ≈ 0.40 vs 0.34 GPU-s. Mean latency
+  1.9 s vs 4.5 s (the 8B queue is shared with every agent; :8002 is not).
+
 ## Language front end, morning fixes (08:35–08:45)
 - Conjunction trigger (adec1a2): `should_translate` also fires on a count/area question in a language outside en/fi/de/fr/it whose
   'and' joins words, unless the composer already reads it (2 classes + `compose._TOGETHER`). Q multilingual probe 143 → 146/150
@@ -150,13 +174,40 @@ a 4× bigger base VLM on our counting. :8001 stays Qwen3-VL-8B + cc-v2/cc-v3. EX
 - Grouped thousands (2ccace2): Swiss 1'200 / 1 200 masked as one number.
 - NEGATIVE: extra slip hints (room codes = rooms, 'Hány … közül' = how many of, băi/banyo = bathtubs): hardL_open 206 vs 212 (hu 45 vs 54).
 
+## lang_guess for terse wordings (09:15–09:35, `experiments/r2/probes/lang_id.py`)
+- Problem: a question with no question word was decided by a tie on a shared word ('in', 'de'): 'Nettofläche Whg. B in m², ohne
+  Balkon und Loggia?' → en, Spanish 'Número de puertas en este plano?' → fr, Dutch 'Tel de ramen op deze plattegrond.' → fr. Read as
+  English or as a covered language, an uncovered-language question never reaches the translator (pipeline `_front_end`).
+- v2 scorer: more function/domain words per language (none for hr/nb/el/lt = F's held-out languages), each word weighted
+  1/(languages listing it), non-Latin script → '?', å also da/no. Open labelled probes (946 + 46 terse): 892 → 928 right.
+- Full v2 measured WORSE in the pipeline (63 open rows whose class changes): 90.2 → 88.5, 0 wins / 1 loss, LLM calls/Q 1.30 → 1.92.
+  Mechanism: correct 'fi'/'de'/'it' makes `_front_end` trust the rules (covered language + target found → no translation), so terse
+  Finnish ('Laske ikkunat.') lost the translation fallback it got as '?'; de/it now trigger ifc's cross-language LLM check.
+- Shipped (163bf61): v2 only for covered → uncovered corrections. 0 changes on the 6,671 open dataset questions; terse same-gold probe
+  (Swiss dev counts × nl/sv/pl/es/pt/cs/ro/da/en, written by R2) 89 → 90/92, 5 Spanish answers 0.45 → 0.99, $0.067 → $0.038/1k;
+  hardL_open neutral (89.7 vs 89.4, the 3 diffs are rows whose lang_guess did not change = batching noise).
+
 ## Noon playbook (model side)
+0. One command (09:45): put Stoa's examples in eval-split format (path, question, answer or null, type, meta.kind) and run
+   `experiments/r2/noon_models.sh EXAMPLES.jsonl [NEMOTRON_LIMIT=40]` → pipeline vs plain local VLM vs hosted Nemotron (1 worker,
+   first N), numbers exact/2%, text by the local judge, one per-kind table + cost per run (`compare_runs.py --by kind`).
+   Tested on a 12-row mix (log $JUNCTION_SHARED/logs/R2/noon_models.log). For an unknown-folder raster, `experiments/r2/style/style.py
+   FILE` says which reader family fits (cubicasa5k / swiss_dwellings / ifc_models / scan, p≥0.8 → 96.7% right).
 1. New question kinds on rasters/scans: first run `vlm_direct` (8B base, conf=logprob) and `vlm_lora` on Stoa's examples; if the LoRA
    answers a kind it was never trained on, its confidence is NOT calibrated (F 01:28) — keep W4's unseen-wording cap.
 2. Hosted Nemotron (`backend=nvidia`, 1 worker, ~4–8 s/Q) is the only model clearly different from ours; use it for visible demo
    steps (Nemotron prize) and as a second opinion on unsure answers, never bulk.
 3. To try another open model quickly: `experiments/r2/hold_8002.sh <preset> <name> <minutes>` (GPU lock, private :8002), then
    `experiments/r2/eval_backend.py --agent local2 -- --solver pipeline --split <file>` or `vlm_direct -k backend=local2`.
+
+## Drawing style from image content (09:30–09:40, `experiments/r2/style/`)
+- `guess_style(path)` → (cubicasa5k | swiss_dwellings | ifc_models | scan, p): numpy softmax on ~110 cheap features (grey/sat/hue
+  histograms, paper tone and texture, edge density and direction, long dark runs, 8×8 thumbnail), image flattened on white first (no
+  file-mode / pixel-size cues). Trained on train groups + one upload-like variant each (grayscale / JPEG q40 / crop / downscale ÷3).
+- Held-out groups (site / model / building): 92.4%; variants 90–91% (without the augmentation, grayscale or JPEG Swiss plans were 0/308);
+  p≥0.8 covers 85% at 96.7%. Residue = CubiCasa ↔ historical scans (CubiCasa contains scanned plans; Wikimedia has CubiCasa-like plans).
+- End to end, 40 dev CubiCasa count Qs as unknown-folder files vs filed under the guess: 30 vs 29/40, evidence boxes 0 → 17/40,
+  $0.203 → $0.036/1k, ECE 0.100 → 0.044. Not wired (W5 upload path / W4 route for source 'unknown', after the freeze).
 
 ## Candidates surveyed (23:35–23:50, HF hub listing; vLLM 0.31 registry checked)
 | model | size | vLLM | why interesting | verdict |
@@ -228,3 +279,6 @@ pretrained CC5K net never saw them) minus drawings in the LoRA's training data m
 9. Language front end: translate a question with the local 8B ONLY when it is non-English and the rule parser fails
    (`should_translate`); ~0.4 s, ~700 tokens, on 0.03% of dataset questions; held-out languages 50 → 81%.
 10. Agent planner: the local 8B; hosted Nemotron as planner ties at 9× the cost.
+11. Free-text answers (IFC fact cards): Qwen3.6-35B-A3B on :8002 via `llm.text_backend()` (D21), +20% GPU-s, judged +7.5.
+12. Files outside our folders (uploads, a hidden set in new folders): `experiments/r2/style` guesses the reader family from the
+    image (p≥0.8 → 96.7% right); filing an upload under the guess keeps accuracy and restores boxes + the cheap path.

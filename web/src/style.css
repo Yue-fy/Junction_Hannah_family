@@ -443,3 +443,21 @@ table.checked .muted { color: var(--muted); }
 .value.parts .pv { line-height: 1; }
 .value.parts .unit { font-size: 15px; }
 .value.parts .pq { font-size: 11.5px; font-weight: 500; letter-spacing: 0; color: var(--muted); line-height: 1.3; }
+
+/* set answers (card.ts setAnswer): header + one row per item, a linked row shows its evidence */
+.value.set { grid-column: 1 / -1; grid-row: 2; margin-top: 8px; display: grid; gap: 3px; font-size: 13.5px; font-weight: 500; letter-spacing: 0; max-height: 300px; overflow-y: auto; }
+.set-head { font-weight: 650; margin-bottom: 3px; }
+.set-row { display: grid; grid-template-columns: max-content minmax(0, 1fr) auto; gap: 8px; align-items: baseline; padding: 4px 8px; border: 1px solid var(--line); border-radius: 6px; background: #fbfcfd; }
+.set-row .sn { font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 175px; }
+.set-row .sd { font-variant-numeric: tabular-nums; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.set-row .w { font-size: 10.5px; color: var(--muted); white-space: nowrap; }
+.set-row.linked { cursor: pointer; }
+.set-row.linked:hover { border-color: #ffc29e; background: var(--accent-soft); }
+.set-row.sel { border-color: var(--accent); background: var(--accent-soft); }
+
+/* answer drawn only on other sheets (main.ts showElsewhere) */
+.elsewhere { position: absolute; left: 12px; right: 12px; margin: 0 auto; width: fit-content; bottom: 12px; z-index: 4; display: flex; flex-wrap: wrap; gap: 5px; align-items: center; justify-content: center; background: rgba(255,255,255,.96); border: 1px solid #ffc29e; border-radius: 10px; padding: 6px 10px; font-size: 12px; color: var(--ink); box-shadow: 0 4px 14px rgba(20, 30, 50, .12); }
+.elsewhere span { color: var(--muted); margin-right: 2px; }
+.elsewhere button { border: 1px solid var(--line); background: var(--accent-soft); border-radius: 6px; padding: 2px 8px; font-size: 12px; cursor: pointer; }
+.elsewhere button:hover { border-color: var(--accent); }
+.elsewhere button b { color: var(--accent); }

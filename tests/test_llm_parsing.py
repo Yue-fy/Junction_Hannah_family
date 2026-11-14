@@ -267,3 +267,48 @@ def test_lang_guess_terse_wordings_and_shared_words():
         assert lang_guess(q) == "en" and v2(q) == "en", q
     # a non-Latin script is never a rule language (Greek 'netto' must not make it Italian)
     assert v2("Πόσες φορές είναι μεγαλύτερο το διαμέρισμα Α από το Β κατά netto επιφάνεια;") == "?"
+
+
+def test_local2_down_falls_back_to_local_at_once(monkeypatch):
+    import time as _t
+
+    from openai import APIConnectionError
+
+    import stoa.llm as L
+
+    calls = []
+
+    class Comp:
+        def __init__(self, name):
+            self.name = name
+
+        def create(self, **kw):
+            calls.append((self.name, kw.get("model")))
+            if self.name == "local2":
+                raise APIConnectionError(request=None)
+
+            class U:
+                prompt_tokens, completion_tokens = 10, 2
+
+            class M:
+                content, reasoning_content = "ok", None
+
+            class C:
+                message, finish_reason, logprobs = M(), "stop", None
+
+            class R:
+                choices, usage, model = [C()], U(), "qwen3-vl-8b"
+
+            return R()
+
+    class Client:
+        def __init__(self, name):
+            self.chat = type("X", (), {"completions": Comp(name)})()
+
+    monkeypatch.setattr(L, "_client", lambda b: Client(b))
+    L._TB_SEEN.pop("local2", None)
+    t0 = _t.time()
+    r = L.chat("hi", backend="local2", model="qwen3.6-35b-a3b", cache=False)
+    assert r.text == "ok" and r.backend == "local" and _t.time() - t0 < 1.0
+    assert calls == [("local2", "qwen3.6-35b-a3b"), ("local", "default")]
+    assert L._TB_SEEN["local2"][0] is False  # text_backend() answers 'local' for the next 60 s

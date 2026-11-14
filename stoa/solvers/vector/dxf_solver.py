@@ -180,6 +180,24 @@ def _outdoor_only_exclusion(question: str) -> bool:
     return True
 
 
+def _substitute_kind(question: str, code: str) -> str | None:
+    """The table-QA code filters objects of a kind the question never names (a substitute class), else None."""
+    kinds = re.findall(r"""\[['"]kind['"]\]\s*==\s*['"](\w+)['"]|kind\s*==\s*['"](\w+)['"]""", code)
+    kinds = {a or b for a, b in kinds}
+    for m in re.finditer(r"""\[['"]kind['"]\]\.isin\(\[([^\]]*)\]""", code):
+        kinds |= set(re.findall(r"""['"](\w+)['"]""", m.group(1)))
+    kinds = {k for k in kinds if k in qparse.KIND_WORDS}
+    if not kinds:
+        return None
+    ql = question.lower()
+    named = {k for k in kinds if qparse._find_words(qparse.KIND_WORDS[k], ql)}
+    if named or ("washbasin" in kinds and re.search(r"\bsinks?\b", ql)) or re.search(
+            r"sanit\w*|fixtures?|plumbing|objects?|items?|elements?|openings?|symbols?|apparecchi|ouvertures?|"
+            r"öffnungen|aperture|einrichtung\w*|wet\s+rooms?", ql):
+        return None  # a group word covers several kinds ("sanitary fixtures", "openings")
+    return sorted(kinds)[0]
+
+
 def _same_number(tok: str, n: float) -> bool:
     for c in (tok.replace(",", ""), tok.replace(".", "").replace(",", "."), tok.replace(",", "."), tok.replace("'", "")):
         try:
@@ -895,6 +913,11 @@ class DxfSolver(BaseSolver):
             conf = min(conf, 0.15)  # e.g. "floor finish of the Bagno" -> "tile": typed by the model, in no table
             missing.append(f"the answer {value!r} does not occur in the drawing's tables (typed by the model)")
             trace.append("guard: text answer not found in any table -> confidence <= 0.15")
+        if (sub := _substitute_kind(question, res.get("code", ""))) is not None:
+            conf = min(conf, 0.2)  # Q 09:20: "How many escalators ...?" -> code counted kind == 'door' (13 @0.45)
+            missing.append(f"the query counted {sub}s, which the question does not ask about; the DXF layers have no "
+                           "class for the asked object")
+            trace.append(f"guard: the code filters kind '{sub}', a class the question never names -> confidence <= 0.2")
         if echo:
             conf = min(conf, 0.15)  # Q red team: "fire rating of the entrance door of apartment A" -> "apartment A"
             missing.append(f"the answer {value!r} only repeats {echo} named in the question; the tables do not hold "

@@ -157,9 +157,11 @@ def answer_free_text(idx: IfcIndex, question: str, it: Intent | None, storey=Non
     if extra:
         card = extra + "\n" + card
     try:
+        # S0 D21: free-text answers may go to a bigger second local model ($STOA_TEXT_BACKEND=local2, R2 09:08:
+        # ifc_bench dev judged 62.0 vs 54.5); llm.text_backend() falls back to "local" when unset or down
         r = llm.chat([{"role": "system", "content": SYSTEM},
                       {"role": "user", "content": f"FACTS:\n{card}\n\nQUESTION: {question}"}],
-                     max_tokens=450, temperature=0.0)
+                     max_tokens=450, temperature=0.0, backend=llm.text_backend())
     except TypeError:  # older client signature: (prompt, ...)
         r = llm.chat(f"{SYSTEM}\n\nFACTS:\n{card}\n\nQUESTION: {question}", max_tokens=450)
     except Exception as ex:  # noqa: BLE001 - server down etc.: the caller keeps its refusal

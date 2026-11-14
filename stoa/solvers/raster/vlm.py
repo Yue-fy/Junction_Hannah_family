@@ -133,7 +133,9 @@ def read_labels(img: Image.Image, key: str, backend: str = "local", target_px: i
     def run():
         log = CallLog()
         f = R1_CACHE / (Path(key).name + ".labels.v2.json")
-        if backend == "local" and f.exists():
+        from stoa.solvers.raster.textlayer import file_tag  # R1's outputs are keyed by name: dataset files only
+
+        if backend == "local" and f.exists() and not file_tag(key):
             d = json.loads(f.read_text())
             text = d["text"]
             c = d.get("cost", {})

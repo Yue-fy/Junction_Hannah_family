@@ -288,7 +288,7 @@ _CACHE: dict[str, list[Bar]] = {}
 
 def bars(path: str, backend: str = "local", reread: bool = True, layer: T.TextLayer | None = None) -> list[Bar]:
     """All graphic scale bars of a raster drawing, best first (more labels, smaller relative residual)."""
-    key = f"{path}|{backend}|{reread}"
+    key = f"{path}{T.file_tag(path)}|{backend}|{reread}"
     if key in _CACHE:
         return _CACHE[key]
     tl = layer or T.text_layer(path, backend=backend)

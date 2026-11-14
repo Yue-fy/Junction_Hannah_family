@@ -70,3 +70,14 @@ def test_swedish_totalt():
                                 "diskhoar, duschar och badkar)?")
     assert p and p.labels == ["wc", "sink", "shower_bathtub"]
     assert decompose("cubicasa5k", "Hur många dörrar finns det totalt?") is None
+
+
+def test_name_sheet_from_file_name():
+    from stoa.pipeline import name_sheet
+
+    p = "data/opening_design/x/The Downtowner_ARCH - Sheet - A000 - SITE PLAN & CODE SUMMARY.pdf"
+    assert name_sheet("How long is the wood fence?", p, "opening_design") == \
+        "On sheet A000 (Site Plan & Code Summary), how long is the wood fence?"
+    assert name_sheet("On sheet A000, how long is the fence?", p, "opening_design") == "On sheet A000, how long is the fence?"
+    assert name_sheet("How many sheets are in this set?", p, "opening_design") == "How many sheets are in this set?"
+    assert name_sheet("How long is the wood fence?", p, "swiss_dwellings") == "How long is the wood fence?"
