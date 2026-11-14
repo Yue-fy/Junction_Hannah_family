@@ -168,3 +168,16 @@ def test_q_v14_v15_storey_scope(solver):
     assert s(ESPL, "How many doors are on the ground floor of the building?").value == 46  # storey word beats 'building'
     assert s(ESPL, "Quante porte ci sono in tutto l'edificio?").value == 211
     assert s(SMILEY, "Quante porte ci sono in tutto l'edificio?").value == 170
+
+
+@pytest.mark.skipif(not abspath(ESPL).exists(), reason="dataset not available")
+def test_plan_vs_model_questions(solver):
+    # Q red-team v17 (Stoa point 4): drawn vs modelled is a GlobalId set difference
+    s = solver.solve
+    a = s(ESPL, "How many windows on '1.korrus' are in the model but not drawn on this plan?")
+    assert a.value == 3 and len(a.evidence) == 3  # 55 in the storey, 52 drawn (bug 21: was 297 @ 0.98)
+    a = s(ESPL, "Do the floor plan and the IFC model agree on the number of windows on '1.korrus'?")
+    assert a.value.startswith("no") and "55" in a.value and "52" in a.value
+    assert s(ESPL, "Do the floor plan and the IFC model agree on the number of doors on '1.korrus'?").value.startswith("yes")
+    assert s(ESPL, "How many floor plan sheets are there for this building?").value == 5
+    assert s(ESPL, "How many doors are drawn on this plan?").value == 46  # ordinary counts untouched

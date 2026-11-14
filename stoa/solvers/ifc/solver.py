@@ -408,6 +408,11 @@ class IfcSolver(BaseSolver):
             return Answer.abstain(self.name, "no IFC model for this drawing", missing=["an IFC model of the building"])
         idx = load_index(model)
         llm_on = str(self.options.get("llm", "1")) != "0"
+        pv = self._plan_vs_model(path, model, idx, question)
+        if pv is not None:
+            pv.solver = self.name
+            pv.cost.wall_seconds = time.perf_counter() - t0
+            return pv
         ans, it, ctx = self._core(path, model, idx, question)
         if llm_on and str(self.options.get("translate", "1")) != "0":
             ans, it, ctx = self._cross_language(path, model, idx, question, ans, it, ctx)
@@ -423,6 +428,91 @@ class IfcSolver(BaseSolver):
         ans.solver = self.name
         ans.cost.wall_seconds = time.perf_counter() - t0
         return ans
+
+    # ------------------------------------------------------------------------------------------------
+    _PVM_AGREE = re.compile(r"\b(agree\w*|match(es)?|consistent|same (number|count)|correspond\w*|tally|differ\w*|"
+                            r"discrepan\w*|mismatch\w*)\b")
+    _PVM_PLAN = re.compile(r"\b(plan|drawing|sheet|2d)\b")
+    _PVM_MODEL = re.compile(r"\b(model|ifc|bim|3d)\b")
+    _PVM_NOTDRAWN = re.compile(r"\bnot (drawn|shown|visible)\b|\bmissing (from|on) (the |this )?(plan|drawing|sheet)\b|"
+                               r"\bin the model but not\b|\bonly in the model\b|\babsent from the (plan|drawing|sheet)\b")
+    _PVM_SHEETS = re.compile(r"\bhow many (floor )?(plan )?(sheets|plans|drawings|floor plans)\b|\bnumber of (floor )?(plan )?"
+                             r"(sheets|plans|drawings)\b")
+
+    def _plan_vs_model(self, path: str, model: str, idx: IfcIndex, question: str) -> Answer | None:
+        """Questions that need the plan AND the model (Stoa point 4, Q red-team v17): "How many windows on 'S' are in
+        the model but not drawn on this plan?", "Do the floor plan and the IFC model agree on the number of doors on
+        'S'?", "How many floor plan sheets are there for this building?". The plan's elements carry their IFC GlobalId
+        (data-guid in the SVG), so drawn vs modelled is a set difference, not a vision problem. None = not such a
+        question."""
+        from stoa.solvers.ifc.plan2d import plan_items, plans_of_model
+
+        qf = fold(_QUOTED_RX.sub(" ", question))
+        if self._PVM_SHEETS.search(qf) and not re.search(r"\b(door|window|room|wall|column)", qf):
+            plans = sorted(plans_of_model(model).items(), key=lambda kv: kv[1])
+            if not plans:
+                return None
+            names = {st.guid: st.name for st in idx.storeys}
+            ev = [Evidence(file=p, page=0, note=f"plan of storey '{names.get(g, '?')}'") for g, p in plans]
+            return Answer(value=len(plans), unit="count", confidence=0.85, evidence=ev, solver=self.name,
+                          trace=["plan sheets rendered from the model: " + ", ".join(Path(p).name for _, p in plans)],
+                          assumptions=["plan sheets = the floor plan files of this model (one per storey drawn); "
+                                       "sections and elevations not counted"], missing=[])
+        agree = bool(self._PVM_AGREE.search(qf) and self._PVM_PLAN.search(qf) and self._PVM_MODEL.search(qf))
+        notdrawn = bool(self._PVM_NOTDRAWN.search(qf))
+        if not (agree or notdrawn):
+            return None
+        it = parse(question)
+        kind = it.kind if it.kind in ("door", "window", "space", "wall", "column", "stair", "slab") else None
+        if kind is None:
+            return None
+        classes = KIND_CLASSES[kind]
+        storey = None
+        for n in it.names:
+            ms = match_storey(idx, n)
+            if ms is not None and ms.score >= 90:
+                storey = ms.obj
+                break
+        asked_plan = Path(path).suffix.lower() in (".pdf", ".svg") and "_plan-" in Path(path).stem
+        if storey is None and asked_plan:
+            storey = plan_storey(path, idx)[0]
+        if storey is None:
+            return None
+        plan = str(Path(path).with_suffix(".pdf")) if asked_plan and plan_storey(path, idx)[0] is storey else \
+            plans_of_model(model).get(storey.guid)
+        items = plan_items(plan) if plan else {}
+        if not items:
+            return None
+        on = idx.in_storey(storey.guid, *classes)
+        drawn = [e for e in on if e.guid in items]
+        missing_els = [e for e in on if e.guid not in items]
+        other = [g for g, i in items.items() if i.cls in classes and g not in {e.guid for e in on}]
+        word = kind.replace("space", "room") + "s"
+        from stoa.kg.graph import CUT_HEIGHT, _crosses, floor_offset
+
+        cut_z = (storey.elevation or 0.0) + floor_offset(idx) + CUT_HEIGHT
+        off_cut = [e for e in missing_els if _crosses(e, cut_z) is False]
+        why_nd = (f"{len(off_cut)} of them lie wholly above/below the cut plane (floor + {CUT_HEIGHT:g} m)"
+                  if off_cut else "none of them is wholly above/below the cut plane")
+        trace = [f"plan {Path(plan).name}: {len(drawn)} of the {len(on)} {word} of storey '{storey.name}' are drawn "
+                 f"(matched by IFC GlobalId); {len(missing_els)} not drawn" + (f"; the sheet also draws {len(other)} "
+                                                                             f"{word} of other storeys" if other else "")]
+        asm = ["the plan is a horizontal cut at about 1.2 m above the floor: elements entirely above or below it "
+               "(high windows, skylights, elements of split levels) are not drawn",
+               "drawn = the sheet's elements tagged with the element's IFC GlobalId"]
+        ev = [self._ev(model, e, f"{e.eff_cls} {e.name or ''} | not drawn on {Path(plan).name}") for e in missing_els]
+        if notdrawn and not agree:
+            return Answer(value=len(missing_els), unit="count", confidence=0.85, evidence=ev[:MAX_EVIDENCE],
+                          trace=trace + [f"in the model but not drawn: {len(on)} - {len(drawn)} = {len(missing_els)}; "
+                                         + why_nd],
+                          solver=self.name, assumptions=asm, missing=[])
+        same = len(drawn) == len(on) and not other
+        txt = (f"yes: the IFC model and the plan both have {len(on)} {word} on '{storey.name}'" if same else
+               f"no: the IFC model has {len(on)} {word} on '{storey.name}', the plan draws {len(drawn)}"
+               + (f" ({len(missing_els)} not drawn; {why_nd})" if missing_els else "")
+               + (f" and {len(other)} of other storeys" if other else ""))
+        return Answer(value=txt, unit=None, confidence=0.85, evidence=(ev or [self._ev(model, e, e.eff_cls) for e in drawn])[:MAX_EVIDENCE],
+                      trace=trace, solver=self.name, assumptions=asm, missing=[])
 
     # ------------------------------------------------------------------------------------------------
     def _cross_language(self, path: str, model: str, idx: IfcIndex, question: str, ans: Answer, it: Intent,
