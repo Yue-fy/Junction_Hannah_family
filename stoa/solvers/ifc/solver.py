@@ -904,6 +904,27 @@ class IfcSolver(BaseSolver):
         op = ("max" if re.search(r"\b(largest|widest|biggest|maximum|max|tallest|highest|thickest|greatest|largest)\b", q)
               else "min" if re.search(r"\b(smallest|narrowest|minimum|min|lowest|shortest|thinnest|least)\b", q)
               else None)
+        nm_ = re.search(r"\b(top|largest|biggest|widest|tallest|highest|thickest|smallest|narrowest|thinnest|lowest|first)"
+                        r"\s+(\d+|two|three|four|five|six|seven|eight|nine|ten)\b|\b(\d+|two|three|four|five|six|seven|"
+                        r"eight|nine|ten)\s+(largest|biggest|widest|tallest|highest|thickest|smallest|narrowest|thinnest|"
+                        r"lowest)\b", q)
+        top_k = 1
+        if nm_:
+            w = nm_.group(2) or nm_.group(3)
+            top_k = int(w) if w.isdigit() else ["two", "three", "four", "five", "six", "seven", "eight", "nine",
+                                                 "ten"].index(w) + 2
+        if op and top_k > 1:
+            distinct = sorted({round(v, 4) for v, _ in vals}, reverse=(op == "max"))[:top_k]
+            lines = [f"{'Largest' if op == 'max' else 'Smallest'} {top_k} {noun} {whats} {where} ({src}):"]
+            ev = []
+            for r_, v0 in enumerate(distinct, 1):
+                hit = [e for v, e in vals if abs(v - v0) < 5e-4]
+                types = Counter(label(e) for e in hit)
+                lines.append(f"{r_}. {mm(v0)}: " + "; ".join(f"{t} ({n})" for t, n in types.most_common(3)))
+                ev += [self._ev(model, e, f"{label(e)} {what} {mm(v0)}") for e in hit][:20]
+            trace.append(f"top {top_k} distinct {whats} ({op})")
+            return Answer(value="\n".join(lines), unit=None, confidence=conf * 0.9, evidence=ev, trace=trace,
+                          solver=self.name, assumptions=assumptions, missing=missing)
         if op:
             v0 = (max if op == "max" else min)(v for v, _ in vals)
             hit = [e for v, e in vals if abs(v - v0) < 5e-4]
@@ -918,15 +939,20 @@ class IfcSolver(BaseSolver):
                      + "; ".join(f"{t} ({n} {noun}{'s' if n > 1 else ''})" for t, n in types.most_common(5))]
             return Answer(value="\n".join(lines), unit=None, confidence=conf, evidence=ev, trace=trace,
                           solver=self.name, assumptions=assumptions, missing=missing)
-        if re.search(r"\btypes?\b", q):  # "wall types and their thicknesses": one line per type
-            per: dict[str, list[float]] = {}
-            for v, e in vals:
-                per.setdefault(label(e), []).append(v)
-            lines = [f"{noun.capitalize()} types {where} with their {what} ({len(per)} types, {len(vals)} {noun}s; {src}):"]
-            for t, vs in sorted(per.items(), key=lambda x: (-max(x[1]), x[0]))[:60]:
-                lo, hi = min(vs), max(vs)
-                rng = mm(lo) if abs(hi - lo) < 5e-4 else f"{lo * 1000:.0f}-{hi * 1000:.0f} mm"
-                lines.append(f"- {t}: {rng} ({len(vs)} {noun}{'s' if len(vs) > 1 else ''})")
+        if re.search(r"\btypes?\b", q):  # "wall types and their thicknesses": one line per type (all elements)
+            per: dict[str, list[float | None]] = {}
+            for e in els:
+                per.setdefault(label(e), []).append(value(e))
+            lines = [f"{noun.capitalize()} types {where} with their {what} ({len(per)} types, {len(els)} {noun}s; "
+                     f"{what} from {src}):"]
+            for t, vs in sorted(per.items(), key=lambda x: (-len(x[1]), x[0]))[:60]:
+                got = [v for v in vs if v]
+                if got:
+                    lo, hi = min(got), max(got)
+                    rng = mm(lo) if abs(hi - lo) < 5e-4 else f"{lo * 1000:.0f}-{hi * 1000:.0f} mm"
+                else:
+                    rng = f"{what} not in the model"
+                lines.append(f"- {t}: {len(vs)} {noun}{'s' if len(vs) > 1 else ''} ({len(vs) / len(els) * 100:.1f}%), {rng}")
             if len(per) > 60:
                 lines.append(f"- ... {len(per) - 60} more types")
             return Answer(value="\n".join(lines), unit=None, confidence=conf * 0.85, evidence=ev_all, trace=trace,
