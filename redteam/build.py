@@ -858,6 +858,47 @@ def main():
             r_["meta"]["accept_re"] = st_rx
             out.append(r_)
 
+    # ===== v19 (09:05): answers that are LISTS ("which rooms are larger than 50 m²?", "which floors have …?") =====
+    # Stoa: the hidden test's answers are "not so simple". Gold = the dataset's own per-room net areas for all 50
+    # rooms of '1.korrus' and its per-storey door / room counts (no solver output used). An answer is right when it
+    # names every gold item and none of the excluded ones (boundary rooms just outside the threshold).
+    K = r"1\.?\s*korrus"
+
+    def kor(n):
+        return rf"\b{n}\.?\s*korrus"
+    for q, items, not_items, kind, note in [
+        ("Which rooms on '1.korrus' are larger than 50 m²?", [r"FUAJEE|\b101\b", r"\b105\b", r"\b119\b",
+         r"ÜHISTEGEVUSE|\b114\b"], [r"LIIKUMISVAHENDID|\b121\b"], "list:ifc", "90.64 / 78.4 / 63.84 / 59.37; next 33.43"),
+        ("Millised ruumid korrusel „1.korrus“ on suuremad kui 50 m²?", [r"FUAJEE|\b101\b", r"\b105\b", r"\b119\b",
+         r"ÜHISTEGEVUSE|\b114\b"], [r"LIIKUMISVAHENDID|\b121\b"], "list:ifc-et", "= the English row"),
+        ("Welche Räume im Geschoss '1.korrus' sind größer als 50 m²?", [r"FUAJEE|\b101\b", r"\b105\b", r"\b119\b",
+         r"ÜHISTEGEVUSE|\b114\b"], [r"LIIKUMISVAHENDID|\b121\b"], "list:ifc-de", "= the English row"),
+        ("List the rooms on '1.korrus' with a net floor area under 4 m².", [r"EL\.?\s*KILP|\b118\b",
+         r"VEEM|\b120\b", r"\b6-2\b"], [r"\b109\b", r"SERVER|\b117\b"], "list:ifc", "3.58 / 3.49 / 3.01; next 4.2"),
+        ("What are the three largest rooms on '1.korrus'?", [r"FUAJEE|\b101\b", r"\b105\b", r"\b119\b"],
+         [r"ÜHISTEGEVUSE|\b114\b"], "list:ifc", "top 3 by net area"),
+        ("Name the rooms on '1.korrus' whose net floor area is between 20 and 25 m².", [r"PERSONALI|\b110\b",
+         r"\b6-1\b", r"SOOJUS|\b116\b"], [r"\b107\b|ILU-", r"\b3-1\b"], "list:ifc",
+         "23.97 / 22.05 / 21.05; 25.13 and 25.25 are just above 25"),
+        ("Which ELUTUBA+KÖÖK rooms on '1.korrus' are smaller than 25 m²?", [r"\b6-1\b"], [r"\b[1-57-9]-1\b|10-1", r"TUALETTRUUM|ESIK|KORIDOR"],
+         "list:ifc", "only 6-1 (22.05); the other nine are 25.25"),
+        ("On which floors is there a room called MAGAMISTUBA?", [kor(2), kor(3), kor(4), kor(5)], [K], "list:ifc-st",
+         "bedrooms only on 2.–5.korrus"),
+        ("Which floors have more than 55 rooms?", [kor(2), kor(3), kor(4)], [K, kor(5)], "list:ifc-st",
+         "60/60/60; 1.korrus 50, 5.korrus 55 (not more than 55)"),
+        ("Which floors have fewer than 42 doors?", [kor(5)], [K, kor(2), kor(3), kor(4)], "list:ifc-st",
+         "5.korrus 39; 2–4 have exactly 42"),
+    ]:
+        r_ = row(E, q, "; ".join(items), None, "text", kind, "same", note=note)
+        r_["meta"]["items"] = items
+        r_["meta"]["not_items"] = not_items
+        out.append(r_)
+    # controls: the same thresholds asked as counts (the number the list should have)
+    for q, g in [("How many rooms on '1.korrus' are larger than 50 m²?", 4),
+                 ("How many rooms on '1.korrus' have a net floor area under 4 m²?", 3),
+                 ("How many rooms on '1.korrus' are between 20 and 25 m²?", 3)]:
+        out.append(row(E, q, g, "count", "count", "list:control", "same", note="count of the list"))
+
     with open(OUT, "w", encoding="utf-8") as f:
         for r in out:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")

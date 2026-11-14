@@ -121,6 +121,10 @@ def rescore(rows):
             r["correct"] = said == str(r.get("gold")).lower()
         elif k.startswith("yesno"):
             r["correct"] = yesno_ok(r["value"], r.get("gold"))
+        elif (r.get("meta") or {}).get("items"):  # v19 list: every gold item named, no excluded item named
+            v = str(r["value"] or "")
+            r["correct"] = (all(re.search(x, v, re.I) for x in r["meta"]["items"])
+                            and not any(re.search(x, v, re.I) for x in r["meta"].get("not_items", [])))
         elif (r.get("meta") or {}).get("parts"):  # v14 multi-part: every gold number must be in the answer
             r["correct"] = parts_ok(r["value"], r["meta"]["parts"])
         elif (r.get("meta") or {}).get("accept_re"):  # v14 'which': the answer must name the right thing
