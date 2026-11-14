@@ -1,3 +1,4 @@
+[hidden] { display: none !important; }
 :root {
   --bg: #f6f5f1; --panel: #ffffff; --ink: #1d1f23; --muted: #5d6470; --line: #d9d6cc;
   --accent: #1f5fbf; --ok: #1e7d3c; --bad: #b3261e; --unk: #8a6d00; --ev: #e8590c; --mine: #1971c2;
@@ -146,3 +147,8 @@ select { font: inherit; width: 100%; padding: .45rem .6rem; border: 1px solid va
   .tab { padding: .4rem .7rem; font-size: .95rem; }
 }
 @media (max-width: 1000px) { nav { flex-wrap: wrap; } .viewer { height: 70vh; } }
+.ans .val.long { font-size: .95rem; font-weight: 500; }
+.viewer .empty .msg { max-width: 46rem; text-align: left; }
+.viewer .empty .msg h3 { margin: 0 0 .5rem; color: var(--ink); }
+.viewer .empty .msg ol { font-size: .85rem; color: var(--ink); max-height: 55vh; overflow: auto; padding-left: 1.6rem; }
+.viewer .empty { cursor: default; overflow: auto; }

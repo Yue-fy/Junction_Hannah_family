@@ -279,6 +279,8 @@ const audit = {
     $("#audit-ref").previousElementSibling.textContent = d.split && d.split !== "dev" ? "Reference answer (made by our agents)" : "Reference answer (dataset)";
     $("#audit-question").textContent = d.question;
     $("#audit-answer").textContent = d.answer;
+    $("#audit-answer").classList.toggle("long", String(d.answer).length > 30);
+    $("#audit-ref").classList.toggle("long", String(d.reference).length > 30);
     $("#audit-conf").textContent = confWords(d.confidence);
     $("#audit-ref").textContent = d.reference;
     $("#audit-match").textContent = d.matches_reference === true ? "our answer matches it" :
@@ -301,9 +303,12 @@ const audit = {
     if (d.views.length) await pick(0);
     else {
       $("#audit-views").innerHTML = "";
+      const els = d.other_evidence.slice(0, 150).map((e) => `<li>${esc(e.note || "(no note)")}${e.ifc_guid ? ` <small>· ${esc(e.ifc_guid)}</small>` : ""}</li>`).join("");
       this.viewer.empty(d.path.endsWith(".ifc") ?
-        `This question is about a <b>3D building model (IFC)</b>, not a drawing.<br>The evidence is a list of model elements on the right.` :
-        "No drawing to show for this question.");
+        `<div class="msg"><h3>This question is about a 3D building model (IFC), not a drawing.</h3>
+         <div>Our evidence is the list of model elements below (${d.other_evidence.length}${d.other_evidence.length > 150 ? ", first 150 shown" : ""}).
+         Each line is one element with its IFC GlobalId.</div>${els ? `<ol>${els}</ol>` : "<p>No elements were cited.</p>"}</div>` :
+        `<div class="msg">No drawing to show for this question.</div>`);
     }
     const n = renderEvidence($("#audit-evidence"), d.views, d.other_evidence, this.viewer, pick);
     $("#audit-ev-n").textContent = n;
