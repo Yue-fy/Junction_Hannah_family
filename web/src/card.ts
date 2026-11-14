@@ -125,7 +125,7 @@ function traceHtml(trace: string[], keep = 6) {
   const li = (full: string) => {
     const t = full.length > 260 ? `${full.slice(0, 240).replace(/\s*\n\s*/g, " ")} …` : full;
     const m = t.match(/^\[([\w:/-]+)\]\s*(.*)$/);
-    const cc = /cross-?check/i.test(t) ? " class=\"cc\"" : "";
+    const cc = /cross-?check/i.test(t) ? " class=\"cc\"" : /\d\s*[x×*/÷+−-]\s*\d[^=]*=\s*-?\d/.test(t) ? " class=\"calc\"" : "";
     return m ? `<li${cc}><span class="tag">${esc(m[1])}</span>${esc(m[2])}</li>` : `<li${cc}>${esc(t)}</li>`;
   };
   const head = trace.slice(0, keep).map(li).join("");
@@ -212,7 +212,13 @@ function intentHtml(a: Answer, run: AgentRun | null) {
   const it = a.intent;
   if (!it && !a.plan && !run) return "";
   const bits: string[] = [];
-  if (run) {
+  // "operator question (modifier share …)" + "<solver> (question as asked): …": the template intent was not used
+  const op = !run && (a.trace ?? []).find((l) => /^operator question \(modifiers? /.test(l))?.match(/modifiers? ([\w+]+)/)?.[1];
+  const raw = !run && (a.trace ?? []).find((l) => /^\w+ \(question as asked\):/.test(l))?.match(/^(\w+)/)?.[1];
+  if (op && raw) {
+    bits.push(op.split("+").map((m) => `<b>${esc(m.replace(/_/g, " "))}</b>`).join(" + "));
+    bits.push(`not a template: ${esc(raw)} read the question itself and computed it in code`);
+  } else if (run) {
     // the template intent was NOT used (it misreads operators); say what the agent did instead
     const mods = run.why?.match(/^modifiers?\s+([\w+]+)/)?.[1]?.split("+") ?? [];
     bits.push(mods.length ? mods.map((m) => `<b>${esc(m.replace(/_/g, " "))}</b>`).join(" + ") : "<b>open question</b>");
@@ -277,6 +283,8 @@ export function secondOpinionHtml(a: Answer, b: Answer, ms: number) {
 }
 
 export interface CardOpts {
+  /** CubiCasa answers without located evidence: ask the label reader (raster) where the counted rooms are. */
+  onLocate?: () => Promise<void>;
   onSecondOpinion?: () => Promise<{ answer: Answer; ms: number }>;
   onAsk?: (question: string) => void;
   roundTripMs: number;
@@ -333,6 +341,8 @@ export function renderCard(el: HTMLElement, a: Answer, opts: CardOpts) {
     ${intentHtml(a, run)}
     ${checks.map((x) => `<div class="xcheck ${x.ok ? "ok" : "bad"}"><b>${x.ok ? "✓ Cross-checked" : "✗ Sources disagree"}</b> ${esc(x.text)}</div>`).join("")}
     ${cascadeHtml(tier)}
+    ${opts.onLocate && !ev.length && a.value !== null && /^data\/cubicasa5k\/.*\.(png|jpe?g)$/i.test(opts.currentFile)
+      ? `<div class="locate-slot"><button class="locate-btn" title="Read the room labels on the drawing (local vision model, once per drawing, cached) and mark the ones this answer counts">Show where · read the room labels</button></div>` : ""}
     ${opts.onSecondOpinion && /\.(png|jpe?g|pdf)$/i.test(opts.currentFile) && (tier !== "deterministic" || (a.confidence ?? 0) < 0.8)
       ? `<div class="second-slot"><button class="second-btn" title="Ask NVIDIA Nemotron 3.5 Super VL (hosted vision + reasoning model) the same question: one API call, only when you click">Second opinion · NVIDIA Nemotron</button></div>` : ""}
     <div class="cost">
@@ -356,6 +366,19 @@ export function renderCard(el: HTMLElement, a: Answer, opts: CardOpts) {
     b.addEventListener("click", () => opts.onAsk?.(b.dataset.q!));
     b.addEventListener("keydown", (e) => e.key === "Enter" && opts.onAsk?.(b.dataset.q!));
   });
+  const lb = el.querySelector<HTMLButtonElement>(".locate-btn");
+  if (lb && opts.onLocate) {
+    const go = opts.onLocate;
+    lb.addEventListener("click", async () => {
+      lb.disabled = true;
+      lb.textContent = "Reading the labels…";
+      try {
+        await go();
+      } catch (e) {
+        lb.parentElement!.innerHTML = `<div class="xcheck bad"><b>Label reader failed</b> ${esc(e)}</div>`;
+      }
+    });
+  }
   const sb = el.querySelector<HTMLButtonElement>(".second-btn");
   if (sb && opts.onSecondOpinion) {
     const go = opts.onSecondOpinion;
