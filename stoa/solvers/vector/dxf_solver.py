@@ -381,12 +381,12 @@ def _eval_term(fm: FloorModel, t: qparse.Term, qr: qparse.Query) -> _Part:
         if not cands:
             return _Part(None, 0.0, [], [f"no rooms match {names or 'numbered rooms'} in scope {t.scope}"],
                          missing=["no matching room on this floor"])
-        ranked = sorted(cands, key=lambda r: r.area, reverse=(qr.op == "max"))
+        ranked = sorted(cands, key=lambda r: r.net, reverse=(qr.op == "max"))
         r = ranked[0]
         tr = [f"{qr.op} over {len(cands)} rooms ({t.note}{', apartment ' + ','.join(t.scope) if t.scope else ''}): "
-              + ", ".join(f"{x.label()} {x.area:.2f}" for x in ranked[:4])]
+              + ", ".join(f"{x.label()} {x.net:.2f}" for x in ranked[:4])]
         conf = 0.9
-        if len(ranked) > 1 and abs(ranked[1].area - r.area) <= 0.02 * max(r.area, 1e-9):
+        if len(ranked) > 1 and abs(ranked[1].net - r.net) <= 0.02 * max(r.net, 1e-9):
             conf = 0.5
             tr.append(f"tie within 2%: {r.label()} vs {ranked[1].label()}")
         asm = [f"candidates: {t.note}" + (f" in apartment(s) {', '.join(t.scope)}" if t.scope else "")
@@ -395,7 +395,7 @@ def _eval_term(fm: FloorModel, t: qparse.Term, qr: qparse.Query) -> _Part:
                   if names is None and unnamed and len(cands) < len(unnamed) + len(cands) and all(c.name for c in cands) else "")]
         if fb:
             conf, asm = min(conf, 0.5), asm + [fb]
-        p = _Part(r.area, conf * (0.85 if t.note.startswith("concept") else 1.0), [(r.bbox, _room_note(r))], tr, asm)
+        p = _Part(r.net, conf * (0.85 if t.note.startswith("concept") else 1.0), [(r.bbox, _room_note(r))], tr, asm)
         p.room = r
         return p
     if k == "area_label":
@@ -404,7 +404,7 @@ def _eval_term(fm: FloorModel, t: qparse.Term, qr: qparse.Query) -> _Part:
         rooms = _rooms_with_name(fm, names)
         if t.scope:  # "the kitchen in apartment A"
             rooms = [r for r in rooms if r.unit in t.scope]
-        val = sum(r.area for r in rooms)
+        val = sum(r.net for r in rooms)
         asm = ["net floor area = sum of ROOM_OUTLINE polygon areas"] + ([f"{t.note}: labels {names}"] if t.note else [])
         if t.scope:
             asm.append(f"restricted to rooms inside apartment(s) {', '.join(t.scope)}")
@@ -414,7 +414,7 @@ def _eval_term(fm: FloorModel, t: qparse.Term, qr: qparse.Query) -> _Part:
         if fb or (t.scope and not rooms):
             conf = min(conf, 0.5)
         return _Part(val, conf, [(r.bbox, _room_note(r)) for r in rooms],
-                     [f"{len(rooms)} rooms labelled {names}: " + " + ".join(f"{r.area:.2f}" for r in rooms)], asm)
+                     [f"{len(rooms)} rooms labelled {names}: " + " + ".join(f"{r.net:.2f}" for r in rooms)], asm)
     if k == "area_apartment":
         unit = next((u for u in fm.units if u.label == t.arg), None)
         if unit is None:
@@ -429,7 +429,7 @@ def _eval_term(fm: FloorModel, t: qparse.Term, qr: qparse.Query) -> _Part:
                          ["wall thickness / gross-area standard (e.g. SIA 416 GF) to add the walls"])
         rooms = [r for r in fm.rooms if r.unit == t.arg and r.number and (qr.include_outdoor or not r.outdoor)]
         excl = [r for r in fm.rooms if r.unit == t.arg and ((r.outdoor and not qr.include_outdoor) or not r.number)]
-        val = sum(r.area for r in rooms)
+        val = sum(r.net for r in rooms)
         tr = [f"apartment {t.arg}: {len(rooms)} numbered indoor rooms inside its UNIT_OUTLINE = {val:.2f} m²"]
         if excl:
             tr.append("excluded: " + ", ".join(r.label() for r in excl))
@@ -441,7 +441,7 @@ def _eval_term(fm: FloorModel, t: qparse.Term, qr: qparse.Query) -> _Part:
     if k == "area_total":
         rooms = [r for r in fm.rooms if r.number and (qr.include_outdoor or not r.outdoor) and not r.shaft]
         excl = [r for r in fm.rooms if r.number and ((r.outdoor and not qr.include_outdoor) or r.shaft)]
-        val = sum(r.area for r in rooms)
+        val = sum(r.net for r in rooms)
         tr = [f"{len(rooms)} numbered indoor rooms = {val:.2f} m²"]
         if excl:
             tr.append("excluded outdoor/shaft: " + ", ".join(r.label() for r in excl))
@@ -465,7 +465,7 @@ def _unnamed_caveat(rooms: list[Room], total: float):
     un = [r for r in rooms if not r.name]
     if not un:
         return 0.97, [], []
-    a = sum(r.area for r in un)
+    a = sum(r.net for r in un)
     lo = total - a
     share = a / total if total else 0
     conf = 0.95 if share < 0.02 else 0.8
@@ -698,7 +698,7 @@ class DxfSolver(BaseSolver):
             if r.unit and re.search(WHICH_APT, question, re.I):  # "which apartment has the largest balcony"
                 value = f"apartment {r.unit}"
                 trace.append(f"the question asks for the apartment: room {r.number} is in apartment {r.unit}")
-            trace.append(f"{qr.op}: {r.label()} with {r.area:.2f} m²")
+            trace.append(f"{qr.op}: {r.label()} with {r.net:.2f} m²")
             unit = None
         elif qr.qtype == "text" and qr.op in ("max", "min"):
             pairs = [(v, t) for v, t in zip(vals, qr.terms) if v is not None]

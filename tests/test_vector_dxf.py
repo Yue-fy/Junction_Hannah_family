@@ -460,7 +460,6 @@ def test_pdftext_pairs_paren_label_with_its_dimension(tmp_path):
     import pymupdf
 
     from stoa.solvers.vector.pdftext import text_groups
-    from stoa.solvers.vector.schedule_solver import _sheet_context
 
     doc = pymupdf.open()
     page = doc.new_page(width=800, height=600)
@@ -472,8 +471,6 @@ def test_pdftext_pairs_paren_label_with_its_dimension(tmp_path):
     texts = [g.text for g in text_groups(str(p))]
     assert "35' - 0\" / (FRONT YARD SETBACK)" in texts, texts
     assert "CONCRETE" in texts and "SIDEWALK EDGE" in texts, texts
-    assert _sheet_context("data/opening_design/Sports_Complex/Sheets - Current Set/A-100-A - Site Plan.pdf") == \
-        "sheet A-100-A - Site Plan of the Sports Complex drawings"
 
 
 def test_sheettext_lookup_expands_partial_dimension(monkeypatch):
@@ -505,3 +502,18 @@ def test_schedule_assembly_multiplier_is_deterministic():
     assert total == 16 + 2 * 118 + 3 * 9 and rows == [0, 1, 2], formula
     assert _assembly_total("How many windows of type SS are scheduled?", {"t2": df}) is None
     assert _assembly_total("If every N-wide assembly consists of N XYZ999 units, how many units?", {"t2": df}) is None
+
+
+def test_room_net_prefers_printed_area_when_polygon_disagrees():
+    """Totals follow the printed room areas when the DXF polygon is > 2% off (site1677 Treppenhaus 35.38 vs printed 29.03)."""
+    from shapely.geometry import box
+
+    from stoa.solvers.vector.floor import Room
+
+    r = Room(idx=0, poly=box(0, 0, 1, 1), bbox=(0, 0, 1, 1), area=35.38, number="2.10", name="Treppenhaus",
+             printed_area=29.03)
+    assert r.net == 29.03
+    r.printed_area = 35.2  # within 2%: the polygon stays
+    assert r.net == 35.38
+    r.printed_area = None
+    assert r.net == 35.38

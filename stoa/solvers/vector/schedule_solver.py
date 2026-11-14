@@ -235,18 +235,6 @@ def _complex(question: str, res: dict) -> bool:
     return len(stm) >= 4 or bool(COMPLEX_Q.search(question))
 
 
-def _sheet_context(path: str) -> str:
-    """'sheet A-100-A - Site Plan of the Sports Complex drawings' from the file path: the words a person would add
-    ("On sheet A020 (Life Safety) of ...") and that steer retrieval to the right view (Q 09:25: with that hint 44/51,
-    without 40/51; judges won't type the sheet title)."""
-    p = Path(path)
-    stem = re.sub(r"^.*?\bSheet\s*-\s*", "", p.stem)  # 'The Downtowner_ARCH - Sheet - A000 - SITE PLAN ...'
-    parts = p.parts
-    proj = parts[parts.index("opening_design") + 1].replace("_", " ") if "opening_design" in parts and \
-        parts.index("opening_design") + 1 < len(parts) - 1 else ""
-    return f"sheet {stem}" + (f" of the {proj} drawings" if proj else "")
-
-
 def _clean(name: str) -> str:
     return re.sub(r"\W+", "_", name).strip("_").lower()[:30] or "table"
 
@@ -559,7 +547,7 @@ class ScheduleSolver(BaseSolver):
         trace = [f"sheet text: {len(groups)} text groups (tags, notes, title block) + {rid - 700000} rows of small "
                  "named tables"]
         try:
-            res = sheettext.ask(question, rows, backend=self.backend, context=_sheet_context(path))
+            res = sheettext.ask(question, rows, backend=self.backend)
         except Exception as e:  # noqa: BLE001
             return Answer.abstain(self.name, f"sheet text QA failed: {type(e).__name__}: {e}", trace)
         trace += res["trace"]

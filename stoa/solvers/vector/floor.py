@@ -76,6 +76,15 @@ class Room:
         return p.x, p.y
 
     @property
+    def net(self) -> float:
+        """Net area: the printed area when the DXF polygon disagrees with it by > 2%, else the polygon (W2 10:25: the
+        reference totals follow the printed labels, e.g. a Treppenhaus polygon 35.38 m² printed 29.03; dev 'all
+        numbered rooms' totals 31 -> 34/35, train 207 -> 209/216, 0 lost). Single-room answers did this already."""
+        if self.printed_area is not None and abs(self.printed_area - self.area) > 0.02 * self.printed_area:
+            return self.printed_area
+        return self.area
+
+    @property
     def outdoor(self) -> bool:
         return (self.name or "").strip().lower() in OUTDOOR
 
