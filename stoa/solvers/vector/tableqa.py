@@ -51,7 +51,7 @@ def floor_tables(fm: FloorModel) -> dict[str, pd.DataFrame]:
     rooms = []
     for r in fm.rooms:
         length, width = _sides(r.poly)
-        rooms.append(dict(room_id=r.idx, number=r.number, name=r.name, area_m2=round(r.area, 2),
+        rooms.append(dict(room_id=r.idx, number=r.number, name=r.name, area_m2=round(r.net, 2),
                           apartment=r.unit, outdoor=r.outdoor, shaft=r.shaft, printed_area_m2=r.printed_area,
                           perimeter_m=round(r.poly.length, 2), length_m=length, width_m=width,
                           n_doors=0, n_windows=0, n_toilets=0, n_washbasins=0, n_bathtubs=0, n_showers=0))
@@ -76,8 +76,8 @@ def floor_tables(fm: FloorModel) -> dict[str, pd.DataFrame]:
         rs = [r for r in fm.rooms if r.unit == u.label]
         row = dict(apartment=u.label, n_rooms_numbered=sum(1 for r in rs if r.number),
                    n_rooms_indoor=sum(1 for r in rs if r.number and not r.outdoor and not r.shaft),
-                   net_area_m2=round(sum(r.area for r in rs if r.number and not r.outdoor), 2),
-                   outdoor_area_m2=round(sum(r.area for r in rs if r.outdoor), 2))
+                   net_area_m2=round(sum(r.net for r in rs if r.number and not r.outdoor), 2),
+                   outdoor_area_m2=round(sum(r.net for r in rs if r.outdoor), 2))
         for c in ("bathroom", "kitchen", "bedroom", "balcony"):  # rooms of a kind, by the drawing's labels
             labs = {x.lower() for x in CONCEPT_LABELS[c]}
             row[f"n_{c}s"] = sum(1 for r in rs if r.number and (r.name or "").lower() in labs)
@@ -85,8 +85,8 @@ def floor_tables(fm: FloorModel) -> dict[str, pd.DataFrame]:
         row["n_windows"] = sum(1 for o in objects if o["kind"] == "window" and o["apartment"] == u.label)
         apts.append(row)
     net = [r for r in fm.rooms if r.number and not r.outdoor and not r.shaft]
-    floor = [dict(net_area_m2=round(sum(r.area for r in net), 2), n_rooms_numbered_indoor=len(net),
-                  n_apartments=len(fm.units), outdoor_area_m2=round(sum(r.area for r in fm.rooms if r.number and r.outdoor), 2))]
+    floor = [dict(net_area_m2=round(sum(r.net for r in net), 2), n_rooms_numbered_indoor=len(net),
+                  n_apartments=len(fm.units), outdoor_area_m2=round(sum(r.net for r in fm.rooms if r.number and r.outdoor), 2))]
     rdf = pd.DataFrame(rooms)
     if not rdf.empty:
         rdf = rdf.set_index("room_id", drop=False)  # rooms.index == room_id, so `.index` is safe to report

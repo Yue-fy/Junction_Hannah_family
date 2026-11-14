@@ -67,8 +67,12 @@ export interface FileInfo {
   credit: string;
   title?: string;
   source_url?: string;
-  /** uploads: the drawing style the visitor declared ("cubicasa5k" = Nordic apartment plan), "" = any */
+  /** uploads: the drawing style the visitor declared or the image was guessed as ("cubicasa5k" = Nordic apartment plan), "" = any */
   style?: string;
+  /** uploads: R2's style guess from the image content (only "cubicasa5k" at p >= 0.8 changes how it is read) */
+  style_guess?: { style: string; p: number };
+  /** uploads: the files uploaded together with this one (one folder: a sheet + its IFC model link up) */
+  set?: string[];
 }
 
 export interface ExampleQuestion {

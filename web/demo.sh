@@ -8,8 +8,11 @@
 #   4. Warm-up: asks every demo-tour question once (fixtures/tour.json + extras, incl. one hosted Nemotron call per
 #      second-opinion step), so the presenter's answers come from the API cache in milliseconds.
 #      fixtures/recorded.json is not changed. Skip with DEMO_WARM=0.
+#   Free-text IFC answers use the 35B on :8002 (D21: STOA_TEXT_BACKEND=local2, set here for the API and the web server
+#   started below; it falls back to :8001 by itself when :8002 is down). An API that is already running keeps its own env.
 # Logs: $DEMO_LOG_DIR (default ${TMPDIR:-/tmp}/stoa-demo).
 set -euo pipefail
+export STOA_TEXT_BACKEND=${STOA_TEXT_BACKEND:-local2}
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 API=${STOA_API_URL:-http://127.0.0.1:8100}
 LLM=${LLM_BASE_URL:-http://127.0.0.1:8001/v1}
@@ -37,6 +40,10 @@ if up "$LLM/models"; then
   echo "LLM      $LLM: $(curl -fsS -m 5 "$LLM/models" | "$PY" -c 'import json,sys; print(", ".join(m["id"] for m in json.load(sys.stdin)["data"]))')"
 else
   echo "LLM      $LLM is DOWN: IFC / Swiss / schedule steps still work; CubiCasa, scans and the agent will fail or fall back" >&2
+fi
+if [ "$STOA_TEXT_BACKEND" = "local2" ]; then
+  up "http://127.0.0.1:8002/v1/models" && echo "LLM2     :8002 up (free-text IFC answers, STOA_TEXT_BACKEND=local2)" \
+    || echo "LLM2     :8002 is down: free-text IFC answers fall back to $LLM" >&2
 fi
 
 if up "http://127.0.0.1:5173/"; then
