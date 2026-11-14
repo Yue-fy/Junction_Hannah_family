@@ -100,3 +100,16 @@ def test_exclusion_by_position(solver):
                               "leaving out 'Attic (414B-11-004-011)'?")
     assert a.value == pytest.approx(190.813, abs=0.01)
     assert not any("exclusion NOT applied" in t for t in a.trace)
+
+
+DUPLEX = "data/ifc_models/bsc-duplex_duplex-a-20110907.ifc"
+
+
+@pytest.mark.skipif(not abspath(DUPLEX).exists(), reason="dataset not available")
+def test_roof_level_with_a_space_is_not_a_floor(solver):
+    a = solver.solve(DUPLEX, "How many doors are on the top floor?")  # 'Roof' holds one roof space, no door
+    assert a.value == 8 and a.confidence <= 0.85
+    a = solver.solve(DUPLEX, "How many floors does the building have?")
+    assert a.value == 2 and any("with them: 4" in m for m in a.missing)
+    a = solver.solve(DUPLEX, "Are there fewer windows on 'Level 1' than on 'Level 2'?")
+    assert a.value.startswith("yes")

@@ -81,8 +81,8 @@ def test_plan_pdf_storey(solver):
 
 
 def test_storeys_filters_and_room_types(solver):
-    st = _val(solver, "How many storeys does the building have?")  # 'T/FDN' holds no room or door
-    assert st.value == 3 and st.confidence <= 0.6 and any("with them: 4" in m for m in st.missing)
+    st = _val(solver, "How many storeys does the building have?")  # T/FDN: no room/door; Roof: a roof space only
+    assert st.value == 2 and st.confidence <= 0.6 and any("with them: 4" in m for m in st.missing)
     assert _val(solver, "What is the elevation of storey 'Level 2'?").value == pytest.approx(3.1, abs=0.01)
     ext = _val(solver, "How many external walls are on 'Level 1'?")
     allw = _val(solver, "How many walls are shown on the floor plan of 'Level 1'?")

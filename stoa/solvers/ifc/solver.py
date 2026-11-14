@@ -91,6 +91,23 @@ def model_for(path: str) -> str | None:
 # languages the parser has (template) vocabulary for, besides English: the dataset's ifc question languages
 PARSER_LANGS = ("de", "nl", "pl", "et", "it", "ro", "fi", "fr")
 _KNOWN_WORDINGS: set[str] | None = None
+_AUX_LEVEL = re.compile(r"\b(roof\w*|dach\w*|dak\w*|toit\w*|tetto|katto|katus|tak|cubierta|telhado|foundation\w*|"
+                        r"fundament\w*|vundament\w*|fdn|t/fdn|footing\w*|fondation\w*|fondazion\w*|cimentaci\w*|"
+                        r"perustu\w*|site|terrain|gelande|maaiveld)\b")
+
+
+def used_storeys(idx, sts=None) -> list:
+    """Storeys people call floors: they hold a door, or rooms while not named as a roof/foundation level (the
+    duplex 'Roof' holds one roof space; esplanades 'Katus' / 'Vundament', smiley 'Dach' hold no room or door).
+    IFC-Bench smiley_west: 'number of levels' gold 4 = KG, EG, 1.OG, 2.OG (not 'Dach')."""
+    sts = list(idx.storeys if sts is None else sts)
+    out = []
+    for st in sts:
+        if idx.in_storey(st.guid, "IfcDoor"):
+            out.append(st)
+        elif idx.in_storey(st.guid, "IfcSpace") and not _AUX_LEVEL.search(fold(st.name or "")):
+            out.append(st)
+    return out
 
 
 def _known_wording(question: str) -> bool:
@@ -719,6 +736,11 @@ class IfcSolver(BaseSolver):
                                f"({', '.join(str(b) for b in buildings_of(idx)[:4])}); "
                                + ("answered for the main one" if any(t.startswith("multi-building") for t in ans.trace)
                                   else "the value covers all of them"))
+        tf = next((n for n in it.notes if n.startswith("top_floor_skip:")), None)
+        if tf and ans.value is not None and ans.confidence > 0.85:
+            ans.confidence = 0.85
+            ans.missing.append("which storey is meant: read as the highest/lowest storey with rooms or doors; the model "
+                               f"also has the level(s) {tf[15:]} beyond it")
         role = next((n for n in it.notes if n.startswith("storey_by_role")), None)
         if role and ans.value is not None:
             cap = 0.6 if role.endswith(":elevation") else 0.85
@@ -943,7 +965,7 @@ class IfcSolver(BaseSolver):
                                                   r"keller", qg):
                     # "How many floors does this building have?" on esplanades: 7 IfcBuildingStorey levels, but
                     # 'Vundament' (foundation) and 'Katus' (roof) hold no room and no door; a person says 5 (Q 04:55)
-                    occ = [st for st in sts if idx.in_storey(st.guid, "IfcSpace") or idx.in_storey(st.guid, "IfcDoor")]
+                    occ = used_storeys(idx, sts)
                     aux = [st for st in sts if st not in occ]
                     if occ and aux:
                         names_aux = ", ".join(f"'{st.name}'" for st in aux[:6])
@@ -956,8 +978,8 @@ class IfcSolver(BaseSolver):
                         else:
                             generic = (f"floors = the {len(occ)} storeys that hold rooms or doors; the model has {len(sts)} "
                                        f"IfcBuildingStorey levels, incl. {names_aux} with no room or door")
-                            missing.append(f"whether levels without rooms or doors count as floors ({names_aux}); "
-                                           f"with them: {len(sts)}")
+                            missing.append(f"whether roof/foundation levels and levels without rooms or doors count as "
+                                           f"floors ({names_aux}); with them: {len(sts)}")
                             trace.append(f"floors with rooms or doors: {len(occ)} of {len(sts)} storeys")
                             sts = occ
                             conf = min(conf, 0.6 / 0.85)
@@ -1608,6 +1630,11 @@ class IfcSolver(BaseSolver):
                 if (len(f) >= 3 or re.search(r"\d", f) and re.search(r"[a-z]", f)) and \
                         (mh := re.search(r"(?<![\w.])" + re.escape(f) + r"(?![\w])", qf)):
                     hits.append((mh.start(), st.name))
+                elif len(f) == 2 and (st.name or "").isupper() and \
+                        re.search(r"(?<![\w.])" + re.escape(st.name) + r"(?![\w])", _QUOTED_RX.sub(" ", question)):
+                    # 'EG', 'KG', 'OG' as written (upper case) in the question; never a lower-case word like 'eg'
+                    mh = re.search(r"(?<![\w.])" + re.escape(f) + r"(?![\w])", qf)
+                    hits.append((mh.start() if mh else 0, st.name))
             hits = sorted(set(hits))
             if len(hits) >= 2 and len({n for _, n in hits}) >= 2:
                 it.names = [n for _, n in hits]
@@ -1654,6 +1681,16 @@ class IfcSolver(BaseSolver):
         # two named storeys compared: "Does A or B contain more doors?", "By how many doors does A exceed B?",
         # "How many times larger is the room area on A than on B?", "ratio between A and B"
         st2 = [n for n in it.names if (ms_ := match_storey(idx, n)) is not None and ms_.score >= 90]
+        if len(st2) == 2 and len(it.names) == 2 and not it.mod and it.kind in (None, "storey"):
+            # "Has storey '-1' fewer doors than storey '0'?": the word 'storey' came first; the counted kind is doors
+            from stoa.solvers.ifc.parse import _kind_hits
+
+            ks_ = [h[2] for h in _kind_hits(qf) if h[2] != "storey"]
+            if ks_:
+                it.kind, it.kinds = ks_[0], [ks_[0]]
+                if it.metric == "text":
+                    it.metric = "count"
+                trace.append(f"two storeys compared: counted kind '{ks_[0]}' (not the storeys)")
         if len(st2) == 2 and len(it.names) == 2 and not it.mod:
             if re.search(r"\b(ratio|times (larger|bigger|more|as \w+|greater|smaller)|divided by)\b", qf):
                 it.op, it.which = "ratio", False
@@ -1742,7 +1779,7 @@ class IfcSolver(BaseSolver):
             sts = [st for st in own_storeys(idx) if st.elevation is not None] or own_storeys(idx)
             # a floor people use: the top / lowest storey that holds rooms or doors, not a roof or foundation level
             # (Q 04:55: 'top floor' on esplanades -> 'Katus' (roof), 0 doors; a person means 5.korrus)
-            occ = [st for st in sts if idx.in_storey(st.guid, "IfcSpace") or idx.in_storey(st.guid, "IfcDoor")]
+            occ = used_storeys(idx, sts)
             top = mt_.group(1) in ("top", "highest", "uppermost", "upper most")
             asks_level = it.kind in (None, "storey")  # elevation / height / name of the level itself: the literal top
             pool = occ if occ and not asks_level else sts
@@ -1752,6 +1789,8 @@ class IfcSolver(BaseSolver):
                 it.kind = "storey"
             skipped = [st.name for st in sts if st not in pool and ((st.elevation or 0.0) > (pick.elevation or 0.0)) == top
                        and st is not pick]
+            if skipped:
+                it.notes.append("top_floor_skip:" + ", ".join(repr(x) for x in skipped))
             trace.append(f"'{mt_.group(0)}' -> storey '{pick.name}'" + (
                 f" (highest/lowest storey with rooms or doors; {', '.join(repr(x) for x in skipped)} hold none)"
                 if skipped else ""))
