@@ -60,12 +60,33 @@ def _rel(path: str) -> str:
     return p[i:] if i >= 0 else p
 
 
-def _npz(path: str) -> Path | None:
+def _npz(path: str, live: bool = False) -> Path | None:
+    """Cached map with rooms + icons; live=True runs the CC5K model once on an uncached image (torch env, ~3-10 s
+    CPU) and saves its maps to artifacts/R1/cc5k_seg_live/ (new drawings, e.g. a hidden test plan)."""
     for d in (ART / "cc5k_seg", ART / "cc5k_seg_live"):
         f = d / f"{Path(path).stem}.npz"
         if f.exists():
-            return f
-    return None
+            with np.load(f) as z:
+                if "icons" in z.files:
+                    return f
+    if not live:
+        return None
+    import subprocess
+    import sys
+    here = Path(__file__).resolve().parents[1] / "cc5k_model"
+    py = os.environ.get("CC5K_PYTHON", "/data/User/fangy4/envs/junction-train/bin/python")
+    data = Path(os.environ.get("STOA_DATA", "/home/fangy4/work/projects/junction-data/stoa-full/junction-dataset"))
+    full = Path(path) if Path(path).is_absolute() else data / path
+    if not (Path(py).exists() and full.exists()):
+        return None
+    env = dict(os.environ, CC5K_SAVE_MAPS=str(ART / "cc5k_seg_live"))
+    try:
+        subprocess.run([py, "-I", str(here / "predict.py"), str(full)], env=env, capture_output=True, timeout=300,
+                       check=True)
+    except Exception as e:  # noqa: BLE001
+        print(f"room_graph: live CC5K run failed: {type(e).__name__}", file=sys.stderr)
+        return None
+    return _npz(path, live=False)
 
 
 def _components(mask: np.ndarray, min_area: float, k: int) -> list[tuple[np.ndarray, list[int]]]:
@@ -135,9 +156,9 @@ def _labels_index() -> dict:
     return out
 
 
-def room_graph(path: str, labels: list | None = None) -> dict | None:
-    """Room graph of one plan, or None if no cached CC5K map exists. labels: optional [(text, cls, box)]."""
-    f = _npz(path)
+def room_graph(path: str, labels: list | None = None, live: bool = True) -> dict | None:
+    """Room graph of one plan, or None (no cached map and no live CC5K run). labels: optional [(text, cls, box)]."""
+    f = _npz(path, live=live)
     if f is None:
         return None
     z = np.load(f)
