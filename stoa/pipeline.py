@@ -404,6 +404,12 @@ class Pipeline(BaseSolver):
             self._cc5k_evidence(path, canon or question, best, trace, intent.key)
         if self.crosscheck and best.value is not None:
             self._kg_crosscheck(path, intent, best, trace)
+        if intent.task in ("area", "length", "volume") and best.value is not None and \
+                Path(path).suffix.lower() in IMG_EXT and not ({".pdf", ".dxf", ".ifc"} & set(siblings(path))):
+            # Stoa: "documents may lack a scale" -> say so instead of implying a measurement
+            best.assumptions = [*best.assumptions, "raster image with no known scale: the size is an estimate "
+                                                   "(no dimension was measured on the drawing)"]
+            best.missing = [*best.missing, "a scale bar or one known dimension (e.g. a door width) to measure from"]
         if why and best.value is not None:  # the agent failed on an operator question: the template answer may ignore it
             best.confidence = round(min(best.confidence, 0.3), 3)
             best.missing = [*best.missing, f"the question has an operator the solvers may not apply ({why.split(';')[0]})"]
