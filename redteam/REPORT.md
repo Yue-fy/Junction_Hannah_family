@@ -1,29 +1,32 @@
 # Red team report (agent Q) — can we break the pipeline?
 
-**647 adversarial questions** (`redteam/questions.jsonl`, built by `redteam/build.py`, analysed by `redteam/analyze.py`),
-in twenty families written one after another tonight; each new family was aimed at the mechanism the last one exposed.
+**704 adversarial questions** (`redteam/questions.jsonl`, built by `redteam/build.py`, analysed by `redteam/analyze.py`),
+in twenty-one families written one after another tonight; each new family was aimed at the mechanism the last one exposed.
 Builds on F's `hard` (translations/paraphrases/compositions/ft²) and `hard2` (new operators) and covers what those
 don't. The first 205 rows start from dev questions the pipeline had **right at conf ≥ 0.8**, so a failure there is
 caused by the perturbation, not by the drawing.
 
-## Now (09:15) — the short version
-- **Latest night be57171 (609 questions v1–v18): 360 of 360 scored answers at confidence ≥ 0.8 are right**; 94.7 % of
-  the scored rows right (62754aa: 91.9 %, 337/339); 17 won / 1 lost (a known flake at 0.45) since 62754aa. Still
-  answered confidently: 3 false premises ("whole building" asked on a single-floor plan; W2). Pre-merge #8 (be57171 +
-  the W2/W3/W4/F heads of 09:00): 0 lost, 361/361. Cost $0.16 per 1,000 adversarial questions.
-- **Two new families this hour, written before any run:** v19 *list answers* (19 rows): every plain "which rooms are
-  larger / smaller than X m²" list is right on 4 IFC models in EN/ET/DE; 4 confident misses where a room type or the
-  counted thing is dropped ("which living rooms < 30 m²" → every room; "floors with more than 55 rooms" → rooms > 55 m²;
-  bug 22, W1). v20 *link questions in new wordings* (19 rows): 6/19 on night; "How many of the model's windows does
-  this drawing not show?" → 297 at 0.98 (bug 21 under a new wording), German "agree?" → a bare 55 at 0.88; every
-  "which sheet …?" → "no sheet information" (W1). R1's kg_qa (not routed yet) gets 12/19 with 0 losses, but its 3
-  confident misses print "no plan sheet" next to evidence that is the right sheet (bug 23, R1).
-- **Fixed tonight, verified on the same rows:** false premises (7/24 confident → 0/24), storeys in everyday words,
-  "whole building" in all 9 languages, "1,200 euros", "how many floors", "how many X and how many Y" (in every
-  language), storey heights and distances, size comparisons, twin-less PNG areas, plan-vs-model "do they agree?"
-  (v17 2/9 → 7/9). Every owner commit since 08:14 was checked before or right after S0 merged it (pre-merge #3–#8).
+## Now (09:25) — the short version
+- **Latest night 31397eb (= be57171 on every row): on the 609 questions v1–v18, 360 of 360 scored answers at confidence
+  ≥ 0.8 are right**; 3 false premises still answered confidently ("whole building" on a single-floor plan). **Pre-merge
+  #9 (31397eb + the 09:10–09:20 owner heads): 364 of 364 right and 0 confident false premises — the first build tonight
+  with no confident miss on v1–v18**; 11 won / 2 lost (both below 0.5). Cost $0.15 per 1,000 adversarial questions.
+- **Three new families this hour (95 questions, written before any run), 12 confident misses on night, 9 on #9:**
+  v19 *list answers* — plain "which rooms are larger / smaller than X m²" lists are right on 4 IFC models in EN/ET/DE;
+  a room type or the counted thing is dropped at 0.90–0.92 (bug 22, W1). v20 *link questions in new wordings* — night
+  6/19; with W4's route to R1's kg_qa (#9) 13/19, but "how many of the model's windows does this drawing not show?" →
+  297 at 0.98 (W1) and two sheet answers that deny the sheet their own evidence shows (bug 23, R1). v21 *sheet text
+  without the "On sheet X of Y" hint* — 41/57 night, 44/57 on #9 (2 confident misses: a dimension-string row, a
+  label echo; W2).
+- **Stoa point 3:** 0 bare refusals in 647 answers; every wrong answer carries an assumption or a "missing" line —
+  but 108 of those lines are process notes ("no located evidence from this solver"), not what the documents lack.
+- **Fixed tonight, verified on the same rows:** false premises (7/24 confident → 0/24, and the one-floor "whole
+  building" on #9), storeys in everyday words, "whole building" in 9 languages, "1,200 euros", "how many floors",
+  "how many X and how many Y" in every language, storey heights and distances, size comparisons, twin-less PNG areas,
+  plan-vs-model "do they agree?" (v17 2/9 → 7/9 night → 9/9 with kg_qa). Every owner commit since 08:14 was checked
+  before or right after S0 merged it (pre-merge #3–#9).
 - **Holds:** rewording, typos, injections, rotated/gray/low-res images, HABS scans in other languages and rotated,
-  plans handed over as a lone PDF. **Weak but not confident:** door/window counts on PNG-only plans, "which sheet".
+  plans handed over as a lone PDF. **Weak but not confident:** door/window counts on PNG-only plans.
 - Demo: the 21 script/tour questions give the same answers on bb94fe4, c1d6149, 62754aa and be57171; two new demo
   questions work ("Do the floor plan and the IFC model agree on the number of windows?" → "no: 55 vs 52 drawn",
   "Which rooms are larger than 50 m²?") — `demo/LIVE-CHECK.md`.
@@ -809,6 +812,26 @@ escalators found, but code must match actual data"; W2) and the rotated-scan age
 show?" → 297 (W1); kg_qa "Which sheet is the floor plan of '3.korrus'?" → "no plan sheet for it" and "Which sheet shows
 the storey 'KG'?" → "KG" (bug 23, R1; the attic variant of it is fixed in R1 1c61f1d).
 
+## v21 (09:18): non-schedule sheets asked without the sheet hint — 57 Qs (W2 asked for it)
+W2's 51 verified probe rows on life-safety, general-notes, site-plan and elevation sheets (sheets with no dataset
+questions, in no split) all start "On sheet A020 (Life Safety) of the Cannery Trail Residences drawings, …". A person
+on site asks "What is the occupant load of the community room?" — so the hint is removed, and 6 rows are asked in
+German / Finnish / Swedish. Gold = W2's (verified against the printed text); feet-inches also accepted in decimal feet.
+**Night 31397eb** (run `…-v21-fda6`): **41 of 57; 12 of 18 at ≥ 0.8 right — 6 confident misses.** **Pre-merge #9**
+(with W2 fdcc3c3/454e8bb; run `…-v21-c342`): **44 of 57; 9 of 11 at ≥ 0.8 right — 2 confident misses**:
+- "How long is the wood fence along the existing retaining wall?" → **870'-5 1/2" at 0.85** (gold 56'): table-QA code
+  picks a row of an unnamed dimension-string table ("S 870' - 5 1/2" ARCH").
+- "What color is the fiber cement clapboard?" → **"FIBER CEMENT CLAPBOARD -" at 0.85** (gold IRON GREY): the code
+  returns the note line that names the material, i.e. the question's own words (a label echo).
+Night → #9: 5 won, 2 lost. Won: "How far below the first floor is the basement level?" −12.0 → 12'-8" (0.85), footprint
+area 0 at 0.85 → 50,400 ft² (0.59), trash-enclosure height 10'-0" at 0.85 → 8 ft, Finnish building height 3.0 at
+0.85 → 32'-9" (0.20), Finnish parking stalls 134 → 116. **Lost (both now low-confidence label echoes):** "What is the
+front yard setback?" 30'-0" at 0.85 → "FRONT YARD SETBACK" at 0.20, Swedish "Vem är generalentreprenör?" "Krause Custom
+Builders" at 0.85 → "General Contractor" at 0.65. Not confident but wrong on #9 as well: "How many accessible parking
+stalls are provided in total?" 1 at 0.65 (gold 6), "Which first-floor unit has the largest area?" U111 at 0.55 (gold
+U120). One gold corrected: W2's "maximum building height" gold is 32', the sheet prints "BUILDING HEIGHT (MAX) = 32' -
+9"" (W2 told). The hinted wordings (W2's own) on #9 are the paired control: see below once run `…-v21_hint-cf82` ends.
+
 ## "You know what you don't know — but refusing is not useful" (Stoa point 3), audited on be57171 (09:15)
 All 622 answers of run `…-090509-…-v19b-a85a` (+ 25 v19b/v20 rows: same picture), by confidence band:
 
@@ -858,8 +881,8 @@ stayed 3 but moved confidence band (0.75 → 0.35 / 0.92).
 - Rotated, grayscale, heavily compressed and half-resolution copies of a plan: 30/30 right, at the same confidence.
 
 ## Re-run
-`questions.jsonl` now has 647 rows: v1 (174) + v2 (31) + v3 Swiss compositions (42) + v4 CubiCasa compositions (36) +
-v5 natural references (70) + v6 judge questions on the demo drawings (21) + v7 scope words in 9 languages (36) + v8 scope premises (8) + v9 Finnish judge (14) + v10 scan follow-ups (8) + v11 number formats (10) + v12 Estonian labels (5) + v13 lone PDF/PNG (8) + v14 two-part / comparisons / heights / which (31) + v15 bug-18 probe (22) + v16 Swiss dev plans alone as PNG/PDF (48) + v17 linking (9) + v18 scans (36) + v19 lists (19) + v20 link wordings (19) = 647; earlier rows are byte-identical across builds (checked with cmp), so runs on the first 205 /
+`questions.jsonl` now has 704 rows: v1 (174) + v2 (31) + v3 Swiss compositions (42) + v4 CubiCasa compositions (36) +
+v5 natural references (70) + v6 judge questions on the demo drawings (21) + v7 scope words in 9 languages (36) + v8 scope premises (8) + v9 Finnish judge (14) + v10 scan follow-ups (8) + v11 number formats (10) + v12 Estonian labels (5) + v13 lone PDF/PNG (8) + v14 two-part / comparisons / heights / which (31) + v15 bug-18 probe (22) + v16 Swiss dev plans alone as PNG/PDF (48) + v17 linking (9) + v18 scans (36) + v19 lists (19) + v20 link wordings (19) + v21 sheet text without the hint (57) = 704; earlier rows are byte-identical across builds (checked with cmp), so runs on the first 205 /
 283 rows compare directly (`python3 $JUNCTION_SHARED/artifacts/Q/subset_stats.py <run> 283`). Build with
 `PYTHONHASHSEED=0 PYTHONPATH=.`; v5 calls the ifc solver for its gold (deterministic, < 1 s per row).
 ```

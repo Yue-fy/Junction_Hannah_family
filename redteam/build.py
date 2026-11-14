@@ -988,7 +988,8 @@ def main():
         if isinstance(g, (int, float)) or re.fullmatch(r"[\d.]+", str(g)):
             return rf"(?<![\d.]){re.escape(str(g))}(?!\d)"
         quote = {"'": "['’′]", '"': "[\"”″]"}
-        alts = ["".join(quote.get(c, re.escape(c)) + r"\s*" for c in str(g) if not c.isspace())]
+        tail = r"(?!\s*-?\s*[1-9])" if str(g).strip()[-1] in "'\"" else r"(?!\d)" if str(g).strip()[-1].isdigit() else ""
+        alts = ["".join(quote.get(c, re.escape(c)) + r"\s*" for c in str(g) if not c.isspace()) + tail]
         m = re.fullmatch(r"(\d+)'\s*-?\s*(\d+)?(?:\s+(\d+)/(\d+))?\"?", str(g).strip())
         if m and m.group(2):  # feet-inches: the same length in decimal feet is right too
             ft = int(m.group(1)) + (int(m.group(2)) + (int(m.group(3)) / int(m.group(4)) if m.group(3) else 0)) / 12
@@ -998,6 +999,9 @@ def main():
             alts.append(rf"(?<![\d.]){m.group(1)}(\.0+)?\s*(ft|feet|foot)\b")
         return "|".join(alts)
     src = [json.loads(line) for line in open(SHARED / "artifacts/Q/v21_src_w2_454e8bb.jsonl")]
+    for r0 in src:  # one gold corrected: the sheet prints "BUILDING HEIGHT (MAX) = 32' - 9\"" (W2's gold says 32')
+        if "32' - 9" in r0.get("verified", ""):
+            r0["gold"] = "32' - 9"
     for r0 in src:
         g, u = r0["gold"], r0.get("unit")
         q = strip_hint(r0["question"])
