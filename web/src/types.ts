@@ -24,7 +24,7 @@ export interface Cost {
 }
 
 export interface Answer {
-  value: number | string | null;
+  value: number | string | boolean | null; // boolean: a Python bool from a solver (shown yes/no)
   unit: string | null;
   confidence: number;
   evidence: Evidence[];
