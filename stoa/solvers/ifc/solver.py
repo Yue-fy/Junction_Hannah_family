@@ -415,7 +415,27 @@ def quote_room_refs(idx: IfcIndex, question: str) -> str:
         if fold(code) in names:
             out.append(question[last:m.start(2)] + f"'{code}'")
             last = m.end(2)
-    return "".join(out) + question[last:] if out else question
+    if out:
+        return "".join(out) + question[last:]
+    # an unquoted LongName that exactly one space of the model carries ('How big is the INVA-WC?',
+    # 'How big is Kellerraum-05-2?'): without quotes the room-type step read 'WC' as a type and summed all 13
+    # toilets @ 0.85 (c9 probe). Only names with a hyphen / digit / dot (codes, not type words like 'ESIK'), and
+    # never a storey name.
+    from collections import Counter
+    from stoa.solvers.ifc.resolve import match_storey as _ms
+
+    longs = Counter(fold(e.long_name or "") for e in idx.by_class("IfcSpace") if e.long_name)
+    for m in sorted(_LONGNAME_TOKEN.finditer(question), key=lambda m: -len(m.group(0))):
+        tok = m.group(0).rstrip(".")
+        if len(tok) >= 4 and re.search(r"[-\d.]", tok) and longs.get(fold(tok)) == 1:
+            st = _ms(idx, tok)
+            if st is not None and st.score >= 95:
+                continue
+            return question[:m.start()] + f"'{tok}'" + question[m.start() + len(tok):]
+    return question
+
+
+_LONGNAME_TOKEN = re.compile(r"(?<![\w'])[^\W_][\w.\-+]*[\w](?![\w'])")
 
 
 def rooms_named(idx: IfcIndex, question: str) -> tuple[list[Element], str]:
