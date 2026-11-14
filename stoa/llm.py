@@ -817,7 +817,8 @@ _LANG_WORDS: dict[str, set[str]] = {
     "no": set("hvor mange hvilke hva er og på det den finnes rom etasje".split()),
     "pl": set("ile jaka jaki jakie który która jest są na w i czy pomieszczeń pokoi powierzchnia tym tego "
               "kondygnacji piętrze".split()),
-    "cs": set("kolik jaká jaký jaké který která je jsou na v a se místností plocha tomto podlaží patře".split()),
+    "cs": set("kolik kolika jaká jaký jaké který která je jsou na v a se místností plocha tomto podlaží patře více "
+              "než má oken dveří stěn počet celková celkový celkem".split()),
     "sk": set("koľko aká aký ktorý je sú na v a miestností plocha tomto podlaží".split()),
     "hu": set("hány hány mennyi van vannak a az és milyen melyik alaprajzon terület szint szinten helyiség "
               "teljes".split()),
@@ -829,7 +830,7 @@ _LANG_WORDS: dict[str, set[str]] = {
 }
 _LANG_CHARS: dict[str, str] = {  # letters that (almost) only one language family uses
     "pl": "ąęłńśźż", "cs": "ěřůť", "sk": "ľĺŕô", "hu": "őű", "tr": "ğşı", "ro": "ășțâî", "et": "õ",
-    "es": "ñ¿¡", "pt": "ãõ", "fi": "", "lv": "āēīūķļņģ", "lt": "ąčęėįšųūž", "da": "æø", "no": "æø", "sv": "å",
+    "es": "ñ¿¡", "pt": "ãõ", "fi": "", "lv": "āēīķļņģ", "lt": "ėįų", "da": "æø", "no": "æø", "sv": "å",
 }
 COVERED_LANGS = ("en", "fi", "de", "fr", "it")  # languages the dataset (and therefore our rules) use
 _QUOTED = re.compile(r"(?<![^\W\d_])'[^']{1,80}'(?![^\W\d_])|\"[^\"]{1,80}\"|‘[^’]{1,80}’|“[^”]{1,80}”|„[^“”]{1,80}[“”]|«[^»]{1,80}»")
@@ -912,6 +913,18 @@ _TR_GLOSSARY = (
     "vannituba (et), koupelna (cs), fürdőszoba (hu), baie (ro), baño (es), badrum (sv); bedroom = sypialnia (pl), "
     "magamistuba (et), ložnice (cs), hálószoba (hu), dormitor (ro), dormitorio (es), sovrum (sv); storey = kondygnacja/"
     "piętro (pl), korrus (et), podlaží/patro (cs), szint/emelet (hu), nivel/etaj (ro), planta (es), våning (sv).")
+# Quantity and unit words (W1 04:56: et 'kogumaht' total volume -> 'total area', hu 'lábban' in feet -> 'at ground
+# level'). NOT used (05:10): with the one-letter fix v3 already matches W1's c5 cs/hu/sv rows 54/54, and adding these
+# was slightly worse elsewhere (hardL_open concept match 208 vs 210/232, lang4 46 vs 47/48; noise-level).
+_TR_GLOSSARY_Q = (
+    " Quantity and unit hints: volume = objętość (pl), maht/ruumala (et), objem (cs), térfogat (hu), volum (ro), "
+    "volumen (es), volym (sv), tilavuus (fi); area = powierzchnia (pl), pindala (et), plocha (cs), terület/alapterület "
+    "(hu), suprafață/arie (ro), superficie/área (es), yta/area (sv), pinta-ala (fi); length = długość (pl), pikkus (et), "
+    "délka (cs), hossz (hu), lungime (ro), longitud (es), längd (sv), pituus (fi); feet = stopa/stopy/stóp/stopach (pl), "
+    "jalg/jalgades (et), stopa/stopách (cs), láb/lábban (hu), picior/picioare (ro), pie/pies (es), fot/fötter (sv), "
+    "jalka/jalkaa (fi); metres = metr/metrach (pl), meeter/meetrites (et), metr/metrech (cs), méter/méterben (hu), "
+    "metru/metri (ro), metro/metros (es), meter (sv); total = łączny/całkowity (pl), kogu-/kokku (et), celkový (cs), "
+    "teljes/összes (hu), total (ro, es), total/sammanlagd (sv).")
 _TR_SCHEMA = {"type": "object", "properties": {"lang": {"type": "string"}, "english": {"type": "string"}},
               "required": ["lang", "english"]}
 _LANG_NAMES = {"pl": "Polish", "et": "Estonian", "es": "Spanish", "cs": "Czech", "hu": "Hungarian", "tr": "Turkish",
@@ -924,6 +937,8 @@ _tr_lock = threading.Lock()
 
 _NUM_SUFFIX = re.compile(r"(\d+(?:[.,]\d+)*)(-[^\W\d_]+)")  # Hungarian/Turkish case endings: 1.11-es, 12-ben
 _LETTER = re.compile(r"(?:(?<=\s)|^)[A-Z](?=[\s,.;:?!)]|$)")  # apartment/unit letters (A, B)
+_ONE_LETTER_WORDS = {"cs": "ovszkuai", "sk": "ovszkuai", "pl": "wzioau", "hu": "a", "sv": "i", "es": "yao",
+                     "it": "eaio", "ro": "a", "pt": "aoe", "fr": "a", "lt": "ir", "lv": "ar"}
 _QCHARS = "'\"‘’“”„«»"
 
 
@@ -931,7 +946,9 @@ def _protect(q: str) -> tuple[str, list[str]]:
     """Mask quoted names (quote marks stay visible, so the model knows a label is there), numbers/IDs and
     unit letters as [[n]]; return the masked text and the spans (quoted ones WITH their quote marks)."""
     spans: list[str] = []
-    hu = lang_guess(q) == "hu"  # Hungarian sentence-initial "A" is the article, not a unit letter
+    # a sentence-initial one-letter WORD of the language (cs 'O kolik', pl 'W modelu', hu article 'A') is not a unit
+    # letter; Turkish 'A dairesinin' (apartment A) has no such word, so it stays protected
+    one_letter = _ONE_LETTER_WORDS.get(lang_guess(q), "")
 
     def keep(text: str) -> str:
         spans.append(text)
@@ -947,7 +964,7 @@ def _protect(q: str) -> tuple[str, list[str]]:
         return keep(ns.group(1)) + ns.group(2) if ns else keep(t)
 
     def letter(m: re.Match) -> str:
-        return m.group(0) if (hu and m.start() == 0) else keep(m.group(0))
+        return m.group(0) if (m.start() == 0 and m.group(0).lower() in one_letter) else keep(m.group(0))
 
     masked = _QUOTED.sub(quoted, q)
     parts = re.split(r"(\[\[\d+\]\])", masked)  # outside the masked names only
