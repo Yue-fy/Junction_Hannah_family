@@ -9,7 +9,8 @@ eye in the side-by-side file that experiments/r2/noon_models.sh writes.
 
 Input, either
   .txt   one question per line; '#' starts a comment; optional leading tags in brackets:
-         [habs] [cubicasa5k,swiss_dwellings] = sources; [data/habs/x.jpg] = that file only; [kind=area_sum] = label;
+         [habs] [cubicasa5k,swiss_dwellings] = sources; [data/habs/x.jpg] = that file only; [kind=area_sum] = label
+         (at the start of the line, or at its end when every item is key=value, data/... or a source name);
          [answer=12] = gold (scored then)
   .jsonl rows with "question" and optional "path" | "sources" (list or comma string) | "kind" | "answer" | "type"
 Output: rows {qid?, path, question, answer, type, meta: {kind, source, from}} for stoa.eval --split OUT.jsonl.
@@ -32,6 +33,11 @@ QUESTION_SOURCES = ("cubicasa5k", "swiss_dwellings", "ifc_models", "ifc_bench", 
 SCAN_SOURCES = ("habs", "finna", "europeana", "wikimedia")
 DEFAULT_SOURCES = ("cubicasa5k", "swiss_dwellings", "ifc_models", "habs")
 _TAG = re.compile(r"^\s*\[([^\]]*)\]\s*")
+_TAG_END = re.compile(r"\s*\[([^\]]*)\]\s*$")  # tags may also END the line, but only if every item is a real tag
+
+
+def _is_tag(t: str) -> bool:
+    return "=" in t or t.startswith("data/") or t in QUESTION_SOURCES + SCAN_SOURCES
 _COUNT = re.compile(r"^\s*(how many|count|number of|kuinka monta|wie viele|combien|cu[aá]nt[oa]s|hur m[aå]nga)\b", re.I)
 
 
@@ -66,6 +72,19 @@ def parse_line(line: str) -> dict | None:
             else:
                 row.setdefault("sources", []).append(tag)
         s = s[m.end():]
+    tail: list[str] = []  # '... floor? [kind=x]' (R2 11:3x: the noon dry run wrote tags last and lost them silently)
+    while (m := _TAG_END.search(s)) and (items := [t.strip() for t in m.group(1).split(",") if t.strip()]) \
+            and all(_is_tag(t) for t in items):
+        tail = items + tail
+        s = s[:m.start()]
+    for tag in tail:
+        if "=" in tag:
+            k, v = (x.strip() for x in tag.split("=", 1))
+            row.setdefault(k, v)  # a leading tag wins
+        elif tag.startswith("data/"):
+            row.setdefault("path", tag)
+        else:
+            row.setdefault("sources", []).append(tag)
     row["question"] = s.strip()
     return row if row["question"] else None
 
