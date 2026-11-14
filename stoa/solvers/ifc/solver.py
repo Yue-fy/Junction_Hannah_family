@@ -365,6 +365,14 @@ class IfcSolver(BaseSolver):
                 ans.missing.append(f"the relation '{rel[0]} {rel[1]}' between element kinds is not modelled; the "
                                    "value counts one kind only")
                 ans.trace.append(f"guard: relation '{rel[0]} {rel[1]}' not modelled -> confidence 0.3")
+        m2q = re.search(r"\b(how many|how much|what|which|wie viele|hoeveel)\b[^?]{3,80}?\band\s+(how many|how much|what|which|"
+                        r"wie viel\w*|hoeveel)\b", fold(_QUOTED_RX.sub(" ", question)))
+        if ans.value is not None and m2q and not isinstance(ans.value, str) and ans.confidence > 0.5:
+            # "How many windows and what total window area ...": two questions, one number
+            ans.confidence = 0.5
+            ans.missing.append("the question asks two things; the value answers only one of them "
+                               f"({ans.unit or 'value'})")
+            ans.trace.append("guard: two questions in one -> confidence 0.5")
         mo = re.search(r"\b(north|south|east|west|northern|southern|eastern|western|nord|sud|sued|ost|noord|zuid|oost|"
                        r"norte|oeste|este|pohjois|etela|ita|lansi)\w*[- ]?(facing|facade|side|elevation|wall|fassade|"
                        r"gevel|fachada|julkisivu)?\b", fold(_QUOTED_RX.sub(" ", question)))
