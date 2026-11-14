@@ -218,6 +218,7 @@ Cost of one answer (D21 item 4), measured, not assumed:
   | vlm_lora adapter chosen by style only | 73.2 | 521 (93.5%) | 34 | 0% | 0.046 |
   | **source hook: outside raster → 'cubicasa5k' at p≥0.8** | **75.1** | 478 (93.5%) | **31** | **32.4%** | **0.041** |
   | dataset path (control, Q 09:33) | 75.9 | 450 (94.7%) | 24 | 47.8% | 0.016 |
+  | same 800 as JPEG q85 uploads: off → hook | 74.6 → 75.1 | 562 → 477 | 47 → 30 | 0 → 32.0% | 0.043 → 0.040 |
 
   The hook touches 588 Qs (147/200 images): 586 answers identical to the dataset path. The adapter-only variant loses 13 W / 21 L
   (the per-concept gate matters, not the adapter) → dropped. Runtime moved to `stoa/style.py` (+ `stoa/style_weights.json`); the
