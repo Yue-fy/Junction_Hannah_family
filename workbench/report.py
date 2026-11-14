@@ -58,7 +58,9 @@ def build() -> str:
 
     items = store.read("audit_items")
     audits = _last_by(store.read("audit"), "item_id")
-    qs = [q for q in _last_by(store.read("questions"), "qid").values() if not q.get("deleted")]
+    live = [q for q in _last_by(store.read("questions"), "qid").values() if not q.get("deleted")]
+    qs = [q for q in live if q.get("origin") != "audit"]
+    agold = [q for q in live if q.get("origin") == "audit"]
     rules = store.read("rules")
     L = [f"# Expert workbench report (updated {time.strftime('%Y-%m-%d %H:%M')})", "",
          "Source: `$JUNCTION_SHARED/human/` (written by the workbench on :8200, agent H). "
@@ -75,10 +77,13 @@ def build() -> str:
         if t:
             L.append(t)
         by_src = defaultdict(Counter)
+        it_by = {i["item_id"]: i for i in items}
         for a in done:
-            src = a.get("path", "").split("/")[1] if a.get("path", "").count("/") >= 2 else "?"
+            it = it_by.get(a["item_id"]) or {}
+            src = (f"batch: {it['batch_label']}" if it.get("batch_label") else
+                   a.get("path", "").split("/")[1] if a.get("path", "").count("/") >= 2 else "?")
             by_src[src][a["verdict"]] += 1
-        L += ["", "| source | ✓ | ✗ | ? |", "|---|---|---|---|"]
+        L += ["", "| source (or batch) | ✓ | ✗ | ? |", "|---|---|---|---|"]
         for src, cc in sorted(by_src.items()):
             L.append(f"| {src} | {cc.get('supports', 0)} | {cc.get('wrong', 0)} | {cc.get('cant_tell', 0)} |")
         flagged = [a for a in done if (a["verdict"] == "wrong") or (a["verdict"] == "supports" and a.get("matches_reference") is False)
@@ -115,6 +120,20 @@ def build() -> str:
         if n_sc:
             L += ["", f"Scored agreement (eval tolerance, only questions where she pressed 'Ask our system'): {n_ok}/{n_sc}."]
     L.append("")
+    if agold:
+        L += [f"### 2b. Reference answers made by auditing items that had none: {len(agold)} "
+              "(also in split `human`, meta.kind `human:audit`)", "",
+              "| item | question | expert's reference | ours | agree |", "|---|---|---|---|---|"]
+        for q in agold:
+            sysa = q.get("system") or {}
+            try:
+                agree = score(q.get("type") or "other", q.get("answer") or None, q.get("unit") or None,
+                              sysa.get("value"), sysa.get("unit"))
+            except Exception:  # noqa: BLE001
+                agree = None
+            L.append(f"| {q.get('item_id')} | {_clip(q.get('question'), 110)} | {_clip(q.get('answer'), 40)} {q.get('unit') or ''} | "
+                     f"{_clip(sysa.get('value'), 40)} {sysa.get('unit') or ''} | {'✓' if agree else '✗' if agree is False else '–'} |")
+        L.append("")
 
     # --- rules
     L += [f"## 3. Physics & sanity rules: {len(rules)}", ""]

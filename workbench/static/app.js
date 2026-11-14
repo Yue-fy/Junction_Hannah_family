@@ -297,7 +297,7 @@ const audit = {
     $("#audit-ref").previousElementSibling.textContent = d.ref_label ? `Reference answer (${d.ref_label})` :
       d.batch ? "Reference answer" :
       d.split && d.split !== "dev" ? "Reference answer (made by our agents)" : "Reference answer (dataset)";
-    if (d.batch_label) $("#audit-meta").innerHTML += `<span class="split-tag">${esc(d.batch_label)}</span>`;
+    if (d.batch_label) $("#audit-meta").innerHTML += ` <span class="split-tag">${esc(d.batch_label)}</span>`;
     $("#audit-question").textContent = d.question;
     $("#audit-answer").textContent = d.answer;
     $("#audit-answer").classList.toggle("long", String(d.answer).length > 30);
