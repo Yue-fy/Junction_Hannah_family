@@ -63,6 +63,18 @@ function fmtValue(a: Answer) {
 }
 
 /** "cross-check: … ✓/✗" lines from evidence notes and trace (D4: no contract change). */
+/** W4's room-segmentation reading on CubiCasa count answers (trace "room segmentation (pretrained CubiCasa5K): 3 bedroom
+ *  region(s) = the answer ✓"; when it differs: "…: 1 sauna region(s); no boxes attached"): an independent second count. */
+function segChecks(a: Answer): { text: string; ok: boolean }[] {
+  return (a.trace ?? []).flatMap((l) => {
+    const m = l.match(/^room segmentation \(([^)]+)\):\s*(\d+) ([\w -]+?) region\(s\)\s*(=\s*the answer)?/i);
+    if (!m || /cross-?check/i.test(l)) return [];
+    const n = Number(m[2]);
+    const what = `${n} ${m[3]} region${n === 1 ? "" : "s"} in the room segmentation (${m[1]})`;
+    return [m[4] ? { text: `${what} = the answer`, ok: true } : { text: `${what}; the answer says ${a.value}`, ok: String(n) === String(a.value) }];
+  });
+}
+
 export function crossChecks(a: Answer, asks: string[] = []): { text: string; ok: boolean }[] {
   // Compound answers prefix each evidence note with its part ("door: door 1; cross-check: answer 36 vs …").
   const parts = new Set(a.plan?.parts ?? []);
@@ -82,7 +94,7 @@ export function crossChecks(a: Answer, asks: string[] = []): { text: string; ok:
   // Exception: boxes added by "Show where" (notes start with the locator's name) carry the locator's check only;
   // the solver's own check (e.g. "vlm_lora 4 = raster 4") is then in the trace, so keep it next to it.
   const fromEv = parse(a.evidence.map((e) => e.note ?? ""));
-  const fromTrace = parse(a.trace ?? []);
+  const fromTrace = [...parse(a.trace ?? []), ...segChecks(a)];
   const located = a.evidence.some((e) => LOCATED_NOTE.test(e.note ?? ""));
   const key = (t: string) => t.split("→")[0].replace(/\s+/g, " ").trim().slice(0, 24);
   // "label reader (raster) finds 1 …" already says what the pipeline's "vlm_lora 0 ≠ raster 1" says: keep one line
@@ -129,6 +141,28 @@ function rangeHtml(a: Answer) {
 /** Why a yes/no answer is yes or no, in one line under it: the compared quantity and the threshold, read from the
  * solver's own assumption or trace line (W1 ifc: "yes/no: is the model quantity (46 count) > 40"; agent/calc lines
  * like "46 > 40 → yes"). Nothing is recomputed here; no line, no basis shown. */
+/** Multi-part answers (W1 ifc: "154 (How many rooms…); 2451.41 m2 (What is the total area…)"): one row per part, the
+ *  value big and the sub-question it answers small, instead of one long sentence. null when the value is not that shape. */
+export function multiPart(a: Answer): { v: string; u: string; q: string }[] | null {
+  if (typeof a.value !== "string") return null;
+  // W4 compose 'list' ("How many doors and how many windows …?"): "door: 46; window: 55"
+  const named = a.value.split(/;\s+/).map((x) => x.match(/^\s*([A-Za-z][\w ()'.-]{0,40}?):\s*(-?\d[\d,]*(?:\.\d+)?)\s*([A-Za-z²³%€/]{0,12})\s*$/));
+  if (named.length >= 2 && named.every((m) => m)) {
+    // "door" → "doors" for plain class words (counts other than 1)
+    const pl = (w: string, v: string) => (/^[a-z ]+$/.test(w) && !/s$/.test(w) && Number(v) !== 1 ? `${w}s` : w);
+    return named.map((m) => ({ v: m![2], u: /^count$/i.test(m![3]) ? "" : m![3], q: pl(m![1].replace(/_/g, " "), m![2]) }));
+  }
+  const parts = a.value.split(/\);\s+/).map((x, i, all) => (i < all.length - 1 ? `${x})` : x));
+  if (parts.length < 2) return null;
+  const rows = parts.map((x) => x.match(/^\s*(-?\d[\d,]*(?:\.\d+)?|yes|no)\s*([A-Za-z²³%€/0-9]{0,12})\s*\((.{3,200})\)\s*$/i));
+  if (rows.some((m) => !m)) return null;
+  return rows.map((m) => {
+    const n = Number(m![1].replace(/,/g, ""));
+    const v = Number.isFinite(n) && Math.abs(n) >= 10000 ? n.toLocaleString("en") : m![1];
+    return { v, u: /^count$/i.test(m![2]) ? "" : m![2], q: m![3].trim() };
+  });
+}
+
 export function yesNoBasis(a: Answer): string {
   if (typeof a.value !== "boolean" && (typeof a.value !== "string" || !/^(yes|no|true|false|ja|nein|oui|non|kyllä|ei|si|sì)$/i.test(a.value.trim()))) return "";
   const OP = String.raw`(>=|<=|≥|≤|>|<|==|=|!=|≠)`;
@@ -147,10 +181,35 @@ export function yesNoBasis(a: Answer): string {
       ?? l.match(new RegExp(String.raw`${NUM}\s*(m2|m²|m3|m³|m|count|%)?\s*${OP}\s*${NUM}\s*(?:→|->|=>|:)\s*(?:yes|no|true|false)`, "i"));
     if (!m) continue;
     const [, x, u, op, y] = m;
+    const sym = ({ ">=": "≥", "<=": "≤", "==": "=", "!=": "≠" } as Record<string, string>)[op] ?? op;
+    // dxf: "[dxf] apartment B: 7 numbered indoor rooms … = 80.83 m²" … "[dxf] comparison: 80.83 > 80.34 -> yes": take
+    // the unit (and the name before the colon) from the line that computed each number
+    const UNIT = String.raw`(m2|m²|m3|m³|m|%|EUR|€|CHF)`;
+    const src = (n: string) => {
+      const re = new RegExp(String.raw`^(?:\[\w+\]\s*)?([^:\[\]]{2,40}?):.*?(?:=|is)\s*${n.replace(/[.]/g, "\\.")}\s*${UNIT}(?![\w²³])`, "i");
+      for (const t of a.trace ?? []) {
+        const k = t.match(re);
+        if (k && t !== l) return { name: k[1].trim(), unit: unitLabel(k[2]) };
+      }
+      return null;
+    };
+    const sx = !u || /^count$/i.test(u.trim()) ? src(x) : null;
+    const sy = sx ? src(y) : null;
+    if (sx && sy) {
+      return `<span class="range basis" title="${esc(l)}">${esc(sx.name)} ${esc(x)} ${esc(sx.unit)} ${esc(sym)} ${esc(sy.name)} ${esc(y)} ${esc(sy.unit)}</span>`;
+    }
     const unit = !u || /^count$/i.test(u.trim()) ? (a.intent?.target && !/unknown/.test(a.intent.target) ? ` ${a.intent.target}s` : "")
       : ` ${unitLabel(u.trim())}`;
-    const sym = ({ ">=": "≥", "<=": "≤", "==": "=", "!=": "≠" } as Record<string, string>)[op] ?? op;
     return `<span class="range basis" title="${esc(l)}">${esc(x)}${esc(unit)} ${esc(sym)} ${esc(y)}</span>`;
+  }
+  // ifc: "[ifc] window=55, door=46" (the two counts compared, no operator logged): show both, ordered by the numbers
+  for (const l of a.trace ?? []) {
+    const k = l.match(/^(?:\[\w+\]\s*)?([a-z_]{2,30})=(-?\d+(?:\.\d+)?),\s*([a-z_]{2,30})=(-?\d+(?:\.\d+)?)\s*$/i);
+    if (!k) continue;
+    const [, wa, xa, wb, xb] = k;
+    const pl = (w: string, n: string) => `${n} ${w.replace(/_/g, " ")}${Number(n) === 1 ? "" : "s"}`;
+    const sym = Number(xa) > Number(xb) ? ">" : Number(xa) < Number(xb) ? "<" : "=";
+    return `<span class="range basis" title="${esc(l)}">${esc(pl(wa, xa))} ${sym} ${esc(pl(wb, xb))}</span>`;
   }
   return "";
 }
@@ -223,7 +282,7 @@ function checkedHtml(a: Answer, text: string) {
     <div class="rich-body">
       <table class="checked"><tbody>${rows.map((r) => `<tr class="${r.notInAnswer ? "contrast" : ""}"><td>${esc(r.name)}</td><td class="num">${r.model}</td><td>${mark(r)}</td></tr>`).join("")}</tbody>${foot}</table>
       <div class="checked-src">${allOk && counted.length ? `Every count in the answer matches the model.` : allOk ? "" : "The model and the answer differ (✗)."} Counted in your browser from the loaded model: no model call.</div>
-      <details class="llm-words"${allOk ? "" : " open"}><summary>The language model's text answer · ${lines} line${lines === 1 ? "" : "s"}</summary><div class="value text rich">${richText(text)}</div></details>
+      <details class="llm-words"${allOk ? "" : " open"}><summary>${(a.cost?.llm_tokens_in ?? 0) > 0 ? "The language model's" : "The solver's"} text answer · ${lines} line${lines === 1 ? "" : "s"}</summary><div class="value text rich">${richText(text)}</div></details>
     </div>`;
 }
 
@@ -452,12 +511,37 @@ export function secondOpinionHtml(a: Answer, b: Answer, ms: number) {
  * reader (raster, local VLM, cached per drawing); symbols → R1's pretrained CubiCasa5K detector (cached, no GPU). */
 const ROOM_TARGETS = new Set(["bedroom", "kitchen", "bathroom", "sauna", "wc_room", "balcony"]);
 const SYMBOL_TARGETS = new Set(["window", "door", "wc", "sink"]);
+/** `missing` without "no located evidence …" when the answer does carry located evidence (boxes or GUIDs). */
+const missingNow = (a: Answer) => (a.missing ?? []).filter((t) => !(/^no located evidence\b/i.test(t) && a.evidence.some((e) => e.bbox || e.ifc_guid)));
+
 export const LOCATED_NOTE = /^(label reader|CubiCasa5K detector): /;
 export interface Locator { solver: string; name: string; button: string; title: string; noun: string }
 const NOUNS: Record<string, string> = { window: "windows", door: "doors", wc: "WC seats", sink: "sinks", wc_room: "WC room labels" };
-export function locatorFor(a: Answer, file: string): Locator | null {
+/** Room words (EN/FI/SV/DE) and the Finnish plan codes printed on CubiCasa plans → R1's room-graph classes. */
+const ROOM_WORDS: [RegExp, string][] = [
+  [/\b(kitchens?|keitti[öo]\w*|kök\w*|küche\w*|kitchenette)\b|\(K\)|'K'/i, "kitchen"],
+  [/\b(bed ?rooms?|makuuhuone\w*|sovrum\w*|schlafzimmer\w*)\b|\((MH|H)\)|'(MH|H)'/i, "bedroom"],
+  [/\b(living ?rooms?|lounge|olohuone\w*|vardagsrum\w*|wohnzimmer\w*)\b|\(OH\)|'OH'/i, "living"],
+  [/\b(bath ?rooms?|wash ?rooms?|toilets?|wcs?|kylpyhuone\w*|pesuhuone\w*|badrum\w*)\b|\((KH|PH|PESUH|WC)\)|'(KH|PH|WC)'/i, "bath"],
+  [/\b(saunas?|löylyhuone\w*|bastu\w*)\b|\((S|LH|SAUNA)\)|'(LH|S)'/i, "sauna"],
+  [/\b(hall(way)?s?|entr(y|ance|ies)|corridors?|lobby|eteinen|etei\w+|tuulikaappi\w*|hall)\b|\((ET|TK)\)|'(ET|TK)'/i, "entry"],
+  [/\b(storage|store ?rooms?|closets?|walk-in|pantry|varasto\w*|vaatehuone\w*|förråd\w*)\b|\((VAR|VH)\)|'(VAR|VH)'/i, "storage"],
+  [/\b(balcon(y|ies)|terraces?|patio|parveke\w*|terassi\w*|balkong\w*)\b|\((PAR|TER)\)/i, "outdoor"],
+  [/\b(garages?|carport|autotalli\w*)\b/i, "garage"],
+];
+/** The room-graph classes a question names (empty: none). */
+export const roomKindsIn = (q: string) => ROOM_WORDS.filter(([re]) => re.test(q)).map(([, k]) => k);
+
+export function locatorFor(a: Answer, file: string, question = ""): Locator | null {
   if (a.value === null || (a.evidence ?? []).length || !/^data\/cubicasa5k\/.*\.(png|jpe?g)$/i.test(file)) return null;
   const t = a.intent?.target ?? (a.trace ?? []).map((l) => l.match(/^intent: count (\w+)/)?.[1]).find((x) => x) ?? "";
+  // "where is the kitchen?", "which room is the sauna entered from?", room areas…: not a count of labels or symbols, but
+  // the question names a room: R1's room graph (cached CubiCasa5K segmentation, no model call) boxes the rooms named
+  const kinds = roomKindsIn(question);
+  if (kinds.length && (a.intent?.task !== "count" || !(ROOM_TARGETS.has(t) || SYMBOL_TARGETS.has(t)))) {
+    return { solver: "rooms", name: "room graph", button: "Show where · room graph", noun: kinds.join(" / "),
+      title: "Mark the rooms this question names, from the room graph of the plan (pretrained CubiCasa5K segmentation + printed labels; cached, no model call)" };
+  }
   const noun = NOUNS[t] ?? (ROOM_TARGETS.has(t) ? `${t} labels` : "symbols");
   // the pipeline already asked the label reader and it found none: nothing to mark
   if (ROOM_TARGETS.has(t) && (a.trace ?? []).some((l) => /cross-check:.*\braster 0\b/.test(l))) return null;
@@ -477,6 +561,8 @@ export interface CardOpts {
   onEvidence: (i: number) => void;
   describeGuid: (g: string) => string;
   currentFile: string;
+  /** the question as asked (locatorFor: which rooms a "where is …" question names) */
+  currentQuestion?: string;
   onOpenSheet: (path: string) => void;
 }
 
@@ -514,13 +600,14 @@ export function renderCard(el: HTMLElement, a: Answer, opts: CardOpts) {
   const ev = a.evidence ?? [];
   const groups = groupEvidence(ev);
   const shown = groups.slice(0, 80);
-  const loc = locatorFor(a, opts.currentFile);
+  const loc = locatorFor(a, opts.currentFile, opts.currentQuestion ?? "");
 
   el.className = `card answer ${a.value === null ? "refused" : ""}`;
   el.innerHTML = `
     <div class="value-row${rich ? " rich" : ""}">
       ${rich && a.checked?.length ? checkedHtml(a, String(a.value))
         : rich ? `<span class="rich-lbl">Text answer · ${String(a.value).split(/\n+/).filter((l) => l.trim()).length} line(s)</span><div class="value text rich">${richText(String(a.value))}</div>`
+        : multiPart(a) ? `<div class="value parts">${multiPart(a)!.map((r) => `<div class="part"><span class="pv">${esc(r.v)}${r.u ? `<span class="unit">${esc(unitLabel(r.u))}</span>` : ""}</span><span class="pq">${esc(r.q)}</span></div>`).join("")}</div>`
         : `<div class="value ${isText ? "text" : ""} ${isText && String(a.value).length > 40 ? "long" : ""}">${esc(fmtValue(a))}${unit ? `<span class="unit">${esc(unit)}</span>` : ""}${rangeHtml(a)}${yesNoBasis(a)}</div>`}
       <div class="conf ${confClass}" title="${a.checked?.length ? "The pipeline's calibrated confidence in its text answer, before the browser counted the types it names in the model (table)" : "Calibrated confidence"}">
         <div class="conf-num">${conf}%</div><div class="conf-bar"><i style="width:${conf}%"></i></div><div class="conf-lbl">${a.checked?.length ? "before the check" : "confidence"}</div>
@@ -545,7 +632,7 @@ export function renderCard(el: HTMLElement, a: Answer, opts: CardOpts) {
     : `<details class="sec" open><summary>Why <small>${(a.trace ?? []).length} steps</small></summary>
       ${traceHtml(a.trace ?? [])}</details>`}
     ${(a.assumptions ?? []).length ? `<details class="sec" open><summary>Assumptions</summary><ul class="assume">${a.assumptions!.map((t) => `<li>${esc(t)}</li>`).join("")}</ul></details>` : ""}
-    ${(a.missing ?? []).length ? `<details class="sec" open><summary>What would make it certain</summary><ul class="missing">${a.missing!.map((t) => `<li>${esc(t)}</li>`).join("")}</ul></details>` : ""}
+    ${missingNow(a).length ? `<details class="sec" open><summary>What would make it certain</summary><ul class="missing">${missingNow(a).map((t) => `<li>${esc(t)}</li>`).join("")}</ul></details>` : ""}
     ${sheetsHtml(ev, opts.currentFile)}
     <details class="sec" open><summary>Evidence <small>${groups.length} item${groups.length === 1 ? "" : "s"}${groups.length < ev.length ? ` (${ev.length} boxes/elements)` : ""} · click to zoom${esc(partialEvidence(run, a))}</small></summary>
       <ul class="evidence">${shown.map((g, n) => evLabel(ev, g, n + 1, opts.describeGuid, asks)).join("")}${groups.length > shown.length ? `<li class="more">+ ${groups.length - shown.length} more</li>` : ""}</ul></details>

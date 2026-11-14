@@ -824,7 +824,9 @@ _LANG_WORDS: dict[str, set[str]] = {
               "teljes".split()),
     "tr": set("kaç ne nedir bu ve bir mi mı alanı katta oda odası toplam kattaki planda".split()),
     "ro": set("câte câți cât care este sunt și pe în din suprafața camere etaj planul acest".split()),
-    "et": set("mitu kui palju on ja kas korrusel ruumi pindala mis".split()),
+    "et": set("mitu kui palju on ja kas korrusel ruumi pindala mis milline millised milliseid protsent protsenti "
+              "protsentides korruse korrus ruum ruumid ruumide ruumil netopinnast pinnast kogupinnast osakaal kokku "
+              "suure moodustab plaanil joonisel hoones mudelis aknaid uksi akende uste".split()),
     "lv": set("cik kāda ir un uz stāvā telpu platība".split()),
     "lt": set("kiek koks yra ir ant aukšte patalpų plotas".split()),
 }
@@ -913,6 +915,15 @@ _TR_GLOSSARY = (
     "vannituba (et), koupelna (cs), fürdőszoba (hu), baie (ro), baño (es), badrum (sv); bedroom = sypialnia (pl), "
     "magamistuba (et), ložnice (cs), hálószoba (hu), dormitor (ro), dormitorio (es), sovrum (sv); storey = kondygnacja/"
     "piętro (pl), korrus (et), podlaží/patro (cs), szint/emelet (hu), nivel/etaj (ro), planta (es), våning (sv).")
+# F 08:20 (open hardL cs/hu/tr/ro slips): room codes read as fixtures ('washrooms (KH, KPH, PH)' -> 'toilets'),
+# hu 'Hány … közül' -> 'Which of', ro 'băi' / tr 'banyo' next to showers -> 'bathrooms', cs 'Kolik van' noun dropped.
+# NOT used (08:50, experiments/r2/probes/hints2_ab.py): appended to v3 it was WORSE, hardL_open concept match 206 vs
+# 212/232 (hu 45 vs 54: 'A lakás' read as 'A apartment' -> room area), lang4 47 vs 48/48, and the targeted slips stayed.
+_TR_HINTS2 = (
+    " Room codes in parentheses (KH, KPH, PH, PESUH, SH, WC, MH, S) mark ROOMS: name them as rooms (bathroom, "
+    "washroom, WC room), never as fixtures (toilet, toilet bowl). 'How many of …' = 'Hány … közül' (hu), 'kaç "
+    "tanesi' (tr), 'câte dintre' (ro), 'kolik z' (cs): keep it a count, never 'which'. bathtub = küvet (tr); "
+    "'van' in 'kolik van' (cs) is bathtubs; next to showers, 'băi' (ro) and 'banyo' (tr) are bathtubs.")
 # Quantity and unit words (W1 04:56: et 'kogumaht' total volume -> 'total area', hu 'lábban' in feet -> 'at ground
 # level'). NOT used (05:10): with the one-letter fix v3 already matches W1's c5 cs/hu/sv rows 54/54, and adding these
 # was slightly worse elsewhere (hardL_open concept match 208 vs 210/232, lang4 46 vs 47/48; noise-level).
@@ -940,6 +951,9 @@ _LETTER = re.compile(r"(?:(?<=\s)|^)[A-Z](?=[\s,.;:?!)]|$)")  # apartment/unit l
 _ONE_LETTER_WORDS = {"cs": "ovszkuai", "sk": "ovszkuai", "pl": "wzioau", "hu": "a", "sv": "i", "es": "yao",
                      "it": "eaio", "ro": "a", "pt": "aoe", "fr": "a", "lt": "ir", "lv": "ar"}
 _QCHARS = "'\"‘’“”„«»"
+# grouped thousands (Swiss 1'200 / 1’200, 1 200 with a (thin/no-break) space): ONE number, masked before quotes so
+# the apostrophe can never pair with a quote mark (Q 05:08: "1'200 CHF" came out as 1 and 200)
+_THOUSANDS = re.compile(r"(?<![\w'’.,])\d{1,3}(?:['’\u00a0\u202f ]\d{3})+(?:[.,]\d+)?(?![\w'’])")
 
 
 def _protect(q: str) -> tuple[str, list[str]]:
@@ -966,7 +980,8 @@ def _protect(q: str) -> tuple[str, list[str]]:
     def letter(m: re.Match) -> str:
         return m.group(0) if (m.start() == 0 and m.group(0).lower() in one_letter) else keep(m.group(0))
 
-    masked = _QUOTED.sub(quoted, q)
+    masked = _THOUSANDS.sub(lambda m: keep(m.group(0)), q)
+    masked = _QUOTED.sub(quoted, masked)
     parts = re.split(r"(\[\[\d+\]\])", masked)  # outside the masked names only
     masked = "".join(p if re.fullmatch(r"\[\[\d+\]\]", p) else _LETTER.sub(letter, _IDNUM.sub(idnum, p))
                      for p in parts)
@@ -976,6 +991,9 @@ def _protect(q: str) -> tuple[str, list[str]]:
 def _restore(text: str, spans: list[str]) -> tuple[str, bool]:
     """Put the spans back; a quoted name always comes back with its own quote marks, whether or not the model
     kept the quotes around the placeholder. ok = every placeholder appeared exactly once."""
+    # the model sometimes writes [1] / [[1] for [[1]] (F 08:30: Estonian hard2r rows fell back to the original)
+    text = re.sub(r"\[{1,2}\s*(\d{1,2})\s*\]{1,2}",
+                  lambda m: f"[[{m.group(1)}]]" if 1 <= int(m.group(1)) <= len(spans) else m.group(0), text)
     ok = all(len(re.findall(rf"\[\[{i}\]\]", text)) == 1 for i in range(1, len(spans) + 1))
     for i in range(len(spans), 0, -1):  # [[12]] before [[1]]
         sp = spans[i - 1]
@@ -1002,7 +1020,33 @@ def should_translate(question: str, intent: Any = None) -> bool:
 
         intent = parse(question)
     return (getattr(intent, "lang", "?") == "?" or getattr(intent, "target", None) in (None, "unknown")
-            or getattr(intent, "task", None) == "text")
+            or getattr(intent, "task", None) == "text" or (TRANSLATE_CONJ and _joins_nouns(question, intent)))
+
+
+# 'and' per language OUTSIDE the rule languages (en/fi/de/fr/it, whose 'und/et/e/ja' the composer reads itself)
+_CONJ = {"sv": "och|samt", "nb": "og", "no": "og", "da": "og", "nl": "en", "pl": "i|oraz", "cs": "a|i", "sk": "a|i",
+         "et": "ja", "lt": "ir", "lv": "un", "hu": "és", "tr": "ve", "ro": "și|și|si", "es": "y|e", "pt": "e",
+         "hr": "i", "sl": "in", "el": "και"}
+# R2 08:40 (Q's compose-cc:sv 3/6): "Hur många toalettstolar och balkonger finns det totalt?" parses as balconies only,
+# and "sovrum och bastur … totalt" names two classes but the composer reads only English 'and' / 'in total', so a
+# Swedish/Dutch/Polish/... composition reaches the LoRA or the agent as ONE question. Translating it lets the composer
+# split it. Kill switch: STOA_TR_CONJ=0.
+TRANSLATE_CONJ = os.environ.get("STOA_TR_CONJ", "1") != "0"
+
+
+def _joins_nouns(question: str, intent: Any) -> bool:
+    """A count/area question in a language the rules do not cover that joins words with its 'and'."""
+    if getattr(intent, "task", None) not in ("count", "area"):
+        return False
+    rx = _CONJ.get(lang_guess(question))
+    if not (rx and re.search(rf"(?<![^\W\d_])(?:{rx})(?![^\W\d_])", _strip_quoted(question), re.I)):
+        return False
+    from stoa.router.compose import _TOGETHER
+    from stoa.router.intent import targets_mentioned
+
+    # the composer already reads it (two classes + its 'in total' word, e.g. NL 'deuren en ramen … in totaal' 0.98
+    # as is): translating would only cap a right answer at the translated-reading confidence
+    return not (len(set(targets_mentioned(question)) - {"apartment", "room"}) >= 2 and _TOGETHER.search(question))
 
 
 def to_english(question: str, *, keep: Sequence[str] = COVERED_LANGS, force: bool = False,
@@ -1033,6 +1077,24 @@ def to_english(question: str, *, keep: Sequence[str] = COVERED_LANGS, force: boo
     except Exception as e:  # noqa: BLE001  (server down: answer on the original rather than fail)
         return Translation(question, guess, False, False, question, f"translation failed ({type(e).__name__})")
     text, ok = _restore(eng, spans) if eng else (question, False)
+    if not ok and spans and lang != "en":
+        # one corrective turn, only on a lost placeholder (R2 08:45: Estonian '... korruse [[1]] netopinnast' came back
+        # as "the floor's net area" without [[1]]); the retry costs a call only on these failures
+        try:
+            need = ", ".join(f"[[{i}]]" for i in range(1, len(spans) + 1))
+            msgs = [{"role": "user", "content": masked}, {"role": "assistant", "content": r.text},
+                    {"role": "user", "content": f"Your translation lost or changed a placeholder. Each of {need} must "
+                                                "appear exactly once, in the role it has in the source. Reply with the "
+                                                "corrected JSON only."}]
+            r2 = chat(msgs, system=_TR_SYSTEM + _TR_GLOSSARY, backend=backend, model=model, max_tokens=300,
+                      temperature=0.0, json_schema=_TR_SCHEMA)
+            eng2 = str((extract_json(r2.text) or {}).get("english", "")).strip()
+            if eng2:
+                t2, ok2 = _restore(eng2, spans)
+                if ok2:
+                    text, ok = t2, True
+        except Exception:  # noqa: BLE001
+            pass
     if lang == "en":
         res = Translation(question, "en", False, True, question)
     elif not ok:

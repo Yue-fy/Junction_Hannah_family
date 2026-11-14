@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from stoa.solvers.ifc.parse import _QUOTED, _kind_hits, fold
 
 NUM = r"(\d+(?:[.,]\d+)?)"
-_CUR = (r"(eur(?:os?)?\b|€|usd\b|us ?dollars?|dollars?|\$|gbp\b|pounds?\b|£|chf\b|swiss francs?|francs?\b|sek\b|nok\b|"
+_CUR = (r"(eur(?:os?|oa|on|ot|oja)?\b|€|usd\b|us ?dollars?|dollars?|\$|gbp\b|pounds?\b|£|chf\b|swiss francs?|francs?\b|sek\b|nok\b|"
         r"dkk\b|kronor|kroner|kr\b|pln\b|zloty|zl\b|ron\b|lei\b)")
 _CUR_CODE = [("eur", "EUR"), ("€", "EUR"), ("usd", "USD"), ("dollar", "USD"), ("$", "USD"), ("gbp", "GBP"),
              ("pound", "GBP"), ("£", "GBP"), ("chf", "CHF"), ("franc", "CHF"), ("sek", "SEK"), ("kronor", "SEK"),
@@ -50,8 +50,50 @@ _UNIT_DIGIT = re.compile(r"(m|ft|sq ?m|sq ?ft|cm|mm|km)[23]\b|\^[23]")
 
 
 def text_of(question: str) -> str:
-    """The question as the parser sees it: quoted names blanked (their digits are names, not numbers), folded."""
-    return " " + fold(_QUOTED.sub(" ", question)) + " "
+    """The question as the parser sees it: quoted names blanked (their digits are names, not numbers), folded,
+    digit grouping removed ('1,200 euros' -> '1200 euros', see `ungroup`)."""
+    return ungroup(" " + fold(_QUOTED.sub(" ", question)) + " ")
+
+
+# digit grouping: '1,200' / '1.200' / "1'200" / '1 200' (+ an optional decimal part with the other separator:
+# '1,250.50', '1.250,50'). Q's bug 17 (05:08): '1,200 euros' was read as 1.2 -> 55.2 EUR at 0.92 (gold 55,200).
+_GROUPED = re.compile(r"(?<![\w.,'’])(\d{1,3})((?P<sep>[,.'’ ])\d{3}(?:(?P=sep)\d{3})*)(?:(?P<dsep>[.,])(?P<dec>\d{1,3}))?"
+                      r"(?![\d]|[.,]\d)")
+
+
+def ungroup_question(question: str) -> str:
+    """`ungroup` on the raw question outside quoted names (their digits are names): every parser downstream (dimension
+    thresholds 'wider than 1,000 mm', area thresholds, factors) then sees plain numbers."""
+    out, last = [], 0
+    for m in _QUOTED.finditer(question):
+        out.append(ungroup(question[last:m.start()]))
+        out.append(m.group(0))
+        last = m.end()
+    out.append(ungroup(question[last:]))
+    return "".join(out)
+
+
+def ungroup(t: str) -> str:
+    """Remove digit-group separators from numbers in folded text; the decimal separator becomes '.'.
+    A separator followed by exactly three digits is a thousands separator when: it is an apostrophe or space (never
+    decimal; a space only next to a currency, '1 200 euroa'), or the number has two or more groups ('1.200.000'), or
+    a decimal part follows with the other separator ('1,250.50'), or it is a comma ('1,200': English grouping; three
+    decimals after a comma are rare in questions), or it is a dot next to a currency ('1.200 €' German). A dot with
+    three digits and no currency stays a decimal ('1.200 m' = 1.2 m in English)."""
+    def rep(m: re.Match) -> str:
+        sep, groups, dsep = m.group("sep"), m.group(2), m.group("dsep")
+        if dsep is not None and dsep == sep:
+            return m.group(0)
+        near = t[max(0, m.start() - 6):m.end() + 10].lower()
+        money = re.search(_CUR, near) is not None
+        multi = groups.count(sep) >= 2
+        if sep == " " and not money:
+            return m.group(0)
+        if sep == "." and not (money or multi or dsep == ","):
+            return m.group(0)
+        digits = m.group(1) + groups.replace(sep, "")
+        return digits + ("." + m.group("dec") if dsep else "")
+    return _GROUPED.sub(rep, t)
 
 
 def _cur(name: str) -> str:
@@ -83,6 +125,23 @@ class Outer:
     cmp: str | None = None  # gt | ge | lt | le | eq
     spans: list[tuple[int, int]] = field(default_factory=list)  # consumed character spans of text_of(question)
     why: str = ""
+    rate: float | None = None  # "15 m of wall per day": n = 1/15, rate = 15, per = 'day'
+    per: str | None = None
+
+
+# a unit word after a per-element factor: "takes 1.5 hours", "needs 4 kg", "uses 2 litres"
+_UNIT_WORDS = [(r"hours?|hrs?|h|stunden?|uur|heures?|ore|tuntia?|timmar|godzin\w*", "h"),
+               (r"minutes?|mins?|minuten?|minuti|minuuttia?", "min"), (r"seconds?|secs?|s|sekunden?", "s"),
+               (r"days?|tage?n?|dagen?|jours?|giorni|paivaa?", "days"), (r"weeks?|wochen?|weken", "weeks"),
+               (r"kg|kilos?|kilograms?|kilogrammes?", "kg"), (r"litres?|liters?|l", "l"),
+               (r"workers?|people|persons?", "persons")]
+_TIME_PER = r"(?P<per>hour|hr|h|day|working day|workday|shift|week|month|minute|min|stunde|tag|uur|dag|heure|jour)s?\b"
+
+
+def unit_word(w: str | None) -> str | None:
+    if not w:
+        return None
+    return next((u for rx, u in _UNIT_WORDS if re.fullmatch(rx, w)), None)
 
 
 def _basis_of(s: str) -> tuple[str | None, str | None, str | None]:
@@ -110,6 +169,24 @@ def detect(question: str) -> Outer | None:
     """The outer operation of a question, or None. Checked in order: rate/multiplier, add/remove, ratio, yes/no."""
     t = text_of(question)
     cur = currency(t)
+    # 0. a work rate: "a crew builds 15 metres of wall per day", "paints 20 m² of wall an hour" -> quantity / rate
+    #    (W4 05:02: read as 'add 15' -> 19 at 0.92)
+    m = re.search(r"(?P<n>\d+(?:[.,]\d+)?)\s*(?P<u>" + _AREA_U[1:-1] + "|" + _VOL_U[1:-1] + "|" + _LEN_U[1:-1] +
+                  r")\s*(?:of\s+(?P<kw>[a-z-]+(?:\s+[a-z-]+)?)\s+)?(?:per|a|an|each|every|/|in an?|in one)\s*"
+                  + _TIME_PER, t)
+    if m and _num(m.group("n")) > 0:
+        metric, _k, bu = _basis_of(m.group("u"))
+        kind = None
+        if m.group("kw"):
+            hits = [h for h in _kind_hits(m.group("kw")) if h[2] != "storey"]
+            kind = hits[0][2] if hits else None
+        if metric in ("area", "volume", "length"):
+            per = m.group("per")
+            per = {"hr": "hour", "h": "hour", "min": "minute", "working day": "day", "workday": "day", "stunde": "hour",
+                   "tag": "day", "uur": "hour", "dag": "day", "heure": "hour", "jour": "day"}.get(per, per)
+            r = _num(m.group("n"))
+            return Outer("mul", 1.0 / r, per + "s", metric, kind, bu, spans=[m.span()], rate=r, per=per,
+                         why=f"rate {m.group('n')} {bu} per {per}")
     # 1. a factor per something: "450 euros per door", "35 EUR per square metre", "2 curtains for every window"
     for m in re.finditer(r"(?:" + _cur("c1") + r"\s*)?(?P<n>\d+(?:[.,]\d+)?)\s*(?:" + _cur("c2") + r")?(?:\s+(?P<noun>[a-z]+))?\s*"
                          r"(?:per|/|for each|for every|each|every|pro|je|par|por)\s+(?P<basis>[^,;?]{1,40})", t):
@@ -135,14 +212,35 @@ def detect(question: str) -> Outer | None:
             return Outer("mul", _num(m.group("n")), cur, "count", hits[0][2], spans=[m.span()],
                          why=f"factor {m.group('n')} {cur} per {hits[0][2]}")
     # "each door costs 450 euros", "every window needs 2 curtains"
-    m = re.search(r"\b(?:each|every|per|one|a single|any)\s+(?P<kw>[a-z-]+(?:\s+[a-z-]+)?)\s+(?:costs?|is priced at|"
-                  r"is worth|needs?|requires?|uses?|takes?|gets?|has|will (?:need|cost|require|get)|would (?:need|cost|"
+    m = re.search(r"\b(?:each|every|per|one|a single|any|an?)\s+(?P<kw>[a-z-]+(?:\s+[a-z-]+)?)\s+(?:costs?|is priced at|"
+                  r"is worth|needs?|requires?|uses?|takes?|gets?|has|weighs?|consumes?|holds?|will (?:need|cost|require|get)|would (?:need|cost|"
                   r"require|get)|cost)\s+(?:about |approximately |roughly |around )?(?:" + _cur("c1") + r"\s*)?(?P<n>\d+(?:[.,]\d+)?)"
-                  r"\s*(?:" + _cur("c2") + r")?(?:\s+(?P<noun>[a-z]+))?", t)
+                  r"\s*(?:" + _cur("c2") + r")?(?:\s*(?P<noun>[a-z]+))?", t)
     if m:
         hits = [h for h in _kind_hits(m.group("kw")) if h[2] != "storey"]
         if hits:
-            unit = cur if (m.group("c1") or m.group("c2") or cur) else "count"
+            uw = unit_word(m.group("noun"))
+            unit = cur if (m.group("c1") or m.group("c2") or cur) else (uw or "count")
+            return Outer("mul", _num(m.group("n")), unit, "count", hits[0][2], spans=[m.span()],
+                         why=f"factor {m.group('n')} {unit} per {hits[0][2]}")
+    # "every door gets a lock costing 1050 euros", "each window is fitted with a blind at €80": an amount WITH a
+    # currency after costing/at/for/priced at, in the same clause as the each-word and the kind
+    m = re.search(r"\b(?:each|every|per|any)\s+(?P<kw>[a-z-]+)\b[^.?;]{0,40}?\b(?:costing|costs?|at|for|priced at|worth)\s+"
+                  r"(?:" + _cur("c1") + r"\s*)?(?P<n>\d+(?:[.,]\d+)?)\s*(?:" + _cur("c2") + r")?", t)
+    if m and (m.group("c1") or m.group("c2")):
+        hits = [h for h in _kind_hits(m.group("kw")) if h[2] != "storey"]
+        if hits:
+            return Outer("mul", _num(m.group("n")), cur, "count", hits[0][2], spans=[m.span()],
+                         why=f"factor {m.group('n')} {cur} per {hits[0][2]}")
+    # verb last (German order, kept by some translations): "if each door 450 euros costs", "a window 1200 € costs"
+    m = re.search(r"\b(?:each|every|one|a single|any|an?)\s+(?P<kw>[a-z-]+)\s+(?:" + _cur("c1") + r"\s*)?"
+                  r"(?P<n>\d+(?:[.,]\d+)?)\s*(?:" + _cur("c2") + r")?(?:\s*(?P<noun>[a-z]+))?\s+(?:costs?|takes?|needs?|"
+                  r"requires?)\b", t)
+    if m:
+        hits = [h for h in _kind_hits(m.group("kw")) if h[2] != "storey"]
+        if hits:
+            uw = unit_word(m.group("noun"))
+            unit = cur if (m.group("c1") or m.group("c2") or cur) else (uw or "count")
             return Outer("mul", _num(m.group("n")), unit, "count", hits[0][2], spans=[m.span()],
                          why=f"factor {m.group('n')} {unit} per {hits[0][2]}")
     # "doors cost 450 euros each", "at €450 apiece"
@@ -156,6 +254,15 @@ def detect(question: str) -> Outer | None:
          or re.search(r"\b(?:if|when|after|once|assuming|suppose|supposing)\b[^.?;\d]{0,20}?\b(?:(?P<rm>" + _REMOVE +
                       r")|(?P<ad>" + _ADD + r"))\s+(?:another\s+|an? additional\s+|a further\s+)?(?P<n>\d+)\b", t))
     if m:
+        after_n = t[m.end("n"):m.end("n") + 9]
+        if re.match(r"\s*(%|percent|per ?cent|prozent|procent)", after_n):
+            # "if 25% of the doors are replaced, how many doors is that?" -> 25% of the count, not 'minus 25'
+            # (W1 c6 probe: 21 @ 0.92 for 46 doors); "how many remain/are left" -> the other 75%
+            p_ = float(m.group("n")) / 100.0
+            rest_ = bool(re.search(r"\b(remain\w*|left|still|stay\w*|keep|kept|untouched|otherwise)\b", t))
+            f_ = (1 - p_) if rest_ else p_
+            return Outer("mul", f_, None, None, spans=[(m.start(), m.end("n") + len(re.match(r"\s*\S+", after_n).group(0)))],
+                         why=f"{m.group('n')}% {'not ' if rest_ else ''}affected (x {f_:g})")
         op = "sub" if m.group("rm") else "add"
         return Outer(op, float(m.group("n")), None, spans=[m.span()], why=f"{op} {m.group('n')}")
     # "Is the building taller than 15 m?"

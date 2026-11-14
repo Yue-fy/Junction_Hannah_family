@@ -609,3 +609,62 @@ with [A]/[B] + "the ground floor normally has the entrance and kitchen" fixed no
 two-storey v3 plan (4828, whose segmentation also merges TYÖH + KHH + LH into one region). Kept in the graph dict
 (`parts`, `room['part']`), off in graph_text (show_parts=False). Per-floor questions need a floor label reader
 ('1 KRS' / '2 KRS', 'upper floor') and better segmentation first; n = 2 plans is too few to tune on.
+
+### 8j. Routing per-room questions to the room graph inside the pipeline (untouched probe v4 + live pipeline run)
+Why: 8i showed the room graph answers per-room questions the pipeline answers at whole-plan scope; this decides
+WHICH questions to hand it and measures the change inside the real pipeline (night 528cadd), not by simulation.
+**Trigger** `experiments/r1/room_graph/route.py` `per_room(question, path)` → `{fire, fire_any, area, kind, why}`:
+regexes for a room as owner ("windows of the kitchen", "does the bathroom have"), relations (entered from, opens
+onto, next to, share a wall, "A and B adjacent", reachable without), locate ("which room has the bathtub", "where's
+the toilet"), superlatives ("largest bedroom"), plus a few fi/de/fr/sv/it forms (not translated by the front end).
+"number of balconies in this drawing" / "(kitchen and bathroom combined)" stay whole-plan. Raster files only.
+False fires (`route_eval.py`): **0 raster-gated fires on all 127,044 dataset questions and on smoke / dev / hard /
+hard2 / hardL_open / cc5k_heldout / train_gate** (text-only fires exist on swiss / ifc wordings, gated out by file
+type), so wiring it cannot move any existing score. Recall: route_probe.txt (written before the trigger ran) 25/26 →
+26/26 after fixes; route_probe2.txt (untouched, 42 fresh wordings) **19/24 recall, 0/18 false** before its own fixes
+(24/24, 0/18 after).
+**Untouched probe v4** (`probe/probe_v4.jsonl`, committed 3949e0e BEFORE any solver ran): 24 by-eye Qs on 6 fresh
+plans from CubiCasa5K's official test list that are in neither our train nor test split (2 are two-storey sheets);
+15 ask for printed room areas, 9 are relations / per-room counts.
+| v4 (untouched) | relations + per-room counts (9) | printed room areas (15) | all 24 |
+|---|---:|---:|---:|
+| pipeline (night 528cadd) | 2 | 8 | 10 |
+| vlm_direct | 3 | 8 | 11 |
+| room_graph solve() alone | **8** | 2 | 10 |
+| **pipeline + route (areas excluded)** | **8** | 8 | **16** |
+So the room graph wins scope and relations but LOSES printed-area questions (2/13 when routed): its area reader's
+VLM boxes put printed numbers into the wrong regions (1264: eight '1.5' values attached to the hall; 9976 two-storey:
+most printed areas unattached), while the pipeline's VLM reads "HUONE 22 11,5" next to the label directly. Hence
+**fire = room-scoped AND not an area question** (`AREA_Q`: area/size/how big/m²/fläche/pinta-ala/superficie…).
+**Live run** (`pipeline_rg.py` registers `pipeline_rg` = Pipeline + the route; standard `stoa.eval`, leaderboard
+lines `pipeline_rg-probe_v*`): all 78 by-eye probe Qs / 20 plans: **54/78 vs pipeline 37/78, +21.8 pts [+8.2,
++35.1] (plan-cluster bootstrap), McNemar 22 vs 5 p = 0.0015**; untouched v4 alone 16 vs 10 (6 vs 0, p = 0.031).
+Evidence on 7.7% → 67.9% of answers; cost $0.077 → $0.228 per 1k (one more local 8B call, ~1.5k tokens; $0 hosted);
+per-room counts now attach only the counted windows/doors (each note names its room) so "located items = answer".
+The 5 lost: 3 real (v1 dev: bathroom doors 1 vs 2; 'largest room' → bedroom; balcony accessed from 'entry'), 2
+pipeline run-to-run noise on questions the route does not touch.
+**PITFALL found:** the hook must sit in `Pipeline.solve` after the language front end and BEFORE `decompose()`: the
+composer splits "How many windows do the two bedrooms have in total?" into "windows on this plan" + "bedrooms" = 6
+(gold 2), so a hook in `_solve_atomic` never sees the room scope (2 probe Qs lost that way in the first live run).
+Limits: n = 78 by-eye Qs on 20 plans written by one person; confidence is still a rule (capped at 0.75 in the
+wrapper). Next for areas: attach printed areas from an OCR text layer (W3's) instead of VLM boxes.
+**Addendum (same cycle): OCR text layer as the graph's source, and an area cross-check.** W3's tiled text layer
+(`stoa.solvers.raster.textlayer`, VLM text spotting per 1100 px tile) gives tile-accurate boxes for every label and
+printed number (1264: OLOHUONE 17,0 / KEITTIÖ 14,5 / HUONE 11,5 / LH 3,0 all in the right regions, where the
+whole-image reader had put eight '1.5' values in the hall). `room_graph(..., textlayer=True)` /
+`solve(..., textlayer=True)` (env `R1_RG_TEXTLAYER=1`) takes labels and printed areas from it, so plans without a
+cached label read (hidden test plans) get labels too. solve() with it: relations / per-room counts 45/53 vs 43/53
+(noise), routed area questions 9/18 vs pipeline 7/18 vs old solve 5/18; all area questions 10/23 vs pipeline 11/23 —
+a tie, so areas still stay with the pipeline. But the two disagree informatively: **when the pipeline's area and the
+text-layer graph's area agree (2%), the pipeline was right 6/6; when they disagree, 5/17.** `pipeline_rg
+area_xcheck=1` (`area_crosscheck()`): room-scoped area question → pipeline answers → graph cross-check; agree → the
+graph's room box (+ printed value) as evidence and conf ≥ 0.75, disagree → conf ≤ 0.3 and "the room graph reads X m²"
+in `missing`; the value never changes. Live on all 78: area answers right 11/23 both ways, **evidence 0 → 6, conf ≥
+0.7 on 6 (6 right), area AUROC 0.51 → 0.88** (all Qs 0.69 → 0.74). Cost $0.228 → $0.523 per 1k on this mix (one
+text layer per plan, ~3–7k tokens in, up to 5k out; local). n = 6 agreements: the direction is clear, the 0.75 is a
+guess. `xcheck_eval.py` reproduces the table. Text-layer PITFALL: 9 of 20 CubiCasa tiles hit the 2,500-token cap
+and 1841 came back with 3 items (a loop), so dense plans lose labels at the end of the list.
+NEGATIVE (exploratory, same cycle): per-floor questions on two-storey sheets cannot lean on printed floor titles —
+the OCR text layer finds one on 1 of 4 two-storey probe sheets ('1 KRS' on 6007; none on 4828, 5046, 9976). A floor
+split needs layout cues (entrance door, stair position, which part holds the kitchen), not text. Latency note for the
+demo: a cold text layer took 6–165 s per plan with the GPU saturated (1–2 tiles, up to 2,500 tokens out per tile).

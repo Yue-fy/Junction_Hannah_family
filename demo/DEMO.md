@@ -1,11 +1,11 @@
 # 3-minute demo script — "Make Blueprints Talk" (Stoa)
 
 Written by agent Q, 14 Nov 04:10; updated 05:00 to follow W5's demo tour (`web/fixtures/tour.json`, 13 steps — the
-"step N" references below are its numbering). Numbers are from the sealed test run S0 made at 03:21 on night 95f2277
-(aggregates only) and dev runs on the same code. Before the pitch, re-run the pre-flight (see the end) and replace any
-number that changed. **Every live question below and every tour question was run through the pipeline on night
-dde6347 at 04:51 (`demo/live_questions.jsonl` → `demo/LIVE-CHECK.md`, 19/21 as expected), so the answers are known in
-advance; the "typed live" variants check that a slightly different wording still works.**
+"step N" references below are its numbering); updated 08:20 for **the test-2 build, night bb94fe4** (S0 started
+sealed test 2 on it at 08:12). Slide 3 has the test-2 aggregates (S0, 08:26). **Every live question below and every tour question was run through
+the pipeline on bb94fe4 at 08:16 and again on night c1d6149 at 08:40 and 62754aa at 08:46 (`demo/live_questions.jsonl` →
+`demo/LIVE-CHECK.md`, 19/21 as expected, the same 21 answers on both and as on dde6347 and 753eccb), so the answers are known in advance; the "typed live" variants check that a
+slightly different wording still works.**
 
 Setup (5 minutes before): API from the `night` worktree root
 `$JUNCTION_VENV/bin/python -m uvicorn stoa.api:app --port 8100` (needs :8001 with LoRA cc-v2, check
@@ -37,12 +37,10 @@ Type: **How many doors are shown on the floor plan of '1.korrus'?** → **46** (
 - Point at: one box per door on the sheet; click "3D": the same 46 doors highlighted in the IFC model by GlobalId; the
   cross-check line "drawing 46 = model 46 ✓".
 - Follow-up (shows reasoning, not lookup): **If each door costs 450 euros, what do all the doors on '1.korrus' cost in
-  total?** → **20,700 €**. ⚠ What the card shows depends on the build: on night 753eccb (05:01) the IFC rules read
-  "450 EUR per door" themselves — 46 doors × 450 in code, 0 model calls, 0.03 s, conf 0.92, 46 doors boxed. Say:
-  "a question no template covers: the price comes from the question, the 46 from the model, the multiplication from
-  code — no language model needed." On dde6347 (04:51) the agent answered instead (ask "doors on '1.korrus'" → 46,
-  calc 46 × 450, IFC rules agree ✓, 7.5 s): then say "the language model plans; the numbers come from the model and
-  from code." Check the frozen build's pre-flight row `ifc-derived` (solver column) before the pitch.
+  total?** → **20,700 €**. On the test-2 build (bb94fe4) the IFC rules read "450 EUR per door" themselves — 46
+  doors × 450 in code, 0 model calls, 0.1 s, conf 0.92, 46 doors boxed. Say: "a question no template covers: the
+  price comes from the question, the 46 from the model, the multiplication from code — no language model needed."
+  Type the price without a thousands separator ("1500 euros", not "1,500"): see the judge list below.
 - Backup if asked for an area (step 1): **What is the net floor area of the room 'KORIDOR (119)' on '1.korrus', in m²?**
   → **63.84 m²** (gold 63.84), the room outline highlighted in 2D and 3D. ⚠ Type this wording; the unquoted "how big is
   the corridor KORIDOR (119) on 1.korrus?" returns 142.24 m² at conf 0.30 (flagged, but wrong).
@@ -60,8 +58,9 @@ windows; gold 36 and 28).
 ### 3. Raster scan, the hard case (≈ 25 s, tour steps 9–10) — `data/cubicasa5k/colorful-4539.png` (dev drawing, never trained on)
 Type: **Kuinka monta makuuhuonetta (MH) pohjapiirustuksessa on?** ("How many bedrooms?") → **3** (gold 3, conf 0.92,
 0.5 s).
-- Point at: our fine-tuned 8B vision model counts; to keep cost low it draws no boxes itself. Click **"Show where"**:
-  a second reader finds the three "MH" labels, they agree (✓), and each counted bedroom is marked.
+- Point at: our fine-tuned 8B vision model counts; it draws no boxes itself, but on the test-2 build the answer
+  already carries the three "MH" label boxes from a room-label reader that costs no model call (they agree with
+  the count). **"Show where"** still works and marks each counted bedroom.
 - Step 10, 10 s: `data/cubicasa5k/high_quality_architectural-14797.png`, **How many saunas are on this floor plan?** →
   the model says **0** at 0.82 (gold 1). "Show where": the label reader finds 'LH' (löylyhuone, the sauna), the card
   turns the disagreement into a ✗ and marks the label. "This is how a person catches our mistake in seconds — the
@@ -71,70 +70,100 @@ Type: **Kuinka monta makuuhuonetta (MH) pohjapiirustuksessa on?** ("How many bed
   'ASEMAPIIRROS M.K. 1/500' (3 s, local model only); step 11, a 1977 HAER sheet → "elevation" from its printed title.
 
 ## 2:05–2:35 · The numbers (slide 3)
-| | sealed test (2,199 Qs, unseen drawings) | dev |
+Sealed test 2 = S0's run b391 on the test-2 build bb94fe4 (08:12, aggregates only, `logs/S0/scorecard-test2.md`).
+| | sealed test 2 (2,199 Qs, unseen drawings) | dev |
 |---|---:|---:|
 | "Just ask a VLM" (Qwen3-VL-8B, image only) | — | 32.0 % micro / 44.1 % weighted |
 | Hosted Nemotron 3.5 Super VL 120B, image only | — | 33.2 % micro (smoke, 206 Qs) |
-| **Ours** | **87.4 % micro / 79.8 % weighted** | 88.5 % / 81.7 % |
-| Ours without the fine-tuned 8B model | 83.9 % / 73.8 % | |
+| **Ours** | **87.7 % micro / 79.7 % weighted** | 89.8 % / 83.4 % |
+| Ours without the fine-tuned 8B model (test-1 code) | 83.9 % / 73.8 % | |
+| **New wordings of the same kinds** (sealed, nobody tuned on it) | **80.4 %** (test 1: 63.0) | |
+| **Derived quantities: prices, rates, shares** (sealed) | **62.2 %** (test 1: 34.6) | |
 
-By source on sealed test: Swiss vector plans 98 % areas / 100 % counts; IFC models 97–100 %; scanned apartment plans
-(CubiCasa) 70.5 % (a VLM alone: 50 % on dev).
-> "When we say we're sure (confidence ≥ 0.8, 78 % of answers), we are right 98 % of the time. Calibration error
-> 0.017. Cost: €0.24 per 1,000 questions; 64 % of questions never call a model." (Tour step 13 shows the same bench;
-> replace with the test-2 numbers if S0 publishes them before the pitch.)
+By source on sealed test 2: Swiss vector plans 99.0 %, IFC models 100 % (397/397), scanned apartment plans
+(CubiCasa) 70.4 % (a VLM alone: 50 % on dev).
+> "When we say we're sure — 79 % of answers — we are right 98 % of the time; calibration error 0.02. Cost: 3 cents
+> per 1,000 questions, ten times less than this morning, because 56 % of questions never call a model. And the
+> failure analysis paid off: on wordings nobody had seen, 63 → 80 %." (Tour step 13 shows W5's bench snapshot:
+> check that it shows the test-2 numbers, or say these.)
 
 ## 2:35–2:55 · Where it breaks, and why (slide 4 — the failure analysis)
-> "We tried to break it ourselves."
-
 Slide image: `demo/redteam-rounds.png` (SVG next to it; regenerate with `python3 experiments/q/plot_rounds.py` and
-headless chromium, numbers from `redteam/REPORT.md`). Say: "every bar is a round; the families we had already asked
-went to zero after each fix, and each new family found the same root cause somewhere new."
-- **Scanned plans, windows and doors**: 19–35 % exact; both our model and a detector *undercount* dense plans
-  (missed symbols grow with density, not with resolution — we tested 2× upscaling: no gain). We show a 90 % range
-  ("7 windows, 6–12") instead of pretending.
-- **New wordings with an extra operation** ("…excluding apartment A", "…at 450 € each"): our sealed generality set
-  drops to 63 %, and derived quantities to 35 % on the code we froze for test 1. Cause: the deterministic solvers
-  answered the template they recognised and ignored the extra step. Fix in place: detect the unexplained operation,
-  compute it in code or lower the confidence (derived probe 29.5 % → 56.8 %, and 100 % right when confident).
-- **Red team** (`redteam/REPORT.md`, 418 adversarial questions; the first 205 built from answers we had right):
-  rewording, casing, distractor numbers: 0 of 56 answers changed; typos and prompt injections changed 7, all at
-  confidence ≤ 0.42 (flagged) — but one injection obeyed once a VLM saw the question (99 at 0.71), so don't claim
-  "injection-proof"; rotated / grayscale / JPEG / half-resolution copies: 30/30; objects that don't exist:
-  8/8 "0"; questions a drawing can't answer: all at confidence ≤ 0.40; asking the same 173 questions twice changed 1
-  free-text answer. **What broke:** asked about a storey, model or room that doesn't exist (or a real room number with
-  the wrong name), the vector and IFC paths answered *something else* at 0.96–0.99 confidence. The IFC solver even
-  knew (0.29); the router overwrote it. Our checks verified the number, not that it answered what was asked.
-  **Then we fixed it the general way** — keep the solver's own doubt, check that every quoted name resolves, never
-  trust an answer that just repeats a number from the question: confident answers to such questions went from 7 of
-  24 to **0 of 24**, and every scored answer we gave at ≥ 0.8 confidence on those 283 questions was right (190/190).
-  (Verified 04:46 on night dde6347; say "fixed" only if that code is in the frozen test-2 build — check
-  `git merge-base --is-ancestor dde6347 <test-2 commit>`.) **And then we broke it again**: asked the way people talk —
-  "how many doors are in the basement?", "im Erdgeschoss?", "in the whole building" in Swedish — the IFC path answered
-  the storey of the sheet on screen, confidently (12 of 20 storey rows, 12 of 12 SV/FR/IT/ET "whole building" rows).
-  Same root cause, a new surface: the check verifies the number, not that it is about the place that was asked.
-  **One round later** (night 753eccb, 05:00): a cross-language reading (as asked + translated, compared) fixed "whole
-  building" in 5 of 6 languages and half the storey words; with the owners' next commits (pre-merge check 05:13) the
-  basement, Italian and ambiguous-room cases are fixed too: **9 of 450 answers confidently wrong, 273 of 277 confident
-  answers right**. Say the latest numbers; check the commits are in the test-2 build.
+headless chromium, numbers from `redteam/REPORT.md`). **Say only this (≈ 20 s, 60 words):**
+> "We tried to break it ourselves: 564 adversarial questions — rewordings, nine languages, rotated scans, rooms that
+> don't exist, questions no drawing can answer. Every confident mistake had one cause: we checked the number, not
+> that it answered what was asked. Each bar is a round of fixes. On the build we're showing, 338 of 339 confident
+> answers are right."
+(Numbers by stage build — say the line for the build on stage: bb94fe4 (test 2): "494 … 283 of 290"; c1d6149:
+"564 … 338 of 339"; 62754aa: "564 … 336 of 337"; 62754aa + the 08:41 heads (pre-merge #6): "564 … every one of 350
+confident answers was right".)
 
-### If a judge types their own question (measured 04:55 on dde6347, `redteam/REPORT.md` v6)
-- Esplanades IFC sheet — safe: "How many rooms / columns are on this floor?" (50 / 37), "How many doors are on the
-  ground floor?" (46), "How many windows does the whole building have?" (297), "How many more windows than doors are
-  there on this floor?" (9). Steer away from: storeys in everyday words on another sheet ("the basement", "im
-  Erdgeschoss"), "top floor" (picks the roof level), "how many floors" (says 7: counts foundation and roof), Finnish
-  "koko rakennuksessa" (answers this storey), floor-to-floor height, and **prices with a thousands separator**:
-  "€1,500 per door" → 69.0 at 0.92 (bug 17) — if a judge wants another price, type it as "1500 euros". If one of these comes up, open the evidence and
-  say it: "the cross-check shows which storey it used — this is our known failure, on the failure slide."
-- Swiss plan — safe: apartments (4), "combined area of apartments A and B" (161.17 m²), "how many square feet is
-  apartment B" (870), "by how many m² is B larger than A" (0.49). Avoid "How big is the Küche?" on floors with several
-  kitchens (sums them, bug 14).
-- A Finnish judge (measured on 753eccb, v9: 11/14, nothing wrong at ≥ 0.8): "Kuinka monta huonetta tässä kerroksessa
-  on?" 50, "Montako ikkunaa ensimmäisessä kerroksessa on?" 55, "Paljonko tämän kerroksen ovet maksavat yhteensä, jos
-  yksi ovi maksaa 450 euroa?" 20,700, "Mikä on asunnon B pinta-ala?" 80.83, "Onko asunnossa sauna?" kyllä/yes. Avoid
-  "Mikä on käytävän KORIDOR (119) pinta-ala?" (142 at 0.30) and "Montako kerrosta rakennuksessa on?" (7).
-- CubiCasa plan — "How big is this apartment?" gives ≈ 84 m² at confidence 0.05 with "no known scale: estimate" —
-  a good moment to show "we know what we don't know".
+Point at the chart: the families already asked go to 0 after each fix; each new family finds the same cause on a
+new surface (storeys in everyday words, "whole building" in Swedish, "1,200 euros", two-part questions).
+
+**Backup for questions (don't read out):**
+- **Newest (08:45, pre-merge #6 = night 62754aa + the 08:41 heads): 3 of 564 at confidence ≥ 0.8 — all three are
+  "whole building" asked on a single-floor plan — and 350 of 350 confident scored answers right.**
+- **Latest merged (08:37, night c1d6149): 4 of 564 at confidence ≥ 0.8, and 338 of 339 confident scored answers right** (`redteam/REPORT.md` "Pre-merge check #5"; the chart's last bar). Left:
+  "whole building" asked on a single-floor Swiss plan (answers the floor, ×3) and a Finnish two-number question
+  answered with one number.
+- **What still breaks on the test-2 build (bb94fe4), 12 of 494 at confidence ≥ 0.8:** "how many doors *and how
+  many* windows" summed into one number (101 at 0.86; two separate answers were asked, W4); "how many doors on the
+  ground floor and how many on the top floor" read as the whole building (W1); "how many floors" counts the
+  foundation and roof levels (7, not 5); "the 7th floor" of a 5-storey model answered for the sheet's storey;
+  "whole building" asked on a single-floor plan; "1,200 euros" read as 1.2 by the IFC rules; Finnish
+  "kellarikerros". Owners have each one; the fixes in W1/W2's unmerged commits (storey heights 1/7 → 5/7, size
+  comparisons 7/8 → 8/8) don't touch the 12.
+- **What holds** (same 494): rewording, casing, distractor numbers, typos, prompt injection, rotated / grayscale /
+  JPEG / half-resolution copies, a plan copied outside our folder, objects that don't exist ("0"), questions no
+  drawing answers (all at confidence ≤ 0.40), "which apartment has the largest kitchen", yes/no without a hint.
+  One injection obeyed once a VLM saw the question (99 at 0.71) before W4's guard: don't claim "injection-proof".
+- **Scanned plans, windows and doors**: 19–35 % exact; both our model and a detector *undercount* dense plans
+  (missed symbols grow with density, not resolution; 2× upscaling: no gain). We show a 90 % range ("7 windows,
+  6–12") instead of pretending.
+- **New wordings with an extra operation** ("…excluding apartment A", "…at 450 € each"): sealed generality set 63 %,
+  derived quantities 35 % on the test-1 code. Cause: the rules answered the template they recognised and ignored the
+  extra step. Fix in place: detect the unexplained operation, compute it in code or lower the confidence (derived
+  probe 29.5 % → 56.8 %, 100 % right when confident). Test 2 measures it on the sealed sets (hard2r, hard3).
+
+### If a judge types their own question (measured 08:37 on night c1d6149, run `…-083658-…-v16-cabe`; `redteam/REPORT.md` v6–v16)
+On an older build (the test-2 build bb94fe4) more of these break: see the git history of this file (08:20 version).
+- **Esplanades IFC sheet — safe:** "How many rooms / columns are on this floor?" (50 / 37), "How many doors are on the
+  ground floor?" (46, 0.98), "How many windows does the whole building have?" (297, also Finnish "koko
+  rakennuksessa"), "How many more windows than doors are there on this floor?" (9), "Which floor has the most doors?"
+  (1.korrus), "Does '1.korrus' have more windows than doors?" (yes), "How many doors and how many windows are on
+  '1.korrus'?" ("door: 46; window: 55"), "What is the floor-to-floor height between '1.korrus' and '2.korrus'?"
+  (3.35 m), prices of any format: "If each door costs €1,500, what do all the doors on '1.korrus' cost?" (69,000).
+  Right but shown as unsure (0.53–0.63; fine to type, the card says why): "How many floors does this building have?"
+  (5), "How many doors are on the top floor?" (39), "1.korrus and 2.korrus together" (88).
+  **Steer away from:** "How many doors are on the ground floor, and how many on the top floor?" (211 twice, 0.77),
+  "How high above the ground floor is the top floor?" (15.1 m, 0.50: 'top floor' = the roof level for heights),
+  "Which floor has the fewest doors?" (names the foundation/roof levels), Italian "in tutto l'edificio" (the sheet's
+  storey, 0.68), and **questions about the links themselves** (v17): "Do the plan and the model agree on the number of
+  windows?" (answers 55 instead of "no: 52 drawn, 3 above/below the cut plane" — point at the cross-check line
+  instead, it says exactly that), "How many windows are in the model but not drawn on this plan?" (297 at 0.98),
+  "Which sheet shows the server room?", "How many floor plan sheets are there?" (1). If one of these comes up, open
+  the evidence and say it: "the trace shows what it computed — this is a
+  known failure, it's on the failure slide."
+- Esplanades rooms are labelled in Estonian; English room words work and the card says which labels it used:
+  "How many kitchens are on this floor?" → 10 ('ELUTUBA+KÖÖK'), "How many toilets …?" → 13, "How big is the server
+  room?" → 4.26 m². Avoid "laundry room" (PESUKODA isn't mapped; flagged at 0.30).
+- **Swiss plan — safe:** apartments (4), "combined area of apartments A and B" (161.17 m²), "how many square feet is
+  apartment B" (870), "by how many m² is B larger than A" (0.49), "Which apartment has the largest kitchen?" (A),
+  "Is apartment A's kitchen bigger than apartment B's?" (yes, 0.87), "How many doors and how many windows are drawn
+  on this floor plan?" ("door: 36; window: 28", 0.98), "… in total?" (64). **Avoid:** "How many doors are there in
+  the whole building?" on this single-floor plan (answers the floor's 36 at 0.99 instead of saying the plan shows one
+  floor), the same two-number question in German/Finnish/French ("Wie viele Türen und wie viele Fenster …" → 64 summed;
+  Finnish → doors only at 0.95), two-part area questions ("how many 'Zimmer' in apartment C and their total area"),
+  "How big is the Küche?" (several kitchens: total at ≤ 0.5 with a per-room list).
+- **A Finnish judge:** "Kuinka monta huonetta tässä kerroksessa on?" 50, "Montako ikkunaa ensimmäisessä kerroksessa
+  on?" 55, "Montako kerrosta rakennuksessa on?" 5 (0.60), "Paljonko tämän kerroksen ovet maksavat yhteensä, jos yksi
+  ovi maksaa 450 euroa?" 20,700, "Mikä on asunnon B pinta-ala?" 80.83, "Onko asunnossa sauna?" yes, "Montako
+  WC-istuinta ja pesuallasta piirustuksessa on yhteensä?" 8. Avoid "Mikä on käytävän KORIDOR (119) pinta-ala?" (142 at
+  0.30), "Montako ovea pohjapiirroksessa on?" on the Swiss plan (0 at 0.32) and "Montako ovea ja montako ikkunaa …".
+- **CubiCasa plan:** "How big is this apartment?" gives ≈ 84 m² at confidence 0.05 with "no known scale: estimate" —
+  a good moment to show "we know what we don't know". "How many bedrooms and how many bathrooms?" → "3 bedrooms and
+  1 bathroom" (agent, 0.58). Avoid "How many windows does this apartment have?" (4 at 0.13; gold 8).
 
 ## 2:55–3:00 · Close
 > "Answers you can verify in seconds, a confidence you can trust, and an honest list of what we don't know yet."
@@ -148,8 +177,8 @@ $JUNCTION_VENV/bin/python -m stoa.eval --solver pipeline --split demo/live_quest
 ```
 All rows except `raster-catch-miss` (deliberately wrong: 0 vs gold 1) and the unquoted "how big is the corridor" row
 must be correct; read the text rows (`ifc-derived` 20,700, `scan-tour11` elevation, `scan-tour12` 1:500,
-`ifc-bench-tour6` the fixture list) by eye. Results from 04:51 on dde6347 (19/21 as expected) are in
-`demo/LIVE-CHECK.md`. Then run `web/demo.sh` to warm the tour.
+`ifc-bench-tour6` the fixture list) by eye. Results from 08:16 on the test-2 build bb94fe4 (19/21 as expected,
+the same answers as on dde6347 and 753eccb) are in `demo/LIVE-CHECK.md`. Then run `web/demo.sh` to warm the tour.
 
 ## Credits to show on the last slide
 CubiCasa5K plans (Kalervo et al. 2019, CC BY-NC-SA 4.0, non-commercial), Swiss Dwellings v3.0.0 (Archilyse AG,

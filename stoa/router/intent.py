@@ -23,7 +23,7 @@ _COUNT = re.compile(
     r"\b(how many|number of|count|kuinka monta|montako|wie viele|anzahl|combien|nombre d|cu[aá]nt[oa]s|"
     r"n[uú]mero de|numero di|num[aă]rul de|quant[ie]|hvor mange|hur m[aå]nga|hoeveel|ile|mitu|antal|aantal)\b", re.I)
 _VOLUME = re.compile(r"(m³|\bm3\b|cubic|volume|volumen|tilavuus|\bmaht|rumfang|volym)", re.I)
-_AREA = re.compile(r"(m²|\bm2\b|ft²|\bft2\b|sq\.? ?ft|square (?:feet|foot|met)|\barea\b|fl[aä]che|pinta-ala|"
+_AREA = re.compile(r"(m²|\bm2\b|ft²|\bft2\b|sq\.? ?ft|square (?:feet|foot|met)|\barea\b|\b(?:sum|add up|total)(?: of)? (?:all )?the (?:\w+ )?areas\b|fl[aä]che|pinta-ala|"
                    r"surface|superficie|\bareal|oppervlakte|p[oõ]randapind|\bpind\b|powierzchnia|yta\b|"
                    # Q 04:13/04:18: "how big is the room 'Hall (0.1)'" was a text question -> ifc's count at 0.97
                    r"\bhow (?:big|large)\b|\bwhat(?:'s| is)? (?:the )?size\b|\bsize of\b|\bwie gro(?:ß|ss)\b|"
@@ -51,11 +51,11 @@ _T = [
     ("bathroom", r"bathrooms?|washrooms?|kylpy- tai pesuhuon|pesuhuon|kylpyhuon|badezimmer|salles? de bains?|bagni\b|badkamer"),
     ("balcony", r"balcon(?:y|ies|e|i)|parveke|balkon\w*|balcons?"),
     ("storey", r"floors? \(storeys?\)|storeys \(floors?\)|storeys\b|stories\b|number of floors|how many floors|kerrosta|kerroksia|geschosse\b|stockwerke|[eé]tages\b|piani\b|verdiepingen"),
-    ("apartment", r"apartments?|residential units?|wohnungen|appartements?|logements?|appartament[io]|unit[àa] abitativ|"
+    ("apartment", r"apartments?|residential units?|(?:wohn)?einheiten|wohnungen|appartements?|logements?|appartament[io]|unit[àa] abitativ|"
                   r"asuntoj|asunto"),
     ("window", r"windows?|ikkun|fenster|fen[eê]tres?|finestr[ae]|ramen\b|vinduer|f[öo]nster|aken|akn|ventanas?|ferestre|okien|okna"),
     ("door", r"doors?|doorways?|\bov(?:i|ea|et)\b|\bovi\w*|\bt[üu]r(?:en)?\b|portes?\b|port[ae]\b|deuren|d[øo]re|d[öo]rr|\buks\b|\bukse\w*|\bust\b|puertas?"),
-    ("stair", r"stairs?|staircases?|treppen?|escaliers?|scale\b|escaleras?|trappen?|trapper|portaat|trepp|sc[ăa]ri\b|schod"),
+    ("stair", r"stairs?|staircases?|treppen?|escaliers?|(?<![Tt]he )(?<![Aa] )(?<!drawing )(?<![Ii]n )scale\b(?!\s+(?:of|bar|is|1\s*:|ratio))|escaleras?|trappen?|trapper|portaat|trepp|sc[ăa]ri\b|schod"),
     ("column", r"columns?|st[üu]tzen|s[øo]jler|colonnes?|pilares?|pilastri|kolommen|pylv|\bposti|\bpost\b|st[âa]lpi|słup"),
     ("beam", r"beams?|tr[äa]ger|bjælker|poutres?|vigas?|travi\b|balken|palk|\btala|grinzi|belk"),
     ("slab", r"slabs?|decken und bodenplatten|bodenplatten|d[æe]k og plader|vloeren|losas?|dalles?|laatat"),
@@ -68,6 +68,7 @@ _T = [
              r"r[äa]ums\b|pomieszczeni|huonei|huonetta|local(?:es)?\b|\bdesignation|bezeichnung|denominazione"),
 ]
 _TARGETS = [(t, re.compile(p, re.I)) for t, p in _T]
+_SCOPE_WORDS = {"bathroom", "kitchen", "bedroom", "balcony", "apartment", "sauna"}
 
 _QUOTED = re.compile(r"«([^»]{1,80})»|„([^“”\"]{1,80})[“”\"]|“([^”]{1,80})”|‘([^’]{1,80})’|(?<!\w)'((?:[^'\n]|(?<=\w)'(?=\w)){1,80})'(?!\w)|"
                      r"\"([^\"]{1,80})\"")
@@ -316,7 +317,13 @@ def parse(question: str) -> Intent:
     q_noquote = _NEGATION.sub(" ", q_noquote)
     target = "unknown"
     for t, rx in _TARGETS:
-        if rx.search(q_noquote):
+        m = rx.search(q_noquote)
+        if m:
+            if t in _SCOPE_WORDS and any(re.match(r"\s+(?:\w+\s+)?(?:" + rx2.pattern + ")", q_noquote[m.end():m.end() + 30], re.I)
+                                         for t2, rx2 in _TARGETS if t2 not in _SCOPE_WORDS and t2 != "room"):
+                # F 08:28: "How many doors …, including the apartment entrance doors?" -> target 'apartment': a room /
+                # apartment word right before an object noun is a scope ("bathroom sinks", "kitchen windows")
+                continue
             target = t
             break
     scope = "drawing"
@@ -327,7 +334,10 @@ def parse(question: str) -> Intent:
             filters["label"] = quoted[0]
         scope = "room"
         target = "room"
-    ma = _APT.search(q_noquote)
+    # F 08:20: re.I let "apartment in m²" read apartment 'IN' (dxf then summed the whole floor @ 0.95): the id is an
+    # upper-case letter / digits as written, or one letter ("apartment b")
+    ma = next((m for m in _APT.finditer(q_noquote)
+               if m.group(1).isupper() or m.group(1).isdigit() or len(m.group(1)) == 1), None)
     if ma and task in ("area",) and target in ("apartment", "balcony", "room", "unknown"):
         filters["apartment"] = ma.group(1).upper()
         scope, target = "apartment", "apartment"
