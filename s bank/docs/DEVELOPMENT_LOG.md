@@ -143,6 +143,18 @@ This log records implementation progress, decisions, verification evidence, and 
 - Confirmed Alex / September: 12.5% dining reduction is EUR 28.21, twenty percent is EUR 45.14, and estimated VAT is EUR 212.38. Explicit tax evidence remains separate; no liability, additional payment or refund is inferred.
 - Full verification discovered 261 tests: 260 passed and one optional browser integration skipped. HTTP tests, JavaScript syntax, Python syntax and whitespace checks passed. Fresh browser-device acceptance and a real Gemini call remain outside this verification.
 
+### Coach agent backend — WP1 (2026-11-14)
+
+- Added `/api/agent`, provider configuration health and startup loading of the ignored local `.env`. The user requested switching live inference to DeepSeek during implementation; the configurable standard-library adapter prefers `DEEPSEEK_API_KEY` / `DEEPSEEK_MODEL` and retains the optional Gemini transport. No SDK dependency was added. The existing `/api/coach` implementation and browser path are unchanged.
+- Added fifteen strictly validated read-only tools over the existing statistics, analytics, ledger, forecast, scenario and goal services. Tool results include periods, basis, cents and display values. Raw identifiers and references stay local; evidence queries let the client reopen the supporting transactions. Proposals require a matching preview and never save or move money.
+- Bounded the loop to six model turns, twenty tool calls and twenty-five seconds, with a deterministic legacy envelope on missing configuration, provider failure, timeout, exhausted steps or repeated numeric-verification failure. Gemini thought signatures and call IDs survive replay; DeepSeek assistant/tool messages preserve call IDs and any provider reasoning internally.
+- Added direct EN/FI/SV numeric provenance tests and temporary-database tool/API regressions. The check accepts sourced calculations and customer figures; it cannot prove the semantic meaning of a sentence. Model-authored names/labels are not numerical evidence, goal inputs must be sourced, and compact/scientific monetary notation cannot silently escape verification.
+- Independent read-only review found four important issues: compact notation bypass, model-input provenance laundering, API display decoration breaking goal-action payloads, and overly broad identifier redaction. Reproducing tests were added before fixes. Two additional findings were treated as important because they affect money calculations: selected historical months now use their last observed day, and the calculator accepts sourced negative amounts. No review finding was left deferred.
+- Implementation decisions: continue on the supplied feature branch; document this separate S-Coach API in `docs/API.md`; keep nonempty history explicitly unsupported until WP2; isolate number checking in `agent_numbers.py`; retain up to twenty-four chart points while ordinary lists cap at twenty with declared truncation; use the existing calendar-month helper and ceiling formula for unsaved goal arithmetic, with no affordability claim. Existing user edits to `.env.example` and the root implementation brief are excluded from the package commit.
+- Live verification used only a fresh synthetic fixture. `deepseek-flash` returned `source: agent` for restaurant totals (EUR 225.70, 2.85 seconds, two model calls) and a 20% reduction (EUR 45.14 monthly / EUR 541.68 annually, 2.47 seconds, two model calls). These are two smoke checks, not a full conversational evaluation. The earlier Gemini request returned HTTP 402 with exhausted project prepayment credits and correctly fell back. No secret values were logged or committed.
+- WP2 memory and WP6 mobile UI remain pending the user's per-package confirmation. The existing website still calls `/api/coach`; the new backend is available directly through `/api/agent`.
+- Final WP1 verification: 400 tests discovered, 399 passed and one optional browser integration skipped (16.119 seconds). All S-Coach JavaScript and Python syntax checks passed; whitespace checks passed. There are 39 new tests, and no existing test was removed or weakened.
+
 ## Current status
 
 - Product design: frozen for implementation.
@@ -150,8 +162,8 @@ This log records implementation progress, decisions, verification evidence, and 
 - P0 code: redesigned; supported semantic scopes and integrated interaction checks pass.
 - P1 code: safe-to-spend, observed investment-cash-flow, goals, forecast, VAT, and selected financing context are implemented and verified.
 - Adaptive/localized UI: new responsive structure and interaction tests pass; fresh rendered phone/tablet/desktop acceptance pending.
-- Optional live Gemini call: pending a configured Junction key; deterministic fallback supports bounded questions with the documented limitations.
+- Live agent: two DeepSeek synthetic smoke checks passed; Gemini generation is quota-blocked. Broader evaluation and web integration remain pending; deterministic fallback supports the existing bounded questions.
 - Runbook and technical reference: reconciled with redesigned behavior, supported definitions and remaining bounds.
 - Dependencies added: none.
-- Publication scope: user-authorized commit and push to `Erin-lab-design/s-bank`; no PR or main-branch update requested.
+- Publication scope: one local commit per work package, then pause for user confirmation. No new push or PR was requested.
 

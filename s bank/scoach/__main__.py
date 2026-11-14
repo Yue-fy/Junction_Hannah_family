@@ -2,11 +2,13 @@
 import argparse
 from pathlib import Path
 from .api import Application, create_server
+from .llm import load_env
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description='Serve the S-Coach local demo')
     root = Path(__file__).resolve().parent.parent
+    load_env(root / '.env')
     parser.add_argument('--db', default=str(root / 'var' / 'scoach.sqlite3'))
     parser.add_argument('--host', default='127.0.0.1')
     parser.add_argument('--port', type=int, default=8080)

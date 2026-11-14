@@ -57,15 +57,21 @@ def _bounded_materiality(cents):
 
 
 class Application:
-    def __init__(self, database='var/scoach.sqlite3', web_root=None, *, coach_transport=None):
+    def __init__(self, database='var/scoach.sqlite3', web_root=None, *, coach_transport=None, agent_transport=None):
         self.database = Path(database)
         self.web_root = Path(web_root) if web_root else Path(__file__).resolve().parent.parent / 'web'
         self.coach_transport = coach_transport
+        self.agent_transport = agent_transport
 
     def handle(self, method, target, payload=None):
         try:
             data = self._route(method, target, payload)
-            return 200, {'ok': True, 'data': _decorate(data)}
+            decorated = _decorate(data)
+            if method == 'POST' and urlsplit(target).path == '/api/agent':
+                # Action params are exact inputs to the confirmed mutation API.
+                for original, action in zip(data.get('actions', []), decorated.get('actions', [])):
+                    action['params'] = dict(original['params'])
+            return 200, {'ok': True, 'data': decorated}
         except APIError as error:
             return error.status, {'ok': False, 'error': {'code': error.code, 'message': str(error)}}
         except (ValueError, TypeError, KeyError) as error:
@@ -81,7 +87,7 @@ class Application:
             raise ValueError('Repeated query parameters are not supported')
         query = {key: values[0] for key, values in query.items()}
         get_routes = {'/api/health', '/api/personas', '/api/overview', '/api/comparison', '/api/transactions', '/api/trends', '/api/forecast', '/api/safe-to-spend', '/api/investments', '/api/financing', '/api/statistics', '/api/statistics/compare', '/api/taxes', '/api/vat', '/api/goals'}
-        post_routes = {'/api/scenarios', '/api/scenarios/exclude', '/api/rules', '/api/goals', '/api/goals/link', '/api/coach', '/api/tax-plan', '/api/undo', '/api/reset'}
+        post_routes = {'/api/scenarios', '/api/scenarios/exclude', '/api/rules', '/api/goals', '/api/goals/link', '/api/coach', '/api/agent', '/api/tax-plan', '/api/undo', '/api/reset'}
         if path not in get_routes | post_routes:
             raise APIError(404, 'not_found', 'Unknown API endpoint')
         if (method == 'GET' and path not in get_routes) or (method == 'POST' and path not in post_routes) or method not in {'GET', 'POST'}:
@@ -93,15 +99,17 @@ class Application:
         if method == 'POST':
             self._validate_body(path, body)
         if path == '/api/health':
+            from .llm import agent_configured
             return {
                 'status': 'ok',
                 'database_ready': self.database.is_file(),
                 'gemini_optional': True,
                 'gemini_configured': bool(os.environ.get('GEMINI_API_KEY') or self.coach_transport),
+                'agent_configured': bool(agent_configured() or self.agent_transport),
             }
         if not self.database.is_file():
             raise APIError(503, 'database_unavailable', 'Demo database missing. Run scripts/build_demo_db.py first.')
-        if method == 'POST' and path != '/api/coach' and body.get('confirmed') is not True:
+        if method == 'POST' and path not in {'/api/coach', '/api/agent'} and body.get('confirmed') is not True:
             raise ValueError('This action requires explicit customer confirmation (confirmed: true)')
         if body.get('provenance', 'user') not in {'user', 'gemini_proposed_user_confirmed'}:
             raise ValueError('Invalid mutation provenance')
@@ -207,6 +215,10 @@ class Application:
                 if path == '/api/goals':
                     from .goals import goal_plan
                     return {**scope, 'goals': [goal_plan(conn, customer_id, row[0]) for row in conn.execute('SELECT id FROM goals WHERE customer_id=? ORDER BY created_at,id', (customer_id,))]}
+            if path == '/api/agent':
+                from .agent import run_agent
+                return run_agent(conn, customer_id, month, body.get('locale', 'en'),
+                                 body.get('message'), body.get('history', []), transport=self.agent_transport)
             if path == '/api/coach':
                 locale = body.get('locale', 'en')
                 if locale not in {'en', 'fi', 'sv'}:
@@ -247,11 +259,17 @@ class Application:
             '/api/goals/link': {'goal_id', 'scenario_id'},
             '/api/tax-plan': {'amount_cents', 'due_date', 'reference_date', 'already_set_aside_cents', 'current_balance_cents', 'reserve_floor_cents', 'set_aside_location', 'label'},
             '/api/coach': {'message', 'locale', 'previous_query'}, '/api/undo': set(), '/api/reset': set(),
+            '/api/agent': {'message', 'locale', 'history'},
         }
         if set(body) - common - fields.get(path, set()):
             raise ValueError('Unknown JSON body field')
+        if path == '/api/agent':
+            from .agent import validate_request
+            validate_request(body.get('message'), body.get('locale', 'en'), body.get('history', []))
         for name, value in body.items():
-            if name == 'previous_query':
+            if path == '/api/agent' and name == 'history':
+                continue
+            elif name == 'previous_query':
                 if value is not None and not isinstance(value, dict):
                     raise ValueError('previous_query must be a resolved scope object')
             elif name == 'confirmed':

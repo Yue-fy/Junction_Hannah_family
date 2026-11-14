@@ -6,6 +6,18 @@ The prototype runs locally by default. It uses no real customer data, makes no p
 
 **Current status:** V2 has four primary pages—Home, Spending, Coach and Goals—with one spending ring, a full conversation page, title-only wishes and three guided customer stories. Coach now answers in prose first, keeps calculations behind supporting disclosures, and distinguishes everyday purchase plans from historical questions. It remains a local prototype; rendered desktop/mobile acceptance and live Gemini remain unverified. See the [conversation and logic audit](docs/CONVERSATION_REPAIR_ACCEPTANCE.md).
 
+### Agent backend (WP1)
+
+`POST /api/agent` adds a function-calling backend for DeepSeek and Gemini with read-only calculation tools, a numeric provenance check and an automatic offline fallback. `/api/coach` and the current web conversation retain their existing behavior. Multi-turn agent memory (WP2) and the mobile agent chat (WP6) are separate follow-on packages.
+
+The server loads `s bank/.env` at startup without overriding existing shell variables. Configure `DEEPSEEK_API_KEY` and optionally `DEEPSEEK_MODEL` (default `deepseek-flash`). DeepSeek takes priority when its key is present; otherwise the agent uses `GEMINI_API_KEY` and `GEMINI_MODEL` (default `gemini-3-flash-preview`). This file is ignored by Git. Model selection is configurable, but another model's availability and latency must be verified against the same tool loop. No SDK or backend dependency is required.
+
+The agent permits at most six model turns, twenty tool calls and a twenty-five-second execution budget. Money calculations use the existing ledger services or a restricted decimal calculator. Charts and highlight cards reference server-created tool results. Proposed goals and scenarios are never saved by the model: they must pass through the existing customer-confirmed POST endpoints.
+
+The number check detects unsupported numeric tokens; it is not a proof that every sentence gives those numbers the correct meaning. It also accepts customer-provided figures and documented date/count exceptions. Unknown benchmarks remain unavailable. Forecasts remain estimates, and this backend does not provide investment, credit or tax advice.
+
+WP1 live smoke checks with `deepseek-flash` passed on a temporary synthetic ledger: restaurant spending of EUR 225.70 and a 20% reduction of EUR 45.14 monthly / EUR 541.68 annually, each using two model calls in under three seconds. This verifies those two paths, not broad conversational quality. An earlier Gemini attempt returned HTTP 402 (`RESOURCE_EXHAUSTED`, exhausted project prepayment credits) and exercised the offline fallback. Automated tests use scripted responses and temporary synthetic databases.
+
 ## What the prototype demonstrates
 
 - **A clear financial home:** the last recorded balance and its date, one coaching action, three teaching baskets and a compact goal/wish summary. Spending owns the single interactive category ring and matching transaction details. Income and saving transfers stay separate from consumption; forecast, investment and VAT details are optional expansions.

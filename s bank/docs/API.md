@@ -24,7 +24,7 @@ Every customer-scoped call accepts `customer_id`; the demo defaults to `CUST0000
 
 | Endpoint | Important parameters | Result |
 |---|---|---|
-| `GET /api/health` | none | Server/database readiness plus `gemini_optional` and secret-free `gemini_configured` booleans |
+| `GET /api/health` | none | Server/database readiness plus secret-free `gemini_optional`, `gemini_configured` and `agent_configured` booleans; configured does not imply available quota |
 | `GET /api/personas` | none | Available synthetic demo personas |
 | `GET /api/overview` | `customer_id`, `month` | Money Map, current priority, facts, candidates, saved scenarios |
 | `GET /api/comparison` | `month`, `comparison_month`, optional exact filters | Complete-period comparison |
@@ -43,6 +43,65 @@ Every customer-scoped call accepts `customer_id`; the demo defaults to `CUST0000
 Exact statistics filters are combined with AND. MCC values must be four-digit strings; `consumption_only` accepts only the exact string `true` and selects negative purchase/housing/utility rows, excluding transfers. These filters also apply to transactions and comparison reads. A model may extract a filter, but local semantic resolution takes precedence for supported questions. The server validates parameters and performs all arithmetic locally; unsupported definitions must clarify rather than silently widen.
 
 ## Coach
+
+### Tool-calling agent (WP1)
+
+`POST /api/agent` is a read-only route and does not require `confirmed`. It accepts the same common customer/account/month fields as `/api/coach`, plus:
+
+```json
+{
+  "customer_id": "CUST00001",
+  "month": "2026-09",
+  "locale": "en",
+  "message": "How much did I spend on restaurants?",
+  "history": []
+}
+```
+
+`message` must be nonempty text up to 2,000 characters; `locale` is `en`, `fi` or `sv`. WP1 accepts an omitted or empty `history`. A nonempty history is explicitly rejected until WP2 implements its bounded replay contract. The existing 64 KiB HTTP body limit is sufficient. Unknown fields and customer/account mismatches fail validation before a model call.
+
+The response `data` contains:
+
+| Field | Meaning |
+|---|---|
+| `source` | `agent` or `deterministic` |
+| `fallback_reason` | `null`, `not_configured`, `timeout`, `unavailable`, `unverified_numbers`, or `max_steps` |
+| `answer` | Plain-text paragraphs; consumers must escape all text |
+| `highlight` | Server-created `{label, value, caption}`, or `null` |
+| `chart` | Server-created `{kind, title, series: [{label, value_cents}]}`, or `null`; missing observations remain `null` |
+| `steps` | Successfully executed tools with plain-language labels |
+| `evidence` | `{id, label, count, query}` records for `/api/transactions`; no raw references are sent to Gemini |
+| `actions` | Optional `{kind, label, params}` buttons: `create_goal`, `save_scenario`, `open_view` |
+| `suggestions` | At most three bounded follow-up questions |
+| `scope` | Selected period `{start, end, reference_date}` based on the recorded data clock |
+| `legacy` | Present on fallback; the existing deterministic coach payload for the same question |
+
+`evidence.query` includes `start`, `end` and exact filters. Add the current customer scope when opening transactions. Comparison periods have separate evidence queries. Forecast and pattern evidence opens supporting account history, not a claim that every displayed row is a recurring bill. A chart's values and highlight amounts come from tool output; model-authored chart arrays are ignored.
+
+Tools are `get_overview`, `spending_total`, `compare_periods`, `monthly_trend`, `list_transactions`, `safe_to_spend`, `forecast_30_days`, `what_if_reduce`, `goal_plan`, `list_goals`, `payday_pattern`, `recurring_payments`, `calculate`, `explain_concept`, and `propose_action`. Filters reuse the existing catalog and statistics validation. Spending defaults to consumption unless an explicit role or transaction type selects other flows. Money fields carry integer cents plus euro text; list truncation is declared. Monthly chart series are the explicit exception to the twenty-item list cap and retain up to twenty-four points.
+
+Goal previews perform calendar-month target arithmetic with no assigned initial savings; they do not assess contribution capacity or affordability. Existing saved goal progress still uses the original goal engine. Scenario previews carry a monthly amount and twelve-month extrapolation, clearly marked as a scenario. Proposals must match a prior preview, contain no `confirmed` field and never execute a mutation. A client must present its confirmation flow, then POST the proposal to `/api/goals` or `/api/scenarios` with `confirmed: true` only after the customer agrees.
+
+Goal target and monthly amounts must originate in customer text or previous verified calculations. Model-authored goal names, labels and echoed proposal text are excluded from numeric evidence. Public action `params` remain exact mutation inputs and are not decorated with additional display fields. The reference clock uses the most recent recorded day on or before the selected month's end, including the most recent earlier day when that month has no transactions.
+
+The transport receives aggregates by default. Only `list_transactions` returns capped, allowlisted row details (date, weekday, category, transaction type, amount, merchant ID and MCC). Customer IDs, account IDs, raw transaction references, hashes and raw JSON stay server-side. No model transcript is persisted. Gemini model content is replayed verbatim for thought signatures, with function response IDs preserved when present. DeepSeek replies retain the original assistant message internally, including tool-call IDs and any reasoning content required for follow-up calls. Internal reasoning is never rendered in the answer.
+
+The numeric gate accepts tool values, customer-input values and scope dates, with a one-cent tolerance and documented small plain-integer/year/date exceptions. Unsupported amounts trigger one corrective turn; a second failure returns the offline result. Small currency/percentage values are checked, and a cent integer alone does not authorize that integer as a euro amount. Compact magnitudes and scientific notation are normalized; unsupported or unbounded numeric notation fails verification. This is numeric provenance checking, not semantic or advice verification.
+
+`Application(..., agent_transport=callable)` injects an offline test transport. Its signature is `(contents, *, system, tools, timeout) -> model_content`. The entire loop is limited to six model turns, twenty tool calls and twenty-five seconds. A transport timeout cannot continue executing database tools in the background; only bounded daemon transport workers may outlive a request. Errors, missing credentials and exhausted quota return the deterministic wrapper without retrying the optional legacy Gemini adapter.
+
+Environment names (values belong only in ignored `.env` or the process environment):
+
+| Name | Use |
+|---|---|
+| `DEEPSEEK_API_KEY` | Enables DeepSeek for `/api/agent`; takes priority over Gemini when both are set |
+| `DEEPSEEK_MODEL` | DeepSeek model name, default `deepseek-flash` |
+| `GEMINI_API_KEY` | Enables Gemini for `/api/agent` when DeepSeek is absent; existing `/api/coach` adapter is unchanged |
+| `GEMINI_MODEL` | Gemini model name, default `gemini-3-flash-preview` |
+
+DeepSeek uses `https://api.deepseek.com/chat/completions`, bearer authentication and OpenAI-style function tools. Thinking is disabled for the interactive deadline, and output is capped at 2,048 tokens. If a provider still returns reasoning with tool calls, it is preserved internally for replay. Provider failures fall back locally; they do not silently incur calls to a second provider. References checked on 2026-11-14: [DeepSeek tool calls](https://api-docs.deepseek.com/guides/tool_calls/), [thinking mode](https://api-docs.deepseek.com/guides/thinking_mode/), [chat completions](https://api-docs.deepseek.com/api/create-chat-completion/).
+
+Wire-format references checked on 2026-11-14: [function calling](https://ai.google.dev/gemini-api/docs/function-calling), [thought signatures](https://ai.google.dev/gemini-api/docs/thought-signatures), [generateContent REST](https://aistudio.google.com/api-reference/generate-content/generate-content), and [Content/Part definitions](https://aistudio.google.com/api-reference/caching). The tutorial pages currently emphasize the Interactions API; this prototype uses the still-documented `generateContent` REST interface and its `systemInstruction`, `functionDeclarations`, `functionCall`, `functionResponse`, `thoughtSignature` and call `id` fields.
 
 ### Experience-redesign additions
 
