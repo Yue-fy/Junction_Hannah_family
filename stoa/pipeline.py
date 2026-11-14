@@ -53,6 +53,23 @@ UNSEEN_SCALE = 0.92  # unseen wording, ONE plain concept: hard's cubicasa paraph
 UNSEEN_STRUCT_CAP = 0.35  # unseen wording WITH extra structure (comparison/exclusion words, numbers): F, held-out: 33%
 
 
+def _excluded_names(question: str) -> list[str]:
+    """Quoted names the question leaves out ("all the other rooms on 'A', leaving out 'kleedkamer (20)'")."""
+    from stoa.router.intent import _OPS_RX, _QUOTED, _fold
+
+    q = _fold(question)
+    rx = dict(_OPS_RX).get("rest")
+    ms = list(rx.finditer(_QUOTED.sub(lambda x: "'" + "x" * (len(x.group(0)) - 2) + "'", q))) if rx else []
+    if not ms:
+        return []
+    m = ms[-1]  # "all the other rooms on 'A', leaving out 'B'": the names after the LAST cue are the excluded ones
+    return [next(g for g in x.groups() if g) for x in _QUOTED.finditer(q) if x.start() >= m.start()]
+
+
+def _tokens(s: str) -> set[str]:
+    return set(re.findall(r"[^\W_]+", str(s).lower()))
+
+
 def _unseen_conf(conf: float, question: str) -> float:
     """Confidence of a local-tier / LoRA / prior answer measured on train templates, for a wording that is not one
     (F 03:23: the flat 0.5 cap made plain paraphrases under-confident and left compounds over-confident)."""
@@ -549,6 +566,20 @@ class Pipeline(BaseSolver):
                 trace.append(f"{name} (question as asked): {a.value} {a.unit or ''} by rules, but the question asks "
                              f"a derived quantity ({'+'.join(derived)}): kept as a second opinion at conf "
                              f"{a.confidence:.2f}")
+                return None, (name, a)
+            excl = _excluded_names(question)
+            if excl and a.evidence and a.confidence >= self.raw_accept and any(
+                    _tokens(n) and _tokens(n) <= _tokens(e.note or "") for n in excl for e in a.evidence) and all(
+                    any({t for t in _tokens(n) if t.isalpha()} <= _tokens(e.note or "") for n in excl)
+                    for e in a.evidence):
+                # novel storey-rest (0/8 at conf 0.985 since raw_first): every piece of evidence IS the thing the
+                # question leaves out -> the exclusion was not applied
+                a = a.model_copy(deep=True)
+                a.confidence = round(min(a.confidence, DERIVED_CAP), 3)
+                a.missing = [*a.missing, f"{name} answered about '{excl[0]}', which the question leaves out: the "
+                                         "operation was not applied"]
+                trace.append(f"{name} (question as asked): {a.value} {a.unit or ''}, but its evidence is only "
+                             f"'{excl[0]}', which the question leaves out: unsure")
                 return None, (name, a)
             if a.confidence < self.raw_accept:
                 trace.append(f"{name} (question as asked): {a.value} {a.unit or ''} at conf {a.confidence:.2f}, unsure"
