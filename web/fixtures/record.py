@@ -24,6 +24,10 @@ EXTRA = [
     ("data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf",
      "What share of the total room area on '1.korrus' does the room 'KORIDOR (119)' take, in percent?"),
     ("data/swiss_dwellings/site1000_bldg2082_floor9385.pdf", "How many rooms labelled 'Zimmer' are there on this floor?"),
+    # scans: answered from the printed text (raster text layer), the cited line boxed
+    ("data/habs/vi0026_sheet_00003.jpg", "What is the title of this sheet?"),
+    ("data/habs/vi0026_sheet_00003.jpg", "What is the scale of this drawing?"),
+    ("data/habs/vi0026_sheet_00003.jpg", "When was this drawing made?"),
 ]
 QUESTIONS = [(t["file"], t["q"]) for t in TOUR if t.get("file") and t.get("q")] + EXTRA
 

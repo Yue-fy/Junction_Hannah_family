@@ -173,10 +173,14 @@ const DEMO = [
 let demoFiles: FileInfo[] | null = null;
 const HISTORICAL = ["habs", "finna", "europeana", "wikimedia"];
 // Scans have no dataset questions; Stoa says the hidden set may ask about them, so offer general ones.
+// The text-grounded ones (title, scale, date) are answered from the scan's printed text (W3's text layer) with the
+// cited line boxed on the sheet.
 const GENERIC_QUESTIONS = [
   "What kind of drawing is this (floor plan, elevation, section, site plan)?",
-  "How many storeys does this building have?",
+  "What is the title of this sheet?",
   "What is the scale of this drawing?",
+  "When was this drawing made?",
+  "How many storeys does this building have?",
   "How many windows are shown on this drawing?",
 ];
 
@@ -304,7 +308,9 @@ async function loadExamples(f: FileInfo) {
       $<HTMLTextAreaElement>("question").value = pick[i].question;
       void runAsk();
     }));
-    sel.innerHTML = `<option value="">More example questions (${qs.length})…</option>` + qs.map((q) =>
+    // files without dataset questions (historical scans): the general questions, also in the menu (chips show ~2)
+    const menu = qs.length ? qs : pick.map((q) => ({ ...q, has_fixture: false }));
+    sel.innerHTML = `<option value="">${qs.length ? "More example questions" : "Questions for any drawing"} (${menu.length})…</option>` + menu.map((q) =>
       `<option value="${esc(q.question)}">${q.has_fixture ? "★ " : ""}${esc(q.question.length > 110 ? q.question.slice(0, 107) + "…" : q.question)}</option>`).join("");
   } catch {
     /* keep empty */
