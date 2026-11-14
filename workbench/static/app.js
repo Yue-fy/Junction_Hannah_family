@@ -28,6 +28,15 @@ function confWords(c) {
   return `confidence ${p}% (${w})`;
 }
 
+function costWords(c) {
+  // what the answer cost us (Stoa scores cost): language-model tokens and time
+  if (!c) return "";
+  const tok = (c.llm_tokens_in || 0) + (c.llm_tokens_out || 0);
+  const t = c.latency_s ?? c.wall_seconds;
+  const bits = [tok ? `${tok.toLocaleString("en")} model tokens` : "no language model", t != null ? `${(+t).toFixed(1)} s` : ""];
+  return "cost: " + bits.filter(Boolean).join(", ");
+}
+
 // ---------------------------------------------------------------------------------------------------------
 // Zoom/pan viewer with an SVG overlay in image-pixel coordinates.
 class Viewer {
@@ -248,6 +257,7 @@ const audit = {
   async init() {
     const r = await api("api/audit/items");
     this.items = r.items; this.moreN = r.more_available || 0;
+    this.batches(r.batches || []);
     if (!this.items.length) {
       $("#audit-question").textContent = "No items to check yet.";
       this.viewer.empty("The audit sample has not been prepared yet.");
@@ -257,6 +267,22 @@ const audit = {
     this.idx = first >= 0 ? first : 0;
     this.progress();
     await this.show();
+  },
+  batches(list) {
+    // new batches (e.g. Stoa's example questions) are offered at once, not only when the current sample is done
+    const el = $("#audit-batches");
+    el.hidden = !list.length;
+    el.innerHTML = list.map((b) => `<div>New to check: <button class="primary" data-batch="${esc(b.name)}">Load ${b.n} items: ${esc(b.label)}</button>
+      ${b.n_ref < b.n ? `<div class="small">${b.n - b.n_ref} of them have no reference answer yet: your judgement (and the right answer, if you know it) becomes the reference.</div>` : ""}</div>`).join("");
+    $$("button[data-batch]", el).forEach((btn) => btn.addEventListener("click", () => this.load(btn.dataset.batch)));
+  },
+  async load(name) {
+    let r;
+    try { r = await api(`api/audit/more?name=${encodeURIComponent(name)}`, { method: "POST" }); } catch (e) { alert(e.message); return; }
+    flash(`${r.added} new items`);
+    await this.init();
+    const j = r.first ? this.items.findIndex((it) => it.item_id === r.first) : -1;
+    if (j >= 0) { this.idx = j; this.progress(); await this.show(); }
   },
   progress() {
     const done = this.items.filter((it) => it.verdict).length;
@@ -274,16 +300,22 @@ const audit = {
     let d;
     try { d = await this.get(it.item_id); } catch (e) { this.viewer.empty(`Could not load: ${esc(e.message)}`); return; }
     this.cur = d;
+    this.shownAt = performance.now(); this.hiddenMs = 0;
     $("#audit-meta").innerHTML = `Item ${this.idx + 1} of ${this.items.length} · ${esc(d.source)} · ${esc(d.type)} · ${esc(d.drawing_name)}` +
       (d.split && d.split !== "dev" ? `<span class="split-tag" title="reference answer made by our agents">harder · ${esc(d.recipe || d.split)}</span>` : "");
-    $("#audit-ref").previousElementSibling.textContent = d.split && d.split !== "dev" ? "Reference answer (made by our agents)" : "Reference answer (dataset)";
+    $("#audit-ref").previousElementSibling.textContent = d.ref_label ? `Reference answer (${d.ref_label})` :
+      d.batch ? "Reference answer" :
+      d.split && d.split !== "dev" ? "Reference answer (made by our agents)" : "Reference answer (dataset)";
+    if (d.batch_label) $("#audit-meta").innerHTML += ` <span class="split-tag">${esc(d.batch_label)}</span>`;
     $("#audit-question").textContent = d.question;
     $("#audit-answer").textContent = d.answer;
     $("#audit-answer").classList.toggle("long", String(d.answer).length > 30);
     $("#audit-ref").classList.toggle("long", String(d.reference).length > 30);
     $("#audit-conf").textContent = confWords(d.confidence);
-    $("#audit-ref").textContent = d.reference;
-    $("#audit-match").textContent = d.matches_reference === true ? "our answer matches it" :
+    $("#audit-cost").textContent = costWords(d.cost);
+    $("#audit-ref").textContent = d.reference ?? "none yet";
+    $("#audit-match").textContent = d.reference == null ? "no reference: please judge from the drawing, and type the right answer below if you know it" :
+      d.matches_reference === true ? "our answer matches it" :
       d.matches_reference === false ? "our answer differs" :
       d.text_match === true ? "free text: looks the same, please compare" :
       d.text_match === false ? "free text: looks different, please compare" : "free-text answer: please compare";
@@ -320,8 +352,10 @@ const audit = {
   async verdict(v) {
     if (!this.cur) return;
     const comment = $("#audit-comment").value, correct_value = $("#audit-correct").value;
+    // time to verify = item shown -> verdict, minus the time the page was hidden (another tab, laptop asleep)
+    const seconds = this.shownAt ? Math.max(0, Math.round((performance.now() - this.shownAt - this.hiddenMs) / 100) / 10) : null;
     try {
-      await api("api/audit", { method: "POST", body: JSON.stringify({ item_id: this.cur.item_id, verdict: v, comment, correct_value }) });
+      await api("api/audit", { method: "POST", body: JSON.stringify({ item_id: this.cur.item_id, verdict: v, comment, correct_value, seconds }) });
     } catch (e) { alert(`Could not save: ${e.message}`); return; }
     this.items[this.idx].verdict = v;
     this.cache.delete(this.cur.item_id);
@@ -336,6 +370,11 @@ const audit = {
   move(d) { const j = this.idx + d; if (j >= 0 && j < this.items.length) { this.idx = j; this.show(); } },
 };
 $$(".verdicts .v").forEach((b) => b.addEventListener("click", () => audit.verdict(b.dataset.v)));
+let hiddenSince = null;
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) hiddenSince = performance.now();
+  else if (hiddenSince !== null) { audit.hiddenMs = (audit.hiddenMs || 0) + performance.now() - hiddenSince; hiddenSince = null; }
+});
 $("#audit-more-btn").addEventListener("click", async () => {
   try { const r = await api("api/audit/more", { method: "POST" }); flash(`${r.added} new items`); } catch (e) { alert(e.message); return; }
   await audit.init();
@@ -520,6 +559,19 @@ const asker = {
   },
 };
 $("#pick-search-btn").addEventListener("click", () => asker.groups($("#pick-search").value.trim()));
+$("#pick-upload-btn").addEventListener("click", () => $("#pick-upload").click());
+$("#pick-upload").addEventListener("change", async (e) => {
+  const f = e.target.files[0]; e.target.value = "";
+  if (!f) return;
+  const msg = $("#pick-upload-msg"); msg.hidden = false; msg.textContent = `Uploading ${f.name}…`;
+  let r;
+  try {
+    r = await api(`api/upload?name=${encodeURIComponent(f.name)}`, { method: "POST", body: f, headers: { "Content-Type": "application/octet-stream" } });
+  } catch (err) { msg.textContent = `Could not add ${f.name}: ${err.message}`; return; }
+  msg.textContent = `Added “${r.card.name}”. It is listed under “Added drawings”.`;
+  await asker.groups();
+  await asker.open(r.path);
+});
 $("#pick-search").addEventListener("keydown", (e) => { if (e.key === "Enter") asker.groups(e.target.value.trim()); });
 $("#pick-reset").addEventListener("click", () => { $("#pick-search").value = ""; asker.groups(); });
 $("#ask-change").addEventListener("click", () => { $("#asker").hidden = true; $("#picker").hidden = false; asker.edit(null); });
