@@ -19,13 +19,13 @@ import re
 from dataclasses import dataclass, field
 
 from stoa.router.canonical import canonical
-from stoa.router.intent import _NEGATION, _QUOTED, _TARGETS, Intent, parse
+from stoa.router.intent import _NEGATION, _QUOTED, _TARGETS, Intent, modifiers, parse
 
 _TOGETHER = re.compile(r"\b(in total|together|altogether|combined|in all|total number|sum of|zusammen|insgesamt|"
                        r"yhteens[aä]|au total|in totale|i alt|totaal)\b", re.I)
 # Q 08:21: "How many doors and how many windows are on '1.korrus'?" was summed (101 @ 0.86; gold 46 and 55): two counting
 # cues, or "respectively / each / separately", without a total cue -> one count per class
-_COUNT_CUE = re.compile(r"\bhow many\b|\bnumber of\b|\bwie viele\b|\bcombien\b|\bquant[ie]\b|\bkuinka monta\b|"
+_COUNT_CUE = re.compile(r"\bhow many\b|\bnumber of\b|\bwie viele\b|\bcombien\b|\bquant[ie]\b|\bkuinka monta\b|\bmontako\b|"
                         r"\bhur många\b|\bhoeveel\b|\bmitu\b|\bhvor mange\b", re.I)
 _EACH = re.compile(r"\b(respectively|separately|each separately|one by one|for each (?:kind|type|class)|jeweils|"
                    r"respectivement|rispettivamente|vastaavasti|var för sig|respectivamente|elk afzonderlijk)\b", re.I)
@@ -168,6 +168,20 @@ def decompose(source: str, question: str) -> Plan | None:
             if all(subs):
                 return Plan("sum", subs, [f"apartment {a}" for a in ma.groups()], "m2")
 
+    # separate counts in any language: two counting cues ("Montako ovea ja montako ikkunaa …", "Wie viele Türen und
+    # wie viele Fenster …") or "respectively", and no total cue (Q 08:35: FI -> the agent answered doors only @ 0.95)
+    if base.task == "count" and not _TOGETHER.search(q) and not (set(modifiers(q)) & {"avg", "ratio", "share", "diff",
+                                                                                         "compare", "threshold"}):
+        first = re.sub(r"\([^)]*\)", " ", re.split(r"\?", qn)[0])  # parentheses hold definitions
+        if len(_COUNT_CUE.findall(first)) >= 2 or _EACH.search(qn):
+            clause = _NEGATION.sub(" ", first)
+            ts = []
+            for _, t in _targets_in(clause):
+                if t not in ts and t not in ("room", "storey", "sanitary"):
+                    ts.append(t)
+            subs = [_sub_for(source, t, base) for t in ts]
+            if len(ts) >= 2 and all(subs):
+                return Plan("list", subs, list(ts), "count")
     # sum of counts: "doors and windows in total", "toilets, washbasins and bathtubs altogether"
     if base.task == "count" and (_TOGETHER.search(q) or re.search(r"\b(and|plus)\b", qn, re.I)):
         clause = qn
