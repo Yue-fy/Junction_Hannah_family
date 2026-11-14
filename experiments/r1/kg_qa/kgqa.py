@@ -149,6 +149,12 @@ def is_link_question(question: str) -> dict:
             r"getekend|dibujad\w*)\b", q):
         # r1v5 'Has the BIM model got more windows on this level than are drawn here?' (no sheet noun)
         why.append("model vs drawn")
+    if not why and re.search(r"^(is there|are there|gibt es|onko|löytyykö|y a-t-il|finns det|c'è|is er|hay|kas on)\s+"
+                             r"(an? |any |the |ein\w* |une? |ett? |un[ao]? |een )?(3d[- ]?model\w*|ifc|bim model|"
+                             r"bim file|dxf|dwg|cad file|building model)\b", q):
+        # the FILE is what is asked about ('Is there a 3D model or IFC file for this apartment?'), not its contents
+        # ('Are there any fire extinguishers in the BIM model?' must not fire)
+        why.append("model exists")
     if not why and re.search(_SET, q):
         why.append("drawing set")
     if not why and re.search(_SHEET3, q) and not re.search(r"\b(scale|maßstab|mittakaava|échelle|scala|skala|schaal|"
@@ -399,6 +405,49 @@ def _first_sentence(s: str, n: int = 140) -> str:
     return s if len(s) <= n else s[:n].rsplit(" ", 1)[0] + "…"
 
 
+# 'Is there an IFC model / a DXF / a 3D model for this plan?' on a drawing with no project graph (Swiss Dwellings,
+# CubiCasa, uploads): the answer is which files are linked to it (Q v23: right at 0.30-0.45 by luck, 0 evidence)
+_EXISTS = (r"\b(is there|are there|does (it|this \w+) (have|come with)|do (we|you) have|exists?|is (an?|the) .{0,30} "
+           r"available|gibt es|existiert|onko|löytyykö|y a-t-il|existe-t-il|finns det|c'è|esiste|is er|bestaat|hay|"
+           r"existe|kas on)\b")
+_FORMATS = (("IFC / 3D model", ".ifc", r"\b(ifc|bim|3d[- ]?(model\w*|file)|3-d model|building model|modell\w*|"
+                                       r"model(e|o)?|maquette|malli\w*|mudel\w*)\b"),
+            ("DXF / CAD drawing", ".dxf", r"\b(dxf|dwg|cad( file| drawing)?|vector (file|drawing))\b"),
+            ("PDF sheet", ".pdf", r"\bpdf\b"),
+            ("raster image", ".png", r"\b(png|jpe?g|raster image|bitmap)\b"))
+
+
+def _file_exists_answer(path: str, question: str, t0: float) -> Answer | None:
+    q = question.lower()
+    if not re.search(_EXISTS, q):
+        return None
+    fmt = next(((name, ext) for name, ext, rx in _FORMATS if re.search(rx, q)), None)
+    if fmt is None:
+        return None
+    try:
+        from stoa.kg import links
+
+        L = links(path) or {}
+    except Exception:  # noqa: BLE001
+        return None
+    sib = dict(L.get("siblings") or {})
+    if L.get("model"):
+        sib.setdefault(".ifc", L["model"])
+    have = sorted(Path(v).name for v in sib.values())
+    yes = fmt[1] in sib
+    src = L.get("source") or "unknown"
+    known = src in ("swiss_dwellings", "cubicasa5k", "ifc_models", "ifc_bench")
+    value = f"{'yes' if yes else 'no'} (files linked to this drawing: {', '.join(have) or 'none'})"
+    return Answer(value=value, confidence=0.85 if known else 0.6, solver="kg_qa",
+                  evidence=[Evidence(file=v, note=f"linked file ({k})") for k, v in sorted(sib.items())][:6],
+                  trace=[f"kg_qa: does a {fmt[0]} exist for this drawing? linked files ({src}): {have} "
+                         "(deterministic, no model call)"],
+                  assumptions=[f"the drawing set = the files stored with this drawing ({src})"]
+                  + ([] if known else ["only files next to this file were searched"]),
+                  missing=([] if yes or known else [f"a {fmt[0]} stored elsewhere would not be found"]),
+                  cost=Cost(wall_seconds=round(time.perf_counter() - t0, 3)))
+
+
 def solve(path: str, question: str, backend: str = "local") -> Answer:
     """One link question; a two-part one ('Which storey …, and does …?') is answered part by part and joined."""
     parts = re.split(_SPLIT, question.strip(), maxsplit=1, flags=re.I)
@@ -435,6 +484,9 @@ def _solve_one(path: str, question: str, backend: str = "local", llm_question: s
 
     rows, ctx = facts(path)
     if not rows:
+        fa = _file_exists_answer(path, question, t0)
+        if fa is not None:
+            return fa
         return Answer(value=None, confidence=0.0, solver="kg_qa", trace=["kg_qa: no project graph for this file"],
                       missing=["no linked model / sheet set for this drawing"])
     hit = is_link_question(question)
