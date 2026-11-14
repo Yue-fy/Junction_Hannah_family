@@ -40,19 +40,21 @@ _WHICH = re.compile(r"^\s*(which|what is the (?:name|type|label|use|function)|na
 
 # --- targets: (target, regex), most specific first ------------------------------------------------------
 _T = [
-    ("wc_room", r"separate wc rooms?|toilet rooms?|erillis\w* wc-til|wc-til|wc-r[aä]um|separate toilets?"),
-    ("shower_bathtub", r"showers?\s*(?:and|plus|\+|&|,)\s*(?:bath)?tubs?|suihku\w* ja kylpyamme|duschen und badewannen|bathtubs?\s*(?:and|plus|\+|&|,)\s*showers?"),
-    ("sink", r"sinks? and wash ?basins?|pesu- ja tiskial|wash ?basins? and sinks?|tiskial|sinks?\b|sp[üu]lbecken|[eé]viers?|"
+    ("wc_room", r"separate wc rooms?|toilet rooms?|erillis\w* wc-til|wc-til|wc-r[aä]um|separate toilets?|separata toaletter|"
+                r"separat toalett"),
+    ("shower_bathtub", r"showers?\s*(?:and|plus|\+|&|,)\s*(?:bath)?tubs?|suihku\w* ja kylpyamme|suihku\w* ja ammee\w*|duschen und badewannen|dusch\w* och badkar\w*|badkar\w* och dusch\w*|bathtubs?\s*(?:and|plus|\+|&|,)\s*showers?"),
+    ("sink", r"sinks? and wash ?basins?|pesu- ja tiskial|wash ?basins? and sinks?|handfat\w* och diskh\w*|diskh\w* och handfat\w*|tiskial|sinks?\b|sp[üu]lbecken|[eé]viers?|diskh[oå]\w*|"
              # FI basin 'allas' (F 08:45: "Montako allasta keittiössä on?" read as a kitchen count)
              r"\ballas(?:ta)?\b|\baltaa\w*|\baltai\w+"),
-    ("wc", r"toilet bowls?|wc seats?|wc-istui|toilets? \(wc\)|\btoilets?\b|\bwcs?\b|\bwc's\b|klosett|cuvettes?|wc-schalen"),
-    ("washbasin", r"wash ?basins?|lavabos?|lavabi|waschbecken|handwaschbecken|lavandini|pesuallas|pesualtai"),
-    ("bathtub", r"bath ?tubs?|badewannen?|baignoires?|vasche da bagno|vasca|kylpyamm|badekar"),
-    ("shower", r"showers?|duschen?|douches?|docce|doccia|suihku"),
+    ("wc", r"toilet bowls?|wc seats?|wc-istui|toilets? \(wc\)|\btoilets?\b|\bwcs?\b|\bwc's\b|klosett|cuvettes?|wc-schalen|"
+           r"toalettstol\w*|\btoalett(?:er|erna)?\b"),
+    ("washbasin", r"wash ?basins?|lavabos?|lavabi|waschbecken|handwaschbecken|lavandini|pesuallas|pesualtai|handfat\w*"),
+    ("bathtub", r"bath ?tubs?|badewannen?|baignoires?|vasche da bagno|vasca|kylpyamm|badekar|badkar\w*"),
+    ("shower", r"showers?|duschen?|douches?|docce|doccia|suihku|duschar\w*"),
     ("sauna", r"saunas?|saunoja|saunaa|saunen|bastu\w*|badstue"),
     ("kitchen", r"kitchens?|kitchenettes?|keitti|k[üu]chen?|cuisines?|cucin[ae]|keuken|k[øo]kken|k[öo]k\b"),
     ("bedroom", r"bedrooms?|makuuhuon|schlafzimmer|chambres? [àa] coucher|camer[ae] da letto|slaapkamer|sovev[æe]relse|sovrum"),
-    ("bathroom", r"bathrooms?|washrooms?|kylpy- tai pesuhuon|pesuhuon|kylpyhuon|badezimmer|salles? de bains?|bagni\b|badkamer"),
+    ("bathroom", r"bathrooms?|washrooms?|kylpy- tai pesuhuon|pesuhuon|kylpyhuon|badezimmer|salles? de bains?|bagni\b|badkamer|badrum\w*"),
     ("balcony", r"balcon(?:y|ies|e|i)|parveke|balkon\w*|balcons?"),
     ("storey", r"floors? \(storeys?\)|storeys \(floors?\)|storeys\b|stories\b|number of floors|how many floors|kerrosta|kerroksia|geschosse\b|stockwerke|[eé]tages\b|piani\b|verdiepingen"),
     ("apartment", r"apartments?|residential units?|(?:wohn)?einheiten|wohnungen|appartements?|logements?|appartament[io]|unit[àa] abitativ|"
@@ -64,7 +66,7 @@ _T = [
     ("beam", r"beams?|tr[äa]ger|bjælker|poutres?|vigas?|travi\b|balken|palk|\btala|grinzi|belk"),
     ("slab", r"slabs?|decken und bodenplatten|bodenplatten|d[æe]k og plader|vloeren|losas?|dalles?|laatat"),
     ("wall", r"walls?|w[äa]nde?|v[æe]gge|murs?\b|muri\b|muros?|wanden|sein[äia]|pere[țt]i|[śs]cian"),
-    ("sanitary", r"sanitary (?:fixtures?|terminals?)|sanit[äa]r|sanitaire|sanitari|sanitarios"),
+    ("sanitary", r"sanitary (?:fixtures?|terminals?)|sanit[äa]r|sanitaire|sanitari|sanitarios|sanitetsenhet\w*"),
     ("light", r"light(?:ing)? fixtures?|lights?\b|leuchten|luminaires?|corpuri de iluminat|lampen|valaisim|apparecchi di illuminazione|lumin"),
     ("furniture", r"furniture|m[öo]bel"),
     ("parking", r"parking (?:spaces?|spots?)|parkpl[äa]tze"),
@@ -92,7 +94,7 @@ _STOREY_PLAN = re.compile(r"floor plan of|on the floor plan|im grundriss|im gesc
                           r"de la planta|plattegrond van|korruse(?:l)?|on <q>|op <q>|på <q>|kondygnacji", re.I)
 _OUTDOOR_EXCL = re.compile(r"excluding balconies|ohne balkone|hors balcons|esclusi balconi|except balconies", re.I)
 # "..., not counting separate WC rooms" must not make the target wc_room
-_NEGATION = re.compile(r"(not counting|excluding|except|without|ohne|hors|esclusi|sauf)[^?;.]*|"
+_NEGATION = re.compile(r"(not counting|excluding|except|without|ohne|hors|esclusi|sauf|\binte\b|\butom\b)[^?;.)]*|"
                        r"[^,;?]*\b(lukuun ottamatta|ausgenommen)", re.I)
 _NO_LABEL = re.compile(r"\b([A-Z]{0,2}\d+(?:\.\d+)+)\s*\(\s*<q>\s*\)")
 _NUMBERED = re.compile(r"numbered|nummerierten|num[ée]rot[ée]es|numerati", re.I)
