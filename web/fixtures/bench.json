@@ -1,735 +1,894 @@
 {
-  "from": "snapshot",
-  "generated": "2026-11-13T23:30:01.532Z",
-  "runs": {
-    "dev": {
-      "pipeline": {
-        "run_id": "20261114-012630-pipeline-dev-878d",
-        "solver": "pipeline",
-        "split": "dev",
-        "time": "2026-11-14T01:29:21",
-        "commit": "fdb0ecc",
-        "agent": "S0",
-        "note": "S0 night fdb0ecc (all branches 01:27)",
-        "n": 2215,
-        "weighted_acc": 0.7401,
-        "accuracy": 0.8395,
-        "macro_accuracy": 0.934,
-        "usd_per_1k_q": 0.055,
-        "latency_p50_s": 0.261,
-        "latency_p95_s": 2.798,
-        "evidence_rate": 0.6682,
-        "refusal_rate": 0,
-        "by_tier": {
-          "deterministic": {
-            "share": 0.7968,
-            "n": 1765,
-            "accuracy": 0.8607,
-            "coverage": 1
-          },
-          "local": {
-            "share": 0.2032,
-            "n": 450,
-            "accuracy": 0.7252,
-            "coverage": 1
-          }
-        },
-        "by_kind": null,
-        "calibration": {
-          "n": 2000,
-          "n_missing_conf": 0,
-          "accuracy": 0.8395,
-          "mean_conf": 0.8321,
-          "ece": 0.0112,
-          "brier": 0.0733,
-          "auroc": 0.9217,
-          "aurc": 0.0297,
-          "e_aurc": 0.016,
-          "hi_conf_share": 0.721,
-          "hi_conf_acc": 0.9723
-        },
-        "cost_mean": {
-          "llm_tokens_in": 716.215801,
-          "llm_tokens_out": 47.962077,
-          "api_tokens_in": 0,
-          "api_tokens_out": 0,
-          "llm_calls": 0.240181,
-          "api_calls": 0,
-          "gpu_seconds": 0.927677,
-          "wall_seconds": 0.614687,
-          "usd": 0.000055
-        },
-        "by_source": {
-          "cubicasa5k": {
-            "n": 800,
-            "correct": 496,
-            "accuracy": 0.62
-          },
-          "ifc_models": {
-            "n": 354,
-            "correct": 354,
-            "accuracy": 1
-          },
-          "opening_design": {
-            "n": 46,
-            "correct": 39,
-            "accuracy": 0.8478260869565217
-          },
-          "swiss_dwellings": {
-            "n": 800,
-            "correct": 790,
-            "accuracy": 0.9875
-          }
-        }
-      },
-      "vlm_direct": {
-        "run_id": "20261114-010917-vlm_direct-dev-1f2f",
-        "solver": "vlm_direct",
-        "split": "dev",
-        "time": "2026-11-14T01:12:12",
-        "commit": "2ba8914",
-        "agent": "R2",
-        "note": "R2 vlm_direct 8B, logprob confidence (CONF_MAP fit on train)",
-        "n": 2215,
-        "weighted_acc": 0.4484,
-        "accuracy": 0.3255,
-        "macro_accuracy": 0.1618,
-        "usd_per_1k_q": 0.084,
-        "latency_p50_s": 2.604,
-        "latency_p95_s": 4.256,
-        "evidence_rate": 0,
-        "refusal_rate": 0.0903,
-        "by_tier": {
-          "deterministic": {
-            "share": 0.0903,
-            "n": 200,
-            "accuracy": null,
-            "coverage": 0
-          },
-          "local": {
-            "share": 0.9097,
-            "n": 2015,
-            "accuracy": 0.3255,
-            "coverage": 1
-          }
-        },
-        "by_kind": null,
-        "calibration": {
-          "n": 2000,
-          "n_missing_conf": 0,
-          "accuracy": 0.3255,
-          "mean_conf": 0.3253,
-          "ece": 0.0243,
-          "brier": 0.1339,
-          "auroc": 0.8688,
-          "aurc": 0.4105,
-          "e_aurc": 0.1011,
-          "hi_conf_share": 0.1365,
-          "hi_conf_acc": 0.8901
-        },
-        "cost_mean": {
-          "llm_tokens_in": 1961.539955,
-          "llm_tokens_out": 3.01219,
-          "api_tokens_in": 0,
-          "api_tokens_out": 0,
-          "llm_calls": 0.909707,
-          "api_calls": 0,
-          "gpu_seconds": 0.081477,
-          "wall_seconds": 2.515228,
-          "usd": 0.000084
-        },
-        "by_source": {
-          "cubicasa5k": {
-            "n": 800,
-            "correct": 403,
-            "accuracy": 0.50375
-          },
-          "ifc_models": {
-            "n": 354,
-            "correct": 4,
-            "accuracy": 0.011299435028248588
-          },
-          "opening_design": {
-            "n": 46,
-            "correct": 8,
-            "accuracy": 0.17391304347826086
-          },
-          "swiss_dwellings": {
-            "n": 800,
-            "correct": 236,
-            "accuracy": 0.295
-          }
-        }
-      },
-      "prior": {
-        "run_id": "20261113-235744-prior-dev",
-        "solver": "prior",
-        "split": "dev",
-        "time": "2026-11-13T23:57:46",
-        "commit": "1953e27",
-        "agent": "F",
-        "note": "D4 prior: keyed backoff + calibrated confidence",
-        "n": 2215,
-        "weighted_acc": 0.4097,
-        "accuracy": 0.269,
-        "macro_accuracy": 0.0997,
-        "usd_per_1k_q": 0,
-        "latency_p50_s": 0,
-        "latency_p95_s": 0.001,
-        "evidence_rate": 0,
-        "refusal_rate": 0,
-        "by_tier": {
-          "deterministic": {
-            "share": 1,
-            "n": 2215,
-            "accuracy": 0.269,
-            "coverage": 1
-          }
-        },
-        "by_kind": null,
-        "calibration": null,
-        "cost_mean": {
-          "llm_tokens_in": 0,
-          "llm_tokens_out": 0,
-          "api_tokens_in": 0,
-          "api_tokens_out": 0,
-          "llm_calls": 0,
-          "api_calls": 0,
-          "gpu_seconds": 0,
-          "wall_seconds": 0.004192,
-          "usd": 0
-        },
-        "by_source": {
-          "cubicasa5k": {
-            "n": 800,
-            "correct": 433,
-            "accuracy": 0.54125
-          },
-          "ifc_models": {
-            "n": 354,
-            "correct": 6,
-            "accuracy": 0.01694915254237288
-          },
-          "opening_design": {
-            "n": 46,
-            "correct": 3,
-            "accuracy": 0.06521739130434782
-          },
-          "swiss_dwellings": {
-            "n": 800,
-            "correct": 96,
-            "accuracy": 0.12
-          }
-        }
-      }
+ "from": "snapshot",
+ "generated": "2026-11-14T01:58:23.774Z",
+ "runs": {
+  "dev": {
+   "pipeline": {
+    "run_id": "20261114-031320-pipeline-dev-bb98",
+    "solver": "pipeline",
+    "split": "dev",
+    "time": "2026-11-14T03:17:43",
+    "commit": "d764334",
+    "agent": "F",
+    "note": "F gate night+W4+R1 d764334 dev",
+    "n": 2215,
+    "weighted_acc": 0.8172,
+    "accuracy": 0.885,
+    "macro_accuracy": 0.9466,
+    "usd_per_1k_q": 0.182,
+    "latency_p50_s": 0.17,
+    "latency_p95_s": 4.005,
+    "evidence_rate": 0.7047,
+    "refusal_rate": 0,
+    "by_tier": {
+     "deterministic": {
+      "share": 0.6221,
+      "n": 1378,
+      "accuracy": 0.9783,
+      "coverage": 1
+     },
+     "local": {
+      "share": 0.3779,
+      "n": 837,
+      "accuracy": 0.7147,
+      "coverage": 1
+     }
     },
-    "hard": {
-      "pipeline": {
-        "run_id": "20261114-011716-pipeline-hard-8d7f",
-        "solver": "pipeline",
-        "split": "hard",
-        "time": "2026-11-14T01:18:15",
-        "commit": "893cf1c",
-        "agent": "S0",
-        "note": "S0 night 474e3e4 (all branches 01:12)",
-        "n": 711,
-        "weighted_acc": 0.6679,
-        "accuracy": 0.7965,
-        "macro_accuracy": 0.928,
-        "usd_per_1k_q": 0.042,
-        "latency_p50_s": 0.492,
-        "latency_p95_s": 1.446,
-        "evidence_rate": 0.6203,
-        "refusal_rate": 0,
-        "by_tier": {
-          "deterministic": {
-            "share": 0.7609,
-            "n": 541,
-            "accuracy": 0.8935,
-            "coverage": 1
-          },
-          "local": {
-            "share": 0.2391,
-            "n": 170,
-            "accuracy": 0.4575,
-            "coverage": 1
-          }
-        },
-        "by_kind": {
-          "composition": {
-            "n": 211,
-            "scored_n": 188,
-            "correct": 120,
-            "accuracy": 0.6383,
-            "coverage": 1,
-            "acc_when_answered": 0.6383,
-            "evidence_rate": 0.5782,
-            "evidence_2d_rate": 0.5782,
-            "evidence_count_match": 0.4516,
-            "evidence_count_n": 62,
-            "refusal_rate": 0,
-            "text_n": 23,
-            "text_fuzzy": 0.7826,
-            "usd_per_q": 0.000047
-          },
-          "paraphrase": {
-            "n": 250,
-            "scored_n": 250,
-            "correct": 209,
-            "accuracy": 0.836,
-            "coverage": 1,
-            "acc_when_answered": 0.836,
-            "evidence_rate": 0.66,
-            "evidence_2d_rate": 0.64,
-            "evidence_count_match": 1,
-            "evidence_count_n": 93,
-            "refusal_rate": 0,
-            "usd_per_q": 0.000058
-          },
-          "translation": {
-            "n": 250,
-            "scored_n": 250,
-            "correct": 219,
-            "accuracy": 0.876,
-            "coverage": 1,
-            "acc_when_answered": 0.876,
-            "evidence_rate": 0.616,
-            "evidence_2d_rate": 0.612,
-            "evidence_count_match": 1,
-            "evidence_count_n": 58,
-            "refusal_rate": 0,
-            "usd_per_q": 0.000022
-          }
-        },
-        "calibration": {
-          "n": 688,
-          "n_missing_conf": 0,
-          "accuracy": 0.7965,
-          "mean_conf": 0.7749,
-          "ece": 0.0302,
-          "brier": 0.068,
-          "auroc": 0.9559,
-          "aurc": 0.0319,
-          "e_aurc": 0.0095,
-          "hi_conf_share": 0.6686,
-          "hi_conf_acc": 0.9826
-        },
-        "cost_mean": {
-          "llm_tokens_in": 327.130802,
-          "llm_tokens_out": 41.388186,
-          "api_tokens_in": 0,
-          "api_tokens_out": 0,
-          "llm_calls": 0.26301,
-          "api_calls": 0,
-          "gpu_seconds": 1.152178,
-          "wall_seconds": 0.654993,
-          "usd": 0.000042
-        },
-        "by_source": {
-          "cubicasa5k": {
-            "n": 283,
-            "correct": 145,
-            "accuracy": 0.5123674911660777
-          },
-          "ifc_models": {
-            "n": 135,
-            "correct": 135,
-            "accuracy": 1
-          },
-          "swiss_dwellings": {
-            "n": 270,
-            "correct": 268,
-            "accuracy": 0.9925925925925926
-          }
-        }
-      },
-      "vlm_direct": {
-        "run_id": "20261114-011843-vlm_direct-hard-48a9",
-        "solver": "vlm_direct",
-        "split": "hard",
-        "time": "2026-11-14T01:21:37",
-        "commit": "6884dee",
-        "agent": "R2",
-        "note": "R2 vlm_direct 8B baseline, logprob confidence",
-        "n": 711,
-        "weighted_acc": 0.336,
-        "accuracy": 0.2529,
-        "macro_accuracy": 0.1253,
-        "usd_per_1k_q": 0.158,
-        "latency_p50_s": 7.312,
-        "latency_p95_s": 13.912,
-        "evidence_rate": 0,
-        "refusal_rate": 0,
-        "by_tier": {
-          "local": {
-            "share": 1,
-            "n": 711,
-            "accuracy": 0.2529,
-            "coverage": 1
-          }
-        },
-        "by_kind": {
-          "composition": {
-            "n": 211,
-            "scored_n": 188,
-            "correct": 18,
-            "accuracy": 0.0957,
-            "coverage": 1,
-            "acc_when_answered": 0.0957,
-            "evidence_rate": 0,
-            "evidence_2d_rate": 0,
-            "refusal_rate": 0,
-            "text_n": 23,
-            "text_fuzzy": 0.4783,
-            "usd_per_q": 0.000144
-          },
-          "paraphrase": {
-            "n": 250,
-            "scored_n": 250,
-            "correct": 68,
-            "accuracy": 0.272,
-            "coverage": 1,
-            "acc_when_answered": 0.272,
-            "evidence_rate": 0,
-            "evidence_2d_rate": 0,
-            "refusal_rate": 0,
-            "usd_per_q": 0.000148
-          },
-          "translation": {
-            "n": 250,
-            "scored_n": 250,
-            "correct": 88,
-            "accuracy": 0.352,
-            "coverage": 1,
-            "acc_when_answered": 0.352,
-            "evidence_rate": 0,
-            "evidence_2d_rate": 0,
-            "refusal_rate": 0,
-            "usd_per_q": 0.000181
-          }
-        },
-        "calibration": {
-          "n": 688,
-          "n_missing_conf": 0,
-          "accuracy": 0.2529,
-          "mean_conf": 0.2872,
-          "ece": 0.0539,
-          "brier": 0.1192,
-          "auroc": 0.8678,
-          "aurc": 0.4835,
-          "e_aurc": 0.0835,
-          "hi_conf_share": 0.1061,
-          "hi_conf_acc": 0.8493
-        },
-        "cost_mean": {
-          "llm_tokens_in": 2054.804501,
-          "llm_tokens_out": 3.2391,
-          "api_tokens_in": 0,
-          "api_tokens_out": 0,
-          "llm_calls": 1,
-          "api_calls": 0,
-          "gpu_seconds": 0.085432,
-          "wall_seconds": 7.649637,
-          "usd": 0.000158
-        },
-        "by_source": {
-          "cubicasa5k": {
-            "n": 283,
-            "correct": 108,
-            "accuracy": 0.38162544169611307
-          },
-          "ifc_models": {
-            "n": 135,
-            "correct": 1,
-            "accuracy": 0.007407407407407408
-          },
-          "swiss_dwellings": {
-            "n": 270,
-            "correct": 65,
-            "accuracy": 0.24074074074074073
-          }
-        }
-      },
-      "prior": {
-        "run_id": "20261113-235746-prior-hard",
-        "solver": "prior",
-        "split": "hard",
-        "time": "2026-11-13T23:57:48",
-        "commit": "1953e27",
-        "agent": "F",
-        "note": "D4 prior: keyed backoff + calibrated confidence",
-        "n": 711,
-        "weighted_acc": 0.3049,
-        "accuracy": 0.2093,
-        "macro_accuracy": 0.0936,
-        "usd_per_1k_q": 0,
-        "latency_p50_s": 0.001,
-        "latency_p95_s": 0.001,
-        "evidence_rate": 0,
-        "refusal_rate": 0,
-        "by_tier": {
-          "deterministic": {
-            "share": 1,
-            "n": 711,
-            "accuracy": 0.2093,
-            "coverage": 1
-          }
-        },
-        "by_kind": {
-          "composition": {
-            "n": 211,
-            "scored_n": 188,
-            "correct": 7,
-            "accuracy": 0.0372,
-            "coverage": 1,
-            "acc_when_answered": 0.0372,
-            "evidence_rate": 0,
-            "refusal_rate": 0,
-            "text_n": 23,
-            "text_fuzzy": 0,
-            "usd_per_q": 0
-          },
-          "paraphrase": {
-            "n": 250,
-            "scored_n": 250,
-            "correct": 59,
-            "accuracy": 0.236,
-            "coverage": 1,
-            "acc_when_answered": 0.236,
-            "evidence_rate": 0,
-            "refusal_rate": 0,
-            "usd_per_q": 0
-          },
-          "translation": {
-            "n": 250,
-            "scored_n": 250,
-            "correct": 78,
-            "accuracy": 0.312,
-            "coverage": 1,
-            "acc_when_answered": 0.312,
-            "evidence_rate": 0,
-            "refusal_rate": 0,
-            "usd_per_q": 0.000001
-          }
-        },
-        "calibration": null,
-        "cost_mean": {
-          "llm_tokens_in": 0,
-          "llm_tokens_out": 0,
-          "api_tokens_in": 0,
-          "api_tokens_out": 0,
-          "llm_calls": 0,
-          "api_calls": 0,
-          "gpu_seconds": 0,
-          "wall_seconds": 0.023261,
-          "usd": 0
-        },
-        "by_source": {
-          "cubicasa5k": {
-            "n": 283,
-            "correct": 115,
-            "accuracy": 0.40636042402826855
-          },
-          "ifc_models": {
-            "n": 135,
-            "correct": 6,
-            "accuracy": 0.044444444444444446
-          },
-          "swiss_dwellings": {
-            "n": 270,
-            "correct": 23,
-            "accuracy": 0.08518518518518518
-          }
-        }
-      }
+    "by_kind": null,
+    "calibration": {
+     "n": 2000,
+     "n_missing_conf": 0,
+     "accuracy": 0.885,
+     "mean_conf": 0.8708,
+     "ece": 0.0195,
+     "brier": 0.055,
+     "auroc": 0.9246,
+     "aurc": 0.0192,
+     "e_aurc": 0.0123,
+     "hi_conf_share": 0.7795,
+     "hi_conf_acc": 0.9801
     },
-    "hard2": {
-      "pipeline": {
-        "run_id": "20261114-011816-pipeline-hard2-356a",
-        "solver": "pipeline",
-        "split": "hard2",
-        "time": "2026-11-14T01:23:41",
-        "commit": "893cf1c",
-        "agent": "S0",
-        "note": "S0 night 474e3e4 (all branches 01:12)",
-        "n": 256,
-        "weighted_acc": 0.6837,
-        "accuracy": 0.8624,
-        "macro_accuracy": 0.9225,
-        "usd_per_1k_q": 0.326,
-        "latency_p50_s": 6.746,
-        "latency_p95_s": 46.787,
-        "evidence_rate": 0.6523,
-        "refusal_rate": 0,
-        "by_tier": {
-          "deterministic": {
-            "share": 0.3008,
-            "n": 77,
-            "accuracy": 0.7551,
-            "coverage": 1
-          },
-          "local": {
-            "share": 0.6992,
-            "n": 179,
-            "accuracy": 0.9,
-            "coverage": 1
-          }
-        },
-        "by_kind": {
-          "reasoning": {
-            "n": 256,
-            "scored_n": 189,
-            "correct": 163,
-            "accuracy": 0.8624,
-            "coverage": 1,
-            "acc_when_answered": 0.8624,
-            "evidence_rate": 0.6523,
-            "evidence_2d_rate": 0.6484,
-            "evidence_count_match": 0.05,
-            "evidence_count_n": 20,
-            "refusal_rate": 0,
-            "text_n": 67,
-            "text_fuzzy": 0.7761,
-            "usd_per_q": 0.000326
-          }
-        },
-        "calibration": {
-          "n": 189,
-          "n_missing_conf": 0,
-          "accuracy": 0.8624,
-          "mean_conf": 0.7336,
-          "ece": 0.1289,
-          "brier": 0.1261,
-          "auroc": 0.7948,
-          "aurc": 0.0477,
-          "e_aurc": 0.0374,
-          "hi_conf_share": 0.6561,
-          "hi_conf_acc": 0.9758
-        },
-        "cost_mean": {
-          "llm_tokens_in": 2146.261719,
-          "llm_tokens_out": 227.101562,
-          "api_tokens_in": 0,
-          "api_tokens_out": 0,
-          "llm_calls": 2.339844,
-          "api_calls": 0,
-          "gpu_seconds": 12.872778,
-          "wall_seconds": 9.841087,
-          "usd": 0.000326
-        },
-        "by_source": {
-          "cubicasa5k": {
-            "n": 50,
-            "correct": 29,
-            "accuracy": 0.58
-          },
-          "ifc_models": {
-            "n": 34,
-            "correct": 34,
-            "accuracy": 1
-          },
-          "swiss_dwellings": {
-            "n": 105,
-            "correct": 100,
-            "accuracy": 0.9523809523809523
-          }
-        }
-      }
+    "cost_mean": {
+     "llm_tokens_in": 1417.899323,
+     "llm_tokens_out": 225.973815,
+     "api_tokens_in": 0,
+     "api_tokens_out": 0,
+     "llm_calls": 0.880361,
+     "api_calls": 0,
+     "gpu_seconds": 6.815393,
+     "wall_seconds": 0.853353,
+     "usd": 0.000182,
+     "gpu_seconds_billed": 0.282687
     },
-    "hard2q": {
-      "pipeline": {
-        "run_id": "20261114-011331-pipeline-hard2q-6741",
-        "solver": "pipeline",
-        "split": "hard2q",
-        "time": "2026-11-14T01:14:48",
-        "commit": "3472dd1",
-        "agent": "F",
-        "note": "F: pipeline on hard2q (clean held-out), night 474e3e4 + night-F",
-        "n": 256,
-        "weighted_acc": 0.5443,
-        "accuracy": 0.6931,
-        "macro_accuracy": 0.8069,
-        "usd_per_1k_q": 0.194,
-        "latency_p50_s": 1.711,
-        "latency_p95_s": 13.88,
-        "evidence_rate": 0.6172,
-        "refusal_rate": 0,
-        "by_tier": {
-          "deterministic": {
-            "share": 0.4297,
-            "n": 110,
-            "accuracy": 0.5513,
-            "coverage": 1
-          },
-          "local": {
-            "share": 0.5703,
-            "n": 146,
-            "accuracy": 0.7928,
-            "coverage": 1
-          }
-        },
-        "by_kind": {
-          "reasoning-reworded-q": {
-            "n": 256,
-            "scored_n": 189,
-            "correct": 131,
-            "accuracy": 0.6931,
-            "coverage": 1,
-            "acc_when_answered": 0.6931,
-            "evidence_rate": 0.6172,
-            "evidence_2d_rate": 0.6172,
-            "evidence_count_match": 0.3333,
-            "evidence_count_n": 12,
-            "refusal_rate": 0,
-            "text_n": 67,
-            "text_fuzzy": 0.4925,
-            "text_judge": 0.6418,
-            "text_judged_n": 67,
-            "usd_per_q": 0.000194
-          }
-        },
-        "calibration": {
-          "n": 189,
-          "n_missing_conf": 0,
-          "accuracy": 0.6931,
-          "mean_conf": 0.735,
-          "ece": 0.2286,
-          "brier": 0.2428,
-          "auroc": 0.5027,
-          "aurc": 0.3961,
-          "e_aurc": 0.3425,
-          "hi_conf_share": 0.6032,
-          "hi_conf_acc": 0.7719
-        },
-        "cost_mean": {
-          "llm_tokens_in": 1652.023438,
-          "llm_tokens_out": 156.289062,
-          "api_tokens_in": 0,
-          "api_tokens_out": 0,
-          "llm_calls": 1.816406,
-          "api_calls": 0,
-          "gpu_seconds": 5.346985,
-          "wall_seconds": 4.322941,
-          "usd": 0.000194
-        },
-        "by_source": {
-          "cubicasa5k": {
-            "n": 50,
-            "correct": 19,
-            "accuracy": 0.38
-          },
-          "ifc_models": {
-            "n": 34,
-            "correct": 31,
-            "accuracy": 0.9117647058823529
-          },
-          "swiss_dwellings": {
-            "n": 105,
-            "correct": 81,
-            "accuracy": 0.7714285714285715
-          }
-        }
-      }
+    "by_source": {
+     "cubicasa5k": {
+      "n": 800,
+      "correct": 587,
+      "accuracy": 0.73375
+     },
+     "ifc_models": {
+      "n": 354,
+      "correct": 354,
+      "accuracy": 1
+     },
+     "opening_design": {
+      "n": 46,
+      "correct": 39,
+      "accuracy": 0.8478260869565217
+     },
+     "swiss_dwellings": {
+      "n": 800,
+      "correct": 790,
+      "accuracy": 0.9875
+     }
     }
+   },
+   "vlm_direct": {
+    "run_id": "20261114-010917-vlm_direct-dev-1f2f",
+    "solver": "vlm_direct",
+    "split": "dev",
+    "time": "2026-11-14T01:12:12",
+    "commit": "2ba8914",
+    "agent": "R2",
+    "note": "R2 vlm_direct 8B, logprob confidence (CONF_MAP fit on train)",
+    "n": 2215,
+    "weighted_acc": 0.4484,
+    "accuracy": 0.3255,
+    "macro_accuracy": 0.1618,
+    "usd_per_1k_q": 0.084,
+    "latency_p50_s": 2.604,
+    "latency_p95_s": 4.256,
+    "evidence_rate": 0,
+    "refusal_rate": 0.0903,
+    "by_tier": {
+     "deterministic": {
+      "share": 0.0903,
+      "n": 200,
+      "accuracy": null,
+      "coverage": 0
+     },
+     "local": {
+      "share": 0.9097,
+      "n": 2015,
+      "accuracy": 0.3255,
+      "coverage": 1
+     }
+    },
+    "by_kind": null,
+    "calibration": {
+     "n": 2000,
+     "n_missing_conf": 0,
+     "accuracy": 0.3255,
+     "mean_conf": 0.3253,
+     "ece": 0.0243,
+     "brier": 0.1339,
+     "auroc": 0.8688,
+     "aurc": 0.4105,
+     "e_aurc": 0.1011,
+     "hi_conf_share": 0.1365,
+     "hi_conf_acc": 0.8901
+    },
+    "cost_mean": {
+     "llm_tokens_in": 1961.539955,
+     "llm_tokens_out": 3.01219,
+     "api_tokens_in": 0,
+     "api_tokens_out": 0,
+     "llm_calls": 0.909707,
+     "api_calls": 0,
+     "gpu_seconds": 0.081477,
+     "wall_seconds": 2.515228,
+     "usd": 8.4e-05
+    },
+    "by_source": {
+     "cubicasa5k": {
+      "n": 800,
+      "correct": 403,
+      "accuracy": 0.50375
+     },
+     "ifc_models": {
+      "n": 354,
+      "correct": 4,
+      "accuracy": 0.011299435028248588
+     },
+     "opening_design": {
+      "n": 46,
+      "correct": 8,
+      "accuracy": 0.17391304347826086
+     },
+     "swiss_dwellings": {
+      "n": 800,
+      "correct": 236,
+      "accuracy": 0.295
+     }
+    }
+   },
+   "prior": {
+    "run_id": "20261113-235744-prior-dev",
+    "solver": "prior",
+    "split": "dev",
+    "time": "2026-11-13T23:57:46",
+    "commit": "1953e27",
+    "agent": "F",
+    "note": "D4 prior: keyed backoff + calibrated confidence",
+    "n": 2215,
+    "weighted_acc": 0.4097,
+    "accuracy": 0.269,
+    "macro_accuracy": 0.0997,
+    "usd_per_1k_q": 0,
+    "latency_p50_s": 0,
+    "latency_p95_s": 0.001,
+    "evidence_rate": 0,
+    "refusal_rate": 0,
+    "by_tier": {
+     "deterministic": {
+      "share": 1,
+      "n": 2215,
+      "accuracy": 0.269,
+      "coverage": 1
+     }
+    },
+    "by_kind": null,
+    "calibration": null,
+    "cost_mean": {
+     "llm_tokens_in": 0,
+     "llm_tokens_out": 0,
+     "api_tokens_in": 0,
+     "api_tokens_out": 0,
+     "llm_calls": 0,
+     "api_calls": 0,
+     "gpu_seconds": 0,
+     "wall_seconds": 0.004192,
+     "usd": 0
+    },
+    "by_source": {
+     "cubicasa5k": {
+      "n": 800,
+      "correct": 433,
+      "accuracy": 0.54125
+     },
+     "ifc_models": {
+      "n": 354,
+      "correct": 6,
+      "accuracy": 0.01694915254237288
+     },
+     "opening_design": {
+      "n": 46,
+      "correct": 3,
+      "accuracy": 0.06521739130434782
+     },
+     "swiss_dwellings": {
+      "n": 800,
+      "correct": 96,
+      "accuracy": 0.12
+     }
+    }
+   }
+  },
+  "hard": {
+   "pipeline": {
+    "run_id": "20261114-031744-pipeline-hard-bb4a",
+    "solver": "pipeline",
+    "split": "hard",
+    "time": "2026-11-14T03:18:35",
+    "commit": "d764334",
+    "agent": "F",
+    "note": "F gate night+W4+R1 d764334 hard",
+    "n": 711,
+    "weighted_acc": 0.7469,
+    "accuracy": 0.8445,
+    "macro_accuracy": 0.9446,
+    "usd_per_1k_q": 0.206,
+    "latency_p50_s": 0.429,
+    "latency_p95_s": 1.412,
+    "evidence_rate": 0.6835,
+    "refusal_rate": 0,
+    "by_tier": {
+     "deterministic": {
+      "share": 0.4782,
+      "n": 340,
+      "accuracy": 0.988,
+      "coverage": 1
+     },
+     "local": {
+      "share": 0.5218,
+      "n": 371,
+      "accuracy": 0.709,
+      "coverage": 1
+     }
+    },
+    "by_kind": {
+     "composition": {
+      "n": 211,
+      "scored_n": 188,
+      "correct": 136,
+      "accuracy": 0.7234,
+      "coverage": 1,
+      "acc_when_answered": 0.7234,
+      "evidence_rate": 0.6256,
+      "evidence_2d_rate": 0.6256,
+      "evidence_count_match": 0.4493,
+      "evidence_count_n": 69,
+      "refusal_rate": 0,
+      "text_n": 23,
+      "text_fuzzy": 0.8261,
+      "usd_per_q": 0.000188
+     },
+     "paraphrase": {
+      "n": 250,
+      "scored_n": 250,
+      "correct": 220,
+      "accuracy": 0.88,
+      "coverage": 1,
+      "acc_when_answered": 0.88,
+      "evidence_rate": 0.724,
+      "evidence_2d_rate": 0.704,
+      "evidence_count_match": 0.945,
+      "evidence_count_n": 109,
+      "refusal_rate": 0,
+      "usd_per_q": 0.000176
+     },
+     "translation": {
+      "n": 250,
+      "scored_n": 250,
+      "correct": 225,
+      "accuracy": 0.9,
+      "coverage": 1,
+      "acc_when_answered": 0.9,
+      "evidence_rate": 0.692,
+      "evidence_2d_rate": 0.688,
+      "evidence_count_match": 0.9091,
+      "evidence_count_n": 77,
+      "refusal_rate": 0,
+      "usd_per_q": 0.00025
+     }
+    },
+    "calibration": {
+     "n": 688,
+     "n_missing_conf": 0,
+     "accuracy": 0.8445,
+     "mean_conf": 0.771,
+     "ece": 0.0753,
+     "brier": 0.0785,
+     "auroc": 0.9338,
+     "aurc": 0.0242,
+     "e_aurc": 0.0113,
+     "hi_conf_share": 0.6206,
+     "hi_conf_acc": 0.993
+    },
+    "cost_mean": {
+     "llm_tokens_in": 1352.139241,
+     "llm_tokens_out": 275.309423,
+     "api_tokens_in": 0,
+     "api_tokens_out": 0,
+     "llm_calls": 1.296765,
+     "api_calls": 0,
+     "gpu_seconds": 8.283208,
+     "wall_seconds": 0.571747,
+     "usd": 0.000206,
+     "gpu_seconds_billed": 0.329391
+    },
+    "by_source": {
+     "cubicasa5k": {
+      "n": 283,
+      "correct": 178,
+      "accuracy": 0.6289752650176679
+     },
+     "ifc_models": {
+      "n": 135,
+      "correct": 135,
+      "accuracy": 1
+     },
+     "swiss_dwellings": {
+      "n": 270,
+      "correct": 268,
+      "accuracy": 0.9925925925925926
+     }
+    }
+   },
+   "vlm_direct": {
+    "run_id": "20261114-011843-vlm_direct-hard-48a9",
+    "solver": "vlm_direct",
+    "split": "hard",
+    "time": "2026-11-14T01:21:37",
+    "commit": "6884dee",
+    "agent": "R2",
+    "note": "R2 vlm_direct 8B baseline, logprob confidence",
+    "n": 711,
+    "weighted_acc": 0.336,
+    "accuracy": 0.2529,
+    "macro_accuracy": 0.1253,
+    "usd_per_1k_q": 0.158,
+    "latency_p50_s": 7.312,
+    "latency_p95_s": 13.912,
+    "evidence_rate": 0,
+    "refusal_rate": 0,
+    "by_tier": {
+     "local": {
+      "share": 1,
+      "n": 711,
+      "accuracy": 0.2529,
+      "coverage": 1
+     }
+    },
+    "by_kind": {
+     "composition": {
+      "n": 211,
+      "scored_n": 188,
+      "correct": 18,
+      "accuracy": 0.0957,
+      "coverage": 1,
+      "acc_when_answered": 0.0957,
+      "evidence_rate": 0,
+      "evidence_2d_rate": 0,
+      "refusal_rate": 0,
+      "text_n": 23,
+      "text_fuzzy": 0.4783,
+      "usd_per_q": 0.000144
+     },
+     "paraphrase": {
+      "n": 250,
+      "scored_n": 250,
+      "correct": 68,
+      "accuracy": 0.272,
+      "coverage": 1,
+      "acc_when_answered": 0.272,
+      "evidence_rate": 0,
+      "evidence_2d_rate": 0,
+      "refusal_rate": 0,
+      "usd_per_q": 0.000148
+     },
+     "translation": {
+      "n": 250,
+      "scored_n": 250,
+      "correct": 88,
+      "accuracy": 0.352,
+      "coverage": 1,
+      "acc_when_answered": 0.352,
+      "evidence_rate": 0,
+      "evidence_2d_rate": 0,
+      "refusal_rate": 0,
+      "usd_per_q": 0.000181
+     }
+    },
+    "calibration": {
+     "n": 688,
+     "n_missing_conf": 0,
+     "accuracy": 0.2529,
+     "mean_conf": 0.2872,
+     "ece": 0.0539,
+     "brier": 0.1192,
+     "auroc": 0.8678,
+     "aurc": 0.4835,
+     "e_aurc": 0.0835,
+     "hi_conf_share": 0.1061,
+     "hi_conf_acc": 0.8493
+    },
+    "cost_mean": {
+     "llm_tokens_in": 2054.804501,
+     "llm_tokens_out": 3.2391,
+     "api_tokens_in": 0,
+     "api_tokens_out": 0,
+     "llm_calls": 1,
+     "api_calls": 0,
+     "gpu_seconds": 0.085432,
+     "wall_seconds": 7.649637,
+     "usd": 0.000158
+    },
+    "by_source": {
+     "cubicasa5k": {
+      "n": 283,
+      "correct": 108,
+      "accuracy": 0.38162544169611307
+     },
+     "ifc_models": {
+      "n": 135,
+      "correct": 1,
+      "accuracy": 0.007407407407407408
+     },
+     "swiss_dwellings": {
+      "n": 270,
+      "correct": 65,
+      "accuracy": 0.24074074074074073
+     }
+    }
+   },
+   "prior": {
+    "run_id": "20261113-235746-prior-hard",
+    "solver": "prior",
+    "split": "hard",
+    "time": "2026-11-13T23:57:48",
+    "commit": "1953e27",
+    "agent": "F",
+    "note": "D4 prior: keyed backoff + calibrated confidence",
+    "n": 711,
+    "weighted_acc": 0.3049,
+    "accuracy": 0.2093,
+    "macro_accuracy": 0.0936,
+    "usd_per_1k_q": 0,
+    "latency_p50_s": 0.001,
+    "latency_p95_s": 0.001,
+    "evidence_rate": 0,
+    "refusal_rate": 0,
+    "by_tier": {
+     "deterministic": {
+      "share": 1,
+      "n": 711,
+      "accuracy": 0.2093,
+      "coverage": 1
+     }
+    },
+    "by_kind": {
+     "composition": {
+      "n": 211,
+      "scored_n": 188,
+      "correct": 7,
+      "accuracy": 0.0372,
+      "coverage": 1,
+      "acc_when_answered": 0.0372,
+      "evidence_rate": 0,
+      "refusal_rate": 0,
+      "text_n": 23,
+      "text_fuzzy": 0,
+      "usd_per_q": 0
+     },
+     "paraphrase": {
+      "n": 250,
+      "scored_n": 250,
+      "correct": 59,
+      "accuracy": 0.236,
+      "coverage": 1,
+      "acc_when_answered": 0.236,
+      "evidence_rate": 0,
+      "refusal_rate": 0,
+      "usd_per_q": 0
+     },
+     "translation": {
+      "n": 250,
+      "scored_n": 250,
+      "correct": 78,
+      "accuracy": 0.312,
+      "coverage": 1,
+      "acc_when_answered": 0.312,
+      "evidence_rate": 0,
+      "refusal_rate": 0,
+      "usd_per_q": 1e-06
+     }
+    },
+    "calibration": null,
+    "cost_mean": {
+     "llm_tokens_in": 0,
+     "llm_tokens_out": 0,
+     "api_tokens_in": 0,
+     "api_tokens_out": 0,
+     "llm_calls": 0,
+     "api_calls": 0,
+     "gpu_seconds": 0,
+     "wall_seconds": 0.023261,
+     "usd": 0
+    },
+    "by_source": {
+     "cubicasa5k": {
+      "n": 283,
+      "correct": 115,
+      "accuracy": 0.40636042402826855
+     },
+     "ifc_models": {
+      "n": 135,
+      "correct": 6,
+      "accuracy": 0.044444444444444446
+     },
+     "swiss_dwellings": {
+      "n": 270,
+      "correct": 23,
+      "accuracy": 0.08518518518518518
+     }
+    }
+   }
+  },
+  "test": {
+   "pipeline": {
+    "run_id": "20261114-032105-pipeline-test-9709",
+    "solver": "pipeline",
+    "split": "test",
+    "time": "2026-11-14T03:52:19",
+    "commit": "95f2277",
+    "agent": "S0",
+    "note": "S0 sealed test 1 @ 95f2277: test-cc5k0",
+    "n": 2199,
+    "weighted_acc": 0.7977,
+    "accuracy": 0.874,
+    "macro_accuracy": 0.9483,
+    "usd_per_1k_q": 0.284,
+    "latency_p50_s": 0.433,
+    "latency_p95_s": 35.168,
+    "evidence_rate": 0.6953,
+    "refusal_rate": 0,
+    "by_tier": {
+     "deterministic": {
+      "share": 0.643,
+      "n": 1414,
+      "accuracy": 0.9685,
+      "coverage": 1
+     },
+     "local": {
+      "share": 0.357,
+      "n": 785,
+      "accuracy": 0.6852,
+      "coverage": 1
+     }
+    },
+    "by_kind": null,
+    "calibration": {
+     "n": 2000,
+     "n_missing_conf": 0,
+     "accuracy": 0.874,
+     "mean_conf": 0.8737,
+     "ece": 0.017,
+     "brier": 0.0622,
+     "auroc": 0.9215,
+     "aurc": 0.0211,
+     "e_aurc": 0.0127,
+     "hi_conf_share": 0.777,
+     "hi_conf_acc": 0.9788
+    },
+    "cost_mean": {
+     "llm_tokens_in": 1191.240109,
+     "llm_tokens_out": 267.960437,
+     "api_tokens_in": 0,
+     "api_tokens_out": 0,
+     "llm_calls": 0.902683,
+     "api_calls": 0,
+     "gpu_seconds": 4.775407,
+     "wall_seconds": 6.777767,
+     "usd": 0.000284,
+     "gpu_seconds_billed": 0.315607
+    },
+    "by_source": {
+     "cubicasa5k": {
+      "n": 803,
+      "correct": 566,
+      "accuracy": 0.7048567870485679
+     },
+     "ifc_models": {
+      "n": 397,
+      "correct": 390,
+      "accuracy": 0.982367758186398
+     },
+     "swiss_dwellings": {
+      "n": 800,
+      "correct": 792,
+      "accuracy": 0.99
+     }
+    }
+   },
+   "no_lora": {
+    "run_id": "20261114-035220-pipeline-test-e96f",
+    "solver": "pipeline",
+    "split": "test",
+    "time": "2026-11-14T03:54:48",
+    "commit": "95f2277",
+    "agent": "S0",
+    "note": "S0 sealed test 1 @ 95f2277: test-lora0",
+    "n": 2199,
+    "weighted_acc": 0.7377,
+    "accuracy": 0.8385,
+    "macro_accuracy": 0.9356,
+    "usd_per_1k_q": 0.191,
+    "latency_p50_s": 0.14,
+    "latency_p95_s": 2.62,
+    "evidence_rate": 0.7181,
+    "refusal_rate": 0,
+    "by_tier": {
+     "deterministic": {
+      "share": 0.7822,
+      "n": 1720,
+      "accuracy": 0.889,
+      "coverage": 1
+     },
+     "local": {
+      "share": 0.2178,
+      "n": 479,
+      "accuracy": 0.6094,
+      "coverage": 1
+     }
+    },
+    "by_kind": null,
+    "calibration": {
+     "n": 2000,
+     "n_missing_conf": 0,
+     "accuracy": 0.8385,
+     "mean_conf": 0.8469,
+     "ece": 0.0161,
+     "brier": 0.0702,
+     "auroc": 0.9234,
+     "aurc": 0.0292,
+     "e_aurc": 0.0153,
+     "hi_conf_share": 0.735,
+     "hi_conf_acc": 0.9667
+    },
+    "cost_mean": {
+     "llm_tokens_in": 970.033652,
+     "llm_tokens_out": 267.552524,
+     "api_tokens_in": 0,
+     "api_tokens_out": 0,
+     "llm_calls": 0.631196,
+     "api_calls": 0,
+     "gpu_seconds": 4.766152,
+     "wall_seconds": 0.537851,
+     "usd": 0.000191,
+     "gpu_seconds_billed": 0.306353
+    },
+    "by_source": {
+     "cubicasa5k": {
+      "n": 803,
+      "correct": 495,
+      "accuracy": 0.6164383561643836
+     },
+     "ifc_models": {
+      "n": 397,
+      "correct": 390,
+      "accuracy": 0.982367758186398
+     },
+     "swiss_dwellings": {
+      "n": 800,
+      "correct": 792,
+      "accuracy": 0.99
+     }
+    }
+   }
+  },
+  "hard2": {
+   "pipeline": {
+    "run_id": "20261114-031836-pipeline-hard2-1156",
+    "solver": "pipeline",
+    "split": "hard2",
+    "time": "2026-11-14T03:19:14",
+    "commit": "d764334",
+    "agent": "F",
+    "note": "F gate night+W4+R1 d764334 hard2",
+    "n": 256,
+    "weighted_acc": 0.8329,
+    "accuracy": 0.9206,
+    "macro_accuracy": 0.9617,
+    "usd_per_1k_q": 0.484,
+    "latency_p50_s": 0.553,
+    "latency_p95_s": 3.23,
+    "evidence_rate": 0.7852,
+    "refusal_rate": 0,
+    "by_tier": {
+     "deterministic": {
+      "share": 0.4922,
+      "n": 126,
+      "accuracy": 0.9908,
+      "coverage": 1
+     },
+     "local": {
+      "share": 0.5078,
+      "n": 130,
+      "accuracy": 0.825,
+      "coverage": 1
+     }
+    },
+    "by_kind": {
+     "reasoning": {
+      "n": 256,
+      "scored_n": 189,
+      "correct": 174,
+      "accuracy": 0.9206,
+      "coverage": 1,
+      "acc_when_answered": 0.9206,
+      "evidence_rate": 0.7852,
+      "evidence_2d_rate": 0.7852,
+      "evidence_count_match": 0.3488,
+      "evidence_count_n": 43,
+      "refusal_rate": 0,
+      "text_n": 67,
+      "text_fuzzy": 0.9254,
+      "usd_per_q": 0.000484
+     }
+    },
+    "calibration": {
+     "n": 189,
+     "n_missing_conf": 0,
+     "accuracy": 0.9206,
+     "mean_conf": 0.7877,
+     "ece": 0.133,
+     "brier": 0.0902,
+     "auroc": 0.8307,
+     "aurc": 0.0182,
+     "e_aurc": 0.0147,
+     "hi_conf_share": 0.5026,
+     "hi_conf_acc": 1
+    },
+    "cost_mean": {
+     "llm_tokens_in": 2227.6875,
+     "llm_tokens_out": 689.175781,
+     "api_tokens_in": 0,
+     "api_tokens_out": 0,
+     "llm_calls": 2.089844,
+     "api_calls": 0,
+     "gpu_seconds": 19.755597,
+     "wall_seconds": 1.190382,
+     "usd": 0.000484,
+     "gpu_seconds_billed": 0.778281
+    },
+    "by_source": {
+     "cubicasa5k": {
+      "n": 50,
+      "correct": 38,
+      "accuracy": 0.76
+     },
+     "ifc_models": {
+      "n": 34,
+      "correct": 34,
+      "accuracy": 1
+     },
+     "swiss_dwellings": {
+      "n": 105,
+      "correct": 102,
+      "accuracy": 0.9714285714285714
+     }
+    }
+   }
+  },
+  "hard2q": {
+   "pipeline": {
+    "run_id": "20261114-031242-pipeline-hard2q-e2c4",
+    "solver": "pipeline",
+    "split": "hard2q",
+    "time": "2026-11-14T03:13:14",
+    "commit": "d764334",
+    "agent": "F",
+    "note": "F gate night+W4+R1 d764334 hard2q",
+    "n": 256,
+    "weighted_acc": 0.5895,
+    "accuracy": 0.7989,
+    "macro_accuracy": 0.9025,
+    "usd_per_1k_q": 0.439,
+    "latency_p50_s": 0.223,
+    "latency_p95_s": 4.23,
+    "evidence_rate": 0.7461,
+    "refusal_rate": 0,
+    "by_tier": {
+     "deterministic": {
+      "share": 0.4258,
+      "n": 109,
+      "accuracy": 1,
+      "coverage": 1
+     },
+     "local": {
+      "share": 0.5742,
+      "n": 147,
+      "accuracy": 0.5824,
+      "coverage": 1
+     }
+    },
+    "by_kind": {
+     "reasoning-reworded-q": {
+      "n": 256,
+      "scored_n": 189,
+      "correct": 151,
+      "accuracy": 0.7989,
+      "coverage": 1,
+      "acc_when_answered": 0.7989,
+      "evidence_rate": 0.7461,
+      "evidence_2d_rate": 0.7461,
+      "evidence_count_match": 0.4054,
+      "evidence_count_n": 37,
+      "refusal_rate": 0,
+      "text_n": 67,
+      "text_fuzzy": 0.5821,
+      "text_judge": 0.6866,
+      "text_judged_n": 67,
+      "usd_per_q": 0.000439
+     }
+    },
+    "calibration": {
+     "n": 189,
+     "n_missing_conf": 0,
+     "accuracy": 0.7989,
+     "mean_conf": 0.7329,
+     "ece": 0.1211,
+     "brier": 0.1305,
+     "auroc": 0.7899,
+     "aurc": 0.087,
+     "e_aurc": 0.0648,
+     "hi_conf_share": 0.5079,
+     "hi_conf_acc": 0.9271
+    },
+    "cost_mean": {
+     "llm_tokens_in": 2177.175781,
+     "llm_tokens_out": 629.9375,
+     "api_tokens_in": 0,
+     "api_tokens_out": 0,
+     "llm_calls": 1.972656,
+     "api_calls": 0,
+     "gpu_seconds": 18.366583,
+     "wall_seconds": 0.645716,
+     "usd": 0.000439,
+     "gpu_seconds_billed": 0.717022
+    },
+    "by_source": {
+     "cubicasa5k": {
+      "n": 50,
+      "correct": 21,
+      "accuracy": 0.42
+     },
+     "ifc_models": {
+      "n": 34,
+      "correct": 34,
+      "accuracy": 1
+     },
+     "swiss_dwellings": {
+      "n": 105,
+      "correct": 96,
+      "accuracy": 0.9142857142857143
+     }
+    }
+   }
+  },
+  "hard2r": {
+   "pipeline": null
   }
+ }
 }

@@ -58,6 +58,12 @@ class RasterCC5KSolver(BaseSolver):
         t = a.template_of(question)
         if t is None:
             return self.abstain("not a windows/doors/WC seats/sinks count question")
+        from stoa.data import source_of
+        foreign = source_of(path) != "cubicasa5k"
+        if foreign and t != "windows":
+            # measured on unseen styles: swiss PNG twins doors 0%, WC seats 7%, sinks 34%; ResBIM Revit doors 0-12%
+            return self.abstain(f"the CubiCasa5K detector does not transfer to this drawing style for {t} (unseen styles: "
+                                "doors 0%, WC seats 7%, sinks 34% exact); only windows transfer")
         try:
             ans = a.RasterCC5K().answer_template(path, t)
         except Exception as e:  # noqa: BLE001 - no cache entry and no working torch env / weights
@@ -65,4 +71,20 @@ class RasterCC5KSolver(BaseSolver):
                                 trace=[f"CC5K_PYTHON={os.environ.get('CC5K_PYTHON', a.PY)}"])
         ans.solver = self.name
         ans.trace.append("pretrained CubiCasa5K multi-task model (Kalervo et al. 2019), weights CC BY-NC 4.0")
+        if foreign:  # windows on a non-CubiCasa style: exact on 26% of swiss PNG plans, 77% of ResBIM Revit plans
+            ans.confidence = 0.26
+            ans.assumptions = [*ans.assumptions, "drawing style unlike CubiCasa5K: windows transfer (exact on 26% of swiss "
+                                                 "PNG plans and 77% of ResBIM plans); the CubiCasa-calibrated "
+                                                 "confidence and range do not apply"]
+            return ans
+        try:  # calibrated range (leak-safe: fitted on CC5K val, coverage checked on CC5K test; crosscheck.py)
+            from stoa.solvers.raster_cc5k.crosscheck import detector_interval
+            rng = detector_interval(t, int(ans.value)) if ans.value is not None else None
+        except Exception:  # noqa: BLE001 - no table: no range
+            rng = None
+        if rng is not None:
+            ans.trace.append(f"interval90: [{rng[0]}, {rng[1]}]")
+            if rng[0] < rng[1]:
+                ans.missing = [*ans.missing, f"exact count not certain: 90% range {rng[0]}–{rng[1]} (held the true "
+                                             f"count ~90% of the time on held-out CubiCasa5K drawings)"]
         return ans

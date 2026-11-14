@@ -108,8 +108,8 @@ def text_fuzzy(pred, gold) -> bool:
 
 
 def score(qtype: str, gold, gold_unit: str | None, pred_value, pred_unit: str | None) -> bool | None:
-    """True/False for scored types; None for text/other (not scored)."""
-    if qtype in ("text", "other"):
+    """True/False for scored types; None for text/other and for questions without a known answer (not scored)."""
+    if qtype in ("text", "other") or gold is None:
         return None
     x = parse_number(pred_value)
     if x is None:

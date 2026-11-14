@@ -263,8 +263,9 @@ export class Viewer2D {
     const r = this.evidence.reduce<[number, number, number, number]>((a, e) =>
       [Math.min(a[0], e.rect[0]), Math.min(a[1], e.rect[1]), Math.max(a[2], e.rect[2]), Math.max(a[3], e.rect[3])],
     [Infinity, Infinity, -Infinity, -Infinity]);
-    const minW = this.w * 0.06;
-    const minH = this.h * 0.06;
+    // at least ~1/5 of the sheet, so a single small box (one room label) is shown with its room around it
+    const minW = this.w * 0.18;
+    const minH = this.h * 0.18;
     const cx = (r[0] + r[2]) / 2;
     const cy = (r[1] + r[3]) / 2;
     const w = Math.max(r[2] - r[0], minW) / 2;

@@ -37,6 +37,29 @@ Question kinds beyond the dataset templates (F's `hard2`: 36/36):
   number: the rule's value goes to the fact-card LLM as a verified fact, with a focus section for the storey.
 - Placeholder rooms (>= 80% of IfcSpaces ~1 m², e.g. sixty5) cap room-area confidence at 0.15 and say why.
 
+Harder / different wordings (cycle 4; self-written probes in `experiments/w1/probe.py`, tests in
+`tests/test_ifc_arith.py`):
+- `arith.py` + `solver._outer`: arithmetic around atomic quantities, computed in code from the normal rules' answers
+  (same evidence): prices/rates given in the question ("each door costs 450 EUR", "35 EUR per m²", "€320 each",
+  DE/NL/FR/ES/IT "jede Tür … 450 Euro"), multipliers ("every window needs 2 curtains"), add/remove N, ratios
+  ("m² of floor per door", "windows per room", "ratio of doors to windows"), numeric yes/no ("Are there more than 40
+  doors?" -> yes/no), +N%, window-to-wall ratio (window opening area / external wall gross side area, %), building
+  height (highest element top - ground-floor level), "taller than N".
+- Geometry outline (`storey_outline`: union of room/wall/column footprints, holes filled): gross floor area, perimeter,
+  and external walls when the model has no `IsExternal` (walls on the outline; FZK-Haus 12 x 10 m -> 120 m², 44 m).
+- Room relations by plan geometry (`adjacent`: a door/window footprint within 0.35 m of the room): doors of room X,
+  rooms with no window / more than one door (conf 0.6-0.65).
+- Rooms: largest/smallest/second largest/median room (value or name), largest minus smallest, which/list rooms above,
+  below or between thresholds, threshold sums, room volume and ceiling height, room types in any language
+  (`arith.ROOM_TYPES`: "bathrooms" -> 'Bad', 'TUALETTRUUM'; falls back to the whole model when the sheet's storey has
+  none), room-type shares over the storey's rooms.
+- Scope: "whole building"/"all floors" on a plan sheet -> whole model; "each floor" -> breakdown over the model;
+  "which storey has the most X" over all storeys; two named storeys summed by default; "compared to" shows both;
+  top/lowest storey; storeys above/below ground.
+- Guards (confidence <= 0.3 + a `missing` note): a number in the question no rule used, an unresolved quoted name, a
+  room type the model doesn't have, an orientation ("north facade"), and a relation between two element kinds the rules
+  don't model ("has the most doors").
+
 IFC-Bench style questions (free text, judged; cycle 3):
 - Type breakdowns name types the way the authoring tool shows them (`index.type_key_fn`): a shared element Name
   when names are type-like (>= 70% of elements share it with >= 2 others; Revit ':123456' ids stripped), else the

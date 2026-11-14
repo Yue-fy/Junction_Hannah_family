@@ -46,6 +46,8 @@ function ifcApi(): Promise<WebIFC.IfcAPI> {
 }
 
 const HL = new THREE.Color("#ff6a13");
+/** Elements shown for contrast, not as the answer's evidence (e.g. same-kind fixtures a text answer leaves out). */
+const HL2 = new THREE.Color("#7b4fd6");
 
 export class Viewer3D {
   readonly el: HTMLElement;
@@ -385,7 +387,7 @@ export class Viewer3D {
   }
 
   /** Highlight elements by GlobalId; returns how many were found. Storey GUIDs select that storey. */
-  highlight(guids: string[], frame = true): number {
+  highlight(guids: string[], frame = true, contrast: Set<string> = new Set()): number {
     this.ensureGuidIndex();
     for (const o of this.hlGroup.children) (o as THREE.Mesh).geometry.dispose();
     this.hlGroup.clear();
@@ -394,12 +396,14 @@ export class Viewer3D {
       side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2, depthTest: true });
     const spaceMat = new THREE.MeshLambertMaterial({ color: HL, emissive: HL, emissiveIntensity: 0.4, transparent: true, opacity: 0.55,
       side: THREE.DoubleSide, depthWrite: false });
+    const mat2 = new THREE.MeshLambertMaterial({ color: HL2, emissive: HL2, emissiveIntensity: 0.35, transparent: true, opacity: 0.92,
+      side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2, depthTest: true });
     for (const gid of guids) {
       const id = this.guidToId.get(gid);
       if (id === undefined) continue;
       if (this.storeys.some((s) => s.id === id)) continue; // storey context, not an element
       const isSpace = this.spaceBuckets.has(id);
-      const m = this.elementMesh(id, isSpace ? spaceMat : mat);
+      const m = this.elementMesh(id, isSpace ? spaceMat : contrast.has(gid) ? mat2 : mat);
       if (m) {
         this.hlGroup.add(m);
         found++;
@@ -528,6 +532,69 @@ export class Viewer3D {
       type: this.api.GetNameFromTypeCode(l.type) ?? "", name: l.Name?.value ?? "", longName: l.LongName?.value ?? "",
       storey: this.storeys.find((s) => s.id === this.storeyOf.get(id))?.name ?? "",
     };
+  }
+
+  /** Element types a free-text answer names ("Toilet-Domestic-3D: 9 units"), found in the loaded model by name: Revit
+   * "Family:Type:Type:id" names give the family and "Family:Type"; ObjectType too. Per named type: its elements and the
+   * number the text puts right after the name (null when it gives none). Generic class words alone never match. */
+  findNamed(text: string, question = ""): { name: string; guids: string[]; said: number | null; missed?: boolean }[] {
+    this.ensureGuidIndex();
+    const api = this.api;
+    if (!api || !text) return [];
+    const families = new Map<string, Set<string>>();
+    const GENERIC = /^(ifc\w*|walls?|doors?|windows?|floors?|roofs?|slabs?|columns?|beams?|stairs?|railings?|spaces?|rooms?|default|generic|level \d+|none|unnamed)$/i;
+    const lower = text.toLowerCase();
+    const byName = new Map<string, Set<string>>();
+    for (const id of this.elementBuckets.keys()) {
+      const gid = this.idToGuid.get(id);
+      if (!gid || this.spaceBuckets.has(id)) continue;
+      let l: { Name?: { value?: string }; ObjectType?: { value?: string } };
+      try {
+        l = api.GetLine(this.modelID, id);
+      } catch {
+        continue;
+      }
+      const name = String(l.Name?.value ?? "");
+      const segs = name.split(":").map((x) => x.trim()).filter(Boolean);
+      if (segs[0]) (families.get(segs[0]) ?? families.set(segs[0], new Set()).get(segs[0])!).add(gid);
+      const cands = new Set([segs[0], segs.length > 2 ? `${segs[0]}:${segs[1]}` : "", String(l.ObjectType?.value ?? "").trim()]);
+      for (const c of cands) {
+        if (!c || c.length < 5 || GENERIC.test(c) || /^\d+$/.test(c) || !lower.includes(c.toLowerCase())) continue;
+        if (!byName.has(c)) byName.set(c, new Set());
+        byName.get(c)!.add(gid);
+      }
+    }
+    // keep the most specific name per element ("Sink Vanity-Round:19\" x 19\"" over "Sink Vanity-Round")
+    const names = [...byName.keys()].sort((a, b) => b.length - a.length);
+    const taken = new Set<string>();
+    const out: { name: string; guids: string[]; said: number | null; missed?: boolean }[] = [];
+    for (const n of names) {
+      const guids = [...byName.get(n)!].filter((g) => !taken.has(g));
+      if (!guids.length) continue;
+      guids.forEach((g) => taken.add(g));
+      const esc = n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const m = text.match(new RegExp(`${esc}[^\\n\\d]{0,24}?(\\d+)(?![\\d.,]*\\s*(mm|cm|m\\b|m²|m2|"|in\\b|ft))`, "i"));
+      out.push({ name: n, guids, said: m ? Number(m[1]) : null });
+    }
+    // Omissions: when the named types are fixtures of one kind (sanitary, furniture, lighting), other families of that
+    // kind in the model that the answer does not name ("Sink Vanity-Round ×6" next to toilets and urinals).
+    // A kind is checked when the answer names one of its families or the QUESTION asks about it ("plumbing fixtures"),
+    // so an answer that names none ("no plumbing fixtures are listed") is still checked against the model.
+    const KINDS: [RegExp, RegExp][] = [
+      [/toilet|\bwc\b|urinal|sink|basin|lavatory|shower|bath|tub\b|bidet|faucet|\btap\b|water closet/i,
+        /plumbing|sanitary|toilets?\b|urinals?|sinks?\b|wash ?basins?|lavator/i],
+      [/chair|table|desk|\bbed\b|sofa|couch|cabinet|shelf|shelving|wardrobe|bench|cubicle|work ?station/i, /furniture|furnishing/i],
+      [/light|lamp|luminaire/i, /light(ing)? fixtures?|lamps?\b|luminaires?|lighting/i]];
+    for (const [k, q] of KINDS) {
+      // a question about rooms/spaces ("which rooms have a toilet?") is not a question about the fixtures themselves
+      if (!out.some((o) => k.test(o.name)) && (!q.test(question) || /\b(rooms?|spaces?|zones?)\b/i.test(question))) continue;
+      for (const [fam, gs] of families) {
+        if (!k.test(fam) || out.some((o) => o.name.startsWith(fam) || fam.startsWith(o.name))) continue;
+        const guids = [...gs].filter((g) => !taken.has(g));
+        if (guids.length) out.push({ name: fam, guids, said: null, missed: true });
+      }
+    }
+    return out.slice(0, 16);
   }
 
   /** Name lookup for evidence labels (e.g. "IfcSpace 119 KORIDOR"). */

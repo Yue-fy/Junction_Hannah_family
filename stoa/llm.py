@@ -1,6 +1,6 @@
 """Shared LLM / VLM client for every agent (owner: R2).
 
-Two backends, both OpenAI-compatible:
+Backends, all OpenAI-compatible ("local2" = a second local vLLM, $LLM2_BASE_URL, default :8002):
   - "local"  : our vLLM server ($LLM_BASE_URL, default http://127.0.0.1:8001/v1). Model alias "default"
                always points at whatever serving/start.sh launched (see `served_model()`).
   - "nvidia" : NVIDIA hosted API (https://integrate.api.nvidia.com/v1, key in $NVIDIA_API_KEY).
@@ -52,6 +52,15 @@ BACKENDS: dict[str, dict[str, Any]] = {
         "coords": "rel1000",
         "timeout": 300.0,
     },
+    # A second local vLLM (e.g. a bigger reasoning model on :8002 next to the shared :8001), billed like "local".
+    # Lets one component (the agent's planner) use another model while every atomic solver stays on :8001.
+    "local2": {
+        "base_url": os.environ.get("LLM2_BASE_URL", "http://127.0.0.1:8002/v1"),
+        "api_key_env": None,
+        "model": os.environ.get("LLM2_MODEL", "default"),
+        "coords": "rel1000",
+        "timeout": 300.0,
+    },
     "nvidia": {
         "base_url": os.environ.get("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1"),
         "api_key_env": "NVIDIA_API_KEY",
@@ -60,6 +69,11 @@ BACKENDS: dict[str, dict[str, Any]] = {
         "timeout": 300.0,
     },
 }
+
+def is_local(backend: str) -> bool:
+    """Our own GPU (billed in GPU seconds), as opposed to a hosted API (billed per call)."""
+    return backend in ("local", "local2")
+
 
 # Default pixel budget per image. Qwen3-VL: 1 visual token per 32x32 px => 3.1 Mpx ~ 3,000 tokens.
 DEFAULT_MAX_PIXELS = int(os.environ.get("LLM_MAX_PIXELS", 3_200_000))
@@ -220,7 +234,7 @@ class Cost:
             self.cached_calls += 1 if res.cached else 0
             # Disk-cache hits are billed as if computed (F, 00:53): a warm dev run must cost the same as the
             # cold test run Stoa will see.
-            if res.backend == "local":
+            if is_local(res.backend):
                 self.gpu_seconds += gpu_seconds_estimate(res.prompt_tokens or 0, res.completion_tokens or 0)
             else:
                 self.api_calls += 1
@@ -280,7 +294,7 @@ def _charge(res: "ChatResult") -> "ChatResult":
     except ImportError:  # older contract without cost metering
         return res
     tin, tout = res.prompt_tokens or 0, res.completion_tokens or 0
-    if res.backend == "local":
+    if is_local(res.backend):
         record_cost(llm_calls=1, llm_tokens_in=tin, llm_tokens_out=tout, gpu_seconds=gpu_seconds_estimate(tin, tout))
     else:
         record_cost(llm_calls=1, llm_tokens_in=tin, llm_tokens_out=tout, api_calls=1, api_tokens_in=tin,
@@ -334,6 +348,24 @@ def served_model(backend: str = "local") -> str:
         return base[0] if base else next((i for i in ids if i != "default"), ids[0] if ids else "")
     except Exception as e:  # noqa: BLE001
         return f"unavailable ({type(e).__name__})"
+
+
+_SERVED: dict[str, tuple[float, frozenset]] = {}
+
+
+def served_models(backend: str = "local", ttl: float = 60.0) -> frozenset:
+    """Every model id the server lists (base names, aliases and LoRA adapters), cached for `ttl` seconds.
+    Empty set if the server is unreachable."""
+    now = time.time()
+    hit = _SERVED.get(backend)
+    if hit and now - hit[0] < ttl:
+        return hit[1]
+    try:
+        ids = frozenset(m.id for m in _client(backend).models.list().data)
+    except Exception:  # noqa: BLE001
+        ids = frozenset()
+    _SERVED[backend] = (now, ids)
+    return ids
 
 
 def _nvidia_throttle() -> None:
@@ -421,7 +453,7 @@ def chat(
     if thinking is not None:
         body.setdefault("chat_template_kwargs", {})["enable_thinking"] = bool(thinking)
     if json_schema is not None:
-        if backend == "local":
+        if is_local(backend):
             body["structured_outputs"] = {"json": json_schema}
         else:
             body["guided_json"] = json_schema
@@ -442,7 +474,7 @@ def chat(
     use_cache = use_cache and temperature == 0.0
     cpath = None
     if use_cache:
-        concrete = served_model(backend) if (backend == "local" and model == "default") else model
+        concrete = served_model(backend) if (is_local(backend) and model == "default") else model
         cpath = _cache_path({"b": backend, "m": concrete, "k": {**kwargs, "model": concrete}})
         if cpath.exists():
             d = json.loads(cpath.read_text())
@@ -494,7 +526,7 @@ def chat(
             delay = min(delay * 2, 60)
         except (APIConnectionError, APITimeoutError) as e:  # server restarting / overloaded
             last_err = e
-            if backend == "local" and isinstance(e, APIConnectionError) and waited < restart_budget:
+            if is_local(backend) and isinstance(e, APIConnectionError) and waited < restart_budget:
                 attempt -= 1  # a restarting local server doesn't use up retries, only the time budget
             time.sleep(delay)
             waited += delay
@@ -757,11 +789,197 @@ def nms_boxes(boxes: list[Box], iou_thr: float = 0.5) -> list[Box]:
     return kept
 
 
+# ---------------------------------------------------------------------------------------------------------------
+# Question translation: a language-agnostic front end (F 04:01: sealed hard2r collapses on languages no rule
+# covers: Polish cubicasa 21%, Estonian ifc 20%). Rules and templates understand en/fi/de/fr/it; anything else is
+# translated to English by the local model, with quoted names, IDs and numbers swapped for placeholders first so
+# they come back byte-identical (a storey called '1.korrus' must not become '1st floor').
+# ---------------------------------------------------------------------------------------------------------------
+
+# function words / question words per language (lower case, accents kept); scored, not first-match
+_LANG_WORDS: dict[str, set[str]] = {
+    "en": set("how many what which is are the of in on this does do there total area floor plan room rooms "
+              "and with by for than larger smaller".split()),
+    "fi": set("kuinka monta montako mikä mitkä onko on ja kerroksessa pohjapiirustuksessa pohjapiirustukseen "
+              "yhteensä paljonko pinta-ala huonetta tässä".split()),
+    "de": set("wie viele welche welcher ist sind der die das im auf dem den gibt es und wohnung fläche geschoss "
+              "grundriss gross groß als".split()),
+    "fr": set("combien quelle quel quels est sont de la le les du des sur dans et une un ce cette plan surface "
+              "pièces appartement étage".split()),
+    "it": set("quanti quante quale qual è di il lo la del della nel sul questo questa e una superficie stanze "
+              "appartamento piano pianta".split()),
+    "es": set("cuántos cuántas cuál cuáles qué el los las es son del en y una superficie habitaciones planta "
+              "piso hay".split()),
+    "pt": set("quantos quantas qual quais o os as é são do da em e uma área quartos planta andar há".split()),
+    "nl": set("hoeveel welke wat het van is zijn op en een oppervlakte verdieping kamers".split()),
+    "sv": set("hur många vilka vilken är och på det den finns rum ytan våning".split()),
+    "da": set("hvor mange hvilke hvad er og på det den findes rum etage".split()),
+    "no": set("hvor mange hvilke hva er og på det den finnes rom etasje".split()),
+    "pl": set("ile jaka jaki jakie który która jest są na w i czy pomieszczeń pokoi powierzchnia tym tego "
+              "kondygnacji piętrze".split()),
+    "cs": set("kolik jaká jaký jaké který která je jsou na v a se místností plocha tomto podlaží patře".split()),
+    "sk": set("koľko aká aký ktorý je sú na v a miestností plocha tomto podlaží".split()),
+    "hu": set("hány hány mennyi van vannak a az és milyen melyik alaprajzon terület szint szinten helyiség "
+              "teljes".split()),
+    "tr": set("kaç ne nedir bu ve bir mi mı alanı katta oda odası toplam kattaki planda".split()),
+    "ro": set("câte câți cât care este sunt și pe în din suprafața camere etaj planul acest".split()),
+    "et": set("mitu kui palju on ja kas korrusel ruumi pindala mis".split()),
+    "lv": set("cik kāda ir un uz stāvā telpu platība".split()),
+    "lt": set("kiek koks yra ir ant aukšte patalpų plotas".split()),
+}
+_LANG_CHARS: dict[str, str] = {  # letters that (almost) only one language family uses
+    "pl": "ąęłńśźż", "cs": "ěřůť", "sk": "ľĺŕô", "hu": "őű", "tr": "ğşı", "ro": "ășțâî", "et": "õ",
+    "es": "ñ¿¡", "pt": "ãõ", "fi": "", "lv": "āēīūķļņģ", "lt": "ąčęėįšųūž", "da": "æø", "no": "æø", "sv": "å",
+}
+COVERED_LANGS = ("en", "fi", "de", "fr", "it")  # languages the dataset (and therefore our rules) use
+_QUOTED = re.compile(r"(?<![^\W\d_])'[^']{1,80}'(?![^\W\d_])|\"[^\"]{1,80}\"|‘[^’]{1,80}’|“[^”]{1,80}”|„[^“”]{1,80}[“”]|«[^»]{1,80}»")
+# IDs and numbers: anything with a digit (1.korrus, A-101, 2,40, 1 200, 25 CHF stays: only the number part)
+_IDNUM = re.compile(r"(?<![\w])(?:\w*\d[\w.,/\-]*\w|\d)(?![\w])")
+
+
+def _strip_quoted(q: str) -> str:
+    return _QUOTED.sub(" ", q)
+
+
+def lang_guess(question: str) -> str:
+    """Best-guess ISO 639-1 code of a question (no model call; quoted names ignored). '?' when nothing matches.
+    Meant for routing ("is this a language our rules cover?"), not for linguistics: close pairs (da/no, cs/sk)
+    can be confused, which does not matter because both get translated."""
+    t = _strip_quoted(question).lower()
+    words = re.findall(r"[^\W\d_]+(?:-[^\W\d_]+)?", t)
+    if not words:
+        return "?"
+    best, best_s = "?", 0.0
+    for code, vocab in _LANG_WORDS.items():
+        s = sum(1.0 for w in words if w in vocab)
+        chars = _LANG_CHARS.get(code, "")
+        if chars:
+            s += 1.5 * sum(1 for ch in t if ch in chars)
+        if s > best_s:
+            best, best_s = code, s
+    return best if best_s >= 1.0 else "?"
+
+
+@dataclass
+class Translation:
+    text: str                 # the English question (== the original when nothing was translated)
+    lang: str                 # source language (model's answer when it translated, else lang_guess)
+    translated: bool          # a model call rewrote the question
+    ok: bool = True           # every protected span came back verbatim (False -> text is the original)
+    original: str = ""
+    note: str = ""            # for Answer.assumptions: "translated from Polish: '...'"
+
+
+_TR_SYSTEM = (
+    "You translate questions about construction drawings and building models into English. Rules: keep every "
+    "placeholder such as [[1]] exactly as written, once each (a placeholder in quotes is a name or label: keep it "
+    "in quotes); keep apartment, room and grid letters or codes; do not answer the question; do not add, drop or "
+    "change any condition, comparison, unit or name; use standard English building terms (storey/floor, apartment, room, "
+    "toilet, sink, door, window, net floor area, wall, slab). Reply as JSON {\"lang\": \"<ISO 639-1 code of the "
+    "source>\", \"english\": \"<the English question>\"}."
+)
+_TR_SCHEMA = {"type": "object", "properties": {"lang": {"type": "string"}, "english": {"type": "string"}},
+              "required": ["lang", "english"]}
+_LANG_NAMES = {"pl": "Polish", "et": "Estonian", "es": "Spanish", "cs": "Czech", "hu": "Hungarian", "tr": "Turkish",
+               "ro": "Romanian", "pt": "Portuguese", "nl": "Dutch", "sv": "Swedish", "da": "Danish", "no": "Norwegian",
+               "sk": "Slovak", "lv": "Latvian", "lt": "Lithuanian", "fi": "Finnish", "de": "German", "fr": "French",
+               "it": "Italian", "en": "English"}
+_tr_memo: dict[tuple, Translation] = {}
+_tr_lock = threading.Lock()
+
+
+_NUM_SUFFIX = re.compile(r"(\d+(?:[.,]\d+)*)(-[^\W\d_]+)")  # Hungarian/Turkish case endings: 1.11-es, 12-ben
+_LETTER = re.compile(r"(?:(?<=\s)|^)[A-Z](?=[\s,.;:?!)]|$)")  # apartment/unit letters (A, B)
+_QCHARS = "'\"‘’“”„«»"
+
+
+def _protect(q: str) -> tuple[str, list[str]]:
+    """Mask quoted names (quote marks stay visible, so the model knows a label is there), numbers/IDs and
+    unit letters as [[n]]; return the masked text and the spans (quoted ones WITH their quote marks)."""
+    spans: list[str] = []
+    hu = lang_guess(q) == "hu"  # Hungarian sentence-initial "A" is the article, not a unit letter
+
+    def keep(text: str) -> str:
+        spans.append(text)
+        return f"[[{len(spans)}]]"
+
+    def quoted(m: re.Match) -> str:
+        t = m.group(0)
+        return t[0] + keep(t) + t[-1]
+
+    def idnum(m: re.Match) -> str:
+        t = m.group(0)
+        ns = _NUM_SUFFIX.fullmatch(t)
+        return keep(ns.group(1)) + ns.group(2) if ns else keep(t)
+
+    def letter(m: re.Match) -> str:
+        return m.group(0) if (hu and m.start() == 0) else keep(m.group(0))
+
+    masked = _QUOTED.sub(quoted, q)
+    parts = re.split(r"(\[\[\d+\]\])", masked)  # outside the masked names only
+    masked = "".join(p if re.fullmatch(r"\[\[\d+\]\]", p) else _LETTER.sub(letter, _IDNUM.sub(idnum, p))
+                     for p in parts)
+    return masked, spans
+
+
+def _restore(text: str, spans: list[str]) -> tuple[str, bool]:
+    """Put the spans back; a quoted name always comes back with its own quote marks, whether or not the model
+    kept the quotes around the placeholder. ok = every placeholder appeared exactly once."""
+    ok = all(len(re.findall(rf"\[\[{i}\]\]", text)) == 1 for i in range(1, len(spans) + 1))
+    for i in range(len(spans), 0, -1):  # [[12]] before [[1]]
+        sp = spans[i - 1]
+        ph = f"[[{i}]]"
+        if len(sp) >= 2 and sp[0] in _QCHARS and sp[-1] in _QCHARS:
+            text = re.sub(rf"[{_QCHARS}]?{re.escape(ph)}[{_QCHARS}]?", lambda _m: sp, text)
+        else:
+            text = text.replace(ph, sp)
+    return text, ok and not re.search(r"\[\[\d+\]\]", text)
+
+
+def to_english(question: str, *, keep: Sequence[str] = COVERED_LANGS, force: bool = False,
+               backend: str = "local", model: str = "default") -> Translation:
+    """Translate a question into English unless its language is in `keep` (default: the languages our rules cover).
+
+    One local-LLM call (~150 tokens in / ~40 out, cost recorded like any chat) for an uncovered language; none
+    otherwise. Quoted names, IDs and numbers are masked as [[n]] before the call and restored after, so they are
+    byte-identical; if the model loses one, the original question is returned with ok=False (caller: keep the
+    original route and lower the confidence). Memoised in-process; disk-cached with STOA_LLM_CACHE=1.
+    `force=True` translates any non-English question (e.g. when intent parsing failed on a covered language)."""
+    guess = lang_guess(question)
+    if guess == "en" or (not force and guess in keep):
+        return Translation(question, guess, False, True, question)
+    key = (question, backend, model)
+    with _tr_lock:
+        if key in _tr_memo:
+            return _tr_memo[key]
+    masked, spans = _protect(question)
+    try:
+        r = chat(masked, system=_TR_SYSTEM, backend=backend, model=model, max_tokens=300, temperature=0.0,
+                 json_schema=_TR_SCHEMA)
+        d = extract_json(r.text) or {}
+        eng = str(d.get("english", "")).strip()
+        lang = str(d.get("lang", guess) or guess).strip().lower()[:5] or guess
+    except Exception as e:  # noqa: BLE001  (server down: answer on the original rather than fail)
+        return Translation(question, guess, False, False, question, f"translation failed ({type(e).__name__})")
+    text, ok = _restore(eng, spans) if eng else (question, False)
+    if lang == "en":
+        res = Translation(question, "en", False, True, question)
+    elif not ok:
+        res = Translation(question, lang, False, False, question,
+                          f"translation from {_LANG_NAMES.get(lang, lang)} lost a name or number; used the original")
+    else:
+        res = Translation(text, lang, True, True, question,
+                          f"question translated from {_LANG_NAMES.get(lang, lang)} by the local model: \"{text}\"")
+    with _tr_lock:
+        _tr_memo[key] = res
+    return res
+
+
 if __name__ == "__main__":  # smoke test: python -m stoa.llm [backend]
     import sys
 
     be = sys.argv[1] if len(sys.argv) > 1 else "local"
-    print("model:", served_model(be) if be == "local" else BACKENDS[be]["model"])
+    print("model:", served_model(be) if is_local(be) else BACKENDS[be]["model"])
     img = Image.new("RGB", (800, 400), "white")
     from PIL import ImageDraw
 
