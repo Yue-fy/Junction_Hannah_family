@@ -227,6 +227,31 @@ def unit_region(path: str, layer: T.TextLayer, letter: str, px_per_m: float | No
     return comp, lab
 
 
+_MORE = re.compile(r"\b(larg|bigg|great|more|most|größ|grös|gröss|plus grand|le plus|più grand|maggior|suurem|suurin|"
+                   r"störst|större|mayor|más grande)", re.I)
+_LESS = re.compile(r"\b(small|less|least|fewer|klein|plus petit|moins|più piccol|minor|pienem|pienin|minst|mindre|"
+                   r"menor|más pequeñ)", re.I)
+_COMPARE = re.compile(r"\b(which|welche[rs]?|quel(?:le)?|quale|mikä|vilken|cuál|is|ist|est|è|onko|är|than|als|que|di|"
+                      r"kuin|än)\b", re.I)
+
+
+def compared_units(question: str, layer: T.TextLayer) -> tuple[list[str], str] | None:
+    """A comparison of units' areas: (letters to compare, 'max'|'min'), or None. Letters: every unit label named
+    after the first unit word ('apartment A or B', 'Wohnung A als Wohnung B'); none named -> all units on the plan."""
+    labels = unit_labels(layer)
+    m = re.search(rf"(?i:\b{_UNIT_WORD})", question)
+    if not m or len(labels) < 2 or not _COMPARE.search(question):
+        return None
+    more, less = _MORE.search(question), _LESS.search(question)
+    if bool(more) == bool(less):
+        return None
+    named = [x for x in re.findall(r"(?<![\w'’])([A-Z])(?![\w])", question[m.start():]) if x in labels]
+    named = list(dict.fromkeys(named))
+    if len(named) == 1:
+        return None  # one unit: its own size, not a comparison
+    return (named or sorted(labels)), ("max" if more else "min")
+
+
 def net_area(path: str, layer: T.TextLayer, question: str, px_per_m: float | None, **kw) -> dict | None:
     """One unit's net area (room_set with a unit letter)."""
     return room_set(path, layer, question, px_per_m, **kw) if unit_letter(question) else None

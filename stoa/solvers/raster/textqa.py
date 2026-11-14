@@ -87,6 +87,11 @@ def answer(path: str, question: str, image_path: str | None = None, backend: str
             bars = [b for b in SB.bars(img_path, backend=backend, layer=tl) if b.unit in SB.UNIT_M]
         except Exception:  # noqa: BLE001 - a bar is a bonus, never a reason to fail the question
             bars = []
+    cmp = A.compared_units(question, tl)
+    if cmp:
+        got = _compare_units(img_path, question, tl, bars, cmp, solver)
+        if got is not None:
+            return got
     unit_q = _AREA_Q.search(question) and A.unit_letter(question)
     if _AREA_Q.search(question) and _sum_scope(question, tl):
         got = _unit_area_answer(img_path, question, tl, bars, solver)
@@ -152,6 +157,10 @@ def answer(path: str, question: str, image_path: str | None = None, backend: str
         # the 'size' is a number the question itself names (room 0.20 -> '0.20 m²'): an echo, not a reading
         conf = 0.05
         missing = [*missing, "the answer repeats a number from the question (likely the room's number, not its size)"]
+    if cmp:  # a unit comparison the boundaries could not settle: a VLM reading of sums it never did (3 misses at 0.75)
+        conf = min(conf, 0.3)
+        missing = [*missing, "could not measure every compared unit from its drawn boundary; the comparison is a "
+                             "reading of the drawing, not a measurement"]
     if unit_q and isinstance(value, (int, float)) and A.unit_labels(tl) and unit_q not in A.unit_labels(tl):
         conf = min(conf, 0.1)
         missing = [*missing, f"this plan labels units {', '.join(sorted(A.unit_labels(tl)))}; there is no apartment "
@@ -323,6 +332,57 @@ def _unit_area_answer(img_path: str, question: str, tl: T.TextLayer, bars: list,
                                                                 + (f", rooms labelled '{r['name']}'" if r['name'] else "")])
                   + ["rooms: " + " + ".join(parts) + f" = {r['value']:g} m²"],
                   assumptions=assumptions, missing=missing)
+
+
+def _compare_units(img_path: str, question: str, tl: T.TextLayer, bars: list, cmp: tuple, solver: str):
+    """'Which apartment is the largest?' / 'Is apartment A larger than B?': each unit's net area (room_set), then the
+    comparison. Confidence: the least sure unit's, lowered when the two leading units are within 5% of each other."""
+    letters, how = cmp
+    if not bars:  # 'larger' is not a size word for _SIZE: get the scale bar here (rooms without a printed area)
+        try:
+            bars = [b for b in SB.bars(img_path, layer=tl) if b.unit in SB.UNIT_M]
+        except Exception:  # noqa: BLE001
+            bars = []
+    bar = next((b for b in bars if b.px_per_m), None)
+    res = {}
+    for L in letters:
+        r = A.room_set(img_path, tl, f"net floor area of apartment {L} except balconies, loggias, terraces", 
+                       bar.px_per_m if bar else None)
+        if r is None:
+            return None
+        res[L] = r
+    order = sorted(res, key=lambda L: res[L]["value"], reverse=(how == "max"))
+    best, second = order[0], order[1]
+    a, b = res[best]["value"], res[second]["value"]
+    margin = abs(a - b) / max(a, b)
+
+    def kind(r):
+        n, nm = len(r["rooms"]), len(r["measured"])
+        return "partial" if r["unmeasured"] else "printed" if nm == 0 else "some" if nm <= 2 and nm < n else "filled"
+    conf = min(UNIT_CONF[kind(r)] for r in res.values())
+    # a sum is within 5% for 69/99 units: two units closer than that can swap
+    conf = round(conf if margin >= 0.1 else min(conf, 0.5) if margin >= 0.05 else min(conf, 0.3), 2)
+    yes_no = re.match(r"\s*(is|ist|est|è|onko|är|does|has|hat)\b", question, re.I) and len(letters) == 2
+    if yes_no:  # 'Is apartment A larger than apartment B?': the first named unit vs the second
+        first = letters[0]
+        value = "yes" if first == best else "no"
+    else:
+        value = best
+    ev = []
+    for L in letters:
+        r = res[L]
+        ev += [Evidence(file=img_path, page=0, bbox=[round(x, 1) for x in r["label"].box], bbox_space="image_px",
+                        note=f"unit label '{r['label'].text}': {r['value']:g} m²"),
+               Evidence(file=img_path, page=0, bbox=[round(x, 1) for x in r["region_box"]], bbox_space="image_px",
+                        note=f"apartment {L}: the region inside its drawn boundary ({len(r['rooms'])} rooms)")]
+    sizes = ", ".join(f"{L} {res[L]['value']:g} m²" + (f" ({len(res[L]['measured'])} room(s) flood-filled)"
+                                                         if res[L]["measured"] else "") for L in order)
+    return Answer(value=value, unit=None, confidence=conf, solver=solver, evidence=ev[:14],
+                  trace=[f"compare units {letters} ({how}): {sizes}; margin {100 * margin:.1f}%"],
+                  assumptions=[f"net floor areas from the room labels inside each unit's drawn boundary, outdoor rooms "
+                               f"left out: {sizes}"],
+                  missing=([f"the two leading units differ by only {100 * margin:.1f}%; a unit sum is within 5% for "
+                            "69 of 99 test units"] if margin < 0.1 else []))
 
 
 def measure(m: dict, bar, question: str, size: tuple[int, int]):

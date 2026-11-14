@@ -373,3 +373,16 @@ def test_label_count_in_a_unit_is_scoped_to_its_boundary(monkeypatch, tmp_path):
     a = s._text_count(str(p), None, "Bad", [], "How many rooms labelled 'Bad' are there in apartment E?")
     assert a.value == 3 and a.confidence <= 0.1 and "no apartment E" in a.missing[0]
     assert s._text_count(str(p), None, "Bad", [], "How many rooms labelled 'Bad' are on this floor?").value == 3
+
+
+def test_compared_units_parsing():
+    from stoa.solvers.raster import apartment as A
+    from stoa.solvers.raster.textlayer import TextItem, TextLayer
+
+    tl = TextLayer(path="x.png", size=(100, 100), items=[TextItem(f"Whg. {L}", [0, 0, 1, 1]) for L in "ABCD"])
+    assert A.compared_units("Which apartment on this floor has the largest net floor area?", tl) == (list("ABCD"), "max")
+    assert A.compared_units("Is apartment A larger than apartment B?", tl) == (["A", "B"], "max")
+    assert A.compared_units("Which is smaller, apartment C or D?", tl) == (["C", "D"], "min")
+    assert A.compared_units("Welche Wohnung ist die grösste?", tl) == (list("ABCD"), "max")
+    assert A.compared_units("What is the net floor area of apartment B in m²?", tl) is None
+    assert A.compared_units("Is apartment B the largest?", tl) is None  # one unit named: not handled as a comparison
