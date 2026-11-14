@@ -28,6 +28,10 @@ API cache (`DEMO_WARM=0` skips that; `fixtures/recorded.json` is not changed). T
 - `/api/kg` (knowledge graph): the API's `GET /kg` if it has one; otherwise the dev server runs W1's
   `stoa.kg.links(path)` itself with `$JUNCTION_VENV/bin/python` from the repo root (`STOA_KG_REPO=<checkout>`
   to use another checkout); if that fails too, it links files by name only (the panel title says "files only").
+- Hosted second opinions (NVIDIA Nemotron) are rate-limited and can hang for minutes: the dev server waits
+  `STOA_HOSTED_TIMEOUT_S` (default 45) seconds, then shows that model's answer from `fixtures/recorded.json`, marked
+  "⟲ recorded HH:MM · hosted API busy right now" (or "hosted model busy" when there is no recording). The API keeps
+  the call running and caches it, so the next click is live.
 - `npm run build` type-checks and builds to `dist/`. `npm run preview` serves the build with the same
   `/api` middleware (no separate server needed).
 

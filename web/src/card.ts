@@ -407,6 +407,7 @@ export function secondOpinionHtml(a: Answer, b: Answer, ms: number) {
   const verdict = b.value === null || b.value === undefined ? `<b>No answer</b> from ${esc(modelName(b))}`
     : `<b>${same ? "✓ Second opinion agrees" : "≠ Second opinion differs"}</b> ${esc(modelName(b))} says <b>${esc(fmtValue(b))}${unit ? ` ${esc(unit)}` : ""}</b>`;
   return `<div class="xcheck second ${same ? "ok" : "bad"}">${verdict}
+    ${b.replayed ? `<small class="replayed" title="${esc(b.replayed)}">⟲ recorded ${esc(b.recorded_at ?? "")} · hosted API busy right now</small>` : ""}
     <small>${wall.toFixed(1)} s · ${((c.api_tokens_in ?? c.llm_tokens_in ?? 0) + (c.api_tokens_out ?? c.llm_tokens_out ?? 0)).toLocaleString()} tok · ${esc(fmtEur(costUsd({ ...c, wall_seconds: wall })))}</small>
     ${raw ? `<details><summary>its reasoning</summary><p>${esc(raw.replace(/\s*\|\s*/g, " ").slice(0, 900))}</p></details>` : ""}</div>`;
 }
