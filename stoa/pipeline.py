@@ -389,6 +389,27 @@ _AREA_UNIT_WORD = re.compile(r"mÂ²|\bm2\b|square (?:met|feet|foot)|sq\.? ?m\b|mÃ
 _AREA_SUM = re.compile(r"\b(?:total|combined|summed|together|sum of)\b[^?]{0,40}\barea|\barea of (?:the )?(?:two|three|all|both)\b|"
                        r"\barea of [^?]{1,40}\band\b", re.I)
 IMG_EXT = (".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp", ".gif")
+# objects nearly every building plan draws: a VLM's "0" for them with no located evidence is an unchecked absence claim
+# (Q 09:58: smiley 1.OG sheet uploaded alone, "How many stairs ...?" -> 0 @0.89 from p(answer digits); '0 swimming
+# pools' at the same 0.89 is right and keeps it)
+COMMON_OBJECTS = {"door", "window", "wall", "stair", "room", "column", "storey", "space"}
+ABSENCE_CAP = 0.5
+
+
+def _located(ans: Answer) -> bool:
+    return any(e.bbox or getattr(e, "ifc_guid", None) for e in ans.evidence or [])
+
+
+def _absence_cap(intent: Intent, conf: float, ans: Answer, trace: list[str]) -> tuple[float, Answer]:
+    if intent.task != "count" or intent.target not in COMMON_OBJECTS or conf <= ABSENCE_CAP or _located(ans):
+        return conf, ans
+    if _num(ans.value) != 0:
+        return conf, ans
+    trace.append(f"0 {intent.target}s with no located evidence: an absence claim on an object plans usually draw -> "
+                 f"confidence {conf:.2f} capped at {ABSENCE_CAP}")
+    ans = ans.model_copy(update={"missing": [*ans.missing, f"no {intent.target} was located on the drawing; a 0 count "
+                                             "is not verified"]})
+    return ABSENCE_CAP, ans
 # tier of each solver (cost order); unknown names count as "local"
 TIER = {"dxf": "deterministic", "ifc": "deterministic", "schedule": "deterministic", "pdf_vector": "deterministic",
         "pdf_text": "deterministic", "raster": "local", "vlm_direct": "local", "agent": "local",
@@ -1342,6 +1363,8 @@ class Pipeline(BaseSolver):
                     total = total.add(extra)
                 answers.append((name, ans, conf))
                 break  # the LoRA's count stands; raster (lora_second=1) only sets the confidence and lends its boxes
+            if name in ("vlm_direct", "vlm_nvidia") and not gate:
+                conf, ans = _absence_cap(intent, conf, ans, trace)
             answers.append((name, ans, conf))
             if conf >= self.accept or self.agree == "never" or len(answers) >= 2:
                 break

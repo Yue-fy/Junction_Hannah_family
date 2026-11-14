@@ -164,6 +164,7 @@ def test_cc5k_switch(monkeypatch, tmp_path):
     import json
 
     import stoa.pipeline as pl
+    import stoa.solvers.raster_cc5k  # noqa: F401  (register the real one first, or it replaces the stub on first use)
     from stoa.contract import Answer
     from stoa.solvers import _REGISTRY
     from stoa.solvers.base import BaseSolver
@@ -262,3 +263,18 @@ def test_compose_yesno_comparison():
     assert p is not None and p.op == "gt" and p.labels == ["bedroom", "bathroom"]
     assert combine(p, [2, 2])[0] == "no" and combine(p, [3, 1])[0] == "yes"
     assert decompose("cubicasa5k", "Does this apartment have a sauna?").op == "exists"
+
+
+def test_absence_cap():
+    """Q 09:58: a VLM's '0 stairs' with no located evidence is an unverified absence claim (capped); '0 pools' is not."""
+    from stoa.contract import Answer, Evidence
+    from stoa.pipeline import ABSENCE_CAP, _absence_cap
+
+    stairs, pools = parse("How many stairs are shown on the floor plan of '1.OG'?"), parse("How many swimming pools are there?")
+    c, a = _absence_cap(stairs, 0.89, Answer(value=0, unit="count", confidence=0.89), [])
+    assert c == ABSENCE_CAP and a.missing
+    assert _absence_cap(stairs, 0.89, Answer(value=3, unit="count", confidence=0.89), [])[0] == 0.89
+    assert _absence_cap(pools, 0.89, Answer(value=0, unit="count", confidence=0.89), [])[0] == 0.89
+    boxed = Answer(value=0, unit="count", confidence=0.89,
+                   evidence=[Evidence(file="a.pdf", page=0, bbox=[0, 0, 1, 1], bbox_space="pdf_pt", note="x")])
+    assert _absence_cap(stairs, 0.89, boxed, [])[0] == 0.89
