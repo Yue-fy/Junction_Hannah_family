@@ -6,7 +6,11 @@ Builds on F's `hard` (translations/paraphrases/compositions/ft²) and `hard2` (n
 don't. The first 205 rows start from dev questions the pipeline had **right at conf ≥ 0.8**, so a failure there is
 caused by the perturbation, not by the drawing.
 
-## Now (11:03) — the short version
+## Now (11:13) — the short version
+- **Final candidate night b656826: v1–v18 398/398 at conf ≥ 0.8 right, 0 false premises at ≥ 0.8; all 1015 rows
+  608/618; the 259 IFC questions on renamed files 213/213 at ≥ 0.8; 11 won / 2 lost vs 6025963 (both < 0.8); demo
+  pre-flight 23/23 unchanged.** Every family written tonight is at 0 confident misses except CubiCasa uploads (5, bug
+  26) and one agent confidence flake (297 at 0.95 / 0.145 run to run).
 - **Pre-merge check #11 (every owner head of 10:54, the candidate for S0's 11:15 merge): 11 won / 1 lost vs night
   6025963 (the loss: a LoRA flip at 0.37), v1–v18 396/396 at ≥ 0.8, 0 false premises, 1015 rows 602/611; the newest
   families' confident misses 18 → 5** (relative storeys fixed except "directly above"; 3 CubiCasa uploads; one agent
@@ -975,6 +979,17 @@ v21 "3rd floor level" (21.92 at 0.85 → 22'-5" at 0.65), the plan-without-IFC "
 201/210), 3 won / 0 lost — still 2 link answers of the wrong shape on hashed names ("Is the door count … the same …?"
 → 50 at 0.97; Italian "Quante finestre … non sono disegnate …?" → 55 at 0.88), both caught by W4's 87eaf64 shape guard
 or not (pre-merge check #10 below).
+
+## Night b656826 (11:04, S0 cycle 43 round 2) — the final candidate
+Runs `20261114-110445-pipeline-all-b656826-0aa9` (1015 rows), `-110445-…-v26_hash-b656826-3fa1` (renamed files),
+`-110445-…-v2527-b656826-ae94` (v25 + v27 alone), demo pre-flight `-110655-…-live_questions-1903` (23/23 unchanged).
+**v1–v18 398/398 at ≥ 0.8 right, 0 false premises at ≥ 0.8; v1–v20 433/433; 1015 rows 608/618; renamed-file IFC rows
+242/251, 213/213 at ≥ 0.8.** vs 6025963 11 won / 2 lost (both < 0.8: "studio units" 7 → 6 at 0.50, a LoRA flip at
+0.37); vs pre-merge #11 1 won ("the storey directly above this one" → 60, W1 15a4ddb) / 2 lost (both flakes: the
+height-difference agent answer 6.7 at 0.85 → a text at 0.30, studio units). Chart bar 6: 5 CubiCasa upload rows (bug
+26) + "How many windows does the floor with the most doors have?" → 297 at 0.95 — the same row gave 0.145 in the
+v25+v27 run on the same build 8 minutes earlier: the agent's confidence follows its last step (open, W4). Cost vs
+41188a4 on the same 956 rows: LLM calls/Q 1.180 → 1.160, tokens in/Q 2,509 → 2,432, mean wall 2.0 → 1.3 s.
 
 ## Pre-merge check #11 (10:54): 6025963 + every owner head of 10:54 (W1 2ac850e, W2 ea0e1a8, W3 9b1abd3, W4 f4724ed, R1 891f4a2, R2 9b1abd3, F c850a6a, W5 9521587)
 Merged one by one (an 8-head octopus fails: "cannot read more than 8 trees"). Runs `20261114-105439-pipeline-all-snap12-e712`
