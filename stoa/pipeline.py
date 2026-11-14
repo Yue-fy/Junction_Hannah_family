@@ -473,11 +473,13 @@ class Pipeline(BaseSolver):
         question, tr_note, tr_cost = self._front_end(question) if self.translate else (question, None, None)
         if question != asked:  # the English translation may say "the B apartment in m²" (hardL_open tr: 321.76 @ 0.95)
             question = normalise_scope(normalise_refs(normalise_numbers(question)), source_of(path))
-        plan = decompose(source_of(path), question) if self.compose else None
-        if plan is None:
-            ans = self._solve_atomic(path, question)
-        else:
-            ans = self._solve_composed(path, question, plan)
+        ans = self._per_room(path, question, t0)
+        if ans is None:
+            plan = decompose(source_of(path), question) if self.compose else None
+            if plan is None:
+                ans = self._solve_atomic(path, question)
+            else:
+                ans = self._solve_composed(path, question, plan)
         if tr_cost:
             ans.cost = _cost_of(ans).add(tr_cost)
         if tr_note and question != asked:
@@ -801,12 +803,39 @@ class Pipeline(BaseSolver):
         trace.append(f"raster (question as asked): {a.value} {a.unit or ''} at conf {a.confidence:.2f}, unsure")
         return None, ("raster", a)
 
-    def _room_graph_first(self, path: str, question: str, intent: Intent, trace: list[str]):
+    def _per_room(self, path: str, question: str, t0: float) -> Answer | None:
+        """D19 (4), R1 08:27: R1's measured per-room route (experiments.r1.room_graph.route.per_room: room-scoped /
+        relational / superlative questions on a raster, not area questions; 0 fires on every dataset/dev/hard split)
+        BEFORE the composer, which turned "How many windows do the two bedrooms have in total?" into windows + bedrooms.
+        R1's probes v1-v4 (78 by-eye Qs): 54/78 vs pipeline 37/78. cc5k=1 only (D8)."""
+        if not (self.cc5k and source_of(path) == "cubicasa5k") or known_template(question):
+            return None
+        try:
+            from experiments.r1.room_graph.route import per_room
+
+            hit = per_room(question, path)
+        except Exception:  # noqa: BLE001
+            return None
+        if not hit.get("fire"):
+            return None
+        trace = [f"route: {hit.get('why', 'room-scoped question')} -> room graph (R1)"]
+        pre, unsure = self._room_graph_first(path, question, parse(question), trace, force=True)
+        a = pre or (unsure[1] if unsure else None)
+        if a is None or a.value is None:
+            return None
+        out = a.model_copy(deep=True)
+        out.trace = trace + [f"[room_graph] {t}" for t in a.trace[-8:]]
+        out.solver = "pipeline/room_graph"
+        out.cost.wall_seconds = round(time.perf_counter() - t0, 4)
+        return out
+
+    def _room_graph_first(self, path: str, question: str, intent: Intent, trace: list[str], force: bool = False):
         """Per-room / relational question on a CubiCasa-style plan ("Through which room is the sauna entered?", "How
         many windows does the kitchen have?"): R1's room graph (CC5K segmentation + icons + printed areas read by the
         VLM, one local text-LLM call). D8: pretrained CubiCasa5K weights -> cc5k=1 only. Its confidence is a provisional rule (n=54),
         so it never enters the >= 0.8 bin here. -> (accepted | None, unsure (name, answer) | None)."""
-        if not (self.cc5k and source_of(path) == "cubicasa5k" and ROOM_REL.search(question)) or known_template(question):
+        if not (self.cc5k and source_of(path) == "cubicasa5k" and (force or ROOM_REL.search(question))) or \
+                known_template(question):
             return None, None
         try:
             from experiments.r1.room_graph.answer import solve as rg_solve
