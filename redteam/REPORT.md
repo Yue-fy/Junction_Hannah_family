@@ -791,6 +791,24 @@ says "row F4 = …plan-03-3-korrus.pdf" and the evidence box IS that file; the s
 right sheet next to an answer that denies it. Neither path answers "How many of the model's windows on '1.korrus'
 does this drawing not show?" (297 at 0.98 both; kg_qa's trigger doesn't fire on that wording).
 
+## Night 31397eb and pre-merge check #9 (09:18): 31397eb + W1 d38fbba + W2 454e8bb + W3 414a362 + W4 1b831ed + R2 5d52531 + F 0598039 + R1 1c61f1d
+**Night 31397eb** (= be57171 + W4 b91c2d1 comparatives + R1 experiments; run `20261114-091619-pipeline-questions-v20-cda2`,
+647 rows v1–v20): **identical to be57171 — 0 won, 0 lost**; 609 rows 360/360 at ≥ 0.8 right with 3 premises at ≥ 0.8;
+647 rows 371/377; $0.153 per 1,000.
+**Pre-merge #9** (run `…-091624-…-v20-7bc3`): **11 won, 2 lost vs 31397eb. On the 609 rows v1–v18: 95.1 % scored,
+364 of 364 at ≥ 0.8 right and, for the first time tonight, 0 false premises answered at ≥ 0.8** (W2 454e8bb: "How
+many doors are there in the whole building?" on the single-floor plan → 36 at 0.50 with "only floor 9385 of building
+2082 is drawn"). 647 rows: 93.7 %, 384/391; AUROC 0.940; $0.153 per 1,000; 0 errors.
+Won: W4's route to R1's kg_qa (D20-4) +8 link rows — German "Stimmen Grundriss und IFC-Modell … überein?" bare 55 at
+0.88 → "no (IFC model 55 windows on '1.korrus', plan draws 52 …)" at 0.85; "Which sheet shows the server room / the
+attic / room 'Stair (414B-XX-001-001)'?" → the right plan sheet; elevation (4) and section (2) drawing counts;
+"Does this drawing show every window that the model has?" → no. Lost (both below 0.5): "How many escalators are shown
+on this floor plan?" on a Swiss plan 0 → 13 at 0.45 (dxf table-QA code counts doors instead, with the comment "no
+escalators found, but code must match actual data"; W2) and the rotated-scan agent flake (2 at 0.49).
+**Left at ≥ 0.8 (7):** v19 lists ×4 (bug 22, W1); "How many of the model's windows on '1.korrus' does this drawing not
+show?" → 297 (W1); kg_qa "Which sheet is the floor plan of '3.korrus'?" → "no plan sheet for it" and "Which sheet shows
+the storey 'KG'?" → "KG" (bug 23, R1; the attic variant of it is fixed in R1 1c61f1d).
+
 ## "You know what you don't know — but refusing is not useful" (Stoa point 3), audited on be57171 (09:15)
 All 622 answers of run `…-090509-…-v19b-a85a` (+ 25 v19b/v20 rows: same picture), by confidence band:
 
