@@ -128,6 +128,9 @@ def _explain_codes(value: str, question: str, rows, legend) -> tuple[str, list[t
     return out, found
 
 
+# count nouns that name no thing ("how many items in total"): never evidence that the table is missing
+GENERIC_RE = re.compile(r"(items?|things?|objects?|elements?|units?|pieces?|total|numbers?|instances?|occurrences?|"
+                        r"times|each|every|overall|altogether)", re.I)
 KINDS_RE = re.compile(r"\b(types?|kinds?|marks?|different|distinct|unique|rows?|entries|lines?|records?|styles?|"
                       r"models?|categories|variants?)\b", re.I)
 
@@ -313,7 +316,8 @@ class ScheduleSolver(BaseSolver):
                          [str(v) for n, df in tables.items() if n != "notes" for v in df.head(60).to_numpy().ravel()]).lower()
         hm = re.search(r"how many\s+(.*?)(?:\b(?:are|is|does|do|have|has|use|uses|in|on|of|with|that|which)\b|[?,(]|$)",
                        question, re.I)
-        counted = [w for w in re.findall(r"[a-z]{4,}", hm.group(1).lower()) if not KINDS_RE.fullmatch(w)] if hm else []
+        counted = [w for w in re.findall(r"[a-z]{4,}", hm.group(1).lower())
+                   if not KINDS_RE.fullmatch(w) and not GENERIC_RE.fullmatch(w)] if hm else []
         if named and not any(w.rstrip("s") in known for w in named):
             conf = min(conf, 0.3)  # e.g. "pier schedule" but no pier table was rebuilt from this sheet
             missing.append(f"no '{named[0]} schedule' table could be rebuilt from the PDF text (it may be drawn among "
