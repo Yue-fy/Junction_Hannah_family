@@ -14,7 +14,6 @@ import json
 import re
 import threading
 import time
-import traceback
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query
@@ -199,6 +198,7 @@ def post_audit(a: AuditIn):
 _SOLVER = None
 _SOLVER_LOCK = threading.Lock()
 _ASK_LOCK = threading.Lock()
+ASK_TIMEOUT = 150  # seconds
 
 
 def _pipeline():
@@ -226,14 +226,32 @@ def run_pipeline(path: str, question: str) -> dict:
     if catalog.is_sealed(path):
         raise HTTPException(400, "this drawing belongs to the sealed test split")
     t0 = time.perf_counter()
-    with _ASK_LOCK:
-        with CostMeter() as meter:
-            try:
-                ans = _pipeline().solve(path, question.strip())
-                if not isinstance(ans, Answer):
-                    ans = Answer.model_validate(ans)
-            except Exception as e:  # noqa: BLE001
-                return {"ok": False, "error": f"{type(e).__name__}: {e}", "trace": traceback.format_exc(limit=3)}
+    # one question at a time; a hung model server must not block the page forever: wait at most ASK_TIMEOUT for the
+    # answer, and the worker thread releases the lock whenever it finishes
+    if not _ASK_LOCK.acquire(timeout=ASK_TIMEOUT):
+        return {"ok": False, "error": "our system is still busy with an earlier question; please try again in a minute"}
+    box: dict = {}
+
+    def work():
+        try:
+            with CostMeter() as meter:
+                try:
+                    a = _pipeline().solve(path, question.strip())
+                    box["ans"] = a if isinstance(a, Answer) else Answer.model_validate(a)
+                except Exception as e:  # noqa: BLE001
+                    box["err"] = f"{type(e).__name__}: {e}"
+            box["meter"] = meter
+        finally:
+            _ASK_LOCK.release()
+
+    th = threading.Thread(target=work, daemon=True)
+    th.start()
+    th.join(ASK_TIMEOUT)
+    if th.is_alive():
+        return {"ok": False, "error": f"no answer within {ASK_TIMEOUT} s (the model server may be busy); please try again later"}
+    if "err" in box:
+        return {"ok": False, "error": box["err"]}
+    ans, meter = box["ans"], box["meter"]
     out = ans.model_dump()
     out["cost"] = {k: v for k, v in meter.cost.model_dump().items() if v}
     out["cost"]["wall_seconds"] = round(time.perf_counter() - t0, 2)
