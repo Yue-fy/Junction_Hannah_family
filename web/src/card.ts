@@ -75,6 +75,38 @@ function segChecks(a: Answer): { text: string; ok: boolean }[] {
   });
 }
 
+/** The API caps some strings at a fixed length: stoa/pipeline.py "… as asked says {value[:60]}", R1's kg_qa
+ * "why: {…[:160]}" and its evidence notes (100 / 120 / 160). A piece of exactly that length was cut, often mid-word
+ * ("the plan dra"): cut it back to the last whole word and mark it "…". Other lengths pass unchanged. */
+export function uncut(s: string, caps: number[]): string {
+  if (!caps.includes(s.length)) return s;
+  const sp = s.lastIndexOf(" ");
+  const t = /\w$/.test(s) && sp > s.length / 2 ? s.slice(0, sp) : s;
+  return `${t.replace(/[\s,;:—–-]+$/, "")}…`;
+}
+/** Capped pieces inside a trace line (cross-check value, kg_qa's "why"). */
+export function tidyCut(l: string): string {
+  return l.replace(/(\bwhy: )(.+)$/, (_, a, b) => a + uncut(b, [160]))
+    .replace(/(\bas asked(?: says|:) )(.*?)(?=\s*\((?:conf|another)\b| [✓✗]|$)/, (_, a, b) => a + uncut(b, [60]))
+    .replace(/(\banswered )(.*?)(?= to the same question)/, (_, a, b) => a + uncut(b, [60]));
+}
+const ASKED_WHO: Record<string, string> = { ifc: "the IFC rules", dxf: "the CAD (DXF) reader", raster: "the label reader",
+  schedule: "the schedule reader", pdf_vector: "the vector PDF reader", agent: "the agent" };
+/** W4's link route: "ifc as asked says no: the IFC model has 55 …" → "The IFC rules, asked the same question directly,
+ * also say no" (the answer above already gives the numbers; a disagreement keeps the other reading). */
+function askedCheck(t: string, ok: boolean): string {
+  const m = t.match(/^(\w+) as asked says (.*?)(\s*\(conf [\d.]+\).*)?$/);
+  if (!m) return t;
+  const who = ASKED_WHO[m[1]] ?? m[1];
+  const v = uncut(m[2], [60]);
+  const yn = v.match(/^(yes|no)\b/i)?.[1].toLowerCase();
+  const head = `${who[0].toUpperCase()}${who.slice(1)}, asked the same question directly,`;
+  const say = /rules$/.test(who) ? "say" : "says";
+  // "(conf 0.97) ✗: confidence capped at 0.5" (the ✗ already stripped) → " (at 0.97); confidence capped at 0.5"
+  const rest = (m[3] ?? "").replace(/^\s*\(conf ([\d.]+)\)\s*:?\s*/, " (at $1); ").replace(/;\s*$/, "");
+  return ok ? `${head} also ${say} ${yn ?? v}` : `${head} ${say} ${v}${rest}`;
+}
+
 export function crossChecks(a: Answer, asks: string[] = []): { text: string; ok: boolean }[] {
   // Compound answers prefix each evidence note with its part ("door: door 1; cross-check: answer 36 vs …").
   const parts = new Set(a.plan?.parts ?? []);
@@ -89,7 +121,8 @@ export function crossChecks(a: Answer, asks: string[] = []): { text: string; ok:
     // numbers as the value shows them: "20700.0" → "20,700" (integers lose ".0"; separators from 10,000 up)
     const pretty = text.replace(/\s*[✓✗]\s*/g, " ").trim().replace(/(?<![\w.])(\d+)\.0(?![\d.])/g, "$1")
       .replace(/(?<![\w.,])\d{5,}(?![\d.,]|\w)/g, (n) => Number(n).toLocaleString("en"));
-    return [{ text: pretty, ok: !/✗|≠|!=|disagree|differs?\b|mismatch|conflict/i.test(text) }];
+    const ok = !/✗|≠|!=|disagree|differs?\b|mismatch|conflict/i.test(text);
+    return [{ text: askedCheck(pretty, ok), ok }];
   });
   // Evidence notes carry the specific check; the trace usually repeats it, so use the trace only as fallback.
   // Exception: boxes added by "Show where" (notes start with the locator's name) carry the locator's check only;
@@ -242,12 +275,12 @@ export function groupEvidence(ev: Evidence[]): { idx: number[]; first: number }[
   return groups;
 }
 
-function evLabel(ev: Evidence[], g: { idx: number[]; first: number }, n: number, describe: (g: string) => string, asks: string[] = []) {
+function evLabel(ev: Evidence[], g: { idx: number[]; first: number }, n: number, describe: (g: string) => string, asks: string[] = [], caps: number[] = []) {
   const items = g.idx.map((i) => ev[i]);
   const has2D = items.some((e) => e.bbox);
   const has3D = items.some((e) => e.ifc_guid);
   const e = items.find((x) => x.bbox) ?? items[0];
-  let note = items.map((x) => x.note).find((x) => x) || (e.ifc_guid ? describe(e.ifc_guid) : "evidence");
+  let note = uncut(items.map((x) => x.note).find((x) => x) || (e.ifc_guid ? describe(e.ifc_guid) : "evidence"), caps);
   // agent answers: "<sub-question> — KORIDOR 63.84 m²" → "step 2 · KORIDOR 63.84 m²"
   const stepNo = asks.length ? items.map((x) => evStep(x.note ?? "", asks)).find((k) => k >= 0) : undefined;
   let step = "";
@@ -302,7 +335,8 @@ function richText(v: string) {
 /** Trace lines: "[solver] text" → tag + text; long traces show the first steps and fold the rest. */
 const CALC = /\d(?:\s+[a-z]+)?\s*[x×*/÷+−-]\s*\d[^=]*=\s*-?\d/;
 function traceHtml(trace: string[], keep = 6) {
-  const li = (full: string, n: number) => {
+  const li = (raw: string, n: number) => {
+    const full = tidyCut(raw);
     const t = full.length > 260 ? `${full.slice(0, 240).replace(/\s*\n\s*/g, " ")} …` : full;
     const m = t.match(/^\[([\w:/-]+)\]\s*(.*)$/);
     const cc = /cross-?check/i.test(t) ? " class=\"cc\"" : CALC.test(t) ? " class=\"calc\"" : "";
@@ -514,7 +548,7 @@ export function secondOpinionHtml(a: Answer, b: Answer, ms: number) {
 const ROOM_TARGETS = new Set(["bedroom", "kitchen", "bathroom", "sauna", "wc_room", "balcony"]);
 const SYMBOL_TARGETS = new Set(["window", "door", "wc", "sink"]);
 /** `missing` without "no located evidence …" when the answer does carry located evidence (boxes or GUIDs). */
-const missingNow = (a: Answer) => (a.missing ?? []).filter((t) => !(/^no located evidence\b/i.test(t) && a.evidence.some((e) => e.bbox || e.ifc_guid)));
+const missingNow = (a: Answer) => (a.missing ?? []).filter((t) => !(/^no located evidence\b/i.test(t) && a.evidence.some((e) => e.bbox || e.ifc_guid))).map(tidyCut);
 
 export const LOCATED_NOTE = /^(label reader|CubiCasa5K detector): /;
 export interface Locator { solver: string; name: string; button: string; title: string; noun: string }
@@ -638,7 +672,7 @@ export function renderCard(el: HTMLElement, a: Answer, opts: CardOpts) {
     ${missingNow(a).length ? `<details class="sec" open><summary>What would make it certain</summary><ul class="missing">${missingNow(a).map((t) => `<li>${esc(t)}</li>`).join("")}</ul></details>` : ""}
     ${sheetsHtml(ev, opts.currentFile)}
     <details class="sec" open><summary>Evidence <small>${groups.length} item${groups.length === 1 ? "" : "s"}${groups.length < ev.length ? ` (${ev.length} boxes/elements)` : ""} · click to zoom${esc(partialEvidence(run, a))}</small></summary>
-      <ul class="evidence">${shown.map((g, n) => evLabel(ev, g, n + 1, opts.describeGuid, asks)).join("")}${groups.length > shown.length ? `<li class="more">+ ${groups.length - shown.length} more</li>` : ""}</ul></details>
+      <ul class="evidence">${shown.map((g, n) => evLabel(ev, g, n + 1, opts.describeGuid, asks, /kg_qa/.test(a.solver ?? "") ? [100, 120, 160] : [])).join("")}${groups.length > shown.length ? `<li class="more">+ ${groups.length - shown.length} more</li>` : ""}</ul></details>
   `;
   el.querySelectorAll<HTMLElement>(".ev-item").forEach((li) => li.addEventListener("click", () => opts.onEvidence(Number(li.dataset.i))));
   el.querySelectorAll<HTMLElement>(".subq").forEach((b) => {
