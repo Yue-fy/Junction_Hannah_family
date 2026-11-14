@@ -13,7 +13,7 @@ physics/sanity rules. FastAPI + plain HTML/JS/CSS (no build step). Owner: agent 
 | 2 Add a hard question | picks any non-test drawing (dev drawings + historical scans), writes a question + answer + method + sureness; measures lengths/areas (scale by 2 clicks or printed 1:N); marks boxes; "Ask our system" runs the pipeline | `questions.jsonl` (eval split `human`) |
 | 3 Physics & sanity rules | min/max/unit/why + free-text uncertainty rules; each rule is tested live on our newest full dev run | `rules.jsonl` |
 
-**After the noon reveal (Stoa's examples):** put them in a jsonl (`{"path", "question", "answer"?}`; paths may be
+**After the noon reveal (Stoa's examples):** one command: `workbench/noon.sh STOA_EXAMPLES.jsonl [name] [label]` (or pass an existing pipeline run id). By hand: put them in a jsonl (`{"path", "question", "answer"?}`; paths may be
 outside the dataset), run `python -m stoa.eval --solver pipeline --split <file> --no-leaderboard`, then
 `python -m workbench.batch <predictions file or run id> --name stoa --label "Stoa's example questions" --ref-label Stoa`.
 The page shows "Load N items" at once; drawings outside the dataset are copied into `human/drawings/`. Items without
