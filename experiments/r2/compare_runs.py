@@ -2,7 +2,7 @@
 
     $JUNCTION_VENV/bin/python experiments/r2/compare_runs.py RUN_A RUN_B [RUN_C ...] [--source cubicasa5k]
 
-RUN = a run_id (prefix ok) or a predictions .jsonl path. Concepts pool a template with its translations
+RUN = a run_id (prefix ok) or a predictions .jsonl path, optionally LABEL=RUN to name its column (e.g. pipeline=<run>). Concepts pool a template with its translations
 (stoa.data.concept_map) when available. Prints n, accuracy per run, and mean tokens/GPU-s/API calls per run.
 A row with no gold and no judge verdict (e.g. Stoa's noon examples without answers) is NOT scored: the cell shows
 "-" (or the accuracy over the scored rows with their count). --show prints every question with each run's answer.
@@ -41,6 +41,9 @@ def main() -> None:
     a = ap.parse_args()
     runs = []
     for r in a.runs:
+        label = None
+        if "=" in r and "/" not in r.split("=", 1)[0]:  # LABEL=RUN
+            label, r = r.split("=", 1)
         p = Path(r) if Path(r).exists() else resolve(r)
         if not p.exists():  # run_id prefix (run ids end in a random suffix)
             hits = sorted(p.parent.glob(Path(r).name.removesuffix(".jsonl") + "*.jsonl"))
@@ -49,7 +52,7 @@ def main() -> None:
                 sys.exit(f"no predictions file for {r}")
             p = hits[-1]
         rows = {x["qid"]: x for x in load(str(p)) if not a.source or x["source"] == a.source}
-        runs.append((Path(p).stem[-40:], rows))
+        runs.append((label or Path(p).stem[-40:], rows))
     common = set.intersection(*(set(r) for _, r in runs))
     print(f"{len(common)} shared questions (score = exact/2% when gold is a number, else the LLM judge's verdict)")
     by = collections.defaultdict(list)

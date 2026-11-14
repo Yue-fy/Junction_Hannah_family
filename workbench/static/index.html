@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Expert Workbench</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="static/style.css">
+</head>
+<body>
+<header>
+  <div class="brand">Expert workbench <span class="sub">Make Blueprints Talk · Team Hannah Family</span></div>
+  <nav>
+    <button class="tab active" data-tab="audit">1 · Check our answers <span class="cnt" id="cnt-audit"></span></button>
+    <button class="tab" data-tab="ask">2 · Add a hard question <span class="cnt" id="cnt-ask"></span></button>
+    <button class="tab" data-tab="rules">3 · Physics &amp; sanity rules <span class="cnt" id="cnt-rules"></span></button>
+  </nav>
+  <div id="saved-flash" class="flash" hidden>Saved ✓</div>
+</header>
+
+<main>
+<!-- TAB 1 -->
+<section id="tab-audit" class="tabpane">
+  <div class="howto">
+    <b>How to use:</b> look at the drawing: the coloured boxes are where our system says the answer comes from.
+    Click a box in the list to zoom to it; scroll to zoom, drag to move.
+    Then press one button (or the keys <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd>). A comment is optional but very welcome.
+  </div>
+  <div class="split">
+    <div class="left">
+      <div id="audit-views" class="viewtabs"></div>
+      <div id="audit-viewer" class="viewer"></div>
+      <div id="audit-credit" class="credit"></div>
+    </div>
+    <div class="right">
+      <div class="progress-row">
+        <span id="audit-progress" class="progress">–</span>
+        <div class="bar"><div id="audit-bar"></div></div>
+      </div>
+      <div id="audit-more" class="more" hidden>
+        All checked — thank you! <button id="audit-more-btn" class="primary">Load <span id="audit-more-n"></span> harder items</button>
+        <div class="small">Reasoning questions made by our own agents (comparisons, ratios, combinations). Their reference answers were
+        computed by us too, so a ✗ may also mean “the reference is wrong” (please say so in the comment).</div>
+      </div>
+      <div class="meta-line" id="audit-meta"></div>
+      <h2 id="audit-question" class="question"></h2>
+      <div class="answers">
+        <div class="ans ours"><div class="lbl">Our answer</div><div id="audit-answer" class="val"></div>
+          <div id="audit-conf" class="conf"></div></div>
+        <div class="ans ref"><div class="lbl">Reference answer (dataset)</div><div id="audit-ref" class="val"></div>
+          <div id="audit-match" class="conf"></div></div>
+      </div>
+      <div class="verdicts">
+        <button class="v ok" data-v="supports">✓ Evidence supports the answer <kbd>1</kbd></button>
+        <button class="v bad" data-v="wrong">✗ Wrong <kbd>2</kbd></button>
+        <button class="v unk" data-v="cant_tell">? Can't tell <kbd>3</kbd></button>
+      </div>
+      <textarea id="audit-comment" rows="2" placeholder="Optional comment: what is wrong, what you would check, what is missing…"></textarea>
+      <div id="audit-last" class="last"></div>
+      <div class="nav">
+        <button id="audit-prev" class="ghost">← Previous</button>
+        <button id="audit-next" class="ghost">Skip →</button>
+      </div>
+      <div id="audit-assumptions" class="notes"></div>
+      <details id="audit-evidence-box" open><summary>Evidence (<span id="audit-ev-n">0</span>)</summary>
+        <ol id="audit-evidence" class="evlist"></ol></details>
+      <details><summary>How our system worked it out</summary><ol id="audit-trace" class="trace"></ol></details>
+    </div>
+  </div>
+</section>
+
+<!-- TAB 2 -->
+<section id="tab-ask" class="tabpane" hidden>
+  <div class="howto">
+    <b>How to use:</b> pick a drawing, look at it, and write a question that is hard for a machine but checkable by you
+    (any language). Add your answer and how you worked it out, then "Ask our system" to compare, and "Save".
+    Optional: "Mark on drawing" lets you draw boxes where your answer comes from.
+  </div>
+  <div id="picker">
+    <div class="picker-bar">
+      <input id="pick-search" type="search" placeholder="Search drawings by name or title (e.g. 'church', 'site 1000', 'clinic')">
+      <button id="pick-search-btn">Search</button>
+      <button id="pick-reset" class="ghost">Show all groups</button>
+    </div>
+    <div id="pick-jump" class="jump"></div>
+    <div id="pick-groups"></div>
+  </div>
+  <div id="asker" hidden>
+    <div class="split">
+      <div class="left">
+        <div class="viewer-bar">
+          <button id="ask-change" class="ghost">← Choose another drawing</button>
+          <span id="ask-name" class="dname"></span>
+          <span id="ask-pages"></span>
+          <button id="ask-mark" class="ghost toggle">✎ Mark on drawing</button>
+          <button id="ask-clear" class="ghost">Clear my marks</button>
+        </div>
+        <div class="measure-bar">
+          <b>Measure:</b>
+          <button id="m-scale" class="ghost toggle" title="Click both ends of a known dimension (scale bar, a dimension line)">📏 Set scale (2 clicks)</button>
+          <button id="m-printed" class="ghost" title="Only for drawings printed to scale (e.g. 'Echelle 1:200')" hidden>Printed scale 1:N</button>
+          <button id="m-length" class="ghost toggle" title="Click points along a line; Esc to restart">Length</button>
+          <button id="m-area" class="ghost toggle" title="Click the corners; click the first corner again to close">Area</button>
+          <span id="m-out" class="mout">Set the scale first.</span>
+          <button id="m-use" class="ghost" hidden>→ add to “how I worked it out”</button>
+        </div>
+        <div id="ask-viewer" class="viewer"></div>
+        <div id="ask-credit" class="credit"></div>
+      </div>
+      <div class="right">
+        <div id="q-editing" class="editing" hidden>Editing a saved question. <button id="q-cancel-edit" class="mini">Cancel editing</button></div>
+        <label>Your question <span class="hint">(any language)</span>
+          <textarea id="q-text" rows="3" placeholder="e.g. What is the total floor area of all bedrooms, and is the bathroom large enough for a wheelchair?"></textarea></label>
+        <div class="row">
+          <label class="grow">Kind of answer
+            <select id="q-type">
+              <option value="count">A count (how many)</option>
+              <option value="area" selected>An area</option>
+              <option value="length">A length / distance / height</option>
+              <option value="volume">A volume</option>
+              <option value="ratio">A ratio or percentage</option>
+              <option value="text">Text (a name, list, yes/no, several numbers)</option>
+            </select></label>
+        </div>
+        <div class="row">
+          <label class="grow">Your answer<input id="q-answer" type="text" placeholder="e.g. 34.5"></label>
+          <label>Unit<input id="q-unit" list="units" type="text" placeholder="m2" value="m2"></label>
+          <datalist id="units"><option>count</option><option>m2</option><option>m</option><option>m3</option><option>mm</option><option>cm</option><option>ft2</option><option>ft</option><option>%</option></datalist>
+        </div>
+        <div class="hint small" id="q-type-hint">One number per question is scored automatically. For several numbers, choose “Text”.</div>
+        <label>How I worked it out
+          <textarea id="q-method" rows="4" placeholder="e.g. Scale bar 1:100; measured the room 3.2 m × 4.1 m; subtracted the shaft…"></textarea></label>
+        <div class="sure-row">How sure are you?
+          <label><input type="radio" name="sure" value="certain"> Certain</label>
+          <label><input type="radio" name="sure" value="fairly_sure" checked> Fairly sure</label>
+          <label><input type="radio" name="sure" value="rough_estimate"> Rough estimate</label>
+        </div>
+        <div class="actions">
+          <button id="q-ask" class="primary">Ask our system</button>
+          <button id="q-save" class="v ok">Save question</button>
+        </div>
+        <div id="q-result" class="result" hidden></div>
+        <details id="ds-box"><summary>What the dataset already asks about this drawing (<span id="ds-n">0</span>)</summary>
+          <ul id="ds-list" class="mine"></ul></details>
+        <h3 class="mine-h">Your questions (<span id="q-count">0</span>)</h3>
+        <ul id="q-list" class="mine"></ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- TAB 3 -->
+<section id="tab-rules" class="tabpane" hidden>
+  <div class="howto">
+    <b>How to use:</b> write down what a plausible value looks like (e.g. a door is 0.7–1.2 m wide) and why.
+    Each rule is tested at once against our ~2,200 test answers (right column): a good rule catches our wrong answers, not the right ones.
+    The big box is for error-propagation rules ("1% scale error → about 2% area error").
+  </div>
+  <div class="rules-grid">
+    <form id="rule-form" class="card">
+      <div class="row">
+        <label class="grow">What<input name="what" type="text" placeholder="e.g. door width (interior)"></label>
+      </div>
+      <div class="row">
+        <label>Min<input name="min" type="text" placeholder="0.7"></label>
+        <label>Max<input name="max" type="text" placeholder="1.2"></label>
+        <label>Unit<input name="unit" list="units" type="text" placeholder="m"></label>
+      </div>
+      <label>Why / source<textarea name="why" rows="2" placeholder="e.g. Finnish building code, accessibility: clear width ≥ 0.85 m"></textarea></label>
+      <label>Uncertainty rule (free text)<textarea name="uncertainty" rows="4" placeholder="e.g. Area scales with the square of the scale: a 1% scale error gives ~2% area error. Counting doors from a plan: double doors count once."></textarea></label>
+      <button type="submit" class="primary">Save rule</button>
+    </form>
+    <div class="card">
+      <h3>Rules so far (<span id="rule-count">0</span>)</h3>
+      <div id="rule-checked-on" class="hint small"></div>
+      <table id="rule-table"><thead><tr><th>What</th><th>Range</th><th>Why / uncertainty</th><th>Against our answers</th></tr></thead><tbody></tbody></table>
+    </div>
+  </div>
+</section>
+</main>
+<script src="static/app.js"></script>
+</body>
+</html>

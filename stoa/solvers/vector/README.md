@@ -70,6 +70,16 @@ confident wrong answers first (W2 cycle 2 found six kinds answered at conf 0.95�
 Experiments behind the rules: `experiments/w2/` (area_misses.py, unnamed_rooms.py, unnamed_inside.py,
 unnamed_rule.py) and R1's `experiments/r1/swiss_area_def/`.
 
+Sat 14 Nov additions (cycle 259):
+- `floor.Room.net`: the printed room area when the DXF polygon is > 2% off, else the polygon. All totals, rankings and
+  table-QA areas use it (the reference follows the printed labels: dev 'all numbered rooms' totals 31 → 34/35).
+- Unnamed numbered rooms ≥ 2% of a total → confidence 0.78 (train: apartments 54/69, totals 45/53 right; geometry
+  does not tell which ones the reference drops). dxf dev: conf ≥ 0.8 = 768 answers, 100% right.
+- `can_handle` reads a sibling `.dxf` anywhere (uploads, hashed copies) when `_swiss_layers` finds the swiss layer
+  names in the DXF's layer table; other DXFs are declined.
+- `_plan_vs_dxf`: "do this plan and its DXF agree on the number of X?" = DXF-layer count vs the PDF's own vector-path
+  count (`pdf_vector`, no LLM) → "yes (36 doors in the DXF = 36 drawn in the PDF)" with both box sets.
+
 ## `pdf_vector` (swiss-style vector PDF, NO DXF needed)
 Same rules and parser as `dxf`; the floor model comes from the PDF alone (`pdffloor.py`): room polygons = filled
 paths stroked grey 0.54 / width 0.37, apartments = red-brown dash-dot strokes, doors = grey-0.27 strokes, texts =
@@ -101,6 +111,12 @@ i.e. unrotated page space).
 | v2 local Qwen3-VL-8B | 78.3% | literal answers rejected, quantity columns typed, retry on empty result |
 | v3 backend=nvidia | 82.6% | +2 questions, similar est. cost; not adopted as default |
 | v4 local (+notes table) | 76.1% | two-part / "what does F4 mean" text answers improve; counts within noise |
+
+Deterministic arithmetic where LLM code flaked: `_assembly_total` ("every N-wide assembly consists of N units" =
+Σ k × Count over the k-WIDE rows); a lookup number within 1 ft of a printed feet-inch dimension of its cited rows →
+that dimension. Guards: a number copied from the question (room 'Hall (0.1)') ≤ 0.2; notes-only answers ≤ 0.65; a
+label echo ≤ 0.2. Non-schedule sheets go to `sheettext.ask` over `pdftext.text_groups` (tags, notes, title block;
+a dimension and its '(LABEL)' across the dimension line are one group); sums drop lengths mixed into counts.
 
 Questions about symbols *drawn* on a plan (A-701 restrooms) are not schedule questions: the solver answers with
 confidence ≤ 0.15 and says what is missing, so the pipeline escalates.

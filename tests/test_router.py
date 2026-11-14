@@ -295,3 +295,59 @@ def test_listed_total():
     for q3 in ("What are the three largest rooms on '1.korrus'?", "Which rooms have a total area above 50 m²?"):
         assert _listed_total(q3, parse(q3), Answer(value=lst, confidence=0.9)) is None
     assert _listed_total(q, parse(q), Answer(value="FUAJEE (101); KORIDOR (105)", confidence=0.9)) is None
+
+
+def test_link_route_plan_vs_model_overrules_kg_qa(monkeypatch):
+    """W1 10:26: W1's deterministic GlobalId reading checks kg_qa on link questions; same -> ✓, different -> its value at the cap."""
+    import experiments.r1.kg_qa.kgqa as kq
+    import stoa.pipeline as pl
+    import stoa.solvers.ifc as ifcmod
+    from stoa.contract import Answer
+
+    monkeypatch.setattr(kq, "is_link_question", lambda q: {"fire": True, "why": "plan and model named"})
+    monkeypatch.setattr(kq, "solve", lambda p, q: Answer(value="no (model 55, plan draws 52)", confidence=0.85))
+    monkeypatch.setattr(ifcmod, "plan_vs_model", lambda p, q: Answer(value="yes: 55 vs 52", confidence=0.85))
+    path = "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf"
+    q = "Does this plan show fewer windows than the IFC model has?"
+    out = pl.Pipeline(crosscheck=0)._link_question(path, q, 0.0)  # disagree -> GlobalId value, capped, kg_qa named
+    assert out.value.startswith("yes") and out.confidence == pl.LINK_DISAGREE and out.solver == "pipeline/ifc"
+    assert any("knowledge-graph reader answered no" in m for m in out.missing)
+    monkeypatch.setattr(kq, "solve", lambda p, q: Answer(value=None, confidence=0.0))  # no KG -> GlobalId reading
+    assert pl.Pipeline(crosscheck=0)._link_question(path, q, 0.0).solver == "pipeline/ifc"
+    monkeypatch.setattr(kq, "solve", lambda p, q: Answer(value="yes (52 < 55)", confidence=0.85))
+    out = pl.Pipeline(crosscheck=0)._link_question(path, q, 0.0)
+    assert out.solver == "pipeline/kg_qa" and any("GlobalId reading says" in t and "✓" in t for t in out.trace)
+    off = pl.Pipeline(crosscheck=0, pvm=0)._link_question(path, q, 0.0)
+    assert not any("GlobalId" in t for t in off.trace)
+
+
+def test_shape_guard():
+    """Q 10:38/10:40: a which-floor question answered by a number, a yes/no question by a number, 'how many' by yes."""
+    from stoa.contract import Answer
+    from stoa.pipeline import SHAPE_CAP, _shape_guard
+
+    def c(q, v):
+        return _shape_guard(q, Answer(value=v, confidence=0.9)).confidence
+
+    assert c("Quale piano ha il maggior numero di porte?", 27) == SHAPE_CAP
+    assert c("Which floor has the biggest room?", "yes (model 55 vs drawn 52)") == SHAPE_CAP
+    assert c("Is the door count on this drawing the same as in the BIM model?", "50") == SHAPE_CAP
+    assert c("By how many doors does this plan differ from the IFC model?", "yes: both have 46") == SHAPE_CAP
+    for q, v in [("Which storey has more doors on its floor plan, '0' or '-1'?", "0"), ("Which sheet number is this?", "2"),
+                 ("How many doors are there?", 12), ("Does the plan show fewer windows than the model?", "yes (52 < 55)"),
+                 ("Which spaces have supply air?", "No spaces are explicitly linked"),
+                 ("Quelle est la surface nette de la pièce 3.03 ?", "10.48"), ("Mikä on asunnon B pinta-ala?", 80.83)]:
+        assert c(q, v) == 0.9, q
+
+
+def test_file_subject_gate():
+    """R1 10:47: on drawings with no project graph the link route admits only questions whose subject is a file."""
+    from stoa.pipeline import _FILE_SUBJECT
+
+    for q in ("Is there an IFC model for this floor plan?", "Gibt es ein IFC-Modell zu diesem Grundriss?",
+              "Finns det en IFC-modell för den här planen?", "Is there a DXF file that goes with this sheet?",
+              "Y a-t-il un DXF pour ce plan ?", "Is there a 3D model or IFC file for this floor plan?"):
+        assert _FILE_SUBJECT.search(q), q
+    for q in ("Are there doors in the IFC model?", "Are there more windows in the plan than in the IFC model?",
+              "How many windows does the IFC model have on this storey?", "Is there a balcony?"):
+        assert not _FILE_SUBJECT.search(q), q

@@ -469,7 +469,7 @@ def _unnamed_caveat(rooms: list[Room], total: float):
     a = sum(r.net for r in un)
     lo = total - a
     share = a / total if total else 0
-    conf = 0.95 if share < 0.02 else 0.8
+    conf = 0.95 if share < 0.02 else 0.78  # train: >= 2% unnamed -> apartments 54/69 (78%), totals 45/53 right (W4/F 10:30-10:40)
     return conf, [f"included {len(un)} numbered rooms without a name ({a:.2f} m²: "
                   + ", ".join(r.number for r in un[:8]) + "); without them the total is "
                   + f"{lo:.2f} m²"], ["room type of unnamed numbered rooms (shaft/void or storage?)"]

@@ -266,6 +266,29 @@ export class Viewer2D {
   }
 
   /** Draw evidence that lives on this file (bbox), plus GUID highlights for ifc_guid evidence. */
+  /** Customer view: circled numbers ①…⑤ on the evidence items the answer lists (indexes into the evidence array). */
+  setNumbers(idx: number[]) {
+    const CIRC = "①②③④⑤⑥⑦⑧⑨";
+    this.evLayer.querySelectorAll<SVGGElement>("g.ev").forEach((g) => {
+      g.querySelector("text.circ")?.remove();
+      const k = idx.indexOf(Number(g.dataset.index));
+      g.classList.toggle("num", k >= 0);
+      if (k < 0) return;
+      const plain = g.querySelector("text");
+      const shape = g.querySelector("rect, circle");
+      if (!plain || !shape) return;
+      const t = document.createElementNS(SVGNS, "text");
+      t.classList.add("circ");
+      const side = Math.max(this.w, this.h);
+      const fs = side * 0.016;
+      t.setAttribute("font-size", String(fs));
+      t.setAttribute("x", plain.getAttribute("x") ?? "0");
+      t.setAttribute("y", String(Number(plain.getAttribute("y") ?? 0) - fs * 0.1));
+      t.textContent = CIRC[k] ?? String(k + 1);
+      g.append(t);
+    });
+  }
+
   setEvidence(evidence: Evidence[]) {
     this.kgLayer.replaceChildren();
     this.evLayer.replaceChildren();

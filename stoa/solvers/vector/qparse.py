@@ -400,6 +400,16 @@ def parse(question: str, vocab: list[str] | None = None, room_numbers: set[str] 
         qtype = "area"
         if not labels and not nums:
             labels = bare_labels(q, vocab) or labels
+        if labels:
+            # "Wohnfläche der Wohnung A (ohne Balkon)": an outdoor label inside an exclusion clause is excluded
+            # (the default anyway), not the target (F 10:53: was area_label(Balkon) = 86.23 instead of apartment A)
+            spans = [m.span() for pat in (POST_EXCL, EXCL_CLAUSE) for m in re.finditer(pat, ql)]
+            kept = [(lab, p) for lab, p in labels
+                    if not (re.match(_OUT_N, str(lab).lower()) and any(a <= p < b for a, b in spans))]
+            if len(kept) < len(labels):
+                notes.append("outdoor label named only as an exclusion: " +
+                             ", ".join(str(lab) for lab, _ in labels if (lab, _) not in kept))
+                labels = kept
         scoped_label = apts and (labels or concept_terms) and not re.search(NEG_APT_W, ql) and \
             not re.search(SHARE_W, ql) and not re.search(TIMES_W, ql) and len(apts) == 1
         two_apt_label = len(apts) == 2 and (labels or concept_terms) and len(labels or concept_terms) == 1 and \
@@ -686,6 +696,11 @@ def covered(question: str, qr: Query) -> bool:
         q = re.sub(pat, " ", q, flags=re.I)
     if qr.op not in ("max", "min") and (re.search(SUPER_MAX, q, re.I) or re.search(SUPER_MIN, q, re.I)):
         return False  # a superlative the rules did not apply ("rooms of the largest apartment")
+    if qr.qtype == "area" and not qr.include_outdoor:
+        # "Welche Wohnfläche hat …" = "what floor area"; "(senza balconi)" / "(ohne Balkon)" = the default exclusion
+        q = re.sub(r"^\s*(?:welche[rs]?|which)\s+(?=(?:\w*fl[äa]che|(?:net\s+|floor\s+)*area)\b)", " ", q, flags=re.I)
+        q = re.sub(r"\b(?:senza|sans|ohne|without)\s+(?:(?:i|il|gli|le|les|la|den|die|the|any)\s+)?" + _OUT_N, " ", q,
+                   flags=re.I)
     m = UNCOVERED.search(q)
     if m:
         # the standard swiss templates contain none of these, except "excluding ... shafts and voids" etc.

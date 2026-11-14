@@ -79,7 +79,7 @@ export function renderBench(el: HTMLElement, b: Bench) {
   const cDet = c.by_tier?.deterministic;
 
   el.innerHTML = `
-    <div class="bn-head"><h2>How well it works</h2>
+    <div class="bn-head"><h2>Accuracy report</h2>
       <p>Measured by <code>stoa.eval</code> on held-out drawings (split by drawing, never seen while building). ${b.from === "snapshot" ? "Snapshot." : "Latest full runs from the team leaderboard."}</p>
       <button class="bn-close" aria-label="Close">✕</button></div>
     <div class="bn-tiles">

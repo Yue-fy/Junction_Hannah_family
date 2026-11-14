@@ -97,3 +97,99 @@ def test_this_building_is_the_whole_model(q, n):
 
     a = IfcSolver(plan2d="0", llm="0").solve(GDY_F, q)
     assert a.value == n
+
+
+ESPL2 = "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-02-2-korrus.pdf"
+
+
+@need
+@pytest.mark.parametrize("path,q,n", [
+    # no storey named on a sheet: the sheet's storey (was the whole model: 24 of 211 doors @ 0.85)
+    (ESPL2, "How many doors on this floor are wider than 1 m?", 3),
+    (ESPL2, "How many windows on this floor are taller than 1.5 m?", 46),
+    (ESPL2, "What is the average width of the doors in the whole building?", 1.088),
+    (ESPL, "How many different door widths are there on '1.korrus'?", 8),
+    (ESPL, "How many doors on '1.korrus' are exactly 900 mm wide?", 2),
+    (ESPL, "How many distinct window heights are there on this floor?", 4),
+])
+def test_dimension_scope_and_counts(path, q, n):
+    from stoa.solvers.ifc.solver import IfcSolver
+
+    a = IfcSolver(plan2d="0", llm="0").solve(path, q)
+    assert a.value == n and a.confidence >= 0.8
+
+
+ESPL_IFC = "data/ifc_models/bsc-esplanades_1807-ep-ar-v18.ifc"
+
+
+@need
+@pytest.mark.parametrize("path,q,want", [
+    (ESPL, "How big is room 119?", 63.841),  # W5 10:34: the storey total 870.288 @ 0.95
+    (ESPL, "What is the area of corridor 119 on floor 1?", 63.841),
+    (ESPL_IFC, "Which floor has no MAGAMISTUBA?", "1.korrus"),  # Q v25: the floors WITH one @ 0.9
+    (ESPL, "Of the floors that have rooms, which one has the fewest?", "1.korrus"),  # was a room @ 0.9
+    (ESPL, "What is the total area of the three largest rooms on '1.korrus'?", 232.887),  # was the list
+    (ESPL, "Which three rooms on '1.korrus' are the largest?",
+     "FUAJEE-TREPIKODA (101) (90.64 m²); KORIDOR (105) (78.40 m²); KORIDOR (119) (63.84 m²)"),
+])
+def test_v25_rankings_and_room_numbers(path, q, want):
+    from stoa.solvers.ifc.solver import IfcSolver
+
+    a = IfcSolver(plan2d="0", llm="0").solve(path, q)
+    assert a.value == want and a.confidence >= 0.8
+
+
+SMILEY_1OG = "data/ifc_models/kit-smiley-west_ac-20-smiley-west-10-bldg_plan-03-1-og.pdf"
+
+
+@need
+@pytest.mark.parametrize("path,q,want", [
+    (ESPL, "How many doors are on the floor above this one?", 42),  # Q: the sheet's own 46 @ 0.97
+    (SMILEY_1OG, "How many walls does the floor below this one have?", 81),
+])
+def test_relative_storey(path, q, want):
+    from stoa.solvers.ifc.solver import IfcSolver
+
+    assert IfcSolver(plan2d="0", llm="0").solve(path, q).value == want
+
+
+@need
+def test_whats_the_difference_is_a_count():
+    a = plan_vs_model(ESPL, "If I count the doors on this plan and in the model, what's the difference?")
+    assert a is not None and a.value == 0 and a.unit == "count"
+
+
+FRIG = "data/ifc_models/bimspeed-frigento_modello-palazzo-testa-cipriano.ifc"
+
+
+@pytest.mark.skipif(not abspath(FRIG).exists(), reason="frigento not available")
+@pytest.mark.parametrize("q,want", [
+    ("Which floor has the greatest number of doors?", "Piano 1"),  # Q v25: the whole-model 27 @ 0.97
+    ("Which floor has the lowest number of doors?", "Solaio interrato"),
+    ("What is the number of doors?", 27),
+])
+def test_greatest_number_of_is_a_floor_ranking(q, want):
+    from stoa.solvers.ifc.solver import IfcSolver
+
+    assert IfcSolver(plan2d="0", llm="0").solve(FRIG, q).value == want
+
+
+@need
+@pytest.mark.parametrize("q,want", [
+    ("How many windows does the storey directly above this one have?", 60),  # Q bug 28: the sheet's 55 @ 0.88
+    ("How many rooms are on the storey above?", 60),
+    ("Quante finestre del modello IFC non sono disegnate in questa pianta?", 3),  # W4 10:49: 55 @ 0.875
+    ("Wie viele Fenster des IFC-Modells sind in diesem Grundriss nicht eingezeichnet?", 3),
+])
+def test_relative_storey_wordings_and_not_drawn_languages(q, want):
+    from stoa.solvers.ifc.solver import IfcSolver
+
+    assert IfcSolver(plan2d="0", llm="0").solve(ESPL, q).value == want
+
+
+@need
+def test_above_ground_level_on_a_sheet_is_not_confident():
+    from stoa.solvers.ifc.solver import IfcSolver
+
+    a = IfcSolver(plan2d="0", llm="0").solve(ESPL, "How many windows are on the floors above ground level?")
+    assert a.confidence <= 0.5

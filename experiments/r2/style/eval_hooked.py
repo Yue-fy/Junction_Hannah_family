@@ -6,6 +6,7 @@ Measurement only (monkeypatch); the real change belongs in stoa/data.py (F).
     PYTHONPATH=. $JUNCTION_VENV/bin/python experiments/r2/style/eval_hooked.py --solver pipeline --split <path> ...
 """
 import functools
+import os
 import sys
 from pathlib import Path
 
@@ -21,13 +22,14 @@ def _outside_source_cached(path: str, folder_mtime: int) -> str:
             from stoa.style import guess_style
 
             s, p = guess_style(path)
-            if s == "cubicasa5k" and p >= 0.8:
-                return "cubicasa5k"
+            if s in HOOK_CLASSES and p >= 0.8:
+                return s
         except Exception:  # noqa: BLE001
             pass
     return "unknown"
 
 
+HOOK_CLASSES = os.environ.get("STYLE_HOOK_CLASSES", "cubicasa5k").split(",")  # e.g. cubicasa5k,swiss_dwellings
 D._outside_source_cached = _outside_source_cached
 
 if __name__ == "__main__":

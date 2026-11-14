@@ -19,7 +19,8 @@ Run: `python -m stoa.eval --solver raster --split <split> [--solver-arg twins=0]
 | Area of a named room on a PNG with no vector twin | printed area next to the room number, else flood fill × scale (`measure.py`) | held-out 43.3% within 2% vs VLM 36.7%; median error 3.3% vs 10.4% |
 | Summed areas (apartment B, all rooms labelled X, whole floor) | unit boundary (red dash-dot, dilated 3-5 px) + printed areas + flood fill for unprinted rooms; numbering gaps make a sum "partial" (`apartment.py`) | 202 twin-less Swiss PNG Qs: 43.6% within 2% vs vlm_direct 0.5%; AUROC 0.844, ECE 0.049 |
 | Which apartment is larger / largest | per-unit areas as above, conf by margin (<10%, <5%) | 83/94 vs vlm_direct 46/94; conf ≥ 0.8 12/12 |
-| Door count on a PNG plan with no vector twin | swing-arc matched filter at the scale bar's px/m; doors on an apartment boundary counted twice, as the source data does (`doorarcs.py`) | dev 2/15 exact (vlm_direct 0/15, LoRA 2/15), one box per door; TRAIN 60 floors 7/60 exact, 24/60 within 10% |
+| Door count on a PNG plan with no vector twin | swing-arc matched filter at the scale bar's px/m; doors on an apartment boundary counted twice, as the source data does (`doorarcs.py`) | all 100 Swiss dev floors: 12 exact, 31 ±1, 51 ±2 vs the counting LoRA 12 / 27 / 45, one box per door (LoRA none); doubling boundary doors: 12 exact vs 5 without |
+| Window count on a PNG plan with no vector twin | wall stretches drawn as 4 thin parallel lines (2 faces + 2 glass) with equal white gaps: per-column/row run scan, lines told apart by ink mass, a mullion splits a run (`windows.py`); 1:100 only. A scale-free pre-scan (`prescan`: the same scan at 50/80/120 px/m, ~0.2 s) runs before the text layer, so a clean plan without such symbols costs no tokens | all 100 Swiss dev floors: 34 exact (74 answered: 46%; 1:200 sheets abstain; the pre-scan changes 0 answers) vs the counting LoRA 10; boxes = the answer on 100%; TRAIN 1:100 recall 0.89 / precision 0.94 |
 | Room question on a sheet that shows no floor plan (elevation, section, detail) | sheet-kind veto (`sheet.py`) | low confidence + "this sheet shows no plan" |
 
 Confidence is the measured hit rate of the method, so the pipeline can gate on it. VLM readings of numbers are capped
@@ -38,6 +39,9 @@ CubiCasa probe: conf ≥ 0.75 went from 2/5 to 5/5 right).
   Score = ink on the ring − ink just inside and outside it. Reject full circles, and keep a detection only if its
   best radius lies inside the search range (a straight line scores higher as the ring shrinks). Work at full
   resolution: half resolution erased the 1-px arcs (recall 7% vs 91%).
+- **Thin-line symbols: classify lines by ink mass, not by min value.** A 1-px line on a slightly tilted wall is
+  antialiased over 2 px (black 64+173, grey 238+75), so 'min < 40 = black' misses most windows (recall 0.24 →
+  0.69 with mass). Drop coloured overlays first (the red apartment boundary merges with wall faces).
 - **Count what the source counts.** The Swiss DXF stores doors on apartment boundaries twice (54/60 TRAIN floors),
   and the gold counts both copies, so an image-only count must add them back.
 
@@ -49,15 +53,20 @@ CubiCasa probe: conf ≥ 0.75 went from 2/5 to 5/5 right).
   route for those.
 - Dimension-line reading (`dimline.py`): 16/126; it needs real tick/arrow detection.
 - A walls-only refill for tiny bathroom fills leaks through windows (no gain; reverted).
+- Window symbols at 1:200 (~30 px/m): the glass lines render as dark as the faces; dropping the ink test and
+  rejecting a 5th / ≥ 6 equally spaced line (stairs) cost 1:100 exact floors or lost on dev (34 → 32). Abstain there.
 
 ## Kill switches (`--solver-arg`)
 
 `text=0` (no text-layer QA), `offdomain=0` (old CubiCasa behaviour on every image), `twins=0` (pretend no
-DXF/PDF/IFC twin exists, to simulate a PNG-only plan), `doors=0` (off-domain door counts abstain), `gate=cls:method`.
+DXF/PDF/IFC twin exists, to simulate a PNG-only plan), `doors=0` / `windows=0` (off-domain door / window counts abstain), `prescan=0` (always read the scale bar before the window scan), `gate=cls:method`.
+
+Cost on uploads: scans fail the clean-render gate and CubiCasa-style plans fail the window pre-scan BEFORE the text layer. Q's 30 CubiCasa-style window uploads: 0 tokens, 0.47 s mean (run 20261114-105811-raster-dw_upload_windows-6729).
 
 ## Data and experiments
 
 TRAIN-only tuning in `experiments/w3/`. Per-object door/window gold in PNG pixels (from the DXF via
-`stoa.solvers.vector.pdfmap`): `experiments/w3/doorwin/gold.py`. Probe sets and caches live in
+`stoa.solvers.vector.pdfmap`): `experiments/w3/doorwin/gold.py`; window detector eval `windows.py [--show STEM]`;
+raster vs LoRA on all dev floors: `upload_set.py --what door|window` + `upload_cmp.py`. Probe sets and caches live in
 `$JUNCTION_SHARED/artifacts/W3/`. Drawings: Swiss Dwellings v3.0.0 (CC BY 4.0), CubiCasa5K (CC BY-NC 4.0), HABS
 (public domain).
