@@ -55,6 +55,7 @@ export function renderBench(el: HTMLElement, b: Bench) {
   const hp = hard.pipeline;
   const kinds = hp?.by_kind ? Object.entries(hp.by_kind) : [];
   const t = b.runs.test?.pipeline;
+  const t0 = b.runs.test?.no_lora; // same sealed test, LoRA switched off (ablation)
   const h2 = b.runs.hard2?.pipeline;
   // held-out generality: F's sealed fresh draw (hard2r, D12) when logged, else the older held-out rewording (hard2q)
   const h2r = b.runs.hard2r?.pipeline;
@@ -69,7 +70,7 @@ export function renderBench(el: HTMLElement, b: Bench) {
     <div class="bn-tiles">
       ${t ? `<div class="bn-tile"><div class="k">Accuracy · sealed test, ${t.n.toLocaleString("en")} questions</div>
         <div class="v">${pct(t.accuracy)}</div>
-        <div class="s">${pct(t.weighted_acc)} weighted · run once on a frozen commit (${esc(t.commit ?? "")}) · dev ${pct(p.accuracy)}; on dev the VLM alone gets ${pct(dev.vlm_direct?.accuracy)}, the prior ${pct(dev.prior?.accuracy)}</div></div>`
+        <div class="s">${pct(t.weighted_acc)} weighted · run once on a frozen commit (${esc(t.commit ?? "")})${t0 ? ` · without our fine-tuned counting model (LoRA) ${pct(t0.accuracy)}${t.by_source?.cubicasa5k && t0.by_source?.cubicasa5k ? `, on scanned plans ${pct(t0.by_source.cubicasa5k.accuracy, 0)} → ${pct(t.by_source.cubicasa5k.accuracy, 0)}` : ""}` : ""} · dev ${pct(p.accuracy)}; on dev the VLM alone gets ${pct(dev.vlm_direct?.accuracy)}, the prior ${pct(dev.prior?.accuracy)}</div></div>`
       : `<div class="bn-tile"><div class="k">Accuracy · dev, ${p.n.toLocaleString("en")} questions</div>
         <div class="v">${pct(p.accuracy)}</div>
         <div class="s">${pct(p.weighted_acc)} weighted by each source's share of the full dataset · VLM alone ${pct(dev.vlm_direct?.accuracy)}, prior ${pct(dev.prior?.accuracy)}</div></div>`}
