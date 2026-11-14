@@ -54,6 +54,34 @@ KINDS = {
         "sqm_of": ("How many square metres of {S} are there on this floor?", False),
         "every": ("Total area of every '{S}' in m²?", False),
     }),
+    # Swiss counts (08:25): the dataset's long wordings vs what a judge types
+    "doors": (r"^How many doors \(interior doors and entrance doors together\) are drawn on this floor plan\?$", {
+        "plain": ("How many doors are there on this floor?", False),
+        "total": ("What is the total number of doors in this plan?", False),
+        "count_imp": ("Count all the doors on this drawing.", False),
+        "incl": ("How many doors does this floor have, including the apartment entrance doors?", False),
+    }),
+    "washbasins": (r"^How many washbasins are drawn on this floor plan\?$", {
+        "sinks": ("How many bathroom sinks are on this floor?", False),
+        "wash_basins": ("How many wash basins does this plan show?", False),
+        "number": ("Number of washbasins on the floor plan?", False),
+    }),
+    "bathtubs": (r"^How many bathtubs are drawn on this floor plan\?$", {
+        "baths": ("How many baths are on this floor?", True),
+        "tubs": ("How many bath tubs can you see in this plan?", False),
+        "count_imp": ("Count the bathtubs on this drawing.", False),
+    }),
+    "apartments": (r"^How many apartments \(residential units\) are shown on this floor plan\?$", {
+        "flats": ("How many flats are on this floor?", False),
+        "units": ("How many residential units does this floor have?", False),
+        "dwellings": ("How many dwellings are there on this level?", False),
+        "number": ("Number of apartments on this floor plan?", False),
+    }),
+    "windows": (r"^How many windows are drawn on this floor plan\?$", {
+        "plain": ("How many windows does this floor have?", False),
+        "total": ("What is the total window count on this plan?", False),
+        "count_imp": ("Count the windows in this drawing.", False),
+    }),
 }
 
 
