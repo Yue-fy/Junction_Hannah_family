@@ -118,7 +118,8 @@ By source on sealed test: Swiss vector plans 98 % areas / 100 % counts; IFC mode
   ground floor?" (46), "How many windows does the whole building have?" (297), "How many more windows than doors are
   there on this floor?" (9). Steer away from: storeys in everyday words on another sheet ("the basement", "im
   Erdgeschoss"), "top floor" (picks the roof level), "how many floors" (says 7: counts foundation and roof), Finnish
-  "koko rakennuksessa" (answers this storey), floor-to-floor height. If one of these comes up, open the evidence and
+  "koko rakennuksessa" (answers this storey), floor-to-floor height, and **prices with a thousands separator**:
+  "€1,500 per door" → 69.0 at 0.92 (bug 17) — if a judge wants another price, type it as "1500 euros". If one of these comes up, open the evidence and
   say it: "the cross-check shows which storey it used — this is our known failure, on the failure slide."
 - Swiss plan — safe: apartments (4), "combined area of apartments A and B" (161.17 m²), "how many square feet is
   apartment B" (870), "by how many m² is B larger than A" (0.49). Avoid "How big is the Küche?" on floors with several

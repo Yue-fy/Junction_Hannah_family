@@ -596,6 +596,24 @@ def main():
     ]:
         out.append(row(path, q, None, None, "other", "scan:premise", "flag", note=note))
 
+    # ===== v11 (05:12): number formats a European writes — thousands separators and decimal commas ==============
+    # "1,200" in English = 1200; "1.200" (de) and "1'200" (Swiss) = 1200; "1 200" (fi/fr) = 1200; "450,50" = 450.5.
+    for path, q, g, typ in [
+        (E, "If each door costs 1,200 euros, what do all the doors on '1.korrus' cost in total?", 55200, "count"),
+        (E, "If each door costs €1,500, what do all the doors on '1.korrus' cost in total?", 69000, "count"),
+        (E, "Wenn eine Tür 1.200 € kostet, was kosten alle Türen auf '1.korrus' zusammen?", 55200, "count"),
+        (E, "Jos yksi ovi maksaa 1 200 euroa, paljonko kaikki ovet kerroksessa '1.korrus' maksavat yhteensä?", 55200,
+         "count"),
+        (E, "If each door costs 450,50 euros, what do all the doors on '1.korrus' cost in total?", 20723, "count"),
+        (SW, "If each door costs 1,200 euros, what do all the doors on this floor plan cost in total?", 43200, "count"),
+        (SW, "Wenn eine Tür 1'200 CHF kostet, was kosten alle Türen auf diesem Grundriss?", 43200, "count"),
+        (SW, "Flooring costs 1,250 CHF per m². What does flooring apartment B cost?", 101037.5, "count"),
+        (SW, "Ist Wohnung B grösser als 80,5 m²?", "yes", "text"),
+        (SW, "Ist Wohnung B grösser als 81,2 m²?", "no", "text"),
+    ]:
+        kind = "yesno:numfmt" if typ == "text" else "numfmt"
+        out.append(row(path, q, g, None, typ, kind, "same", note="thousands separator / decimal comma"))
+
     with open(OUT, "w", encoding="utf-8") as f:
         for r in out:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")

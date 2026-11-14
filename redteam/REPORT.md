@@ -1,7 +1,7 @@
 # Red team report (agent Q) — can we break the pipeline?
 
-**440 adversarial questions** (`redteam/questions.jsonl`, built by `redteam/build.py`, analysed by `redteam/analyze.py`),
-in ten families written one after another tonight; each new family was aimed at the mechanism the last one exposed.
+**450 adversarial questions** (`redteam/questions.jsonl`, built by `redteam/build.py`, analysed by `redteam/analyze.py`),
+in eleven families written one after another tonight; each new family was aimed at the mechanism the last one exposed.
 Builds on F's `hard` (translations/paraphrases/compositions/ft²) and `hard2` (new operators) and covers what those
 don't. The first 205 rows start from dev questions the pipeline had **right at conf ≥ 0.8**, so a failure there is
 caused by the perturbation, not by the drawing.
@@ -24,7 +24,8 @@ caused by the perturbation, not by the drawing.
    'KG' (6 languages → the sheet's storey at 0.88–0.98, W1), Italian "in tutto l'edificio" (3, W1), "How big is the
    Küche?" with several kitchens → silent sum at 0.98 (5, W2; fixed on night-W2 2254acb: 0.50 + "name the room"), "how many floors" → 7 incl. foundation and roof (W1),
    "whole building" on a one-floor plan and "the 7th floor" of a 5-storey model (5, W1/W2). On scans, unanswerable
-   questions still get an invented number (514 seats at 0.34) with no reason given (v10, W4).
+   questions still get an invented number (514 seats at 0.34) with no reason given (v10, W4). **Prices written
+   "1,200 euros" / "€1,500" are read as 1.2 / 1.5 by the IFC rules → 55.2 / 69.0 at 0.92** (v11, bug 17, W1).
 5. **Demo safety.** Judge-style questions on our three demo drawings (v6, v9 in Finnish) and the full tour pre-flight
    are in `demo/DEMO.md` ("If a judge types their own question") and `demo/LIVE-CHECK.md`.
 
@@ -40,6 +41,7 @@ caused by the perturbation, not by the drawing.
 | v8 scope premises (8) | "whole building" on a one-floor plan, "7th floor" in a 5-storey model | 2/2 ordinals · **5 of 6 premises at ≥ 0.8** |
 | v9 Finnish judge (14) | Finnish on the demo drawings | 11/14 · 0 |
 | v10 scan follow-ups (8) | date / author / scale; floor-plan questions on an elevation | 4/4 facts · premises answered without a reason |
+| v11 number formats (10) | "1,200 euros", "1.200 €", "1'200 CHF", "450,50", "80,5 m²" | 6/10 · **2** ("1,200" → 1.2 in ifc) |
 
 Re-run everything: see "Re-run" at the end. History (v1 → v10, with each round's verification) follows.
 
@@ -459,6 +461,18 @@ Run `20261114-045855-pipeline-questions-93c5`, all 418 rows; subsets by `subset_
 sheet's 50 at 0.88–0.98 (ground floor now works); Italian "in tutto l'edificio" ×3; ambiguous room names ×5 (W2); "how
 many floors" → 7; v8 scope premises ×5.
 
+## v11 (05:10): number formats a European writes — 10 Qs, run `20261114-050851-pipeline-v11-ccd8` (night 753eccb)
+### 17. "1,200 euros" is read as 1.2 by the IFC rules: factor-1000 error at 0.92 (HIGH, demo-visible) — owner W1 (`ifc` arith); W4/R2 for "1'200"
+- Esplanades sheet: "If each door costs **1,200** euros, what do all the doors on '1.korrus' cost in total?" →
+  **55.2 at 0.92** (gold 55,200); "**€1,500**" → **69.0 at 0.92** (gold 69,000). German "1.200 €" → 46 (the door
+  count) at 0.30. Swiss plan, Swiss thousands apostrophe "Wenn eine Tür **1'200** CHF kostet …" → the agent computes
+  36 × 200 = 7,200 at 0.75 (gold 43,200).
+- Right: "450,50 euros" → 20,723 (0.92), Finnish "1 200 euroa" → 55,200 (agent, 0.75), dxf "1,200 euros" → 43,200,
+  "1,250 CHF per m²" × apartment B → 101,037.5 (agent, 0.81), "Ist Wohnung B grösser als 80,5 / 81,2 m²?" → yes / no.
+- **Fix:** a comma, dot, apostrophe or space followed by exactly three digits and then a non-digit is a thousands
+  separator; one or two digits after a comma is a decimal. Same family as bug 9: the arithmetic is verified, the
+  operand is not.
+
 ## Pre-merge check (05:07): night 753eccb + W1 1c43c57 + W2 2254acb + W4 f889ace (scratch snapshot)
 All 440 rows, run `20261114-050528-pipeline-questions-98f0` vs night's `93c5`: **0 answers lost**; core 283 rows 96.5 %
 (=), 189/189 right at ≥ 0.8, 0/24 false premises; all 440: 91.7 % scored, 237/247 right at ≥ 0.8, $0.073 per 1,000.
@@ -475,8 +489,8 @@ Italian ×3, floors = 7, 7th floor ×2; W2: one-floor "whole building" ×3).
 - Rotated, grayscale, heavily compressed and half-resolution copies of a plan: 30/30 right, at the same confidence.
 
 ## Re-run
-`questions.jsonl` now has 440 rows: v1 (174) + v2 (31) + v3 Swiss compositions (42) + v4 CubiCasa compositions (36) +
-v5 natural references (70) + v6 judge questions on the demo drawings (21) + v7 scope words in 9 languages (36) + v8 scope premises (8) + v9 Finnish judge (14) + v10 scan follow-ups (8) = 440; earlier rows are byte-identical across builds (checked with cmp), so runs on the first 205 /
+`questions.jsonl` now has 450 rows: v1 (174) + v2 (31) + v3 Swiss compositions (42) + v4 CubiCasa compositions (36) +
+v5 natural references (70) + v6 judge questions on the demo drawings (21) + v7 scope words in 9 languages (36) + v8 scope premises (8) + v9 Finnish judge (14) + v10 scan follow-ups (8) + v11 number formats (10) = 450; earlier rows are byte-identical across builds (checked with cmp), so runs on the first 205 /
 283 rows compare directly (`python3 $JUNCTION_SHARED/artifacts/Q/subset_stats.py <run> 283`). Build with
 `PYTHONHASHSEED=0 PYTHONPATH=.`; v5 calls the ifc solver for its gold (deterministic, < 1 s per row).
 ```
