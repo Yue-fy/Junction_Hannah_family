@@ -1,6 +1,6 @@
 # Error analysis (E = agent F)
 
-Updated 04:00, 14 Nov 2026 (sections newest first). Regenerate the tables with
+Updated 04:45, 14 Nov 2026 (sections newest first). Regenerate the tables with
 `/data/User/fangy4/envs/junction/bin/python -m stoa.eval.analyze <run_id> --baseline <dummy run_id> --top 20`.
 For paired significance use `python3 experiments/r1/stats/compare.py RUN_A RUN_B --by template` (cluster CI).
 
@@ -13,7 +13,44 @@ answer) vs `20261113-234812-dummy-dev` (template prior), both on dev v2 (hash f4
 | dummy (prior) | 26.1% | 40.4% | 0 | 0% |
 | vlm_direct | 32.0% (28.0–36.5) | 44.1% | 200 (all IFC) | 0% |
 
-## LATEST (03:30): gate of the test-1 code, cc5k=1 leak-free, where dev points are left
+## LATEST (04:45, cycle 62): language is the biggest held-out gap, and a translate-first front end closes most of it
+
+### 1. hardL: the same known-gold questions in 8 languages nobody tuned on (stoa/eval/hardl.py)
+Base = dev questions with gold (v0: 20 atomic; cubicasa 7, ifc 9, swiss 4; the 20 hard2 compositions are still
+being translated: hosted API 429s). Translations by hosted Nemotron 3.5 VL (not the local Qwen that a front end uses),
+quoted names and numbers checked verbatim. `hardL_open` (cs/hu/tr/ro + the 60 English bases) is open; `hardL`
+(nb/hr/el/lt) is held out (F/S0, aggregates). None of these languages is in hard2r (es/et/pl) or hard3. Paired on the
+same items with `experiments/F/hardl_paired.py EN_RUN RUN`. Night 15c0b04, `lora_conf=own`, 4 workers.
+
+| run | English (same items) | as is | translate-first (simulated) | paired W/L | conf≥0.8 right | confident-wrong |
+|---|---:|---:|---:|---:|---:|---:|
+| open cs/hu/tr/ro (n 80) | 90.0 | 52.5 | **86.2** | 27 / 0 | 90.3 → 100% | 3 → 0 |
+| held-out nb/hr/el/lt (n 78) | 89.7 | 53.8 | **79.5** | 20 / 0 | 75.9 → 95.7% | 7 → 2 |
+| held-out by source: cubicasa / ifc / swiss | 71 / 100 / 100 | 32 / 68 / 62.5 | 54 / 91 / 100 | | | |
+
+Simulation = R2's `should_translate` trigger (non-English and the intent parser failed) → `to_english(force=True)`,
+English kept only if it re-parses (`experiments/F/lang_frontend_sim.py`). Per held-out language: nb 80 → 90 (rules
+already read 6 of 20), el 50 → 85, hr 45 → 75, lt 39 → 67. Remaining held-out misses: translation drift (the 8B
+model added an 'external' the source did not say → ifc filtered walls at ≥0.8) and trigger-fired-but-no-reparse
+(original kept; ifc answered a count with a non-integer at ≥0.8). Guards suggested to W4. Runs:
+20261114-042948-…-hardL_open-80c7, -043124-…-hardL_open_fe-e0f4, -043021-…-hardL-dbd0, -043140-…-hardL_fe-df5f.
+
+### 2. Held-out hard2q on night 15c0b04 (aggregates)
+W4's 0.75 cap: ≥0.8 bin 50.8% @ 92.7% (0980: 55.6% @ 86.7%), accuracy 79.9 (=). `lora_conf=own` vs `gate`:
+cubicasa ECE 0.107 vs 0.162, AUROC 0.669 vs 0.632 → default own. Last confident-wrong bucket: swiss
+floor-minus-apartment 7/15 wrong, all at 0.90–0.96: dxf returns the excluded apartment's area when the exclusion is a
+fronted phrase, and the KG ✓ checks the apartment polygons, so nothing lowers confidence (W2: parse; W4: guard).
+
+### 3. IFC areas on unseen models (artifacts/F/ifc_area_probe.jsonl, `experiments/F/ifc_probe.py write_area`)
+137 Qs on 13 ifc_bench models with IfcSpaces: 78/78 Qto-gold answers right, 0 errors, 0 None; 32 right answers at 0.7
+only because Qto ≠ shape by > 2% (W1). With the count probe (301/301), IFC geometry generalises; wording does not.
+
+### 4. Paths outside the dataset (Q 04:13, fixed 62b0d1e)
+`dataset_rel` cut any absolute path containing data/<source>/ and looked it up under $STOA_DATA → missing file →
+prior at 0.8. Now only a true copy (same relative path and size) is cut; others keep their path and get the source
+from the folder name; `ifc_model_for` looks next to a foreign plan.
+
+## Earlier (03:30): gate of the test-1 code, cc5k=1 leak-free, where dev points are left
 
 Context: every agent was stopped by the org spend limit 01:58–03:10, so there was no 02:40 freeze. At 03:12 F gated
 W4 c1b294c (trust on unseen wordings, from F's 01:44 held-out mechanisms) + W4 3d21bee (cc5k gate path) + R1 eb03604

@@ -52,6 +52,7 @@ function fmtEur(usd: number) {
 
 function fmtValue(a: Answer) {
   if (a.value === null || a.value === undefined) return "—";
+  if (typeof a.value === "boolean") return a.value ? "yes" : "no"; // Python bool (int subclass) arrives as true/false
   if (typeof a.value === "number") {
     // thousands separators only from 10,000 up (years and model ids like 2011 stay as they are)
     const v = Math.abs(a.value) >= 10000 ? a.value.toLocaleString("en", { maximumFractionDigits: 2 })
@@ -72,7 +73,10 @@ export function crossChecks(a: Answer, asks: string[] = []): { text: string; ok:
     const part = l.match(/^([^:;]+):\s/)?.[1];
     const k = asks.length ? evStep(l, asks) : -1;
     const text = (k >= 0 ? `step ${k + 1}: ` : part && parts.has(part) ? `${part}: ` : "") + m[1].trim();
-    return [{ text: text.replace(/\s*[✓✗]\s*/g, " ").trim(), ok: !/✗|≠|!=|disagree|differs?\b|mismatch|conflict/i.test(text) }];
+    // numbers as the value shows them: "20700.0" → "20,700" (integers lose ".0"; separators from 10,000 up)
+    const pretty = text.replace(/\s*[✓✗]\s*/g, " ").trim().replace(/(?<![\w.])(\d+)\.0(?![\d.])/g, "$1")
+      .replace(/(?<![\w.,])\d{5,}(?![\d.,]|\w)/g, (n) => Number(n).toLocaleString("en"));
+    return [{ text: pretty, ok: !/✗|≠|!=|disagree|differs?\b|mismatch|conflict/i.test(text) }];
   });
   // Evidence notes carry the specific check; the trace usually repeats it, so use the trace only as fallback.
   // Exception: boxes added by "Show where" (notes start with the locator's name) carry the locator's check only;
@@ -124,7 +128,7 @@ function rangeHtml(a: Answer) {
  * solver's own assumption or trace line (W1 ifc: "yes/no: is the model quantity (46 count) > 40"; agent/calc lines
  * like "46 > 40 → yes"). Nothing is recomputed here; no line, no basis shown. */
 export function yesNoBasis(a: Answer): string {
-  if (typeof a.value !== "string" || !/^(yes|no|true|false|ja|nein|oui|non|kyllä|ei|si|sì)$/i.test(a.value.trim())) return "";
+  if (typeof a.value !== "boolean" && (typeof a.value !== "string" || !/^(yes|no|true|false|ja|nein|oui|non|kyllä|ei|si|sì)$/i.test(a.value.trim()))) return "";
   const OP = String.raw`(>=|<=|≥|≤|>|<|==|=|!=|≠)`;
   const NUM = String.raw`(-?\d[\d,]*(?:\.\d+)?)`;
   const lines = [...(a.assumptions ?? []), ...(a.trace ?? []).filter((l) => /yes|no\b|→/i.test(l))];
@@ -139,6 +143,18 @@ export function yesNoBasis(a: Answer): string {
     return `<span class="range basis" title="${esc(l)}">${esc(x)}${esc(unit)} ${esc(sym)} ${esc(y)}</span>`;
   }
   return "";
+}
+
+/** A name in the question the solver could not find (W1 ifc: assumption "could not resolve 'KORIDOR (119)'"): the answer
+ * then covers something broader (the sheet's storey, the model), possibly at high confidence after a rewrite. Shown
+ * right under the value so a reader catches the scope change before trusting the number. */
+export function scopeWarning(a: Answer): string {
+  const all = [...(a.assumptions ?? []), ...(a.missing ?? [])];
+  const names = [...new Set(all.flatMap((l) => [...l.matchAll(/could not resolve '([^']+)'/gi)].map((m) => m[1])))];
+  if (!names.length || a.value === null || a.value === undefined) return "";
+  const scope = all.map((l) => l.match(/\b(storey '[^']+'|the whole model|model-wide)/i)).find((m) => m)?.[1];
+  const hi = (a.confidence ?? 0) >= 0.8 ? " The confidence above is for that broader question." : "";
+  return `<div class="xcheck bad scope-warn"><b>⚠ Not matched</b>the solver could not match ${names.map((n) => `'${esc(n)}'`).join(", ")} to a storey, room or model for this question, so this answer covers ${scope ? esc(scope) : "a broader scope"}.${hi} Check that this is what was asked.</div>`;
 }
 
 /** One row per object: evidence items that share an ifc_guid (2D box + 3D element) are grouped. */
@@ -262,7 +278,9 @@ function reasoningHtml(run: AgentRun, a: Answer) {
     const th = (s.thought ? `<div class="th">${esc(s.thought)}</div>` : "") + (s.warn ? `<div class="warn">⚠ ${esc(s.warn)}</div>` : "");
     if (s.tool === "ask") {
       const k = evCount(s.input);
-      const meta = [s.conf !== undefined ? `${Math.round(s.conf * 100)}%` : "", s.by ?? "", k ? `${k} evidence` : ""].filter(Boolean).join(" · ");
+      const cnt = askCount(s);
+      const meta = [s.conf !== undefined ? `${Math.round(s.conf * 100)}%` : "", s.by ?? "",
+        k ? (cnt && cnt > k ? `${k} of ${cnt} passed as evidence` : `${k} evidence`) : ""].filter(Boolean).join(" · ");
       return `<li>${n}${tool}<span role="button" tabindex="0" class="subq" data-q="${esc(s.input)}" title="Ask this sub-question on its own">${esc(s.input)}</span><span class="res">→ <b>${fmtRes(s.result)}</b>${meta ? ` <small>${esc(meta)}</small>` : ""}</span>${th}</li>`;
     }
     if (s.tool === "calc") return `<li>${n}${tool}<code>${esc(s.input.replace(/\*/g, "×").replace(/\//g, "÷"))}</code><span class="res">= <b>${fmtRes(s.result)}</b></span>${th}</li>`;
@@ -272,6 +290,24 @@ function reasoningHtml(run: AgentRun, a: Answer) {
   };
   const head = run.why ? `<div class="why-agent">Not a known question template (${esc(run.why.replace(/;\s*not a known template$/, ""))}), so a small local model plans the steps; every number comes from a tool, never from the model.</div>` : "";
   return `${head}<ol class="steps">${run.steps.map(li).join("")}</ol>`;
+}
+
+/** The count an ask step returned ("46 count (confidence 0.99, …)" → 46), else null. */
+function askCount(s: AgentStep): number | null {
+  const m = s.result.match(/^\s*(\d+)\s*(?:count\b|$|\()/);
+  return m ? Number(m[1]) : null;
+}
+
+/** Agent answers pass on only part of a counted sub-answer's evidence (W4: the first 6): say so, and how to see all. */
+function partialEvidence(run: AgentRun | null, a: Answer): string {
+  if (!run) return "";
+  const asks = run.steps.map((s, i) => ({ s, i })).filter(({ s }) => s.tool === "ask");
+  for (const { s, i } of asks) {
+    const n = askCount(s);
+    const k = (a.evidence ?? []).filter((e) => evStep(e.note ?? "", [s.input]) === 0).length;
+    if (n && k && n > k) return ` · first ${k} of the ${n} from step ${i + 1}; click its question to see all`;
+  }
+  return "";
 }
 
 /** Which ask step an agent evidence note came from: notes are "<ask input[:55]> — <note>". -1 = none. */
@@ -316,7 +352,11 @@ function intentHtml(a: Answer, run: AgentRun | null) {
   } else if (it) {
     bits.push(`<b>${esc(it.task)}</b>`);
     const target = a.plan?.parts?.length ? a.plan.parts.join(a.plan.op === "sum" ? " + " : ", ") : it.target;
-    if (target && target !== it.task && target !== "unknown") bits.push(esc(target.replace(/_/g, " ")));
+    // free-text questions: the template parser often guesses a target nobody used (Finnish "Mikä on piirustuksen
+    // mittakaava?" → 'door'); show it only when the solver's trace mentions it beyond the intent line itself
+    const used = it.task !== "text" || a.plan?.parts?.length || !target
+      || (a.trace ?? []).some((l) => !/^intent:/.test(l) && new RegExp(`\\b${target.replace(/_/g, " ").replace(/[^\w ]/g, "")}`, "i").test(l));
+    if (target && target !== it.task && target !== "unknown" && used) bits.push(esc(target.replace(/_/g, " ")));
     const f = Object.entries(it.filters ?? {}).filter(([, v]) => v !== null && v !== "" && v !== false)
       .map(([k, v]) => `${esc(k.replace(/_/g, " "))} <i>${esc(v === true ? "yes" : v)}</i>`);
     bits.push(...(f.length ? f : it.scope ? [`scope <i>${esc(it.scope)}</i>`] : []));
@@ -448,6 +488,7 @@ export function renderCard(el: HTMLElement, a: Answer, opts: CardOpts) {
         <div class="conf-num">${conf}%</div><div class="conf-bar"><i style="width:${conf}%"></i></div><div class="conf-lbl">confidence</div>
       </div>
     </div>
+    ${scopeWarning(a)}
     ${intentHtml(a, run)}
     ${compareHtml(a)}
     ${checks.map((x) => `<div class="xcheck ${x.ok ? "ok" : "bad"}"><b>${x.ok ? "✓ Cross-checked" : "✗ Sources disagree"}</b> ${esc(x.text)}</div>`).join("")}
@@ -468,7 +509,7 @@ export function renderCard(el: HTMLElement, a: Answer, opts: CardOpts) {
     ${(a.assumptions ?? []).length ? `<details class="sec" open><summary>Assumptions</summary><ul class="assume">${a.assumptions!.map((t) => `<li>${esc(t)}</li>`).join("")}</ul></details>` : ""}
     ${(a.missing ?? []).length ? `<details class="sec" open><summary>What would make it certain</summary><ul class="missing">${a.missing!.map((t) => `<li>${esc(t)}</li>`).join("")}</ul></details>` : ""}
     ${sheetsHtml(ev, opts.currentFile)}
-    <details class="sec" open><summary>Evidence <small>${groups.length} item${groups.length === 1 ? "" : "s"}${groups.length < ev.length ? ` (${ev.length} boxes/elements)` : ""} · click to zoom</small></summary>
+    <details class="sec" open><summary>Evidence <small>${groups.length} item${groups.length === 1 ? "" : "s"}${groups.length < ev.length ? ` (${ev.length} boxes/elements)` : ""} · click to zoom${esc(partialEvidence(run, a))}</small></summary>
       <ul class="evidence">${shown.map((g, n) => evLabel(ev, g, n + 1, opts.describeGuid, asks)).join("")}${groups.length > shown.length ? `<li class="more">+ ${groups.length - shown.length} more</li>` : ""}</ul></details>
   `;
   el.querySelectorAll<HTMLElement>(".ev-item").forEach((li) => li.addEventListener("click", () => opts.onEvidence(Number(li.dataset.i))));

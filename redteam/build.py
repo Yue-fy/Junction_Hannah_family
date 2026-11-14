@@ -18,6 +18,7 @@ import os
 import random
 import re
 import shutil
+from collections import defaultdict
 from pathlib import Path
 
 from PIL import Image
@@ -270,6 +271,89 @@ def main():
     for b in pick2("cubicasa5k", "count", 2, lambda r: True):
         out.append(row(b["path"], "How many IfcWall elements are in this model?", None, None, "count",
                        "unanswerable", "flag", b, note="a raster plan has no IFC model"))
+
+    # ===== v3 (04:40): "A and B in total" in 7 languages on Swiss vector plans ================================
+    # dxf counts are ~100 % right, so a miss here is the composer / language parsing, not perception. hard's 211
+    # compositions are all English. Gold = sum of the drawing's own atomic dev golds.
+    from stoa.eval.splits import load_split
+
+    rng3 = random.Random(1403)
+    atom = {"door": "How many doors (interior doors and entrance doors together) are drawn on this floor plan?",
+            "window": "How many windows are drawn on this floor plan?",
+            "toilet": "How many toilets (WC) are drawn on this floor plan?",
+            "basin": "How many washbasins are drawn on this floor plan?",
+            "bathtub": "How many bathtubs are drawn on this floor plan?"}
+    words = {  # plural / partitive forms as a native speaker would write them in this sentence
+        "en": {"door": "doors", "window": "windows", "toilet": "toilets", "basin": "washbasins", "bathtub": "bathtubs"},
+        "fi": {"door": "ovea", "window": "ikkunaa", "toilet": "WC-istuinta", "basin": "pesuallasta",
+               "bathtub": "kylpyammetta"},
+        "de": {"door": "Türen", "window": "Fenster", "toilet": "WCs", "basin": "Lavabos", "bathtub": "Badewannen"},
+        "fr": {"door": "portes", "window": "fenêtres", "toilet": "WC", "basin": "lavabos", "bathtub": "baignoires"},
+        "it": {"door": "porte", "window": "finestre", "toilet": "WC", "basin": "lavabi", "bathtub": "vasche da bagno"},
+        "nl": {"door": "deuren", "window": "ramen", "toilet": "toiletten", "basin": "wastafels", "bathtub": "badkuipen"},
+        "sv": {"door": "dörrar", "window": "fönster", "toilet": "toaletter", "basin": "handfat", "bathtub": "badkar"},
+    }
+    tmpl = {"en": "How many {a} and {b} are drawn on this floor plan in total?",
+            "fi": "Kuinka monta {a} ja {b} pohjapiirustukseen on piirretty yhteensä?",
+            "de": "Wie viele {a} und {b} sind insgesamt auf diesem Grundriss eingezeichnet?",
+            "fr": "Combien de {a} et de {b} y a-t-il au total sur ce plan ?",
+            "it": "Qual è il numero totale di {a} e {b} su questa pianta?",
+            "nl": "Hoeveel {a} en {b} staan er in totaal op deze plattegrond?",
+            "sv": "Hur många {a} och {b} finns det totalt på planritningen?"}
+    from stoa.data import load_questions
+
+    dev_paths = {q.path for q in load_split("dev") if q.source == "swiss_dwellings"}
+    gold_by = defaultdict(dict)  # atomic golds of dev drawings (the English twin may sit outside the dev cap)
+    for q in load_questions():
+        if q.path in dev_paths:
+            for k, t in atom.items():
+                if q.question == t:
+                    gold_by[q.path][k] = q.answer
+    pairs = [("door", "window"), ("toilet", "basin"), ("bathtub", "basin"), ("window", "toilet")]
+    paths = sorted(p for p, g in gold_by.items() if len(g) == len(atom))
+    rng3.shuffle(paths)
+    for i, path in enumerate(paths[:6]):
+        a_, b_ = pairs[i % len(pairs)]
+        g = gold_by[path]
+        for lang, t in tmpl.items():
+            q = t.format(a=words[lang][a_], b=words[lang][b_])
+            out.append(row(path, q, int(g[a_]) + int(g[b_]), "count", "count", f"compose:{lang}", "same",
+                           note=f"{a_} {g[a_]} + {b_} {g[b_]}"))
+
+    # ===== v4 (04:45): the same on CubiCasa raster plans (the LoRA must not read a compound as one class) =======
+    # Each composed row has atomic EN controls for its two parts (kind compose-atom), so the analysis can compare
+    # the composed answer with the sum of the pipeline's own atomic answers: parsing isolated from perception.
+    rng4 = random.Random(1404)
+    catom = {"bedroom": "How many bedrooms (makuuhuone, usually marked MH) are on this floor plan?",
+             "sauna": "How many saunas are on this floor plan?",
+             "wc": "How many toilet bowls (WC seats) are drawn on this floor plan?",
+             "balcony": "How many balconies (parveke, including glazed balconies) are on this floor plan?"}
+    cwords = {"en": {"bedroom": "bedrooms", "sauna": "saunas", "wc": "WC seats", "balcony": "balconies"},
+              "fi": {"bedroom": "makuuhuonetta", "sauna": "saunaa", "wc": "WC-istuinta", "balcony": "parveketta"},
+              "de": {"bedroom": "Schlafzimmer", "sauna": "Saunen", "wc": "WC-Sitze", "balcony": "Balkone"},
+              "sv": {"bedroom": "sovrum", "sauna": "bastur", "wc": "toalettstolar", "balcony": "balkonger"}}
+    ctmpl = {"en": "How many {a} and {b} are on this floor plan in total?",
+             "fi": "Kuinka monta {a} ja {b} pohjapiirustuksessa on yhteensä?",
+             "de": "Wie viele {a} und {b} gibt es insgesamt auf diesem Grundriss?",
+             "sv": "Hur många {a} och {b} finns det totalt på planritningen?"}
+    cdev = {q.path for q in load_split("dev") if q.source == "cubicasa5k"}
+    cgold = defaultdict(dict)
+    for q in load_questions():
+        if q.path in cdev:
+            for k, t in catom.items():
+                if q.question == t:
+                    cgold[q.path][k] = q.answer
+    cpairs = [("bedroom", "sauna"), ("wc", "balcony"), ("sauna", "balcony")]
+    cpaths = sorted(p for p, g in cgold.items() if len(g) == len(catom))
+    rng4.shuffle(cpaths)
+    for i, path in enumerate(cpaths[:6]):
+        a_, b_ = cpairs[i % len(cpairs)]
+        g = cgold[path]
+        for k in (a_, b_):
+            out.append(row(path, catom[k], g[k], "count", "count", "compose-atom", "same", note=k))
+        for lang, t in ctmpl.items():
+            out.append(row(path, t.format(a=cwords[lang][a_], b=cwords[lang][b_]), int(g[a_]) + int(g[b_]), "count",
+                           "count", f"compose-cc:{lang}", "same", note=f"{a_} {g[a_]} + {b_} {g[b_]}"))
 
     with open(OUT, "w", encoding="utf-8") as f:
         for r in out:

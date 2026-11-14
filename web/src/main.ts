@@ -416,9 +416,18 @@ async function runAsk() {
   history.replaceState(null, "", url);
   const card = $("card");
   card.className = "card loading";
-  card.innerHTML = `<div class="spinner"></div><p>Answering… <small>cheapest solver first (rules → local model → hosted model)</small></p>`;
+  card.innerHTML = `<div class="spinner"></div><p>Answering… <b class="elapsed"></b> <small>cheapest solver first (rules → local model → hosted model)</small><small class="slow" hidden><br>Still working: no rule answers this directly, so the local vision model is reading the drawing or the reasoning agent is planning steps. The first read of a large scan can take a few minutes; after that it is cached.</small></p>`;
   $<HTMLButtonElement>("askBtn").disabled = true;
   const t0 = performance.now();
+  // a live question can take long (first text-layer read of a scan, the agent's steps): show it is still going
+  const tick = window.setInterval(() => {
+    const s = (performance.now() - t0) / 1000;
+    const el = card.querySelector<HTMLElement>(".elapsed");
+    if (!el) return window.clearInterval(tick);
+    el.textContent = s >= 2 ? `${Math.floor(s)} s` : "";
+    const slow = card.querySelector<HTMLElement>(".slow");
+    if (slow && s >= 15) slow.hidden = false;
+  }, 1000);
   try {
     const a = await ask(f.path, q);
     if (state.file?.path !== f.path) return;
@@ -427,6 +436,7 @@ async function runAsk() {
     card.className = "card error";
     card.innerHTML = `<p><b>Request failed.</b> ${esc(e)}</p>`;
   } finally {
+    window.clearInterval(tick);
     $<HTMLButtonElement>("askBtn").disabled = false;
   }
 }

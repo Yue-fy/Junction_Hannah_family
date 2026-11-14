@@ -19,7 +19,7 @@ UNIT_ALIASES = {"m2": {"m2", "m²", "sqm"}, "cm2": {"cm2", "cm²"}, "ft2": {"ft2
                 "mm": {"mm"}, "m": {"m"}, "count": {"count", None, ""}}
 FLAG_WORDS = re.compile(r"not found|no (such|room|storey|level|space|scale|data)|does not exist|doesn't exist|"
                         r"unknown|not (in|on|shown|available|given|present|listed)|cannot|can't|missing|assum|"
-                        r"no .* (named|called|labelled)|not stated", re.I)
+                        r"no .* (named|called|labelled)|not stated|could not|matches no|not resolve", re.I)
 
 
 def num(v):
