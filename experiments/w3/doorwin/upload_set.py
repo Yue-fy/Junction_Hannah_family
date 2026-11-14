@@ -19,16 +19,19 @@ from stoa.solvers.vector import floor as F  # noqa: E402
 
 D = os.environ["STOA_DATA"]
 Q = "How many doors (interior doors and entrance doors together) are drawn on this floor plan?"
+QW = "How many windows are drawn on this floor plan?"
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--split", default="dev")
     ap.add_argument("--out", required=True)
+    ap.add_argument("--what", default="door", choices=["door", "window"])
     a = ap.parse_args()
     qs = [q for q in load_split(a.split) if q.source == "swiss_dwellings"]
     stems = sorted({Path(q.path).stem for q in qs})
-    known = {Path(q.path).stem: q.answer for q in qs if "doors (interior doors and entrance" in q.question}
+    pat = "doors (interior doors and entrance" if a.what == "door" else "How many windows are"
+    known = {Path(q.path).stem: q.answer for q in qs if pat in q.question}
     n = agree = 0
     with open(a.out, "w") as f:
         for s in stems:
@@ -36,7 +39,7 @@ def main():
             if not all(os.path.exists(base + e) for e in (".dxf", ".png")):
                 continue
             try:
-                g = len(F.load_floor(base + ".dxf").items["door"])
+                g = len(F.load_floor(base + ".dxf").items[a.what])
             except Exception as e:  # noqa: BLE001
                 print("skip", s, type(e).__name__)
                 continue
@@ -44,10 +47,11 @@ def main():
                 agree += int(str(known[s]).strip() == str(g))
                 if str(known[s]).strip() != str(g):
                     print("gold mismatch", s, known[s], g)
-            f.write(json.dumps({"qid": f"dup-{s}", "path": f"data/swiss_dwellings/{s}.png", "question": Q,
+            f.write(json.dumps({"qid": f"{a.what[0]}up-{s}", "path": f"data/swiss_dwellings/{s}.png",
+                                "question": Q if a.what == "door" else QW,
                                 "type": "count", "source": "swiss_dwellings", "answer": g, "unit": "count"}) + "\n")
             n += 1
-    print(n, "floors ->", a.out, f"; dataset door questions agreeing with the DXF count: {agree}/{len(known)}")
+    print(n, "floors ->", a.out, f"; dataset {a.what} questions agreeing with the DXF count: {agree}/{len(known)}")
 
 
 if __name__ == "__main__":

@@ -126,7 +126,7 @@ class RasterSolver(BaseSolver):
 
     def __init__(self, gate: str = "", backend: str = "local", target_px: int | str = 2_000_000,
                  text: int | str = 1, offdomain: int | str = 1, twins: int | str = 1, doors: int | str = 1,
-                 **kwargs):
+                 windows: int | str = 1, **kwargs):
         super().__init__(**kwargs)
         self.backend = backend
         self.target_px = int(target_px)
@@ -134,6 +134,7 @@ class RasterSolver(BaseSolver):
         self.offdomain = bool(int(offdomain))  # non-CubiCasa images: labels for rooms, abstain on symbols
         self.twins = bool(int(twins))  # 0 = act as if no vector twin existed (simulates an unseen PNG-only plan)
         self.doors = bool(int(doors))  # off-domain door counts from drawn swing arcs (doorarcs.py); 0 = abstain
+        self.windows = bool(int(windows))  # off-domain window counts from 4-line wall symbols (windows.py); 0 = abstain
         self.gate = load_gate()
         for part in filter(None, (gate or "").split(",")):
             c, m = part.split(":")
@@ -274,6 +275,10 @@ class RasterSolver(BaseSolver):
             ans = self._door_arcs(path, trace)
             if ans is not None:
                 return ans
+        if cls == "window" and self.windows and twinless:
+            ans = self._window_symbols(path, trace)
+            if ans is not None:
+                return ans
         return Answer(value=None, unit="count", solver=self.name, trace=trace + ["abstain (off-domain symbol class)"],
                       missing=[f"a {cls.replace('_', ' ')} detector for this drawing style (raster's are fitted on "
                                f"CubiCasa plans only)"])
@@ -285,20 +290,13 @@ class RasterSolver(BaseSolver):
         counts exact on 7/60 floors (the DXF also counts doors no drawing shows), median error -2. An estimate whose
         every door a reader can check, not an exact count. None without a metric scale bar."""
         from stoa.solvers.raster import doorarcs as DA
-        from stoa.solvers.raster import scalebar as SB
         from stoa.solvers.raster import textlayer as T
 
         img_path = self._raster_file(path)
         if img_path is None:
             return None
-        try:
-            tl = T.text_layer(img_path, backend=self.backend)
-            bar = next((b for b in SB.bars(img_path, layer=tl) if b.unit in SB.UNIT_M and b.px_per_m), None)
-        except Exception as e:  # noqa: BLE001
-            trace.append(f"door arcs: no scale ({type(e).__name__})")
-            return None
+        bar = self._metric_bar(img_path, trace, "door arcs", "the door radius in pixels is unknown")
         if bar is None:
-            trace.append("door arcs: no metric scale bar, so the door radius in pixels is unknown")
             return None
         import numpy as np
         from PIL import Image
@@ -323,6 +321,54 @@ class RasterSolver(BaseSolver):
                                    f"source data does"],
                       missing=["a vector twin (DXF/PDF) of this plan for an exact count: the image alone matched the "
                                "exact count on 7 of 60 TRAIN floors (median error -2 doors)"])
+
+    def _metric_bar(self, img_path: str, trace: list[str], what: str, why: str):
+        """The drawing's metric scale bar (text layer + scalebar.py; cached per drawing), else None."""
+        from stoa.solvers.raster import scalebar as SB
+        from stoa.solvers.raster import textlayer as T
+
+        try:
+            tl = T.text_layer(img_path, backend=self.backend)
+            bar = next((b for b in SB.bars(img_path, layer=tl) if b.unit in SB.UNIT_M and b.px_per_m), None)
+        except Exception as e:  # noqa: BLE001
+            trace.append(f"{what}: no scale ({type(e).__name__})")
+            return None
+        if bar is None:
+            trace.append(f"{what}: no metric scale bar, so {why}")
+        return bar
+
+    def _window_symbols(self, path: str, trace: list[str]) -> Answer | None:
+        """Windows on a plan without a vector twin: wall stretches drawn as 4 thin parallel lines (windows.py; line
+        spacing 0.03-0.35 m and length >= 0.3 m from the scale bar). TRAIN Swiss floors at 1:100: held-out exact 10/32,
+        +-1 15/32, recall 0.85 / precision 0.93 on all 51. None without a metric bar or below 45 px/m (1:200 renders
+        merge the lines), so the cascade asks a VLM."""
+        from stoa.solvers.raster import textlayer as T
+        from stoa.solvers.raster import windows as WS
+
+        img_path = self._raster_file(path)
+        if img_path is None:
+            return None
+        bar = self._metric_bar(img_path, trace, "window symbols", "the wall/window sizes in pixels are unknown")
+        if bar is None:
+            return None
+        if bar.px_per_m < WS.MIN_PX_PER_M:
+            trace.append(f"window symbols: {bar.px_per_m:.1f} px/m is too coarse (1:200; the window lines merge)")
+            return None
+        dets = WS.detect(T._abspath(img_path), bar.px_per_m)
+        ev = [Evidence(file=path, page=0, bbox=[round(float(v), 1) for v in d["box"]], bbox_space="image_px",
+                       note=f"window {k + 1}: 4-line window symbol in a {'horizontal' if d['dir'] == 'h' else 'vertical'}"
+                            f" wall")
+              for k, d in enumerate(dets)]
+        if bar.box:
+            ev.append(Evidence(file=path, page=0, bbox=[round(v, 1) for v in bar.box], bbox_space="image_px",
+                               note=f"scale bar: {bar.px_per_m:.1f} px per m"))
+        trace.append(f"window symbols: {len(dets)} (scale {bar.px_per_m:.1f} px/m)")
+        return Answer(value=len(dets), unit="count", confidence=WS.CONF, evidence=ev, solver=self.name, trace=trace,
+                      assumptions=["a window = a wall stretch >= 0.3 m drawn as 4 thin parallel lines (wall faces + "
+                                   "glass), as in Swiss-style renders; a window split by a mullion counts as two; "
+                                   "other window symbols are missed"],
+                      missing=["a vector twin (DXF/PDF) of this plan for an exact count: the image alone matched the "
+                               "exact count on 10 of 32 held-out TRAIN floors"])
 
     def _text_count(self, path: str, cls: str | None, label: str | None, trace: list[str],
                     question: str | None = None) -> Answer:
