@@ -97,3 +97,23 @@ def test_this_building_is_the_whole_model(q, n):
 
     a = IfcSolver(plan2d="0", llm="0").solve(GDY_F, q)
     assert a.value == n
+
+
+ESPL2 = "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-02-2-korrus.pdf"
+
+
+@need
+@pytest.mark.parametrize("path,q,n", [
+    # no storey named on a sheet: the sheet's storey (was the whole model: 24 of 211 doors @ 0.85)
+    (ESPL2, "How many doors on this floor are wider than 1 m?", 3),
+    (ESPL2, "How many windows on this floor are taller than 1.5 m?", 46),
+    (ESPL2, "What is the average width of the doors in the whole building?", 1.088),
+    (ESPL, "How many different door widths are there on '1.korrus'?", 8),
+    (ESPL, "How many doors on '1.korrus' are exactly 900 mm wide?", 2),
+    (ESPL, "How many distinct window heights are there on this floor?", 4),
+])
+def test_dimension_scope_and_counts(path, q, n):
+    from stoa.solvers.ifc.solver import IfcSolver
+
+    a = IfcSolver(plan2d="0", llm="0").solve(path, q)
+    assert a.value == n and a.confidence >= 0.8

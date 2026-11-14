@@ -1461,7 +1461,7 @@ class IfcSolver(BaseSolver):
             # ignores part of the question, so it is not what was asked (W5's probes, 01:49)
             from stoa.solvers.ifc.arith import leftover_numbers
 
-            thr_vals = [float(x) for x in (it.threshold[1:] if it.threshold else ())]
+            thr_vals = [float(x) for x in (it.threshold[1:] if it.threshold else ())] + list(ctx.get("used_numbers", ()))
             left = [x for x in leftover_numbers(question, ctx.get("outer_spans", []), None, dims=bool(ctx.get("dims_used")))
                     if not any(abs(float(x.replace(",", ".")) - t) < 1e-9 for t in thr_vals)]
             if ctx.get("rank", 1) > 1:
@@ -1708,6 +1708,10 @@ class IfcSolver(BaseSolver):
         st_n, oth_n = self._storey_names(idx, it) if it.names else ([], [])
         if ctx.get("compose", True) and not oth_n and len(st_n) <= 1 and not ctx.get("no_dims"):
             ctx["dims_storey"] = st_n[0][1] if st_n else None
+            # 'How many doors on this floor are wider than 1 m?' asked on the 2.korrus sheet took the whole model (24 of
+            # 211 @ 0.85; W1 c8): no storey named on a plan sheet -> the sheet's storey, as for plain counts
+            ctx["dims_sheet"] = (plan_storey(path, idx) if not st_n and it.scope != "model"
+                                 and Path(path).suffix.lower() != ".ifc" and is_plan_sheet(path, idx) else (None, ""))
             dim = self._dims_answer(model, idx, it, trace, ctx)
             if dim is not None:
                 ctx["dims_used"] = True
@@ -3354,6 +3358,9 @@ class IfcSolver(BaseSolver):
         missing: list[str] = []
         i, _ = storey_mention(ctx.get("question", ""), [s.name for s in idx.storeys])
         storey = ctx.get("dims_storey") or (idx.storeys[i] if i is not None else None)
+        if storey is None and (ctx.get("dims_sheet") or (None, ""))[0] is not None and not self._BUILDING.search(q):
+            storey = ctx["dims_sheet"][0]
+            trace.append(f"storey from the plan file: {ctx['dims_sheet'][1]}")
         els = idx.by_class(*KIND_CLASSES[it.kind])
         if storey is not None:
             els = [e for e in els if e.storey == storey.guid]
@@ -3427,7 +3434,28 @@ class IfcSolver(BaseSolver):
         mm = lambda v: f"{v * 1000:.0f} mm"  # noqa: E731
         asks_type = bool(re.search(r"\b(type|types|which|what kind|family)\b", q))
         thr = _DIM_THRESHOLD.search(q)
-        if thr and (it.metric == "count" or re.search(r"\b(how many|number of|count|wie viele|hoeveel|combien)\b", q)):
+        how_many_q = it.metric == "count" or re.search(r"\b(how many|number of|count|wie viele|hoeveel|combien)\b", q)
+        # 'How many doors on 1.korrus are exactly 0.9 m wide?' (W1 c8: the width table @ 0.30): equal within 1 mm
+        eq = None if thr else re.search(r"\b(exactly|precisely|genau|precies|exactement|exactamente|tasan|täsmälleen)\s+"
+                                        r"(?P<num>\d+(?:[.,]\d+)?)\s*(?P<unit>mm|cm|m)?\b", q)
+        if eq and how_many_q:
+            num = float(eq.group("num").replace(",", "."))
+            u = eq.group("unit") or ""
+            lim = num / 1000 if u == "mm" or (not u and num > 20) else num / 100 if u == "cm" else num
+            hit = [(v, e) for v, e in vals if abs(v - lim) <= 1e-3]
+            ctx.setdefault("used_numbers", []).append(num)
+            trace.append(f"equal: {what} = {lim:.3f} m (± 1 mm) -> {len(hit)} of {len(vals)} {noun}s")
+            ev = [self._ev(model, e, f"{label(e)} {what} {mm(v)}") for v, e in hit][:MAX_EVIDENCE]
+            return self._final(len(hit), "count", it, conf * 0.95, ev, trace, assumptions, missing)
+        # 'How many different door widths are there on 1.korrus?' (W1 c8: the table @ 0.77): distinct values to the mm
+        if how_many_q and re.search(r"\b(different|distinct|unique|verschiedene\w*|unterschiedliche\w*|verschillende|"
+                                    r"differentes|distintos|eri)\b", q) and re.search(
+                r"\b(widths?|heights?|thickness\w*|sizes?|breiten?|hohen?|breedtes?|hoogtes?|largeurs?|hauteurs?|"
+                r"anchos?|alturas?|leveyksi\w*|korkeuksi\w*)\b", q):
+            distinct = sorted({round(v * 1000) for v, _ in vals})
+            trace.append(f"distinct {whats} (to the mm): " + ", ".join(f"{d_} mm" for d_ in distinct[:20]))
+            return self._final(len(distinct), "count", it, conf * 0.95, ev_all, trace, assumptions, missing)
+        if thr and how_many_q:
             num = float(thr.group("num").replace(",", "."))
             u = thr.group("unit") or ""
             lim = num / 1000 if u == "mm" or (not u and num > 20) else num / 100 if u == "cm" else num

@@ -1,0 +1,14 @@
+PATH bsc-esplanades_1807-ep-ar-v18_plan-02-2-korrus.pdf
+How many doors on this floor are narrower than 0.8 m?
+How many doors on this floor are wider than 1 m?
+How many doors are wider than 1 m?
+How many doors on this plan are wider than 1 m?
+What is the average width of the doors on this floor?
+How many doors are on this floor?
+How many windows on this floor are taller than 1.5 m?
+What is the average width of the doors in the whole building?
+What is the widest door in this building?
+How many doors on '1.korrus' are wider than 1 m?
+How many doors on the ground floor are wider than 1 m?
+PATH bsc-esplanades_1807-ep-ar-v18.ifc
+How many doors are wider than 1 m?
