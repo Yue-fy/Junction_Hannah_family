@@ -577,6 +577,22 @@ spaces) — "How high above the ground floor is the top floor?" → 15.10 at 0.5
 Küchen gibt es … und wie gross ist die grösste?" → 4 only. Not confident, but wrong on screen. Fix: detect the second
 question and answer every part, or cap ≤ 0.3 with "answers only the count".
 
+## For Saturday noon: red-team Stoa's example questions in one command (`redteam/from_examples.py`)
+Put Stoa's examples in a jsonl (`path`, `question`, and `answer` / `unit` when known; a path may be absolute), then
+```
+PYTHONPATH=. $JUNCTION_VENV/bin/python redteam/from_examples.py EXAMPLES.jsonl --out $JUNCTION_SHARED/artifacts/Q/noon.jsonl --translate fi,de,sv
+$JUNCTION_VENV/bin/python -m stoa.eval --solver pipeline --split $JUNCTION_SHARED/artifacts/Q/noon.jsonl --no-leaderboard --workers 4
+PYTHONPATH=. $JUNCTION_VENV/bin/python redteam/from_examples.py --report <run>.jsonl
+```
+Per example: the example itself, 6 surface perturbations, translations by the local 8B (kept only when our own
+`to_english` reads them back as the same task and object class — it turns Finnish "bathtubs" into "bathrooms"
+otherwise), ft² / mm unit traps, a made-up storey/room name (expects a flag), and pairs of examples on one file asked
+as one question (both numbers expected). Without a gold answer, variants are checked for consistency with the
+example's own answer and confidence band. Dry run on 7 of our demo questions (73 rows, ~2 min, run
+`20261114-082413-pipeline-noon-dryrun-52ad`): 6 flagged — bug 18 again ("How many windows …, and how many bathtubs
+…?" → 32 at 0.98), two garbled Finnish translations answered at ≤ 0.60, and three CubiCasa variants whose answer
+stayed 3 but moved confidence band (0.75 → 0.35 / 0.92).
+
 ## What held (worth saying in the pitch)
 - Paraphrase / casing / context / distractor numbers: **0 of 56 answers changed**. Typos and injections changed 7
   answers, **all of them at conf ≤ 0.42**, so the confidence flagged every one.
