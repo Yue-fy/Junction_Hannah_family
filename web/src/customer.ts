@@ -141,7 +141,11 @@ function headline(a: Answer, ctx: HeroCtx): { big: string; unit: string; sentenc
     return { big: fmtValue(a), unit: "", sentence: [noun, where].filter(Boolean).join(" ") };
   }
   if (unit === "€" || unit === "$") return { big: `${unit}${fmtValue(a)}`, unit: "", sentence: costSentence(ctx.question) };
-  const room = a.intent?.filters?.room ? String(a.intent.filters.room) : "";
+  // the room as asked ("How big is room 119?" → "room 119"), its name from the evidence when there is one ("KORIDOR")
+  const asked = ctx.question.match(/\broom\s+'?([\w.()-]*\d[\w.()-]*)'?/i)?.[1];
+  const named = (a.evidence ?? []).length && (a.evidence ?? []).every((e) => e.note === a.evidence[0].note)
+    ? (a.evidence[0].note ?? "").match(/^([A-ZÄÖÜÕ][A-ZÄÖÜÕ+ -]{2,})\b/)?.[1]?.trim() : undefined;
+  const room = a.intent?.filters?.room ? String(a.intent.filters.room) : asked ? `room ${asked}${named ? ` (${named.toLowerCase()})` : ""}` : "";
   const apt = a.intent?.filters?.apartment ? `apartment ${a.intent.filters.apartment}` : "";
   const what = a.intent?.task === "area" ? (room ? `floor area of ${room}` : apt ? `floor area of ${apt}` : "floor area") : a.intent?.task === "length" ? "length" : a.intent?.task === "volume" ? "volume" : "";
   return { big: fmtValue(a), unit, sentence: [what, where].filter(Boolean).join(" ") };
