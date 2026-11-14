@@ -57,8 +57,11 @@ reads it from the sheet's title when the file name says nothing), and the page o
 counted elements lit in 3D. Checked (cycle 8): esplanades 2.korrus sheet renamed `A102.pdf` + model `house.ifc` →
 doors 42, rooms 60, walls 156 (all = dataset), rooms > 40 m² = KORIDOR (202) 78.40, KORIDOR (205) 63.84, TREPIKODA
 (201) 45.50 (= dataset), 1 s each, 0 LLM calls. A lone PDF sheet says how to get this ("upload the .ifc too"); without
-it the sheet goes the vision way (Q 09:58: 0/5). The 2D sheet has no boxes in this mode (the GlobalId layer is the
-dataset's SVG twin, which is not uploaded).
+it the sheet goes the vision way (Q 09:58: 0/5). Rooms the model answer cites are also boxed on the 2D sheet: `server/ask_upload.py`
+`sheet_labels` maps each cited GlobalId to the room's number + name (W1's `stoa.kg.links`) and finds that printed
+label in the PDF's text layer (60 of 60 rooms on the 2.korrus sheet), with a "the sheet's own text labels N of the M
+rooms ✓" check. Doors and windows have no printed label, so they show in 3D only (the GlobalId layer of a dataset
+sheet is its SVG twin, which an upload does not have).
 **Show where · door swings** (uploaded images that are not CubiCasa-style, door counts): W3's door-swing reader
 (`raster`, `twins=0`, geometry, no model call, ~20 s) boxes each swing arc it finds and adds a ✓/✗ line. Lone Swiss
 PNG (samples/swiss-floor-plan.png): answer 26 @ 0.11, reader 35 boxes, ✗ shown (gold 36).
