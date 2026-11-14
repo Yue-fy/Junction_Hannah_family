@@ -67,6 +67,8 @@ export interface FileInfo {
   credit: string;
   title?: string;
   source_url?: string;
+  /** uploads: the drawing style the visitor declared ("cubicasa5k" = Nordic apartment plan), "" = any */
+  style?: string;
 }
 
 export interface ExampleQuestion {
