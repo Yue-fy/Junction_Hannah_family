@@ -271,8 +271,16 @@ function intentHtml(a: Answer, run: AgentRun | null) {
   const raw = !run && (a.trace ?? []).find((l) => /^\w+ \(question as asked\):/.test(l))?.match(/^(\w+)/)?.[1];
   // the solver's own operation line, e.g. "[ifc] outer operation: factor 450 EUR per door" (numbers given in the question)
   const outer = !run && (a.trace ?? []).map((l) => l.match(/^(?:\[\w+\]\s*)?outer operation:\s*(.+)$/)?.[1]).find((x) => x);
-  if ((op || outer) && raw) {
-    if (op) bits.push(op.split("+").map((m) => `<b>${esc(m.replace(/_/g, " "))}</b>`).join(" + "));
+  // ranked answers: "[ifc] argmax over storeys -> 1.korrus"
+  const arg = !run && (a.trace ?? []).map((l) => l.match(/\barg(max|min) over (\w+)/)).find((x) => x);
+  if ((op || outer || arg) && raw) {
+    if (op && !/^compare$/.test(op)) bits.push(op.split("+").map((m) => `<b>${esc(m.replace(/_/g, " "))}</b>`).join(" + "));
+    if (arg) {
+      const u = (a.trace ?? []).map((l) => l.match(/^\[\w+\]\s*[^:\[\]]{1,60}?:\s*-?\d+(?:\.\d+)?\s*(count|m2|m²|m3|m³|m|%|EUR)\b/)?.[1]).find((x) => x);
+      const by = u === "count" ? (it?.target && it.target !== "unknown" ? `${it.target} count` : "count")
+        : u && /^m(2|²)$/.test(u) ? "area" : u && /^m(3|³)$/.test(u) ? "volume" : u === "m" ? "length" : "";
+      bits.push(`<b>${arg[1] === "max" ? "largest" : "smallest"} of the ${esc(arg[2])}</b>${by ? ` by ${esc(by)}` : ""}`);
+    }
     if (outer) bits.push(`<b>${esc(outer)}</b>`);
     bits.push(`not a template: ${esc(raw)} read the question itself and computed it in code`);
   } else if (run) {
