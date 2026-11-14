@@ -211,6 +211,17 @@ def detect(question: str) -> Outer | None:
             unit = cur if (m.group("c1") or m.group("c2") or cur) else (uw or "count")
             return Outer("mul", _num(m.group("n")), unit, "count", hits[0][2], spans=[m.span()],
                          why=f"factor {m.group('n')} {unit} per {hits[0][2]}")
+    # verb last (German order, kept by some translations): "if each door 450 euros costs", "a window 1200 € costs"
+    m = re.search(r"\b(?:each|every|one|a single|any|an?)\s+(?P<kw>[a-z-]+)\s+(?:" + _cur("c1") + r"\s*)?"
+                  r"(?P<n>\d+(?:[.,]\d+)?)\s*(?:" + _cur("c2") + r")?(?:\s*(?P<noun>[a-z]+))?\s+(?:costs?|takes?|needs?|"
+                  r"requires?)\b", t)
+    if m:
+        hits = [h for h in _kind_hits(m.group("kw")) if h[2] != "storey"]
+        if hits:
+            uw = unit_word(m.group("noun"))
+            unit = cur if (m.group("c1") or m.group("c2") or cur) else (uw or "count")
+            return Outer("mul", _num(m.group("n")), unit, "count", hits[0][2], spans=[m.span()],
+                         why=f"factor {m.group('n')} {unit} per {hits[0][2]}")
     # "doors cost 450 euros each", "at €450 apiece"
     m = re.search(r"(?:" + _cur("c1") + r"\s*)?(?P<n>\d+(?:[.,]\d+)?)\s*(?:" + _cur("c2") + r")?\s*" + _EACH + r"\b", t)
     if m and (m.group("c1") or m.group("c2") or cur):

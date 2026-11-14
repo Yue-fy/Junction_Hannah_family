@@ -849,7 +849,8 @@ class IfcSolver(BaseSolver):
             if i is not None:
                 storey = idx.storeys[i]
                 trace.append(f"{why} (unquoted)")
-            elif "matches no single storey" in why:
+            elif "matches no single storey" in why and it.kind != "storey" and \
+                    not re.search(r"\b(ground|basement)\b", why.split(" matches")[0]):
                 # "doors on the 7th floor" on a 5-storey model: never answer the sheet's storey with confidence
                 # (Q 04:58 bug 13b: 46 @ 0.985; a quoted '7.korrus' was already flagged)
                 conf = min(conf, 0.3)
