@@ -835,3 +835,39 @@ no pipeline effect yet: _link_question admits only IFC sources). (c) Q v27 (Q's 
 9/9 held; imperative second parts ('… and say how many …') split; 'how many X does the model have there' read from
 the storey's C row; 'fewer doors drawn here than the model' and it/es/sv/nl/et 'not drawn' fire → 2 W / 0 L
 (-103938-…-b9d0 → -105146-…-58c1). Every trigger change re-checked: 0 / 128,535 dataset questions.
+
+### 8n. Integration check on night b656826 + a noon triage kit (cycle 22, 11:05-11:15)
+**Link probes on the merged build** (night b656826 = every agent's final answer-changing head; pipeline end to end):
+| probe | base (cycle 21 run) | night b656826 | conf ≥ 0.8 right | tokens/Q |
+|---|---|---|---|---|
+| R1 r1v5 (15) | 15/15 | **15/15** | 15/15 | 3214 → 3212 |
+| Q v23 (21) | 21/21 | **21/21** | 18 → **21** | 4087 → **2353** |
+| R1 probe_kg (21) | 20/21 (09:31 run) | **21/21** | 17 → **20** | 2983 → **1829** |
+| R1 r1v6_files (6) | 6/6 (standalone) | **6/6** | 0 → **6** (evidence 0 → 6) | 9434 → **0** |
+| W1 c8_cmp (22) | 22/22 | **22/22** | 18 → **22** | 2460 → 2162 |
+| Q v27 (23; base run had 14 rows) | 14/14 | **23/23** | 20/20 | 3664 → 2239 |
+| W4 file_exists (14) | 14/14 | **14/14** | 12/12 | 190 → 190 |
+| **total** | | **122/122, 0 wrong at ≥ 0.8** | | |
+W4's GlobalId check (W1 plan_vs_model, 0 LLM) raises the share of answers at ≥ 0.8 (it agrees with kg_qa → ✓) and
+cuts tokens on v23q/probe_kg by ~40%. W4's file-subject gate makes 'Is there an IFC model for this drawing?' cost
+0 tokens. Runs: artifacts/eval/20261114-110451-…-probe_r1v5-ee65, -110519-…-probe_v23q-1a9c, -110540-…-probe_kg-d67d,
+-110605-…-probe_r1v6_files-f489, -110606-…-c8_cmp-5370, -110624-…-v27-1865, -110641-…-file_exists-399f.
+Scorer fix: experiments/r1/kg_qa/run.py correct() now reads Q's `meta.items` (every regex must match). Before the fix
+it marked 3 right v27 two-part answers as wrong.
+
+**Noon triage** (experiments/r1/noon/, README there): `triage.py EXAMPLES.jsonl` = for each question, with 0 LLM
+calls and in ~10 s, the source, W4's intent parse, train-template hit, compose plan, R1's triggers (link / room /
+estimate), the nearest train+dev question (TF-IDF over words + char 4-grams; test is never read) and where a fix
+would go (stoa/router/README.md §3). NEW = nearest < 0.5 and no train template. Calibrated (`calibrate.py`): NEW on
+dev 14%, hard 33%, hard2 77%, Q's red team 70%.
+**Negative result: novelty does not predict failure** (`triage_vs_run.py RUN`, Q's rescore for text rows):
+| split (run) | NEW acc | seen acc | what does predict it |
+|---|---|---|---|
+| Q red team (snap12, 973 scored) | 95.4% (453) | 78.3% (520) | CubiCasa seen 68.7%, 'unknown' (uploads) 72.4% |
+| hard (c43 gate, 688) | 87.3% (157) | 84.9% (531) | CubiCasa 63.9-68.8%, Swiss/IFC 99-100% |
+| hard2 (c43 gate, 189) | 97.4% (116) | 83.6% (73) | CubiCasa seen 76.0% |
+The team has worked on these rows all night (they are in-sample for the fixes), and the weak part is a source, not
+a wording: CubiCasa raster counts. So NEW tells you where to write probes, and it must not become a confidence cap.
+Small-sample rule for Stoa's examples (exact McNemar): a fix needs ≥ 6 W / 0 L (p = 0.031) or 8 W / 1 L (p = 0.039);
+15/20 right = 75% [53, 89] Wilson. Write 5-10 rewordings per example (Q's redteam/from_examples.py) so that a fix
+can be tested at all.
