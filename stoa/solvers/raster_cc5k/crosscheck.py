@@ -165,6 +165,18 @@ def _own_p(ans: Answer) -> float:
     return float(ans.confidence or 0.0)
 
 
+def _joint(target: str, agree_other: bool, agree_det: bool) -> float | None:
+    j = _table().get("joint") or {}
+    cells = j.get("cells") or {}
+    c = f"r{int(agree_other)}c{int(agree_det)}"
+    k, n = (cells.get(target) or {}).get(c, [0, 0])
+    if n < j.get("nmin", 8):
+        k, n = (cells.get("G:" + (j.get("groups") or {}).get(target, "")) or {}).get(c, [0, 0])
+    if n == 0:
+        return None
+    return round(min(0.95, (k + 1) / (n + 2)), 3)
+
+
 def interval(target: str, value: int, detector: int, level: int = 90) -> tuple[int, int] | None:
     """Calibrated range for the true count given another solver's `value` and the CC5K `detector` count (both ints),
     or None when no table exists for the target/level. level 90 or 80 (nominal coverage, %)."""
@@ -178,9 +190,13 @@ def interval(target: str, value: int, detector: int, level: int = 90) -> tuple[i
 
 
 def check(path: str, key: str | None, ans: Answer, source: str | None = None, live: bool | None = None,
-          arbitrate: bool = True) -> Answer:
+          arbitrate: bool = True, other: int | None = None, other_name: str = "raster") -> Answer:
     """See the module docstring. `key`: intent key ("count:window:drawing") or a bare target ("window").
-    `source`: the name to print for the other solver (default: ans.solver)."""
+    `source`: the name to print for the other solver (default: ans.solver).
+    `other`: a THIRD count for the same question (the pipeline's raster second opinion). When given, a LoRA answer's
+    confidence comes from the joint table P(right | agrees with raster?, agrees with CC5K?) fitted on train_gate
+    (experiments/r1/count_interval/three_way.py; dev: AUROC 0.839 → 0.863, ECE 0.048 → 0.025 vs the raster-only
+    table)."""
     out = ans.model_copy(deep=True)
     tgt = _target(key)
     v = _int(ans.value)
@@ -218,7 +234,13 @@ def check(path: str, key: str | None, ans: Answer, source: str | None = None, li
     tab = _table()
     if not switched and any(n in (ans.solver or "") for n in tab.get("applies_to_solvers", [])):
         c = tab.get("targets", {}).get(tgt, {}).get("agree" if agree else "kept")
-        if c is not None:
+        o = _int(other)
+        cj = _joint(tgt, v == o, agree) if o is not None else None
+        if cj is not None:
+            trace.append(f"confidence {out.confidence:.2f} → {cj:.2f}: P(right | {src} {'=' if v == o else '≠'} "
+                         f"{other_name} {o}, {'=' if agree else '≠'} {what} {det}) on train_gate, which {src} never saw")
+            out.confidence = cj
+        elif c is not None:
             trace.append(f"confidence {out.confidence:.2f} → {c:.2f}: P(right | {src} and {what} "
                          f"{'agree' if agree else 'disagree'}) on train_gate, which {src} never saw")
             out.confidence = float(c)

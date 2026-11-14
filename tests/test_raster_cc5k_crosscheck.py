@@ -91,3 +91,13 @@ def test_lora_answers_get_a_machine_readable_range():
     assert lo <= 5 and hi >= 11
     raster = Answer(value=1, unit="count", confidence=0.7, solver="raster")
     assert not any(t.startswith("interval90:") for t in cx.check(DRAWING, "count:sink:drawing", raster).trace)
+
+
+@needs_cache
+def test_a_third_count_switches_to_the_joint_confidence_table():
+    agree_both = cx.check(DRAWING, "count:door:drawing", lora(4, 0.6), other=4)
+    agree_det_only = cx.check(DRAWING, "count:door:drawing", lora(4, 0.6), other=7)
+    assert agree_both.confidence == cx._joint("door", True, True)
+    assert agree_det_only.confidence == cx._joint("door", False, True)
+    assert any("raster 7" in t for t in agree_det_only.trace)
+    assert cx.check(DRAWING, "count:door:drawing", lora(4, 0.6)).confidence == cx._table()["targets"]["door"]["agree"]

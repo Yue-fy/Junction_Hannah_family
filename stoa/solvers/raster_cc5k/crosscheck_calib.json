@@ -138,5 +138,212 @@
     ]
    }
   }
+ },
+ "joint": {
+  "fitted_on": "train_gate: artifacts/W4/calib/vlm_lora.jsonl + raster.jsonl + CC5K cache",
+  "rule": "P(LoRA right | agrees with raster?, agrees with CC5K?) = (k+1)/(n+2) capped 0.95; cell n < nmin -> the group's cell",
+  "nmin": 8,
+  "groups": {
+   "window": "openings",
+   "door": "openings",
+   "wc": "fixtures",
+   "sink": "fixtures",
+   "bedroom": "rooms",
+   "balcony": "rooms",
+   "bathroom": "rooms",
+   "kitchen": "rooms"
+  },
+  "cells": {
+   "G:fixtures": {
+    "r0c0": [
+     4,
+     11
+    ],
+    "r0c1": [
+     10,
+     11
+    ],
+    "r1c0": [
+     14,
+     21
+    ],
+    "r1c1": [
+     35,
+     37
+    ]
+   },
+   "G:openings": {
+    "r0c0": [
+     7,
+     56
+    ],
+    "r0c1": [
+     11,
+     15
+    ],
+    "r1c0": [
+     1,
+     7
+    ],
+    "r1c1": [
+     2,
+     2
+    ]
+   },
+   "G:rooms": {
+    "r0c0": [
+     5,
+     8
+    ],
+    "r0c1": [
+     10,
+     11
+    ],
+    "r1c0": [
+     32,
+     38
+    ],
+    "r1c1": [
+     98,
+     103
+    ]
+   },
+   "balcony": {
+    "r0c0": [
+     1,
+     2
+    ],
+    "r0c1": [
+     5,
+     6
+    ],
+    "r1c0": [
+     11,
+     14
+    ],
+    "r1c1": [
+     18,
+     18
+    ]
+   },
+   "bathroom": {
+    "r0c0": [
+     2,
+     2
+    ],
+    "r0c1": [
+     2,
+     2
+    ],
+    "r1c0": [
+     9,
+     10
+    ],
+    "r1c1": [
+     24,
+     26
+    ]
+   },
+   "bedroom": {
+    "r0c0": [
+     2,
+     4
+    ],
+    "r0c1": [
+     3,
+     3
+    ],
+    "r1c0": [
+     7,
+     9
+    ],
+    "r1c1": [
+     22,
+     24
+    ]
+   },
+   "door": {
+    "r0c0": [
+     5,
+     25
+    ],
+    "r0c1": [
+     8,
+     10
+    ],
+    "r1c0": [
+     1,
+     4
+    ],
+    "r1c1": [
+     1,
+     1
+    ]
+   },
+   "kitchen": {
+    "r1c0": [
+     5,
+     5
+    ],
+    "r1c1": [
+     34,
+     35
+    ]
+   },
+   "sink": {
+    "r0c0": [
+     3,
+     7
+    ],
+    "r0c1": [
+     4,
+     5
+    ],
+    "r1c0": [
+     10,
+     14
+    ],
+    "r1c1": [
+     12,
+     14
+    ]
+   },
+   "wc": {
+    "r0c0": [
+     1,
+     4
+    ],
+    "r0c1": [
+     6,
+     6
+    ],
+    "r1c0": [
+     4,
+     7
+    ],
+    "r1c1": [
+     23,
+     23
+    ]
+   },
+   "window": {
+    "r0c0": [
+     2,
+     31
+    ],
+    "r0c1": [
+     3,
+     5
+    ],
+    "r1c0": [
+     0,
+     3
+    ],
+    "r1c1": [
+     1,
+     1
+    ]
+   }
+  }
  }
 }

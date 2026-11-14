@@ -1,0 +1,56 @@
+diff --git a/stoa/pipeline.py b/stoa/pipeline.py
+index 6e74bdf..eec185b 100644
+--- a/stoa/pipeline.py
++++ b/stoa/pipeline.py
+@@ -339,8 +339,10 @@ class Pipeline(BaseSolver):
+             trace.append(f"{name}: {ans.value} {ans.unit or ''} (conf {conf:.2f}"
+                          + (", held-out hit rate" if name in rates else ", train hit rate" if name in acc else "") + ")")
+             if name == "vlm_lora" and gate and gate.get("lora_vs_raster"):
+-                conf, extra = self._lora_vs_raster(path, ask, ans, gate["lora_vs_raster"], trace, conf)
++                conf, extra, ra_value = self._lora_vs_raster(path, ask, ans, gate["lora_vs_raster"], trace, conf)
+                 total = total.add(extra)
++                if self.cc5k and src == "cubicasa5k":  # R1: CC5K boxes, ✓/✗, window/WC arbitration, joint conf, range
++                    ans, conf = self._cc5k_crosscheck(path, intent, ans, conf, ra_value, trace)
+                 answers.append((name, ans, conf))
+                 break  # the LoRA's count stands; raster only sets the confidence and lends its boxes
+             answers.append((name, ans, conf))
+@@ -381,13 +383,13 @@ class Pipeline(BaseSolver):
+         agree, raster's label boxes become the evidence."""
+         r = self._get("raster")
+         if r is None:
+-            return conf, Cost()
++            return conf, Cost(), None
+         try:
+             ra = r.solve(path, ask) if r.can_handle(path, ask) else None
+         except Exception:  # noqa: BLE001
+             ra = None
+         if ra is None or ra.value is None:
+-            return conf, Cost()
++            return conf, Cost(), None
+         if not isinstance(ra, Answer):
+             ra = Answer.model_validate(ra)
+         same = _agree(ans.value, ra.value, "count")
+@@ -401,7 +403,22 @@ class Pipeline(BaseSolver):
+             note = f"cross-check: vlm_lora {ans.value} ≠ raster {ra.value}"
+             ans.missing = [*ans.missing, f"raster counted {ra.value}, the LoRA {ans.value}"]
+         trace.append(f"{note} → conf {c:.2f} (LoRA right {k}/{n} on train_gate when raster {'agreed' if same else 'disagreed'})")
+-        return c, _cost_of(ra)
++        return c, _cost_of(ra), ra.value
++
++    def _cc5k_crosscheck(self, path: str, intent: Intent, ans: Answer, conf: float, ra_value, trace: list[str]):
++        """R1 (D11): read the precomputed CubiCasa5K detections (no torch, no LLM): one image_px box per detected
++        symbol when the answer has none, a ✓/✗ line, window/WC arbitration when the detector is surer, confidence
++        from P(LoRA right | agrees with raster?, agrees with CC5K?) on train_gate, and a calibrated 90% range.
++        Dev (night 609e41c run 272e, offline): cubicasa 73.4 → 76.8 (+3.4 [+1.8, +5.1]), ECE 0.034 → 0.021."""
++        try:
++            from stoa.solvers.raster_cc5k.crosscheck import check
++            a = ans.model_copy(update={"confidence": conf})
++            out = check(path, intent.key, a, other=ra_value)
++        except Exception as e:  # noqa: BLE001 - no cache / bad record: keep the LoRA's answer as it was
++            trace.append(f"cc5k cross-check: error {type(e).__name__}")
++            return ans, conf
++        trace.extend(t for t in out.trace[len(a.trace):] if not t.startswith("cc5k cross-check: no cached"))
++        return out.model_copy(update={"trace": a.trace}), out.confidence  # the lines are in the pipeline trace now
+ 
+     def _cc5k_order(self, key: str, order: list[str], rates: dict, trace: list[str]) -> list[str]:
+         """D8: R1's pretrained CubiCasa5K model for symbol counts, gated on cc5k_heldout (never train_gate: the
