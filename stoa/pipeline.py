@@ -206,6 +206,51 @@ def normalise_refs(question: str) -> str:
     return _EXCL_AFTER.sub(lambda m: "excluding " + m.group(1), q)
 
 
+# D19 (1), F 08:33: a CubiCasa plan is ONE dwelling, so "this apartment / flat / home" is the drawing itself ("How many
+# windows does this apartment have?" went to the agent as a 2-class 'multi' question: 3/30 vs 15/30 on the CC5K route)
+_THIS_DWELLING = re.compile(
+    r"\b(?:this|the|that) (?:whole |entire )?(?:apartment|flat|home|house|dwelling|unit|residence)\b(?! [A-Z0-9]\b)"
+    r"|\b(?:tässä|tämän) (?:asunno\w*|huoneisto\w*)|\b(?:diese[rnms]?|der) Wohnung\b|\b(?:denna|den här) lägenhet\w*"
+    r"|\b(?:cet|l') ?appartement\b|\b(?:questo|quest') ?appartamento\b", re.I)
+
+
+def normalise_scope(question: str, source: str) -> str:
+    if source != "cubicasa5k":
+        return question
+    def native(m: re.Match) -> str:
+        t = m.group(0).lower()
+        if t.startswith(("tässä", "tämän")):
+            return "tässä pohjapiirustuksessa"
+        if "wohnung" in t:
+            return "dieser Grundriss" if t.startswith("diese ") else "diesem Grundriss"
+        if "lägenhet" in t:
+            return "denna planritning"
+        if "appartement" in t:
+            return "ce plan"
+        if "appartamento" in t:
+            return "questa pianta"
+        return "this floor plan"
+
+    return _THIS_DWELLING.sub(native, question)
+
+
+# a rules solver saying it did not apply part of the question: an operation, or a number the question states (D19 (2):
+# ifc "the question gives the number(s) 2.7, which the rules did not use", dxf "... which this rule answer does not use")
+_OP_FLAG = re.compile(r"operat|not appl|did not apply|did not use|does not use", re.I)
+
+
+def _unconsumed_numbers(question: str, canon: str, trace) -> list[str]:
+    """Numbers the question states that neither the canonical question nor any trace line uses (F 08:29, sealed hard3:
+    'wall side area ... walls 2.7 m high' -> the canonical retry dropped the height, 9/9 wrong at 0.95)."""
+    text = " ".join([canon, *map(str, trace)])
+    have = {float(t) for t in re.findall(r"(?<![\w.])\d+(?:\.\d+)?", text.replace(",", "."))}
+    out = []
+    for x in _question_numbers(question):
+        if not any(abs(x - h) <= 1e-9 * max(1.0, abs(x)) for h in have):
+            out.append(str(int(x)) if float(x).is_integer() else f"{x:g}")
+    return out
+
+
 def _question_numbers(question: str) -> list[float]:
     q = re.sub(r"'[^']*'|\"[^\"]*\"|«[^»]*»|„[^“”]*[“”]", " ", question)
     return [float(t.replace(",", ".")) for t in re.findall(r"(?<![\w.])\d+(?:[.,]\d+)?(?![\w.])", q)]
@@ -423,11 +468,11 @@ class Pipeline(BaseSolver):
             ans.cost.wall_seconds = round(time.perf_counter() - t0, 4)
             return ans
         original = question
-        question = normalise_refs(normalise_numbers(question))
+        question = normalise_scope(normalise_refs(normalise_numbers(question)), source_of(path))
         asked = question
         question, tr_note, tr_cost = self._front_end(question) if self.translate else (question, None, None)
         if question != asked:  # the English translation may say "the B apartment in m²" (hardL_open tr: 321.76 @ 0.95)
-            question = normalise_refs(normalise_numbers(question))
+            question = normalise_scope(normalise_refs(normalise_numbers(question)), source_of(path))
         plan = decompose(source_of(path), question) if self.compose else None
         if plan is None:
             ans = self._solve_atomic(path, question)
@@ -821,7 +866,7 @@ class Pipeline(BaseSolver):
             if pre is not None:
                 return pre
             if unsure is not None and not why and self.use_agent and allow_agent and intent.task != "text" and \
-                    source_of(path) != "ifc_bench" and any(re.search(r"operat|not appl|did not apply", m, re.I)
+                    source_of(path) != "ifc_bench" and any(_OP_FLAG.search(str(m))
                                                            for m in unsure[1].missing):
                 # the solver itself says the question has an operation it did not apply: the agent's job
                 why = f"{unsure[0]} flagged an operation it did not apply"
@@ -862,7 +907,7 @@ class Pipeline(BaseSolver):
             trace.append("no train gate for this kind of question: general path by file type")
 
         canon = None
-        op_flag = unsure is not None and any(re.search(r"operat|not appl|did not apply", m, re.I)
+        op_flag = unsure is not None and any(_OP_FLAG.search(str(m))
                                              for m in unsure[1].missing)
         if op_flag:
             trace.append(f"{unsure[0]} flagged an operation it did not apply: no canonical rewrite")
@@ -986,6 +1031,14 @@ class Pipeline(BaseSolver):
             best.confidence = 0.3
             if premise not in best.missing:
                 best.missing = [*best.missing, premise]
+        if canon and canon != question and best.value is not None and best.confidence > 0.5:
+            left = _unconsumed_numbers(question, canon, best.trace + trace)
+            if left:
+                trace.append(f"the question states {', '.join(left[:3])}, which the canonical form and the answer do "
+                             "not use: confidence capped at 0.5")
+                best.confidence = 0.5
+                best.missing = [*best.missing, f"the question states {', '.join(left[:3])}, which this answer does not "
+                                               "use (a height, rate, price or share may change the result)"]
         if self.cc5k and src == "cubicasa5k" and intent.key in CC5K_KEYS and best.value is not None and \
                 best.solver != "raster_cc5k":
             self._cc5k_evidence(path, canon or question, best, trace, intent.key)
