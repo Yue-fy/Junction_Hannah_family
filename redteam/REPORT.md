@@ -6,7 +6,23 @@ Builds on F's `hard` (translations/paraphrases/compositions/ft²) and `hard2` (n
 don't. The first 205 rows start from dev questions the pipeline had **right at conf ≥ 0.8**, so a failure there is
 caused by the perturbation, not by the drawing.
 
-## Verdict (08:20, night bb94fe4 = the test-2 build) — read this first
+## Now (09:00) — the short version
+- **Latest code (night 62754aa + the owners' 08:41–08:50 commits, 609 questions): 351 of 352 answers we give at
+  confidence ≥ 0.8 are right; 4 confident misses left** — "whole building" asked on a single-floor plan (×3, the plan
+  shows one floor; W2) and "how many windows are in the model but not drawn on this plan?" (297, W1/W4). Night
+  62754aa itself: 336/337. The test-2 build bb94fe4: 283/290 on 494 questions.
+- **Fixed tonight, verified on the same rows:** false premises (7/24 confident → 0/24), storeys in everyday words,
+  "whole building" in 9 languages, "1,200 euros", "how many floors", "how many X and how many Y" (summed → listed, in
+  every language), storey heights, size comparisons, twin-less PNG areas. Every owner commit since 08:14 was checked
+  before or right after S0 merged it (pre-merge checks #3–#7): 0 right answers lost except one flaky LLM-code row.
+- **Still weak (not confident, but wrong):** questions *about the links* between plan, model and sheets (v17: 2/9 —
+  the knowledge graph checks answers but doesn't answer "do they agree?" / "which sheet?"), Italian "in tutto
+  l'edificio", door/window counts on PNG-only plans, cost under attack (+51 % since 05:05).
+- **Holds:** rewording, typos, injections, rotated/gray/low-res images, HABS scans in other languages and rotated
+  (36/36), plans handed over as a lone PDF (22/24).
+- Demo: the 21 script/tour questions give the same answers on bb94fe4, c1d6149 and 62754aa (`demo/LIVE-CHECK.md`).
+
+## Verdict (08:20, night bb94fe4 = the test-2 build) — the detailed version
 1. **What holds.** Rewording, casing, extra context, distractor numbers, typos, prompt injection, rotated / gray /
    JPEG-q10 / half-resolution copies, a plan copied outside our folder, objects that don't exist, yes/no without a
    hint, the same question asked twice, "which apartment has the largest kitchen": on all 494 rows the test-2 build
