@@ -449,3 +449,23 @@ def test_window_symbols_four_line_wall_stretch(tmp_path):
     dets = WS.detect(str(p), 59.0)
     assert len(dets) == 2 and all(d["dir"] == "h" for d in dets)
     assert dets[0]["box"][1] == 100 and dets[0]["box"][3] == 143
+
+
+def test_window_symbols_none_found_abstains(tmp_path, monkeypatch):
+    """No 4-line symbol on a drawing with a metric bar = another convention: abstain, never '0 windows'."""
+    import numpy as np
+    from PIL import Image
+
+    from stoa.solvers.raster import RasterSolver
+    from stoa.solvers.raster import scalebar as SB
+    from stoa.solvers.raster import textlayer as T
+
+    p = tmp_path / "plan.png"
+    Image.fromarray(np.full((200, 300), 255, np.uint8)).save(p)
+    bar = SB.Bar(unit="m", px_per_unit=59.0, labels=[], box=[0, 0, 10, 10], residual=0.0, source="t")
+    monkeypatch.setattr(T, "text_layer", lambda *a, **k: None)
+    monkeypatch.setattr(SB, "bars", lambda *a, **k: [bar])
+    s = RasterSolver()
+    trace: list[str] = []
+    assert s._window_symbols(str(p), trace) is None
+    assert any("none of the known" in t for t in trace)

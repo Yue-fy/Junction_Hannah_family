@@ -302,6 +302,9 @@ class RasterSolver(BaseSolver):
         from PIL import Image
 
         dets = DA.detect(T._abspath(img_path), bar.px_per_m)
+        if not dets:  # a plan without a single swing arc draws its doors another way: not "0 doors"
+            trace.append("door arcs: no swing arc found (this drawing may draw doors differently)")
+            return None
         rgb = np.asarray(Image.open(T._abspath(img_path)).convert("RGB"))
         dup = [d for d in dets if DA.red_near(rgb, d, bar.px_per_m) >= DA.DUP_RED]
         n = len(dets) + len(dup)
@@ -355,6 +358,10 @@ class RasterSolver(BaseSolver):
             trace.append(f"window symbols: {bar.px_per_m:.1f} px/m is too coarse (1:200; the window lines merge)")
             return None
         dets = WS.detect(T._abspath(img_path), bar.px_per_m)
+        if not dets:  # 0 of 160 Swiss dev/TRAIN floors have no window: another symbol convention, not "0 windows"
+            trace.append("window symbols: none of the known 4-line kind found (this drawing may draw windows "
+                         "differently)")
+            return None
         ev = [Evidence(file=path, page=0, bbox=[round(float(v), 1) for v in d["box"]], bbox_space="image_px",
                        note=f"window {k + 1}: 4-line window symbol in a {'horizontal' if d['dir'] == 'h' else 'vertical'}"
                             f" wall")
