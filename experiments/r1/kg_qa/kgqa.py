@@ -37,7 +37,9 @@ _PLAN = (r"\b(plan|floor ?plan|drawing|sheet|grundriss\w*|zeichnung\w*|piirustu\
 _AGREE = (r"\b(agree|match|consistent|same number|differ|discrepan\w*|übereinstimm\w*|stimmen\w*|gleich\w*|"
           r"täsmää\w*|sama\w*|identiques?|même nombre|correspond\w*|överens\w*|stämmer|coincid\w*|"
           r"overeen\w*|ühti\w*|but not|not (drawn|shown)|missing from|nicht (gezeichnet|dargestellt)|"
-          r"ei (ole )?piirretty|non (dessiné|représenté)|more \w+ (on|in) .* than the|than the .* (shows|plan)|"
+          r"ei (ole )?piirretty|non (dessiné|représenté)|non (sono |è )?(disegnat\w*|rappresentat\w*|mostrat\w*)|"
+          r"no (están |está )?(dibujad\w*|mostrad\w*)|inte (ritade?|visade?)|niet (getekend|getoond)|"
+          r"pole (joonistatud|näidatud)|more \w+ (on|in) .* than the|than the .* (shows|plan)|"
           r"show\w* (every|all)|zeigt (alle|jede)|näyttää kaikki|montre (tous|toutes))\b")
 _SHEETN = (r"(floor ?plan |architectural |separate |different )?(sheets?|drawings?|plans?|floor ?plans?|sections?|"
            r"elevations?|grundriss\w*|schnitt\w*|ansicht\w*|bl[äa]tter|blatt|zeichnungen|pohjapiirustu(s|sta|ksia)|"
@@ -146,7 +148,9 @@ def is_link_question(question: str) -> dict:
     if not why and re.search(_MODEL, q) and re.search(
             r"\b(than|as|als|kuin|que|än|di|dan)\s+(are|is|were|sind|on|sont|är|sono|zijn|son)?\s*(drawn|shown|"
             r"gezeichnet|dargestellt|piirretty|näytetty|dessinée?s?|représentée?s?|ritade?|visade?|disegnat\w*|"
-            r"getekend|dibujad\w*)\b", q):
+            r"getekend|dibujad\w*)\b", q) or (re.search(_MODEL, q) and re.search(
+            r"\b(drawn|shown) (here|on (this|the) (plan|sheet|drawing))\b.{0,40}\bthan\b|\bthan\b.{0,60}\b(drawn|shown) "
+            r"(here|on (this|the) (plan|sheet|drawing))\b", q)):
         # r1v5 'Has the BIM model got more windows on this level than are drawn here?' (no sheet noun)
         why.append("model vs drawn")
     if not why and re.search(r"^(is there|are there|gibt es|onko|löytyykö|y a-t-il|finns det|c'è|is er|hay|kas on)\s+"
@@ -326,7 +330,10 @@ _THIS = (r"\b(this|dieser|diesem|diesen|dieses|tämä\w*|tällä|tässä|ce|cett
 _SPLIT = (r",?\s+(?:and|und|ja|et|och|e|en|y)\s+(?=(?:if so,?\s+|falls ja,?\s+|si oui,?\s+|om så,?\s+)?"
           r"(?:do|does|is|are|how|which|what|was|were|has|have|can|stimmt|stimmen|wie|welche\w*|ist|sind|hat|"
           r"onko|ovatko|täsmää\w*|kuinka|montako|est-ce|combien|quel\w*|stämmer|hur|vilke\w*|quant\w*|quale|"
-          r"corrispond\w*|hoeveel|welke|klopt|kloppen|cuánt\w*|qué|cuál|coincid\w*|mitu|kas)\b)")
+          r"corrispond\w*|hoeveel|welke|klopt|kloppen|cuánt\w*|qué|cuál|coincid\w*|mitu|kas|"
+          r"(?:say|tell(?: me)?|give|state|report|sag\w*|nenne\w*|gib|kerro|ilmoita|dis|donne|indique\w*|ange|säg|"
+          r"dimmi|indica|di'|zeg|noem|geef|di|dime|indique)\s+(?:me\s+|us\s+)?(?:how|wie|kuinka|combien|hur|"
+          r"quant\w*|hoeveel|cuánt\w*|mitu|whether|if|ob|onko|si|om|se|of))\b)")
 _BASEMENT_Q = (r"\b(basement|cellar|keller(geschoss)?|untergeschoss|kellari\w*|sous-sol|källar\w*|cantina|"
                r"seminterrato|kelder|sótano|kelder|kelder\w*|kelder)\b")
 _BASEMENT_NAME = r"^\s*(kg|ug|u\d|b\d|-\d)(?![a-z0-9])|\b(keller|untergeschoss|basement|cellar|kellari|sous-sol|källare|kelder)\b"
@@ -514,6 +521,21 @@ def _solve_one(path: str, question: str, backend: str = "local", llm_question: s
                       trace=[f"kg_qa: {hit['why']} -> storeys of the IFC model with no {key}: "
                              f"{[r['storey'] for r in got]} (deterministic, no model call)"],
                       cost=Cost(wall_seconds=round(time.perf_counter() - t0, 3)))
+    ql0 = question.strip().lower()
+    if counting_q and (re.search(_MODEL2, ql0) or llm_question) and not re.search(
+            r"\b(drawn|shown|show|shows|missing|not|plan|sheet|drawing|absent|leave|leaves|than|differ\w*)\b", ql0) \
+            and re.search(r"\b(there|on it|in it|on this (storey|floor|level))\b", ql0):
+        # Q v27 two-part '… and say how many windows the model has there' (part 2): the model's count on this
+        # sheet's storey, read from its C row (deterministic)
+        this0 = (ctx.get("this") or {}).get("name")
+        what0 = next((w for w, rx in _WHAT.items() if re.search(rx, ql0)), None)
+        own0 = next((r for r in rows if r["id"][0] == "C" and r["storey"] == this0 and r["what"] == what0), None)
+        if own0:
+            return Answer(value=own0["model"], unit="count", confidence=0.8, solver="kg_qa",
+                          evidence=[Evidence(file=ctx.get("model") or path, note=own0["text"][:160])],
+                          trace=[f"kg_qa: the model's {what0} on this sheet's storey '{this0}': {own0['id']} "
+                                 f"model {own0['model']} (deterministic, no model call)"],
+                          cost=Cost(wall_seconds=round(time.perf_counter() - t0, 3)))
     lq = llm_question or question
     view = _retrieve(rows, lq)
     byid = {r["id"]: r for r in rows}
