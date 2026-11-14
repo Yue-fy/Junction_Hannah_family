@@ -57,7 +57,7 @@ for q in qs:
                            others=[i.box for i in tl.items if M._ROOM_ID.fullmatch(i.text.strip()) and i is not lab]
                            if a.split else None, fixture_retry=a.fixture, grow=a.grow)
         if got:
-            r.update(value=got["m2"], rel_err=abs(got["m2"] / q["answer"] - 1), box=got["box"])
+            r.update(value=got["m2"], rel_err=abs(got["m2"] / q["answer"] - 1), box=got["box"], wall_frac=got["wall_frac"])
     rows.append(r)
 Path(a.out).write_text("".join(json.dumps(r) + "\n" for r in rows))
 n = len(rows)

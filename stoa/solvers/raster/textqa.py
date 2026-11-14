@@ -188,7 +188,9 @@ def _room_area_answer(img_path: str, question: str, tl: T.TextLayer, bars: list,
                       trace=[f"room label '{lab.text}' at {lab.box}; printed area next to it: '{a['line']}'"])
     r = M.room_area(img_path, lab.box, bar.px_per_m, **M.FILL,
                     others=[i.box for i in ids if i is not lab and M._ROOM_ID.fullmatch(i.text.strip())])
-    if r is None:
+    if r is None or r["wall_frac"] < 0.05 or r["m2"] > 120:
+        # not bounded by drawn walls (thin-line historical plans leak: HABS ut0011 'KITCHEN' filled ~100 m², 0% of its
+        # outline on walls; Swiss rooms: min 0.01, 5/71 below 0.2) or larger than any single room: no measurement
         return None
     unit = "ft2" if re.search(r"\b(sq\.? ?ft|square feet|ft²|feet)\b", question, re.I) else "m2"
     v = r["m2"] / 0.3048 ** 2 if unit == "ft2" else r["m2"]
