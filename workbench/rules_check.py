@@ -78,7 +78,10 @@ def violations(rules: list[dict], question: str, value, unit: str | None, typ: s
     for res in check(rules, [pred]):
         if res.get("flagged"):
             r = res["rule"]
-            rng = f"{r.get('min') if r.get('min') is not None else '…'}–{r.get('max') if r.get('max') is not None else '…'} {r.get('unit') or ''}"
+            def f(x):
+                return f"{x:g}" if isinstance(x, (int, float)) else "…"
+
+            rng = f"{f(r.get('min'))}–{f(r.get('max'))} {r.get('unit') or ''}"
             out.append(f"outside your rule “{r.get('what')}”: {rng.strip()}" + (f" ({r['why']})" if r.get("why") else ""))
     return out
 
