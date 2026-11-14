@@ -97,6 +97,41 @@ RECIPES = {
 }
 
 
+# --cc (c225, 08:58): CubiCasa count compositions in Finnish and Swedish (the open hard/hard2 rows are English only)
+RECIPES_CC = {
+    "bedrooms+bathrooms": (r"", {
+        "fi": "Montako makuuhuonetta ja kylpyhuonetta (ei erillisiä WC-tiloja) asunnossa on yhteensä?",
+        "sv": "Hur många sovrum och badrum (inte separata toaletter) har bostaden sammanlagt?",
+    }),
+    "doors+windows": (r"", {
+        "fi": "Montako ovea ja ikkunaa pohjapiirroksessa on yhteensä?",
+        "sv": "Hur många dörrar och fönster finns det totalt på planen?",
+    }),
+    "doors-windows": (r"", {
+        "fi": "Kuinka paljon enemmän ovia kuin ikkunoita pohjapiirroksessa on?",
+        "sv": "Hur många fler dörrar än fönster finns det på planen?",
+    }),
+    "windows-doors": (r"", {
+        "fi": "Kuinka paljon enemmän ikkunoita kuin ovia pohjapiirroksessa on?",
+        "sv": "Hur många fler fönster än dörrar finns det på planen?",
+    }),
+    "wc+sinks+showers": (r"", {
+        "fi": "Montako saniteettikalustetta pohjapiirroksessa on yhteensä (WC-istuimet, pesu- ja tiskialtaat, suihkut ja "
+              "ammeet)?",
+        "sv": "Hur många sanitetsenheter finns det totalt på planen (toalettstolar, handfat och diskhoar, duschar och "
+              "badkar)?",
+    }),
+    "wc+showers": (r"", {
+        "fi": "Montako WC-istuinta, suihkua ja kylpyammetta pohjapiirroksessa on yhteensä?",
+        "sv": "Hur många toalettstolar, duschar och badkar finns det sammanlagt på planen?",
+    }),
+    "wet-rooms": (r"", {
+        "fi": "Montako märkätilaa asunnossa on (kylpyhuoneet, erilliset WC:t ja saunat yhteensä)?",
+        "sv": "Hur många våtrum har bostaden (badrum, separata toaletter och bastur tillsammans)?",
+    }),
+}
+
+
 _ITEM = {"toilets": {"de": "WCs", "fr": "WC", "it": "WC"},
          "washbasins": {"de": "Lavabos", "fr": "lavabos", "it": "lavabi"},
          "bathtubs": {"de": "Badewannen", "fr": "baignoires", "it": "vasche da bagno"},
@@ -116,19 +151,22 @@ def _items(en_list: str) -> dict:
 
 
 def main():
+    import sys
+    cc = "--cc" in sys.argv
+    recipes, src = (RECIPES_CC, "cubicasa") if cc else (RECIPES, "swiss")
     sh = os.environ["JUNCTION_SHARED"]
-    out = os.path.join(sh, "artifacts", "F", "comp_ml.jsonl")
+    out = os.path.join(sh, "artifacts", "F", "comp_ml_cc.jsonl" if cc else "comp_ml.jsonl")
     n_rows, skipped = 0, {}
     with open(out, "w", encoding="utf-8") as f:
         for split in ("hard", "hard2"):
             for line in open(os.path.join(sh, "results", "splits", f"{split}.jsonl")):
                 r = json.loads(line)
                 rec = r.get("meta", {}).get("recipe")
-                if not r["source"].startswith("swiss") or rec not in RECIPES or r.get("type") == "text":
+                if not r["source"].startswith(src) or rec not in recipes or r.get("type") == "text":
                     continue
                 if r["meta"].get("kind") not in ("composition", "reasoning"):
                     continue
-                rx, tpls = RECIPES[rec]
+                rx, tpls = recipes[rec]
                 m = re.search(rx, r["question"]) if rx else re.match("", "")
                 if m is None:
                     skipped[rec] = skipped.get(rec, 0) + 1

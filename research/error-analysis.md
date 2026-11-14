@@ -1,6 +1,6 @@
 # Error analysis (E = agent F)
 
-Updated 08:20, 14 Nov 2026 (sections newest first). Regenerate the tables with
+Updated 08:55, 14 Nov 2026 (sections newest first). Regenerate the tables with
 `/data/User/fangy4/envs/junction/bin/python -m stoa.eval.analyze <run_id> --baseline <dummy run_id> --top 20`.
 For paired significance use `python3 experiments/r1/stats/compare.py RUN_A RUN_B --by template` (cluster CI).
 
@@ -13,7 +13,47 @@ answer) vs `20261113-234812-dummy-dev` (template prior), both on dev v2 (hash f4
 | dummy (prior) | 26.1% | 40.4% | 0 | 0% |
 | vlm_direct | 32.0% (28.0–36.5) | 44.1% | 200 (all IFC) | 0% |
 
-## LATEST (08:20, cycle 224): the wired language front end on held-out languages; "both readings" fixes its underconfidence; one English confident-wrong
+## LATEST (08:55, cycle 225): same-gold wording probes in 8 languages: where a judge's own wording breaks us
+
+All probes are OPEN (dev drawings / open hard + hard2 bases; quote and fix freely). Each re-asks a dataset question in
+the words a judge might type, with the SAME gold; most carry the dataset wording of the same base as a control
+(`experiments/F/add_controls.py`), so `python3 experiments/F/control_compare.py PROBE RUN` isolates the wording effect.
+Code: night c1d6149 (S0 cycle 37 merges incl. W4 0319d93 apartment normalisation). Generators:
+`experiments/F/apt_wording_probe.py [N] [--ml|--cc|--ifc|--ml2]`, `experiments/F/comp_ml_probe.py`.
+
+| probe (artifacts/F/…) | rows | acc | vs control | confident-wrong (≥0.8) | where it breaks |
+|---|---:|---:|---|---:|---|
+| apt_wording (EN: Swiss/IFC/CubiCasa) | 1711 | 89.3 | Swiss 82.5 → **94.5** after W4 0319d93 (152 won / 0 lost) | 123 → 39 (Swiss) | "including the apartment entrance doors" 0/28 @0.98; plural "areas" 0/30; CubiCasa "this apartment" windows 3/30; IFC unquoted room names |
+| apt_wording_ml (Swiss apartments DE/FR/IT) | 880 | 66.8 | — | 84 | **Wohneinheit / logement → floor total @0.96–0.98 (77)**; 'wie viele Quadratmeter / combien de mètres carrés / quanti metri quadrati' → balcony count 0/120; 'ohne Balkon und Loggia' / 'balcons exclus' → balcony area |
+| apt_wording_ml2 (Swiss rooms/labels/fixtures DE/FR/IT) | 934 | **100** | = control | 0 | none |
+| apt_wording_ifc (IFC rooms/counts in 7 languages) | 348 | **100** | = control | 0 | none (quoted names) |
+| apt_wording_cc (CubiCasa casual FI/EN) | 1080 | 73.2 | 71.8 vs 75.8 | 18 | composer: "sinks … kitchen and bathroom together" → sink+kitchen+bathroom (0/30); FI '…keittiössä ja kylpyhuoneessa yhteensä' → kitchen+bathroom @0.92; 'Laske ikkunat.' → text |
+| comp_ml (Swiss hard/hard2 compositions DE/FR/IT) | 780 | 93.3* | 549/585 = control except two | 36 | **FR 'de plus que' summed (compose.py 'plus' = +) 23/23 @0.976; IT 'Di quanti m² … più grande del …' → max (room name) 13/13 @0.99** |
+| comp_ml_cc (CubiCasa hard/hard2 count compositions FI/SV) | 399 | 45.4 | FI = control (7/7 recipes); SV 42.1 vs 51.9 | 2 | **SV 'våtrum (badrum, separata toaletter och bastur)' → 'sauna' via LoRA @0.75 (0/25); 'sovrum och badrum … sammanlagt' → 'bedroom'** (no sv sum cues; front end skips because a target was found) |
+
+\* first run had a probe bug (sanitary item list always 'bathtubs'; English bases vary bathtubs/showers): 15 false
+losses, fixed; clean re-run 20261114-084910-pipeline-comp_ml-a0c6 = the baseline (all 36 confident-wrong are the FR
+'de plus que' and IT 'di quanti m²' rows; ECE 0.218, AUROC 0.40: right DE/FR/IT compositions sit under the unseen cap).
+
+Runs: 20261114-083551-pipeline-apt_wording-93e0, -083721-…-apt_wording_ml-7b6c, -084334-…-apt_wording_ml2-1f56,
+-084147-…-apt_wording_ifc-f27a, -084051-…-apt_wording_cc-1bc6, -084910-…-comp_ml-a0c6, -085023-…-comp_ml_cc-4f34; plural mini-probe -083814-…-areas_plural-e14a.
+
+**Reading.** Per-entity atomic questions are wording- and language-robust everywhere we looked (Swiss rooms/labels/
+fixtures in DE/FR/IT, IFC in 7 languages, CubiCasa casual FI/EN: 100% / 100% / = control). The failures are all in
+**the small set of words that change scope or operator**, and they fail confidently:
+1. *Dwelling nouns outside the normaliser* (Wohneinheit, Einheit, logement, alloggio, "units") lose the apartment
+   scope → whole-floor sum at 0.96–0.98. The cross-check that should catch it compares the floor total with itself.
+   Fix asked of W4: the nouns + a whole-floor safety net (dwelling id in the question, floor-total trace → cap ≤0.5).
+2. *Operator words that are also other words*: French 'plus' (= more) → '+'; plural 'areas' → not an area; 'including
+   the apartment entrance doors' → '+ apartments'; Italian 'di quanti m² … più grande' → 'which is larger'.
+3. *Locations read as terms*: "sinks in the kitchen and bathroom" → sinks + kitchens + bathrooms.
+4. *Intent says area, the solver says count*: 'wie viele Quadratmeter …' (intent right, dxf counts balconies). A kind
+   mismatch between intent and answer should trigger the canonical re-ask instead of returning the count.
+
+Owners told (inbox 08:40–08:52): W4 (1, 2-plus/areas, 3, 4, CubiCasa 'Laske'), W2 (2-incl/areas/di quanti, the
+Quadratmeter parse, exclusions read as targets, alloggio table-QA). Re-run commands for each are in board/F.md NEXT.
+
+## Earlier (08:20, cycle 224): the wired language front end on held-out languages; "both readings" fixes its underconfidence; one English confident-wrong
 
 Context: all agents were stopped by the org spend limit 05:20–08:10, so night is still bb94fe4 (S0 cycle 19) and
 sealed test 2 started only at 08:12 (S0). S0's last gate on bb94fe4: dev 89.9 / 83.6 w, hard 84.7, hard2 92.1,
