@@ -259,3 +259,16 @@ def test_split_row_without_path_is_skipped(tmp_path, capsys):
     qs = load_split(str(f))
     assert len(qs) == 1 and qs[0].path == "data/cubicasa5k/x.png"
     assert "no 'path'" in capsys.readouterr().err
+
+
+def test_text_fuzzy_ignores_rows_without_gold():
+    from stoa.eval.runner import summarize
+
+    base = {"source": "swiss_dwellings", "template": "t", "unit": None, "gold_unit": None, "confidence": 0.9,
+            "abstained": False, "evidence": [], "correct": None, "latency_s": 0.1, "error": None}
+    rows = [dict(base, qid="a", type="other", gold=None, value="room 6.15", text_fuzzy=False),
+            dict(base, qid="b", type="text", gold="Kitchen", value="kitchen", text_fuzzy=True)]
+    m = summarize(rows)
+    assert m["text_n"] == 1 and m["text_fuzzy"] == 1.0
+    m = summarize(rows[:1])
+    assert "text_fuzzy" not in m and m["no_gold_n"] == 1
