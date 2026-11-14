@@ -1,0 +1,35 @@
+# c6 probe 3 (08:43), IFC-Bench models nobody tuned on, written BEFORE running.
+# ac20: Keller(-3) 16 doors/44 win, EG 18/54, 1.OG 22/54, 2.OG 21/54, Dachgeschoss(9.0) 0 doors, 3 spaces
+PATH ../ifc_bench/ac20_arc.ifc
+# gold 5 (Dachgeschoss is a floor: 3 rooms)
+¿Cuántas plantas tiene el edificio?
+# gold 21 (2. Obergeschoss: top floor WITH doors? Dachgeschoss has rooms -> top floor = Dachgeschoss 0 doors). Debatable: gold 0 at <= 0.85
+How many doors are on the top floor?
+# gold 16 (Keller)
+Hur många dörrar finns det i källaren?
+# gold 54*1 250 = 67500
+If each window costs 1 250 EUR, what do all windows on 'Erdgeschoss' cost?
+# gold yes (22 > 18)
+Does '1. Obergeschoss' have more doors than 'Erdgeschoss'?
+# gold 39 (18 + 21)
+How many doors are on Erdgeschoss and 2. Obergeschoss together?
+# digital_hub: B01_OKRD(-3.37) 13 doors; E00 26 doors 21 win; E01 25 doors 26 win
+PATH ../ifc_bench/digital_hub_arc.ifc
+# gold 13 (B01 = basement by elevation)
+How many doors are in the basement?
+# gold 3
+Kolik podlaží má budova?
+# gold 26 (E01, the top floor)
+How many windows are on the top floor?
+# gold 25*2.5 = 62.5 h
+If cleaning one door takes 2.5 hours, how many hours for all doors on 'E01_OKRD'?
+# gold: no 5th floor -> <= 0.3
+How many doors are on the fifth floor?
+# fzk_house: Erdgeschoss 5 doors 9 win; Dachgeschoss 0 doors 2 win 1 space
+PATH ../ifc_bench/fzk_house_arc.ifc
+# gold 2
+How many storeys does the house have?
+# gold 2 (Dachgeschoss windows)
+How many windows are on the top floor?
+# gold 5*1 999.90 = 9999.5
+If a door costs €1,999.90, what do all the doors cost?
