@@ -169,5 +169,36 @@ def score():
     print(f"solve() on fired positives: {good}/{tot} give a number + conf < 0.5 + assumptions + missing; LLM calls {calls}")
 
 
-if __name__ == "__main__":
+if __name__ == "__main__" and sys.argv[1] in ("make", "score"):
     {"make": make, "score": score}[sys.argv[1]]()
+
+
+def front_end():
+    """Recall when the trigger also runs on the pipeline's English translation (as the link route does)."""
+    from stoa.llm import to_english
+
+    rows = [json.loads(x) for x in open(OUT) if json.loads(x)["meta"]["set"] == "pos"]
+    seeds = sorted({r["meta"]["seed"] for r in rows}, key=lambda s: int(s[3:]))
+    half_a = set(seeds[0::2])
+
+    def run(r):
+        k = kind_of(r["question"])
+        ok = k["fire"] and k["kind"] == r["meta"]["kind"]
+        if not ok and r["meta"]["lang"] not in ("en", "orig"):
+            t = to_english(r["question"], force=True)
+            q = t if isinstance(t, str) else getattr(t, "text", None) or (t[0] if isinstance(t, tuple) else str(t))
+            k2 = kind_of(q)
+            ok = k2["fire"] and k2["kind"] == r["meta"]["kind"]
+        return r, ok
+
+    with ThreadPoolExecutor(8) as ex:
+        res = list(ex.map(run, rows))
+    for name, sel in (("A", lambda r: r["meta"]["seed"] in half_a), ("B", lambda r: r["meta"]["seed"] not in half_a)):
+        rs = [(r, ok) for r, ok in res if sel(r)]
+        print(f"{name} asked-or-translated: {sum(ok for _, ok in rs)}/{len(rs)}; non-English "
+              f"{sum(ok for r, ok in rs if r['meta']['lang'] not in ('en', 'orig'))}/"
+              f"{sum(1 for r, _ in rs if r['meta']['lang'] not in ('en', 'orig'))}")
+
+
+if __name__ == "__main__" and sys.argv[1] == "front_end":
+    front_end()
