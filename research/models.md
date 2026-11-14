@@ -221,7 +221,9 @@ Cost of one answer (D21 item 4), measured, not assumed:
    `[answer=12]` = gold. Per question the table groups by kind; `compare_runs.py ... --by source` gives the other cut. Don't hand the
    eval a row without `path`: `load_split` crashes with KeyError 'qid' (F told 11:03). Dry run 11:05 (4 questions → 8 rows, 3 min,
    runs 20261114-110500-pipeline-noon_dry_txt-9562 / -110746-vlm_direct-…-f4e6 / -110750-…-n2-9c22): what's slow is the open
-   kinds: a CubiCasa 'total floor area' question → agent, **160 s** and 11.8k tokens (75 m² @0.4, no scale: an estimate); a HABS
+   kinds: a CubiCasa 'total floor area' question → agent, **160 s wall** but only 4.9 GPU-s (10 LLM calls, 11.8k in / 4.5k out;
+   the rest = queueing on a GPU at 95% from other agents' evals), 75 m² @0.4 with missing 'agent and room_graph disagree (75 vs 750)'
+   and NO assumptions listed (Stoa point 3: should say 'no scale; assumed …'); a HABS
    'which state' question → raster text layer, 41 s and 28k tokens ('Virginia' @0.75). Counts on dxf/ifc 2–4 s. Expect a
    20-question × 4-source example run to take ~15–25 min on a busy GPU; start it right after noon.
 1. New question kinds on rasters/scans: first run `vlm_direct` (8B base, conf=logprob) and `vlm_lora` on Stoa's examples; if the LoRA
