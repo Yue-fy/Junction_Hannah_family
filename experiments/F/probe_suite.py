@@ -33,7 +33,8 @@ BASELINE = SUITE_DIR / "night-1a4e2af.json"
 # biggest first so the streams finish together
 PROBES = ["apt_wording", "apt_wording_cc", "apt_wording_ml", "neutral_path", "comp_ml", "apt_wording_syn",
           "apt_wording_typo", "comp_ml_cc", "apt_wording_ml2", "this_plan", "this_plan_nh", "whole_top", "whole_top_nh",
-          "apt_wording_ifc", "format_swap", "apt_wording_scope", "apt_wording_scope_model", "apt_wording_scope_nh"]
+          "apt_wording_ifc", "unit_probe", "format_swap", "apt_wording_scope", "apt_wording_scope_model",
+          "apt_wording_scope_nh"]
 
 
 def _load(path):
