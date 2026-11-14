@@ -6,7 +6,7 @@ import { createExperienceStore, suggestedMemory, ux, buildJournal } from './expe
 import { spendingCategories, forecastSummary, toolScope, milestoneFor } from './presentation.js';
 import { coachNarrative } from './coach-narrative.js';
 import { agentTurnHTML } from './coach-chat.js';
-import { createMonthlyRecapCache, monthlyRecapPrompt } from './monthly-recap.js';
+import { createMonthlyRecapCache, monthlyRecapPrompt, recapTiles } from './monthly-recap.js';
 
 const state = createState();
 let api = createAPI(state.customerId);
@@ -24,7 +24,7 @@ function experience(){if(!experienceStores.has(state.customerId))experienceStore
 const evidenceRegistry=new Map();let evidenceSequence=0;
 let memoryProposal=null, noteEditing=null, tourStep=0, coachSequence=0;
 let coachPending=null, coachTimer=null, agentProposal=null, actionSequence=0;
-const monthlyRecaps=createMonthlyRecapCache();
+const monthlyRecaps=createMonthlyRecapCache(),recapPrevious=new Map();
 let homeRecap=null,homeDataState='loading';
 function sourceButton(refs=[],scope={}){
   if(!refs.length)return '';
@@ -172,7 +172,9 @@ function renderMonthlyRecap(){
     if(Number.isSafeInteger(overview.consumption_cents))facts.push(t('home.recap.spending',{amount:money(overview.consumption_cents)}));
     if(Number.isSafeInteger(overview.committed_saving_transfers_cents))facts.push(t('home.recap.saving',{amount:money(overview.committed_saving_transfers_cents)}));
   }
-  $('insight-description').innerHTML=esc(result?.text||(ready?(facts.join(' ')||t('home.recap.noFacts')):t(homeDataState==='loading'?'loading.account':'home.recap.unavailable')));
+  const lines=result?.lines;
+  $('insight-description').innerHTML=lines?`<strong class="recap-lead">${esc(lines.headline)}</strong><span class="recap-line recap-good"><b>${esc(t('v3.recap.good'))}</b> ${esc(lines.good)}</span><span class="recap-line recap-watch"><b>${esc(t('v3.recap.watch'))}</b> ${esc(lines.watch)}</span>`:esc(result?.text||(ready?(facts.join(' ')||t('home.recap.noFacts')):t(homeDataState==='loading'?'loading.account':'home.recap.unavailable')));
+  renderRecapTiles(ready?overview:null);
   text('home-recap-status',ready?t(active?.pending?'home.recap.pending':result?'home.recap.ai':'home.recap.recorded'):'');
   $('home-coach-card').setAttribute('aria-busy',String(Boolean(active?.pending)));
   text('open-story',t('home.recap.open')+' ↗');$('open-story').disabled=!ready;
@@ -181,9 +183,28 @@ function renderMonthlyRecap(){
   const question=protectedCategory==='Restaurants'&&alternative?`${copy('Show my spending on','Näytä menoni luokassa','Visa mina utgifter för')} ${alternative.category}`:profile.focus==='buffer'?t('coach.question.safe'):protectedCategory==='none'&&result?.question?result.question:t('home.recap.followup',{period});
   const starter=$('home-coach-question');starter.dataset.directQuestion=question;starter.textContent=question+' ↗';starter.disabled=!ready;
 }
+function renderRecapTiles(overview){
+  const node=$('recap-tiles');if(!node)return;
+  if(!overview){node.innerHTML='';return;}
+  const previousMonth=state.selectedMonth?shiftMonth(state.selectedMonth,-1):null;
+  const previous=recapPrevious.get(state.customerId+'|'+previousMonth)||null;
+  node.innerHTML=recapTiles(overview,previous).map(tile=>{
+    const delta=tile.delta_cents,direction=delta>0?'up':delta<0?'down':'same';
+    const change=delta===null?'':`<small class="recap-delta recap-${direction}">${direction==='up'?'▲':direction==='down'?'▼':'＝'} ${esc(delta===0?t('v3.recap.same'):t('v3.recap.vs',{amount:money(Math.abs(delta)),month:monthLabel(previousMonth)}))}</small>`;
+    return `<div class="recap-tile"><span>${esc(t('v3.recap.'+tile.key))}</span><strong>${money(tile.cents)}</strong>${change}</div>`;
+  }).join('');
+}
+function loadPreviousOverview(context){
+  if(!context.month||!state.observedStart)return;
+  const previousMonth=shiftMonth(context.month,-1),key=context.customerId+'|'+previousMonth;
+  if(recapPrevious.has(key)||previousMonth<state.observedStart.slice(0,7))return;
+  recapPrevious.set(key,null);
+  request(context,'get','/api/overview',{month:previousMonth}).then(data=>{recapPrevious.set(key,data);if(state.view==='home'&&isCurrent(context))renderRecapTiles(state.overview);}).catch(()=>{recapPrevious.delete(key);});
+}
 function refreshMonthlyRecap(){
   if(homeDataState!=='ready'||!state.overview||state.view!=='home'){renderMonthlyRecap();return;}
   const context=captureContext(),key=JSON.stringify([context.customerId,context.month,context.locale,state.overview]);
+  loadPreviousOverview(context);
   const entry=monthlyRecaps.get(key,()=>context.api.agent(monthlyRecapPrompt(context.month,context.locale),{month:context.month,locale:context.locale,conversation:[]}));
   if(homeRecap?.entry===entry&&isCurrent(homeRecap.context)&&homeRecap.context.locale===context.locale){renderMonthlyRecap();return;}
   const current={context,entry};homeRecap=current;renderMonthlyRecap();

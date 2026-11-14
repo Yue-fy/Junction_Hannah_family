@@ -1,7 +1,7 @@
 // The agent selects observations; existing server tools and number checks own the facts.
 export function monthlyRecapPrompt(month, locale) {
   const language = {en:'English',fi:'Finnish',sv:'Swedish'}[locale] || 'English';
-  return `Write a monthly recap for ${month} for the Home card in ${language}. Call get_overview for this month first. It provides recorded income, consumption, savings transfers and top categories; copy its preformatted euro values. Choose only two useful observations, not an inventory of every figure. Write two short sentences, about forty to sixty words, as plain text without a heading. A previous-month comparison is optional; use compare_periods if helpful and copy its computed differences. Only call calculate for a needed new calculation, using euro values, not integer cent fields. If an optional tool fails, omit that calculation and summarize available facts. Do not do financial arithmetic yourself. Keep consumption separate from saving transfers. Salary and other income do not describe all incoming credits. Payment counts are not visits. Do not infer motives, household facts, investment returns or recommend cutting a spending category. Return one standalone, relevant follow-up question in suggestions; it must name the subject and period rather than refer to 'this' or 'it'. No chart, highlight or proposed actions are needed.`;
+  return `Write a monthly recap for ${month} for the Home card in ${language}. Call get_overview for this month first; compare_periods with the previous calendar month is optional. Copy preformatted euro values and precomputed percentages exactly; never do arithmetic yourself. Reply with exactly three short paragraphs separated by blank lines and nothing else: (1) the single most important thing about this month, at most twelve words; (2) one thing that went well, at most eighteen words; (3) one thing worth a look, at most eighteen words. No labels, headings, emoji or bold. Warm and matter-of-fact; never shame. Use the basket names Must-pays, Surprise must-pays and Little leaks if you mention baskets. Add one short follow-up question as a suggestion in the ui block.`;
 }
 
 function acceptedRecap(response) {
@@ -12,8 +12,11 @@ function acceptedRecap(response) {
   if (paragraphs.some(value => !value)) return null;
   const text = paragraphs.join(' ');
   if (text.length > 600) return null;
+  // The redesigned card shows a headline plus 'went well' and 'worth a look' lines when the model follows the format.
+  const lines = paragraphs.length === 3 && paragraphs[0].length <= 110 && paragraphs.slice(1).every(value => value.length <= 160)
+    ? {headline: paragraphs[0], good: paragraphs[1], watch: paragraphs[2]} : null;
   const question = Array.isArray(response.suggestions) ? response.suggestions.find(value => typeof value === 'string' && value.trim() && value.length <= 160) : null;
-  return {text, question: question?.trim() || null};
+  return {text, lines, question: question?.trim() || null};
 }
 
 export function createMonthlyRecapCache() {
@@ -30,4 +33,18 @@ export function createMonthlyRecapCache() {
       return entry;
     },
   };
+}
+
+/** Stat tiles for income, spending and savings transfers with change versus the previous month. Pure. */
+export function recapTiles(overview, previous) {
+  const value = (data, key) => {
+    if (!data) return null;
+    if (key === 'income') return Number.isSafeInteger(data.salary_cents) && Number.isSafeInteger(data.other_income_cents) ? data.salary_cents + data.other_income_cents : null;
+    const field = {spent:'consumption_cents', saved:'committed_saving_transfers_cents'}[key];
+    return Number.isSafeInteger(data[field]) ? data[field] : null;
+  };
+  return ['income','spent','saved'].map(key => {
+    const current = value(overview, key), before = value(previous, key);
+    return {key, cents: current, delta_cents: current !== null && before !== null ? current - before : null};
+  }).filter(tile => tile.cents !== null);
 }

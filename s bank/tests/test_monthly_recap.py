@@ -119,3 +119,28 @@ const request=calls.find(call=>call.path==='/api/agent');assert.ok(request);asse
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class MonthlyRecapV3Tests(unittest.TestCase):
+    read = contracts.WebContractTests.read
+    node_app = contracts.WebContractTests.node_app
+
+    def test_three_paragraph_recap_renders_headline_and_two_lines_with_tiles(self):
+        self.node_app(SETUP + r'''
+recap={...recap,answer:['Spending stayed close to August.','You moved €100.00 to savings.','Little leaks took €988.70 <b>this</b> month.']};
+await app.load();await settle();
+const html=get('insight-description').innerHTML;
+assert.ok(html.includes('recap-lead'));assert.ok(html.includes('Went well:'));assert.ok(html.includes('Worth a look:'));
+assert.ok(html.includes('&lt;b&gt;'));
+const tiles=get('recap-tiles').innerHTML;
+assert.ok(tiles.includes('Money in'));assert.ok(tiles.includes('Spent'));assert.ok(tiles.includes('To savings'));
+assert.match(tiles,/988\.70/);
+''')
+
+    def test_recap_tiles_compute_change_against_previous_month(self):
+        self.node_app(r'''
+const mod=await import('data:text/javascript;base64,'+Buffer.from(sources['monthly-recap.js']).toString('base64'));
+const tiles=mod.recapTiles({salary_cents:200000,other_income_cents:5000,consumption_cents:90000,committed_saving_transfers_cents:10000},{salary_cents:200000,other_income_cents:0,consumption_cents:100000,committed_saving_transfers_cents:10000});
+assert.deepEqual(tiles.map(t=>[t.key,t.cents,t.delta_cents]),[['income',205000,5000],['spent',90000,-10000],['saved',10000,0]]);
+assert.deepEqual(mod.recapTiles({consumption_cents:500},null).map(t=>[t.key,t.delta_cents]),[['spent',null]]);
+''')

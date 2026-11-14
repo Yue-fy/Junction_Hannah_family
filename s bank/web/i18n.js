@@ -1692,6 +1692,13 @@ for (const [key, values] of Object.entries(RECAP_MESSAGES)) { EN['home.recap.'+k
 const V3_MESSAGES = {
   offlineAnswer:['Quick answer (offline)','Pikavastaus (offline)','Snabbsvar (offline)'],
   basketExamples:['This month: {items}','Tässä kuussa: {items}','Den här månaden: {items}'],
+  'recap.income':['Money in','Tulot','Pengar in'],
+  'recap.spent':['Spent','Menot','Utgifter'],
+  'recap.saved':['To savings','Säästöön','Till sparande'],
+  'recap.vs':['{amount} vs {month}','{amount} vs. {month}','{amount} jämfört med {month}'],
+  'recap.same':['Same as last month','Sama kuin viime kuussa','Samma som förra månaden'],
+  'recap.good':['Went well:','Meni hyvin:','Gick bra:'],
+  'recap.watch':['Worth a look:','Kannattaa katsoa:','Värt att titta på:'],
 };
 for (const [key, values] of Object.entries(V3_MESSAGES)) { EN['v3.'+key]=values[0]; FI['v3.'+key]=values[1]; SV['v3.'+key]=values[2]; }
 
