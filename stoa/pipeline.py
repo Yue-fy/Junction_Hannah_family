@@ -44,7 +44,7 @@ from stoa.data import siblings, source_of
 from stoa.router import gating, prior
 from stoa.router.canonical import canonical
 from stoa.router.compose import combine, decompose
-from stoa.router.intent import DERIVED, Intent, extra_structure, modifiers, parse
+from stoa.router.intent import _COUNT, DERIVED, Intent, extra_structure, modifiers, parse
 from stoa.router.prior import known_template
 
 DERIVED_CAP = 0.4  # max confidence of a rules-only (0 LLM calls) as-asked answer to a derived-quantity question
@@ -74,6 +74,11 @@ APT_AREA_Q = ("What is the net floor area of apartment {a} in m², summing all i
               "terraces and other outdoor spaces?")
 FLOOR_AREA_Q = ("What is the total net floor area in m² of all numbered indoor rooms on this floor (excluding balconies, "
                 "loggias, terraces and other outdoor spaces, shafts and voids)?")
+
+
+# a counting cue in any language (wider than the parser's _COUNT, which steers parsing and R2's translate trigger)
+_COUNT_CUE = re.compile(r"\b(?:quant[oa]s|kolik|ko[lľ]ko|koliko|kiek|h[aá]ny|ka[cç]|c[aâ]te|c[aâ]ți|ilu|kui palju|cik|"
+                        r"tally|total number|count)\b", re.I)
 
 
 def _excluded_apartment(question: str) -> str | None:
@@ -247,6 +252,24 @@ class Pipeline(BaseSolver):
             path = dataset_rel(path)
         except Exception:  # noqa: BLE001
             pass
+        try:
+            from stoa.data import abspath
+
+            readable = abspath(path).exists()
+        except Exception:  # noqa: BLE001
+            readable = True
+        if not readable:
+            # Q 04:13 HIGH: every solver raised FileNotFoundError and the pipeline answered the train prior at its hit
+            # rate (0.80 for storeys) with nothing in `missing`. Nothing was read: say so, spend nothing
+            intent = parse(question)
+            trace = [f"intent: {intent.describe()} (lang {intent.lang})", f"the file could not be opened: {path}"]
+            ans = self._prior_answer(source_of(path), intent, trace, None, question)
+            ans.confidence = round(min(ans.confidence, 0.05), 3)
+            ans.missing = [*ans.missing, f"the drawing could not be read (file not found: {path})"]
+            ans.trace = trace
+            ans.solver = f"pipeline/{ans.solver}"
+            ans.cost.wall_seconds = round(time.perf_counter() - t0, 4)
+            return ans
         asked = question
         question, tr_note, tr_cost = self._front_end(question) if self.translate else (question, None, None)
         plan = decompose(source_of(path), question) if self.compose else None
@@ -266,6 +289,13 @@ class Pipeline(BaseSolver):
                 ans.confidence = UNSEEN_MAX
         elif tr_note:
             ans.trace = [f"language front end: {tr_note}"] + ans.trace
+        if ans.value is not None and str(ans.unit or "").lower() == "count" and ans.confidence > 0.3 and \
+                not any(rx.search(x) for rx in (_COUNT, _COUNT_CUE) for x in (question, asked)):
+            # Q 04:18: "How big is the room 'Hall (0.1)'?" -> ifc '5 count' at 0.97. A count nobody asked for is a
+            # misreading (0 such answers on dev/hard/hard2 = 3,182 questions, so this costs nothing measured)
+            ans.trace.append("a count answer, but the question asks no 'how many': confidence capped at 0.3")
+            ans.confidence = 0.3
+            ans.missing = [*ans.missing, "the question does not ask for a number of things; the answer is a count"]
         question = asked
         ans.cost.wall_seconds = round(time.perf_counter() - t0, 4)
         if ans.value is not None and "vlm_" in (ans.solver or "") and _echoes_question(ans.value, question):
@@ -660,8 +690,11 @@ class Pipeline(BaseSolver):
             total = total.add(_cost_of(a))
             if a.value is None:
                 continue
-            if derived and not any(str(t).startswith("table QA code") for t in a.trace) and \
-                    a.confidence >= self.raw_accept:
+            if derived and not any(str(t).startswith("table QA code") or re.match(r"outer operation: (?:factor|per)\b", str(t))
+                                   for t in a.trace) and a.confidence >= self.raw_accept:
+                # W1 04:15: ifc applies rates/prices in code ("outer operation: factor 450 EUR per door" / "per door";
+                # 26/26 right on derived.jsonl) -> trusted; its 'add N' is not ("15 metres of wall per day" -> "add 15"
+                # -> 19 at 0.92, gold 5.9 days), so add/remove stay capped for the agent
                 # a rate / price / given constant (W5 01:49: "if each door costs 450 €, how much do the doors cost?"
                 # -> ifc 46 doors at 0.97): rules may have answered the measured quantity, not the derived one (an
                 # LLM that only NAMES the operation does not help: dxf 'one value' -> 30 doors for "painting one
