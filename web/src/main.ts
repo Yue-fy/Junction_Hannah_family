@@ -710,6 +710,7 @@ async function runAsk() {
   $<HTMLButtonElement>("askBtn").disabled = true;
   $("hero").hidden = false;
   $("hero").innerHTML = heroLoadingHtml(q);
+  fitQuestion();
   const t0 = performance.now();
   // a live question can take long (first text-layer read of a scan, the agent's steps): show it is still going
   const tick = window.setInterval(() => {
@@ -990,6 +991,13 @@ function showLanding(on: boolean) {
 }
 $("projectsBtn").addEventListener("click", () => showLanding(true));
 $("askMore").addEventListener("click", () => document.body.classList.remove("answered"));
+/** Customer view: the question box grows with its text (a chip or a tour step can be long). */
+function fitQuestion() {
+  const ta = $<HTMLTextAreaElement>("question");
+  ta.style.height = "";
+  if (isCustomer() && ta.scrollHeight > ta.clientHeight) ta.style.height = `${ta.scrollHeight + 2}px`;
+}
+$("question").addEventListener("input", fitQuestion);
 
 async function fileInfo(path: string): Promise<FileInfo | undefined> {
   return state.files.find((x) => x.path === path)

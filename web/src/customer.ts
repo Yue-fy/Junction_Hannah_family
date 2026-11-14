@@ -92,7 +92,7 @@ export function confidenceWords(c: number): { cls: string; word: string; hint: s
 function wherePhrase(a: Answer, ctx: HeroCtx): string {
   const st = a.intent?.filters?.storey;
   if (st) return `on ${floorName(String(st))}`;
-  if (a.intent?.scope === "model" || /\b(whole|entire) building\b|\bin (this|the) model\b/i.test(ctx.question)) return "in the whole building";
+  if (/\b(whole|entire) building\b/i.test(ctx.question) || (a.intent?.scope === "model" && !/\bnot drawn\b/i.test(ctx.question))) return "in the whole building";
   const label = ctx.sheetLabel(ctx.file);
   if (/\.ifc$/i.test(ctx.file)) return "in the 3D model";
   if (/^floor \d|floor$/i.test(label)) return `on ${label.toLowerCase().replace(/^(\d)/, "the $1")}`;
@@ -123,6 +123,8 @@ function headline(a: Answer, ctx: HeroCtx): { big: string; unit: string; sentenc
   const t = a.intent?.target ?? "";
   const n = NOUN[t];
   const where = wherePhrase(a, ctx);
+  const notDrawn = ctx.question.match(/how many (\w+) on '?([^'?]+?)'? are in the (?:3D )?model but not drawn/i);
+  if (notDrawn) return { big: fmtValue(a), unit: "", sentence: `${notDrawn[1]} on ${floorName(notDrawn[2])} are in the 3D model but not drawn on the plan` };
   if (a.unit === "count" || (!a.unit && Number.isInteger(v))) {
     const noun = n ? n[Number(v) === 1 ? 0 : 1] : "";
     return { big: fmtValue(a), unit: "", sentence: [noun, where].filter(Boolean).join(" ") };
@@ -258,7 +260,7 @@ export function diffsHtml(d: Difference[], p: Project): string {
     ${d.map((x, i) => `<div class="diff"><div><b>${esc(x.label)}:</b> the drawing shows ${x.drawn} ${esc(x.kind)}, the 3D model has ${x.model}${x.explained ? ` <small>(${x.explained} above/below the cut)</small>` : ""}</div>
       <button type="button" class="diff-go" data-diff="${i}">Show me</button></div>`).join("")}`;
 }
-/** The question behind "Show me" (W5 cycle 7: checked end to end for windows on 4 projects). */
-export const diffQuestion = (x: Difference) => `How many ${x.kind} on '${x.storey}' are in the model but not drawn on this plan?`;
+/** The question behind "Show me" (W5 cycle 8: windows floor 2 → 7, walls floor 1 / 5 → 4, all with the elements marked). */
+export const diffQuestion = (x: Difference) => `How many ${x.kind} on ${floorName(x.storey)} are in the 3D model but not drawn on this plan?`;
 
 export { projectOf, PROJECTS };

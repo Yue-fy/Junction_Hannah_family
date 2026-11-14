@@ -479,7 +479,7 @@ body[data-view="customer"] .brand { grid-template-columns: 34px 1fr auto; align-
 body[data-view="customer"] .brand p, body[data-view="customer"] #backend, body[data-view="customer"] #picker,
 body[data-view="customer"] #examples, body[data-view="customer"] #fileMeta, body[data-view="customer"] #fitBtn,
 body[data-view="customer"] #roomsBtn, body[data-view="customer"] #linked, body[data-view="customer"] #xbanner,
-body[data-view="customer"] .pane-label, body[data-view="customer"] #modes button[data-mode="split"] { display: none !important; }
+body[data-view="customer"] .pane-label { display: none !important; }
 body[data-view="customer"] .brand-right { flex-direction: row; align-items: center; gap: 8px; }
 body[data-view="customer"] .brand h1 { font-size: 18px; }
 body[data-view="customer"] .logo { width: 34px; height: 34px; font-size: 17px; }
