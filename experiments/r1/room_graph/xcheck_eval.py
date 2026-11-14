@@ -18,6 +18,8 @@ RUNS = {"pipeline": ["081950-pipeline-probe_v1-e150", "082013-pipeline-probe_v2-
                            "084152-pipeline-probe_v3-51e3", "084156-pipeline-probe_v4-2fed"],
         "night-W3 271b7de": ["084629-pipeline-probe_v1-f81b", "084649-pipeline-probe_v2-9514",
                              "084702-pipeline-probe_v3-bf79", "084715-pipeline-probe_v4-e943"],  # git archive, no lb
+        "W4 4d4187f+W3 ac981b3": ["085051-pipeline-probe_v1-4a93", "085051-pipeline-probe_v2-fd85",
+                                  "085051-pipeline-probe_v3-c9d9", "085051-pipeline-probe_v4-ddbf"],  # merge-tree archive
         "pipeline_rg": ["082535-pipeline_rg-probe_v1-0a7c", "082543-pipeline_rg-probe_v2-3133",
                         "082604-pipeline_rg-probe_v3-ba42", "082609-pipeline_rg-probe_v4-1586"],
         "pipeline_rg+xcheck": ["083916-pipeline_rg-probe_v1-81f3", "083923-pipeline_rg-probe_v2-4082",

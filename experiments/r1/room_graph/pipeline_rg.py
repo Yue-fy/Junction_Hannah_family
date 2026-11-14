@@ -50,6 +50,12 @@ def area_crosscheck(path: str, question: str, ans):
 
     g = rg_solve(path, question, textlayer=True)
     a, b = _num(ans.value), _num(g.value)
+    if a is None and b is not None and g.unit in (None, "m2"):
+        # a non-numeric answer to an area question ('bedroom', 'not specified') while the plan prints one
+        ans.confidence = min(float(ans.confidence or 0.0), DISAGREE_CONF)
+        ans.missing = [*ans.missing, f"the room graph (printed labels + areas, OCR) reads {b:g} m² for this question"]
+        ans.trace = [*ans.trace, f"room-graph area cross-check: {b:g} m² vs a non-numeric answer -> conf <= {DISAGREE_CONF}"]
+        return ans
     if a is None or b is None or g.unit not in (None, "m2"):
         ans.trace = [*ans.trace, "room-graph area cross-check: no comparable value"]
         return ans
