@@ -870,7 +870,7 @@ class Translation:
     note: str = ""            # for Answer.assumptions: "translated from Polish: '...'"
 
 
-_TR_SYSTEM = (
+_TR_SYSTEM_BASE = (
     "You translate questions about construction drawings and building models into English. Rules: keep every "
     "placeholder such as [[1]] exactly as written, once each (a placeholder in quotes is a name or label: keep it "
     "in quotes); keep apartment, room and grid letters or codes; do not answer the question; do not add, drop or "
@@ -878,6 +878,18 @@ _TR_SYSTEM = (
     "toilet, sink, door, window, net floor area, wall, slab). Reply as JSON {\"lang\": \"<ISO 639-1 code of the "
     "source>\", \"english\": \"<the English question>\"}."
 )
+# + a fixed domain glossary and "never add / drop qualifiers" (F 04:36/04:38: the remaining losses were concept-noun
+# slips, e.g. Polish 'belek' (beams) -> balconies, and one ADDED 'external'). experiments/r2/probes/concept_match.py:
+# translation parses to the same (task, target) as its English base on hardL_open 139/158 vs 129/158 without it,
+# lang4 47 vs 46/48, 'belek' fixed, 0 vs 2 lost placeholders. (Two noun hints, washbasin vs kitchen sink and bathtub
+# vs bathroom, were added after seeing hardL_open misses: F's held-out hardL is the honest check.)
+_TR_SYSTEM = _TR_SYSTEM_BASE + (
+    " Never add a qualifier or condition the source does not state (e.g. external, internal, load-bearing, net, "
+    "gross) and never drop one it states; translate every noun. Translate building nouns with these English terms: "
+    "toilet bowl / WC seat (a fixture), separate WC room (a room), washbasin (a bathroom wash basin, lavabo), kitchen "
+    "sink, shower, bathtub (the tub itself, not the room), sauna, bedroom, bathroom / washroom (a room), kitchen, "
+    "living room, balcony, terrace, storey / floor (a level of the building), apartment, room / space, door, window, "
+    "wall, slab, beam, column, stair, roof, railing.")
 _TR_SCHEMA = {"type": "object", "properties": {"lang": {"type": "string"}, "english": {"type": "string"}},
               "required": ["lang", "english"]}
 _LANG_NAMES = {"pl": "Polish", "et": "Estonian", "es": "Spanish", "cs": "Czech", "hu": "Hungarian", "tr": "Turkish",
@@ -955,7 +967,7 @@ def should_translate(question: str, intent: Any = None) -> bool:
 
 
 def to_english(question: str, *, keep: Sequence[str] = COVERED_LANGS, force: bool = False,
-               backend: str = "local", model: str = "default") -> Translation:
+               backend: str = "local", model: str | None = None) -> Translation:
     """Translate a question into English unless its language is in `keep` (default: the languages our rules cover).
 
     One local-LLM call (~150 tokens in / ~40 out, cost recorded like any chat) for an uncovered language; none
