@@ -815,6 +815,12 @@ async function showAnswer(a: Answer, roundTripMs: number) {
   if (state.ifc && a.evidence.some((e) => e.ifc_guid)) {
     if (state.mode === "2d" && !v2d.hasGuid(a.evidence.find((e) => e.ifc_guid)!.ifc_guid!)) setMode("split");
     await ensure3D();
+    // customer view: an answer about several floors (the whole building, a floor comparison) is shown in the 3D model,
+    // where all of it is lit; one floor plan would show only part of it
+    if (isCustomer() && state.mode !== "3d" && v3d && v3d.file === state.ifc) {
+      const floors = new Set(a.evidence.filter((e) => e.ifc_guid).map((e) => v3d!.storeyOfGuid(e.ifc_guid!)).filter((x) => x !== null));
+      if (floors.size > 1) setMode("3d");
+    }
     applyEvidence3D(a);
   } else if (v3d && v3d.file === state.ifc) {
     applyEvidence3D(a); // clears the previous answer's highlight
