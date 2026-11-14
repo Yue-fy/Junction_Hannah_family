@@ -22,7 +22,7 @@ PORT=8002 GPU_UTIL=${GPU_UTIL:-0.30} SERVED_NAME="$NAME" serving/start.sh "$PRES
 
 run() {
   echo "[$(date +%H:%M)] eval: $*"
-  LLM_BASE_URL=http://127.0.0.1:8002/v1 "$J" -m stoa.eval --solver "$SOLVER" --workers 16 \
+  LLM_BASE_URL=http://127.0.0.1:8002/v1 "$J" -m stoa.eval --solver "$SOLVER" --workers ${WORKERS:-4} \
     --solver-arg model="$NAME" --note "R2 bake-off $PRESET ($NAME) on private :8002" "$@" 2>&1 | grep -v "it/s" || true
 }
 ARGS=()
