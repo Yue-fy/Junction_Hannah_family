@@ -52,6 +52,7 @@ detector: they disagree (> 2%) on 10 of 400 dev Swiss area Qs and dxf is right o
 | 1a4e2af (c41) | 92.2 | 7,900 (72.5%) | 99.08% | 73 |
 | 6025963 (c42 r2) | 92.5 | 7,953 (73.0%) | 99.14% | 68 |
 | 9b1abd3 (c43 r1) | 92.6 | 7,808 (71.7%) | 99.58% | 33 |
+| b656826 (c43 r2, freeze) | 92.9 | 7,896 (72.5%) | 99.59% | 32 |
 
 (10,894 paired OPEN rows, 19 probes.) The drop is W2 fd50ee3 (unnamed numbered rooms ≥ 2% of a total → 0.78, from the
 unlabeled-room finding above): the two Swiss apartments wrong in every wording lose their 0.9. What is left at ≥ 0.8 is
