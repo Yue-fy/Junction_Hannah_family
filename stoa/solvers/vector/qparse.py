@@ -148,6 +148,8 @@ SIZE_W = (r"\barea\b|fl[äa]che|surface|superficie|oppervlak|\bsize\b|gr[öo](?:
 DIFF_BETWEEN = (r"difference\s+(?:\w+\s+){0,4}?between|unterschied\s+(?:\w+\s+){0,4}?zwischen|diff[ée]rence\s+"
                 r"(?:\w+\s+){0,4}?entre|differenza\s+(?:\w+\s+){0,4}?(?:tra|fra)|verschil\s+(?:\w+\s+){0,4}?tussen|"
                 r"skillnad\w*\s+(?:\w+\s+){0,4}?mellan|diferencia\s+(?:\w+\s+){0,4}?entre")
+CMP_GT = r"\b(?:bigger|larger|greater|gr[öo](?:ss|ß)er|plus\s+grand\w*|pi[uù]\s+grand\w*|maggiore|groter|st[öo]rre)\b"
+CMP_LT = r"\b(?:smaller|kleiner|plus\s+petit\w*|pi[uù]\s+piccol\w*|minore|kleiner|mindre)\b"
 COMMON_W = (r"common\s+(?:areas?|parts?|spaces?|rooms?)|shared\s+(?:areas?|spaces?|rooms?)|circulation\s+areas?|"
             r"(?:belong|belongs|belonging)\s+to\s+no\s+(?:apartment|unit|flat)|not\s+(?:in|part\s+of|assigned\s+to)\s+any\s+"
             r"(?:apartment|unit|flat)|outside\s+(?:all|any|the)\s+(?:apartments|units|flats)|allgemein(?:fl[äa]che|r[äa]ume|e\s+"
@@ -241,6 +243,10 @@ def parse(question: str, vocab: list[str] | None = None, room_numbers: set[str] 
     vocab = vocab or []
     is_count = bool(re.search(COUNT_WORDS, ql))
     is_area = bool(re.search(AREA_WORDS, ql))
+    # "Is apartment A bigger than apartment B?" / "Is the kitchen of B larger than 7 m²?": a yes/no size comparison
+    yes_cmp = bool(YESNO.match(ql.strip())) and not is_count and bool(re.search(CMP_GT + "|" + CMP_LT, ql))
+    if yes_cmp:
+        is_area = True
     if not is_count and not is_area and re.search(SIZE_ONLY, ql):
         is_area = True  # "what's the size of the Küche, room 3.09" is an area, not a count of Küche rooms (Q red team)
     unit = "ft2" if re.search(FT2, ql) else "m2"
@@ -426,6 +432,14 @@ def parse(question: str, vocab: list[str] | None = None, room_numbers: set[str] 
             qr = Query("count", op, terms, "count", notes, include_outdoor=inc, gross=gross, threshold=thr, consumed=consumed)
             qr.terms.sort(key=lambda t: t.pos)
             return qr
+        if yes_cmp and len(terms) in (1, 2) and op in ("sum", "diff", "max", "min"):
+            lt = bool(re.search(CMP_LT, ql)) and not re.search(CMP_GT, ql)
+            m = re.search(r"(?:than|als|que|di|dan|än)\s+(\d+(?:[.,]\d+)?)\s*(?:m²|m2|qm|mq|sq|square)", ql)
+            if len(terms) == 2 or m:
+                qr = Query("text", "yes_lt" if lt else "yes_gt", sorted(terms, key=lambda t: t.pos), None, notes,
+                           include_outdoor=inc, gross=gross, consumed=consumed + [CMP_GT, CMP_LT, YESNO.pattern, r"\bthan\b"],
+                           threshold=float(m.group(1).replace(",", ".")) if (m and len(terms) == 1) else None)
+                return qr
         if re.search(WHICH_CMP, ql) and len(terms) >= 2:
             op = "min" if re.search(r"smaller|kleiner|petit|piccol|mindre|peque[ñn]|pienempi|mniejsz", ql) else "max"
             qr = Query("text", op, terms, None, notes, include_outdoor=inc, gross=gross, consumed=consumed + [WHICH_CMP, r"\bwhich\b"])
@@ -570,8 +584,8 @@ def covered(question: str, qr: Query) -> bool:
     q = _norm(question)
     if qr.qtype == "count" and APT_RE.search(q) and not all(t.scope for t in qr.terms):
         return False  # an apartment letter the rules did not attach to every term
-    if YESNO.match(q.strip()):
-        return False  # yes/no question
+    if YESNO.match(q.strip()) and not qr.op.startswith("yes_"):
+        return False  # yes/no question (other than a size comparison the rules decide)
     for pat in qr.consumed:  # parts the parse turned into an operator are covered
         q = re.sub(pat, " ", q, flags=re.I)
     if qr.op not in ("max", "min") and (re.search(SUPER_MAX, q, re.I) or re.search(SUPER_MIN, q, re.I)):

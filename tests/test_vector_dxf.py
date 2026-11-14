@@ -317,3 +317,16 @@ def test_qparse_conjunctions_and_singular_labels():
     assert qparse.singular_label("How big is the Küche?")
     assert not qparse.singular_label("What is the total net floor area of all rooms labelled 'Küche' in m²?")
     assert not qparse.singular_label("How big are the kitchens?")
+
+
+def test_qparse_yes_no_size_comparison():
+    from stoa.solvers.vector import qparse
+    vocab = ["Küche", "Bad"]
+    qr = qparse.parse("Is apartment A bigger than apartment B?", vocab, room_numbers=set())
+    assert qr.op == "yes_gt" and [t.arg for t in qr.terms] == ["A", "B"] and qparse.covered("Is apartment A bigger than apartment B?", qr)
+    qr = qparse.parse("Is apartment B's kitchen bigger than apartment A's kitchen?", vocab, room_numbers=set())
+    assert qr.op == "yes_gt" and [t.scope for t in qr.terms] == [["B"], ["A"]]
+    qr = qparse.parse("Is the kitchen in apartment C larger than 7 m²?", vocab, room_numbers=set())
+    assert qr.op == "yes_gt" and qr.threshold == 7.0
+    qr = qparse.parse("Ist Wohnung F kleiner als Wohnung E?", vocab, room_numbers=set())
+    assert qr.op == "yes_lt"
