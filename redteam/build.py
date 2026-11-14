@@ -1002,6 +1002,10 @@ def main():
     for r0 in src:  # one gold corrected: the sheet prints "BUILDING HEIGHT (MAX) = 32' - 9\"" (W2's gold says 32')
         if "32' - 9" in r0.get("verified", ""):
             r0["gold"] = "32' - 9"
+        # W2 09:39: the text stream reads "(REAR YARD SETBACK) 30' - 0" (FRONT YARD SETBACK) 35' - 0"" — each label is
+        # followed by its value, and the dimension next to "(FRONT YARD SETBACK)" is 35' - 0" (W2's gold said 30')
+        if "Sports_Complex" in r0["path"] and "front yard setback" in r0["question"]:
+            r0["gold"] = "35' - 0"
     for r0 in src:
         g, u = r0["gold"], r0.get("unit")
         q = strip_hint(r0["question"])

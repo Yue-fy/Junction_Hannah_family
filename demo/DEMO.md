@@ -92,13 +92,14 @@ Slide image: `demo/redteam-rounds.png` (SVG next to it; regenerate with `python3
 headless chromium, numbers from `redteam/REPORT.md`). **Say only this (≈ 22 s, 65 words):**
 > "We tried to break it ourselves: almost 900 adversarial questions — rewordings, nine languages, rotated scans, rooms
 > that don't exist, a judge's own upload. Every confident mistake had one cause: we checked the number, not that it
-> answered what was asked. Each bar is a round of fixes; the last is this morning's new attacks. On the first 600,
-> all 364 confident answers are right — and it never just refuses."
-(The 09:40 bar = 14 confident misses from the three newest families — uploads, link wordings, storey roles — on the
-build where every older family is at 0. If the owners' fixes for bugs 24–26 merge before the pitch, re-run and redraw.)
-(Numbers by stage build — say the line for the build on stage: **night 0ffd81b (09:28) and later: "over 600 … all 364
-confident answers are right, and no confident answer to a trick question"** (measured, run `…-092751-…-all-0ffd81b-ba15`;
-also 407 of 409 on all 704 rows); be57171 / 31397eb: "609 … all 360"; bb94fe4 (test 2):
+> answered what was asked. Each bar is a round of fixes; the last two are this morning's new attacks. On the first
+> 600, all 378 confident answers are right — and it never just refuses."
+(The 09:28 / 09:50 bars = 14 / 12 confident misses from the three newest families — uploads, link wordings, storey
+roles — on builds where every older family is at 0; 7a78559 fixed the storey roles. If the fixes for bugs 25–26 merge
+before the pitch, re-run and redraw.)
+(Numbers by stage build — say the line for the build on stage: **night 7a78559 (09:50) and later: "… all 378 confident
+answers are right, and no confident answer to a trick question"** (run `…-094023-…-all-7a78559-2466`; 413 of 413 on
+v1–v20); 0ffd81b: "… all 364" (run `…-092751-…-all-0ffd81b-ba15`); be57171 / 31397eb: "609 … all 360"; bb94fe4 (test 2):
 "494 … 283 of 290"; c1d6149: "564 … 338 of 339"; 62754aa: "609 … 337 of 339". "Never just refuses": 0 of 647
 answers on be57171 are a bare refusal, and every wrong one carries an assumption or a "missing" line — see backup.)
 
