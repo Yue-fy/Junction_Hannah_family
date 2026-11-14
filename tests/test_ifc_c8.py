@@ -137,3 +137,23 @@ def test_v25_rankings_and_room_numbers(path, q, want):
 
     a = IfcSolver(plan2d="0", llm="0").solve(path, q)
     assert a.value == want and a.confidence >= 0.8
+
+
+SMILEY_1OG = "data/ifc_models/kit-smiley-west_ac-20-smiley-west-10-bldg_plan-03-1-og.pdf"
+
+
+@need
+@pytest.mark.parametrize("path,q,want", [
+    (ESPL, "How many doors are on the floor above this one?", 42),  # Q: the sheet's own 46 @ 0.97
+    (SMILEY_1OG, "How many walls does the floor below this one have?", 81),
+])
+def test_relative_storey(path, q, want):
+    from stoa.solvers.ifc.solver import IfcSolver
+
+    assert IfcSolver(plan2d="0", llm="0").solve(path, q).value == want
+
+
+@need
+def test_whats_the_difference_is_a_count():
+    a = plan_vs_model(ESPL, "If I count the doors on this plan and in the model, what's the difference?")
+    assert a is not None and a.value == 0 and a.unit == "count"

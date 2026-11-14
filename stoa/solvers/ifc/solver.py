@@ -977,7 +977,10 @@ class IfcSolver(BaseSolver):
                           evidence=(ev or [self._ev(model, e, e.eff_cls) for e in drawn])[:MAX_EVIDENCE],
                           trace=trace, solver=self.name, assumptions=asm, missing=[])
         same = len(drawn) == len(on) and not other
-        if how_many and not complete and re.search(r"\b(differ\w*|discrepan\w*|mismatch\w*|difference|unterscheid\w*|"
+        # "If I count the doors on this plan and in the model, what's the difference?" (Q: 'no: both 46' @ 0.85, gold 0)
+        wh_diff = bool(re.search(r"\bwhat(?:.s| is| would be)\s+the\s+difference\b|\bwie gross ist der unterschied\b|"
+                                 r"\bmika on ero\b|\bwat is het verschil\b|\bquelle est la difference\b", qf))
+        if (how_many or wh_diff) and not complete and re.search(r"\b(differ\w*|discrepan\w*|mismatch\w*|difference|unterscheid\w*|"
                                                    r"eroa\w*|erinev\w*|verschil\w*)\b", qf):
             # 'By how many doors does this plan differ from the IFC model?' (Q v23: 'yes: both 46', gold 0)
             n_plan = len(drawn) + len(other)
@@ -1723,6 +1726,28 @@ class IfcSolver(BaseSolver):
             if ps is not None and not (it.metric == "area" and rooms and not it.total):
                 storey = ps
                 trace.append(f"storey from the plan file: {why}")
+                # 'How many doors are on the floor above / below this one?' (Q: the sheet's own storey @ 0.97): the
+                # next storey up / down from the sheet's, by elevation
+                rel = re.search(r"\b(?:floor|storey|story|level)\s+(above|below|under|over|beneath)\s+(?:this|the current|"
+                                r"the present|the one shown|the one on this (?:sheet|plan))\b|\b(?:one|a) (?:floor|storey|level)"
+                                r"\s+(up|down|higher|lower)\b|\bnext (?:floor|storey|level) (up|down)\b",
+                                fold(_QUOTED_RX.sub(" ", it.question or "")))
+                if rel:
+                    up = (rel.group(1) or rel.group(2) or rel.group(3)) in ("above", "over", "up", "higher")
+                    order = sorted([st_ for st_ in own_storeys(idx) if st_.elevation is not None],
+                                   key=lambda st_: st_.elevation)
+                    j = next((k for k, st_ in enumerate(order) if st_.guid == ps.guid), None)
+                    nb = order[j + 1] if (j is not None and up and j + 1 < len(order)) else \
+                        order[j - 1] if (j is not None and not up and j >= 1) else None
+                    if nb is not None:
+                        storey = nb
+                        trace.append(f"the floor {'above' if up else 'below'} the sheet's '{ps.name}' = '{nb.name}' "
+                                     f"(next storey by elevation)")
+                        assumptions.append(f"'the floor {'above' if up else 'below'} this one' = the next storey by "
+                                           f"elevation from the sheet's '{ps.name}': '{nb.name}'")
+                    else:
+                        conf = min(conf, 0.3)
+                        trace.append(f"guard: no storey {'above' if up else 'below'} '{ps.name}' -> confidence 0.3")
             elif ps is not None:
                 trace.append(f"plan file shows {why}")
             elif not rooms and len({e.storey for e in idx.elements.values()
