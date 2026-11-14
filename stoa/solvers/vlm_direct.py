@@ -29,6 +29,7 @@ Options (pass via the eval tool's solver kwargs, e.g. `--solver vlm_direct -k ba
 
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 
@@ -65,6 +66,33 @@ def map_conf(p: float, kind: str, model: str | None = None) -> float:
         if p <= edge:
             return acc
     return table[-1][1]
+
+
+# Per-concept confidence for the counting LoRAs (R2 04:25): hit rate per (intent target, answer-digit p bin) on
+# train_gate, shrunk toward the concept's overall rate (experiments/r2/fit_concept_conf.py -> lora_concept_conf.json).
+# On dev (pipeline run bb98) it ranks LoRA answers as well as the pipeline's raster-agreement confidence (AUROC 0.885
+# vs 0.881, ECE 0.050 vs 0.035; conf>=0.8 on 66% at 89% right vs 47% at 94.5%) without the raster second reader
+# (~2 LLM calls / ~590 output tokens per cubicasa question; $0.42 -> ~$0.03 per 1k).
+_CONCEPT_CONF: dict | None = None
+_P_RX = re.compile(r"p\(answer digits\) = ([0-9.]+)")
+
+
+def concept_conf(model: str, target: str, trace: list[str]) -> tuple[float, str] | None:
+    global _CONCEPT_CONF
+    if _CONCEPT_CONF is None:
+        f = Path(__file__).with_name("lora_concept_conf.json")
+        _CONCEPT_CONF = json.loads(f.read_text()) if f.exists() else {}
+    m = _CONCEPT_CONF.get(model)
+    ps = [float(x.group(1)) for t in trace for x in [_P_RX.search(t)] if x]
+    if not m or not ps or target not in m["table"]:
+        return None
+    b = str(sum(ps[-1] > e for e in m["bins"]))
+    cells = m["table"][target]
+    k, n = cells.get(b, [0, 0])
+    # small/empty cells shrink toward the concept's own hit rate (windows stay low even at a rare high p)
+    prior = (sum(v[0] for v in cells.values()) + 1) / (sum(v[1] for v in cells.values()) + 2)
+    conf = round((k + m["shrink"] * prior) / (n + m["shrink"]), 3)
+    return conf, f"confidence {conf:.2f} = '{target}' answers at this certainty (p bin {b}) right {k}/{n} on train_gate"
 
 
 IMG_EXT = (".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp")
@@ -464,6 +492,11 @@ class VlmLora(VlmDirect):
         ans = self._solve_with(model, path, question)
         target = getattr(intent, "target", "unknown")
         trained = self.TRAINED_BY_MODEL.get(model, self.TRAINED)
+        if ans.value is not None and target in trained:
+            cc = concept_conf(model, target, ans.trace)
+            if cc is not None:
+                ans.confidence, note = cc
+                ans.trace.append(note)
         if ans.value is not None and target not in trained and ans.confidence > self.UNTRAINED_CONF:
             ans.trace.append(f"target '{target}' not among the LoRA's trained concepts: confidence capped at "
                              f"{self.UNTRAINED_CONF}")
