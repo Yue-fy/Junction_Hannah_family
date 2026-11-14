@@ -648,3 +648,19 @@ composer splits "How many windows do the two bedrooms have in total?" into "wind
 (gold 2), so a hook in `_solve_atomic` never sees the room scope (2 probe Qs lost that way in the first live run).
 Limits: n = 78 by-eye Qs on 20 plans written by one person; confidence is still a rule (capped at 0.75 in the
 wrapper). Next for areas: attach printed areas from an OCR text layer (W3's) instead of VLM boxes.
+**Addendum (same cycle): OCR text layer as the graph's source, and an area cross-check.** W3's tiled text layer
+(`stoa.solvers.raster.textlayer`, VLM text spotting per 1100 px tile) gives tile-accurate boxes for every label and
+printed number (1264: OLOHUONE 17,0 / KEITTIÖ 14,5 / HUONE 11,5 / LH 3,0 all in the right regions, where the
+whole-image reader had put eight '1.5' values in the hall). `room_graph(..., textlayer=True)` /
+`solve(..., textlayer=True)` (env `R1_RG_TEXTLAYER=1`) takes labels and printed areas from it, so plans without a
+cached label read (hidden test plans) get labels too. solve() with it: relations / per-room counts 45/53 vs 43/53
+(noise), routed area questions 9/18 vs pipeline 7/18 vs old solve 5/18; all area questions 10/23 vs pipeline 11/23 —
+a tie, so areas still stay with the pipeline. But the two disagree informatively: **when the pipeline's area and the
+text-layer graph's area agree (2%), the pipeline was right 6/6; when they disagree, 5/17.** `pipeline_rg
+area_xcheck=1` (`area_crosscheck()`): room-scoped area question → pipeline answers → graph cross-check; agree → the
+graph's room box (+ printed value) as evidence and conf ≥ 0.75, disagree → conf ≤ 0.3 and "the room graph reads X m²"
+in `missing`; the value never changes. Live on all 78: area answers right 11/23 both ways, **evidence 0 → 6, conf ≥
+0.7 on 6 (6 right), area AUROC 0.51 → 0.88** (all Qs 0.69 → 0.74). Cost $0.228 → $0.523 per 1k on this mix (one
+text layer per plan, ~3–7k tokens in, up to 5k out; local). n = 6 agreements: the direction is clear, the 0.75 is a
+guess. `xcheck_eval.py` reproduces the table. Text-layer PITFALL: 9 of 20 CubiCasa tiles hit the 2,500-token cap
+and 1841 came back with 3 items (a loop), so dense plans lose labels at the end of the list.
