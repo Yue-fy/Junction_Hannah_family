@@ -517,3 +517,11 @@ def test_room_net_prefers_printed_area_when_polygon_disagrees():
     assert r.net == 35.38
     r.printed_area = None
     assert r.net == 35.38
+
+
+def test_dxf_plan_vs_dxf_question_words():
+    from stoa.solvers.vector.dxf_solver import DxfSolver as D
+
+    q = "Do this floor plan and its DXF file agree on the number of doors?"
+    assert D.AGREE_Q.search(q) and D.DXF_Q.search(q)
+    assert not D.DXF_Q.search("How many doors are shown on this floor plan?")

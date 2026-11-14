@@ -559,7 +559,50 @@ class DxfSolver(BaseSolver):
         r"\bkoko (?:rakennu|talo)|\bkaikki(?:ssa)? kerrok|\btodo el edificio\b|\bedificio (?:entero|completo)\b|"
         r"\btodas las plantas\b|\btodos los pisos\b", re.I)
 
+    AGREE_Q = re.compile(r"\b(?:agree|match(?:es)?|consistent|(?:the )?same (?:number|count)|differ|discrepanc|"
+                         r"übereinstimm|stimmen|concord|correspond|coincid)\w*", re.I)
+    DXF_Q = re.compile(r"\bdxf\b|\bcad (?:file|model|drawing)\b", re.I)
+
+    def _plan_vs_dxf(self, path: str, question: str) -> Answer | None:
+        """'Do this floor plan and its DXF file agree on the number of doors?' (Q 10:00: table QA compared two DXF
+        tables, 'no' @0.60): count once from the DXF layers and once from the PDF's own vector paths (pdf_vector,
+        no LLM), answer yes/no with both numbers and both sets of boxes. None = not such a question."""
+        if self.name != "dxf" or not (self.AGREE_Q.search(question) and self.DXF_Q.search(question)):
+            return None
+        fm, _, _ = self._load(path)
+        if fm is None:
+            return None
+        terms = [t for t in qparse.parse(question, fm.names()).terms if t.kind == "count"]
+        if len(terms) != 1 or not terms[0].arg or not re.fullmatch(r"[a-z_ ]+", str(terms[0].arg)):
+            return None
+        noun = str(terms[0].arg).replace("_", " ")
+        plural = noun + ("es" if noun.endswith(("sh", "ch", "s", "x")) else "s")
+        canon = f"How many {plural} are shown on this floor plan?"
+        back = [t for t in qparse.parse(canon, fm.names()).terms if t.kind == "count"]
+        if [(t.kind, t.arg) for t in back] != [(terms[0].kind, terms[0].arg)]:
+            return None
+        pdf = path if path.lower().endswith(".pdf") else siblings(path).get(".pdf")
+        a = self._solve(path, canon)
+        b = PdfVectorSolver(llm=0)._solve(pdf, canon) if pdf else None
+        if not isinstance(a.value, int) or b is None or not isinstance(b.value, int):
+            return None
+        same = a.value == b.value
+        value = (f"yes ({a.value} {plural} in the DXF = {b.value} drawn in the PDF)" if same else
+                 f"no (the DXF has {a.value} {plural}, the PDF's drawn symbols give {b.value})")
+        conf = 0.9 if same else 0.45
+        trace = [f"plan vs DXF: counted {plural} twice, independently: DXF layers -> {a.value} (conf {a.confidence:.2f}); "
+                 f"PDF vector paths (pdf_vector, no LLM) -> {b.value} (conf {b.confidence:.2f}) -> "
+                 + ("agree ✓" if same else "differ ✗"), *[f"[dxf] {t}" for t in a.trace[:4]],
+                 *[f"[pdf] {t}" for t in b.trace[:4]]]
+        missing = [] if same else ["the PDF count comes from matching drawn symbol shapes, which can miss or split "
+                                   "symbols; check the boxes where the two sets differ"]
+        return Answer(value=value, unit=None, confidence=conf, evidence=[*a.evidence, *b.evidence[:60]], trace=trace,
+                      solver=self.name, assumptions=["the PDF and the DXF are two files of the same drawing; each was "
+                                                     "counted on its own"], missing=missing)
+
     def solve(self, path: str, question: str) -> Answer:
+        if (pv := self._plan_vs_dxf(path, question)) is not None:
+            return pv
         ans = self._solve_guarded(path, question)
         if ans.value is not None and (self.BUILDING_W.search(question) or
                                       any(self.BUILDING_W.search(str(t)) for t in ans.assumptions[:1])):
