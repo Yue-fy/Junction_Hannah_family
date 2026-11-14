@@ -614,6 +614,250 @@ def main():
         kind = "yesno:numfmt" if typ == "text" else "numfmt"
         out.append(row(path, q, g, None, typ, kind, "same", note="thousands separator / decimal comma"))
 
+    # ===== v12 (05:15): English room concepts on the Estonian-labelled demo model =================================
+    # 1.korrus rooms: TUALETTRUUM 11, ELUTUBA+KÖÖK 10, ESIK 10, INVA-WC 1, WC 1, PESUKODA (laundry) 115, SERVER 117, LIFT.
+    # Gold for areas = ifc on the template wording with the exact room name; counts = label counts (assumption shown).
+    for q, g, unit, typ, note in [
+        ("How many kitchens are on this floor?", 10, "count", "count", "ELUTUBA+KÖÖK x10 (living room + kitchen)"),
+        ("How many toilets are on this floor?", 13, "count", "count", "TUALETTRUUM 11 + INVA-WC + WC"),
+        ("How big is the server room?", 4.257, "m2", "area", "SERVER (117) 4.257"),
+        ("How big is the laundry room on this floor?", 14.332, "m2", "area", "PESUKODA (115) 14.332"),
+    ]:
+        out.append(row(E, q, g, unit, typ, "judge-et:ifc", "same", note=note))
+    r_ = row(E, "Is there a lift on this floor?", "yes", None, "text", "yesno:et-labels", "same", note="LIFT space")
+    out.append(r_)
+
+    # ===== v13 (05:17): the Swiss demo plan handed over alone, outside our folder, as PDF or as PNG ===============
+    # No DXF sibling: the PDF must be read as vectors, the PNG as pixels. Gold = the drawing's dataset answers.
+    lone = IMG_DIR / "lone"
+    lone.mkdir(parents=True, exist_ok=True)
+    for ext in ("pdf", "png"):
+        dst = lone / f"plan-upload.{ext}"
+        shutil.copyfile(abspath(SW.replace(".pdf", f".{ext}")), dst)
+        for q, g, unit, typ in [
+            ("How many doors (interior doors and entrance doors together) are drawn on this floor plan?", 36, "count",
+             "count"),
+            ("How many apartments (residential units) are shown on this floor plan?", 4, "count", "count"),
+            ("What is the net floor area of apartment B in m², summing all its rooms except balconies, loggias, "
+             "terraces and other outdoor spaces?", 80.83, "m2", "area"),
+            ("How many bathtubs are drawn on this floor plan?", 4, "count", "count"),
+        ]:
+            out.append(row(dst, q, g, unit, typ, f"lone:{ext}", "same", note="Swiss demo plan without its DXF"))
+
+    # ===== v14 (08:30): questions with more than one answer, comparisons, storey heights, 'which' ==================
+    # Stoa: the hidden set is "harder, answers not so simple". The root cause behind every confident miss so far is a
+    # check that verifies the computed number, never that it answers what was asked; a two-part question answered with
+    # one number is the same failure. Gold is independent of our solvers: storey elevations and per-storey door /
+    # window / space containment from plain ifcopenshell (esplanades mm, smiley-west m), room areas from the Swiss
+    # plan's printed areas (= dataset gold for 2.09/2.10), CubiCasa counts from the plan's dataset answers.
+    # Scoring (analyze.py): meta.parts = every listed number must be in the answer (counts exact, else 2 %);
+    # yes/no by the first word; meta.accept_re = a regex the answer must match.
+    def multi(path, q, parts, kind, note):
+        r_ = row(path, q, " ; ".join(str(p_) for p_ in parts), None, "text", kind, "same", note=note)
+        r_["meta"]["parts"] = parts
+        return r_
+
+    SM = "data/ifc_models/kit-smiley-west_ac-20-smiley-west-10-bldg_plan-03-1-og.pdf"
+    for path, q, parts, note in [
+        (E, "How many doors and how many windows are on '1.korrus'?", [46, 55], "containment 46 / 55"),
+        (E, "How many doors are on the ground floor, and how many on the top floor?", [46, 39],
+         "1.korrus 46 (elev 0), 5.korrus 39"),
+        (E, "Montako ovea ja montako ikkunaa kerroksessa '2.korrus' on?", [42, 60], "containment 42 / 60"),
+        (E, "Wie viele Türen hat '3.korrus' und wie viele Fenster?", [42, 60], "containment 42 / 60"),
+        (SW, "How many doors and how many windows are drawn on this floor plan?", [36, 28], "dataset 36 / 28"),
+        (SW, "How many rooms labelled 'Zimmer' does apartment C have, and what is their total area?", [3, 43.82],
+         "2.17 14.70 + 2.21 18.21 + 2.22 10.91 (printed)"),
+        (SW, "What are the net areas of apartment A and of apartment B?", [80.34, 80.83], "dataset A / B"),
+        (SW, "Wie viele Küchen gibt es auf diesem Grundriss und wie gross ist die grösste?", [4, 12.05],
+         "Küche x4; 2.02 (Whg. A) 12.05"),
+        (CC, "How many bedrooms and how many bathrooms does this apartment have?", [3, 1], "dataset bedrooms 3 / bath 1"),
+        (CC, "Montako makuuhuonetta ja montako WC-istuinta asunnossa on?", [3, 2], "dataset bedrooms 3 / WC seats 2"),
+    ]:
+        out.append(multi(path, q, parts, "multi:" + path.split("/")[1].split("_")[0], note))
+
+    for path, q, g, note in [
+        (SW, "Is apartment A's kitchen bigger than apartment B's kitchen?", "yes", "2.02 12.05 vs 2.15 7.59"),
+        (SW, "Is the kitchen of apartment C larger than the kitchen of apartment B?", "no", "2.20 7.54 vs 2.15 7.59"),
+        (SW, "Is room 2.27 larger than 20 m²?", "yes", "2.27 Zimmer 22.38"),
+        (SW, "Ist das Zimmer 2.21 grösser als 18,5 m²?", "no", "2.21 Zimmer 18.21 (decimal comma)"),
+        (SW, "Is apartment A larger than apartment B?", "no", "80.34 < 80.83 (dataset)"),
+        (E, "Are there more doors on '2.korrus' than on '5.korrus'?", "yes", "42 > 39"),
+        (E, "Does '1.korrus' have more windows than doors?", "yes", "55 > 46"),
+        (E, "Is the floor-to-floor height between '1.korrus' and '2.korrus' more than 3 metres?", "yes", "3.35 m"),
+    ]:
+        out.append(row(path, q, g, None, "text", "yesno:compare", "same", note=note))
+
+    for path, q, g, note in [
+        (E, "What is the vertical distance between '1.korrus' and '5.korrus', in metres?", 13.4, "elev 0 / 13400 mm"),
+        (E, "How high above the ground floor is the top floor, in metres?", 13.4, "1.korrus 0 → 5.korrus 13400 mm"),
+        (E, "What is the height difference between the 2nd and the 4th floor in metres?", 6.7,
+         "2.korrus 3350 → 4.korrus 10050 mm (unquoted ordinals)"),
+        (E, "Mikä on kerrosten '3.korrus' ja '4.korrus' välinen korkeusero metreinä?", 3.35, "6700 → 10050 mm"),
+        (E, "Wie gross ist der Höhenunterschied zwischen '1.korrus' und 'Katus' in Metern?", 17.0, "0 → 17000 mm"),
+        (SM, "What is the floor-to-floor height between 'EG' and '1.OG', in metres?", 2.78, "elev -0.25 → 2.53 m"),
+        (SM, "How far is '2.OG' above 'KG', in metres?", 8.04, "elev -2.81 → 5.23 m"),
+    ]:
+        out.append(row(path, q, g, "m", "length", "height:ifc", "same", note=note))
+    for path, q, note in [
+        (E, "What is the vertical distance between '1.korrus' and '8.korrus', in metres?", "no '8.korrus' (top 5.korrus)"),
+        (SM, "What is the floor-to-floor height between '1.OG' and '3.OG'?", "no '3.OG' (top 2.OG, then Dach)"),
+    ]:
+        out.append(row(path, q, None, None, "other", "height:premise", "flag", note=note))
+
+    for path, q, rx, g, note in [
+        (SW, "Which apartment has the largest kitchen?", r"(apartment|whg\.?|wohnung|unit)\s*a\b|^\W*a\b", "A",
+         "2.02 12.05 (A) vs 7.59 / 7.54 / 7.41"),
+        (SW, "Which apartment has the smallest kitchen?", r"(apartment|whg\.?|wohnung|unit)\s*d\b|^\W*d\b", "D",
+         "2.24 7.41 (D)"),
+        (SW, "Which is the largest room in apartment D?", r"2\.27|22[.,]38", "2.27", "2.27 Zimmer 22.38"),
+        (E, "Which floor has the most doors?", r"1\.?\s*korrus|ground floor|first floor", "1.korrus",
+         "46 / 42 / 42 / 42 / 39"),
+    ]:
+        r_ = row(path, q, g, None, "text", "which", "same", note=note)
+        r_["meta"]["accept_re"] = rx
+        out.append(r_)
+
+    # ===== v15 (08:30): bug 18 probe — "how many X and how many Y" in 8 languages, with sum controls ===============
+    # A repeated question word asks for two numbers (meta.parts); "in total" asks for one (scored by the eval as a
+    # count); a bare "X and Y" is ambiguous, so either both numbers or their sum is right (meta.parts = list of
+    # alternatives). Gold as v14 (Swiss dataset answers, esplanades containment, CubiCasa dataset answers).
+    for path, q, parts, kind in [
+        (SW, "Wie viele Türen und wie viele Fenster sind auf diesem Grundriss eingezeichnet?", [36, 28], "multi:de"),
+        (SW, "Combien de portes et combien de fenêtres sont dessinées sur ce plan ?", [36, 28], "multi:fr"),
+        (SW, "Quante porte e quante finestre sono disegnate su questa pianta?", [36, 28], "multi:it"),
+        (SW, "Montako ovea ja montako ikkunaa pohjapiirustukseen on piirretty?", [36, 28], "multi:fi"),
+        (SW, "Hur många dörrar och hur många fönster finns på planritningen?", [36, 28], "multi:sv"),
+        (SW, "Hoeveel deuren en hoeveel ramen staan er op deze plattegrond?", [36, 28], "multi:nl"),
+        (SW, "How many doors are there on this plan, and how many windows?", [36, 28], "multi:en"),
+        (SW, "Give me the number of doors and the number of windows on this floor plan.", [36, 28], "multi:en"),
+        (SW, "How many doors and windows are drawn on this floor plan, respectively?", [36, 28], "multi:en"),
+        (SW, "How many windows and how many bathtubs are drawn on this floor plan?", [28, 4], "multi:en"),
+        (E, "Mitu ust ja mitu akent on korrusel '1.korrus'?", [46, 55], "multi:et"),
+        (E, "Hoeveel deuren en hoeveel ramen zijn er op '2.korrus'?", [42, 60], "multi:nl"),
+        (E, "How many rooms and how many columns are on this floor?", [50, 37], "multi:en"),
+        (CC, "How many bedrooms and how many saunas does this apartment have?", [3, 1], "multi:en"),
+        (CC, "Montako makuuhuonetta ja montako saunaa asunnossa on?", [3, 1], "multi:fi"),
+    ]:
+        out.append(multi(path, q, parts, "multi15:" + kind.split(":")[1], "repeated question word: two numbers"))
+    for path, q, alts, note in [
+        (SW, "How many doors and windows are drawn on this floor plan?", [[36, 28], [64]], "ambiguous: both or sum"),
+        (SW, "Wie viele Türen und Fenster gibt es auf diesem Grundriss?", [[36, 28], [64]], "ambiguous: both or sum"),
+        (E, "How many doors and windows are on '1.korrus'?", [[46, 55], [101]], "ambiguous: both or sum"),
+    ]:
+        out.append(multi(path, q, alts, "multi15:ambig", note))
+    for path, q, g in [
+        (SW, "How many doors and windows are drawn on this floor plan in total?", 64),
+        (SW, "Wie viele Türen und Fenster gibt es insgesamt auf diesem Grundriss?", 64),
+        (E, "How many doors and windows are there on '1.korrus' altogether?", 101),
+        (CC, "How many bedrooms and saunas does this apartment have in total?", 4),
+    ]:
+        out.append(row(path, q, g, "count", "count", "multi15:sum", "same", note="explicit total: one number"))
+
+    # ===== v16 (08:40): four other Swiss DEV plans handed over alone, as PNG and as PDF ============================
+    # v13 tried this on the demo plan only. Raster (W3) now reads twin-less PNGs; are its gains general? Drawings:
+    # the first 4 Swiss dev drawings after a seeded shuffle (dev = everyone's development split, never trained on).
+    # Questions: the drawing's own English dataset questions (gold = dataset), at most 6 kinds per drawing.
+    dev_ids = [json.loads(line) for line in open(SHARED / "results/splits/dev.jsonl")]
+    sw_paths = sorted({r["path"] for r in dev_ids if r["source"] == "swiss_dwellings"})
+    random.Random(16).shuffle(sw_paths)
+    sw_paths = sw_paths[:4]
+    by_path = defaultdict(list)
+    with open(Path(os.environ.get("STOA_DATA", "")) / "questions.jsonl") as f:
+        for line in f:
+            d = json.loads(line)
+            if d["path"] in sw_paths and d["question"].startswith(("How many", "What is")):
+                by_path[d["path"]].append(d)
+    kinds = [("apartments", r"apartments \(residential"), ("doors", r"^How many doors"), ("windows", r"^How many windows"),
+             ("label", r"rooms labelled"), ("apt-area", r"net floor area of apartment"),
+             ("label-area", r"total net area in m² of all rooms labelled")]
+    lone16 = IMG_DIR / "lone16"
+    lone16.mkdir(parents=True, exist_ok=True)
+    for p in sw_paths:
+        picked = []
+        for _, rx in kinds:
+            hit = next((d for d in by_path[p] if re.search(rx, d["question"])), None)
+            if hit:
+                picked.append(hit)
+        for ext in ("png", "pdf"):
+            dst = lone16 / (Path(p).stem.replace("site", "upload-") + f".{ext}")
+            shutil.copyfile(abspath(p.replace(".pdf", f".{ext}")), dst)
+            for d in picked:
+                out.append(row(dst, d["question"], d["answer"], d.get("unit"), d.get("type") or "count",
+                               f"lone16:{ext}", "same", note=f"{Path(p).name}: dataset gold"))
+
+    # ===== v17 (08:48): linking documents (Stoa: "different data don't talk to each other; linking earns points") ===
+    # Questions that need the plan AND the model (or the set of sheets). Gold: esplanades plan sheets in the dataset
+    # (plan-01..05), ifcopenshell containment (doors 46 / windows 55 on '1.korrus', SERVER / PESUKODA spaces only on
+    # '1.korrus'), the plan's drawn symbols (46 doors; 52 windows: 3 lie wholly above/below the 1.2 m cut plane —
+    # tour step 3), smiley-west '1.OG' 50 doors drawn = 50 in the model (the cross-check line).
+    for path, q, g, typ, kind, rx, note in [
+        (E, "Do the floor plan and the IFC model agree on the number of doors on '1.korrus'?", "yes", "text",
+         "yesno:link", None, "46 drawn = 46 IfcDoor"),
+        (E, "Do the floor plan and the IFC model agree on the number of windows on '1.korrus'?", "no", "text",
+         "yesno:link", None, "52 drawn vs 55 IfcWindow"),
+        (E, "Does this drawing show every window that the model has on '1.korrus'?", "no", "text", "yesno:link", None,
+         "3 of 55 are not cut by the plan"),
+        (SM, "Do the floor plan and the IFC model agree on the number of doors on '1.OG'?", "yes", "text", "yesno:link",
+         None, "50 drawn = 50 IfcDoor"),
+        (E, "How many windows on '1.korrus' are in the model but not drawn on this plan?", 3, "count", "link:count", None,
+         "55 - 52"),
+        (E, "How many floor plan sheets are there for this building?", 5, "count", "link:count", None,
+         "plan-01-1-korrus … plan-05-5-korrus"),
+        (E, "How many more doors are on '1.korrus' than on '5.korrus'?", 7, "count", "link:count", None, "46 - 39"),
+        (E, "Which sheet shows the server room?", None, "text", "link:which", r"1\.?\s*korrus|plan[- ]?0?1\b",
+         "SERVER space only on 1.korrus"),
+        (E, "On which floor is the laundry room (PESUKODA)?", None, "text", "link:which",
+         r"1\.?\s*korrus|first floor|ground floor", "PESUKODA only on 1.korrus"),
+    ]:
+        r_ = row(path, q, g if g is not None else "1.korrus", "count" if typ == "count" else None, typ, kind, "same",
+                 note=note)
+        if rx:
+            r_["meta"]["accept_re"] = rx
+        out.append(r_)
+
+    # ===== v18 (08:50): historical scans asked naturally, in other languages, rotated (Stoa: scans matter) =========
+    # Base = W4's scan probe (artifacts/W4/scans.jsonl: 20 HABS sheets, gold from the Library of Congress catalogue
+    # title "(sheet N of M)" + state = what the title block prints), which asks with a format hint ("Answer like '2 of
+    # 5'", "Give the two-letter state code"). Here: the first 6 sheets asked the way a person would, in DE/FI, and on a
+    # copy rotated by 90° (scans arrive sideways). Counts are scored as numbers; the state by name or code.
+    states = {"AL": "Alabama", "AK": "Alaska", "AZ": "Arizona", "AR": "Arkansas", "CA": "California", "CO": "Colorado",
+              "CT": "Connecticut", "DE": "Delaware", "DC": "District of Columbia", "FL": "Florida", "GA": "Georgia",
+              "HI": "Hawaii", "ID": "Idaho", "IL": "Illinois", "IN": "Indiana", "IA": "Iowa", "KS": "Kansas",
+              "KY": "Kentucky", "LA": "Louisiana", "ME": "Maine", "MD": "Maryland", "MA": "Massachusetts",
+              "MI": "Michigan", "MN": "Minnesota", "MS": "Mississippi", "MO": "Missouri", "MT": "Montana",
+              "NE": "Nebraska", "NV": "Nevada", "NH": "New Hampshire", "NJ": "New Jersey", "NM": "New Mexico",
+              "NY": "New York", "NC": "North Carolina", "ND": "North Dakota", "OH": "Ohio", "OK": "Oklahoma",
+              "OR": "Oregon", "PA": "Pennsylvania", "RI": "Rhode Island", "SC": "South Carolina", "SD": "South Dakota",
+              "TN": "Tennessee", "TX": "Texas", "UT": "Utah", "VT": "Vermont", "VA": "Virginia", "WA": "Washington",
+              "WV": "West Virginia", "WI": "Wisconsin", "WY": "Wyoming", "PR": "Puerto Rico", "VI": "Virgin Islands"}
+    scan_rows = [json.loads(line) for line in open(SHARED / "artifacts/W4/scans.jsonl")]
+    sheets = []
+    for r_ in scan_rows:
+        if r_["path"] not in sheets:
+            sheets.append(r_["path"])
+    rot_dir = IMG_DIR / "scans"
+    rot_dir.mkdir(parents=True, exist_ok=True)
+    for p in sheets[:6]:
+        gold = {r_["meta"]["recipe"]: r_["answer"] for r_ in scan_rows if r_["path"] == p}
+        n, m = (int(x) for x in re.match(r"(\d+) of (\d+)", gold["sheet-of"]).groups())
+        code = gold["state"]
+        st_rx = rf"\b{code}\b|{states.get(code, code)}"
+        rot = rot_dir / (Path(p).stem + "_rot90.jpg")
+        if not rot.exists():
+            Image.open(abspath(p)).convert("RGB").rotate(90, expand=True).save(rot, quality=90)
+        for path, q, g, kind in [
+            (p, "How many sheets are in this drawing set?", m, "scan18:count"),
+            (p, "Which sheet number is this?", n, "scan18:count"),
+            (p, "Wie viele Blätter hat dieser Plansatz?", m, "scan18:de"),
+            (rot, "How many sheets are in this drawing set?", m, "scan18:rot90"),
+        ]:
+            out.append(row(path, q, g, "count", "count", kind, "same", note=f"catalogue: sheet {n} of {m}"))
+        for path, q, kind in [(p, "Where is this building located?", "scan18:state"),
+                              (p, "Missä osavaltiossa rakennus sijaitsee?", "scan18:state-fi")]:
+            r_ = row(path, q, states.get(code, code), None, "text", kind, "same", note=f"catalogue: state {code}")
+            r_["meta"]["accept_re"] = st_rx
+            out.append(r_)
+
     with open(OUT, "w", encoding="utf-8") as f:
         for r in out:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")

@@ -40,6 +40,7 @@ KIND_CLASSES: dict[str, tuple[str, ...]] = {
     "duct_fitting": ("IfcDuctFitting",), "duct": ("IfcDuctSegment",), "pipe_fitting": ("IfcPipeFitting",),
     "pipe": ("IfcPipeSegment",), "air_terminal": ("IfcAirTerminal",), "outlet": ("IfcOutlet",),
     "switch": ("IfcSwitchingDevice",), "valve": ("IfcValve",), "damper": ("IfcDamper",), "pump": ("IfcPump",),
+    "cable_tray": ("IfcCableCarrierSegment",),  # trays / ladders / trunking (cables run IN them: IfcCableSegment)
     "cable": ("IfcCableSegment", "IfcCableCarrierSegment"), "fire_terminal": ("IfcFireSuppressionTerminal",),
     "pipe_accessory": ("IfcPipeAccessory",), "duct_accessory": ("IfcDuctAccessory",),
     "meter": ("IfcFlowMeter", "IfcFlowInstrument", "IfcSensor"), "junction_box": ("IfcJunctionBox",),
@@ -105,7 +106,8 @@ def material_family(word: str) -> str | None:
 
 # multilingual stems (matched at word starts on accent-folded lowercase text)
 _LEX: list[tuple[str, tuple[str, ...]]] = [
-    ("sanitary", ("sanitary fixture", "sanitary terminal", "sanitarobjekt", "sanitaerobjekt", "aparatos sanitario",
+    ("sanitary", ("sanitary fixture", "sanitary terminal", "plumbing fixture", "sanitary ware", "sanitaryware",
+                  "bathroom fixture", "sanitary appliance", "sanitarobjekt", "sanitaerobjekt", "aparatos sanitario",
                   "aparato sanitario", "sanitair", "sanitet", "sanitar", "toilets and", "wc and")),
     ("light", ("light fixture", "lighting fixture", "luminaire", "leuchte", "luminaria", "lamp", "armatur",
                "verlichtingsarmatu", "valgusti", "oprawy oswietl", "corpuri de iluminat")),
@@ -128,7 +130,9 @@ _LEX: list[tuple[str, tuple[str, ...]]] = [
     ("valve", ("valve", "ventile", "ventil ", "ventils", "klep", "valvula")),  # not "ventilation"
     ("damper", ("damper", "klappe")),
     ("pump", ("pump", "pumpe", "pomp")),
-    ("cable", ("cable", "kabel", "cable tray")),
+    ("cable_tray", ("cable tray", "cable carrier", "cable ladder", "kabelgoot", "kabelgoten", "kabeltrasse",
+                    "kabelpritsche", "kabelrinne", "chemin de cable", "trunking")),
+    ("cable", ("cable", "kabel")),
     ("curtain_wall", ("curtain wall", "vorhangfassade", "muro cortina", "gardinvaeg", "vliesgevel")),
     ("stair_flight", ("stair flight", "treppenlauf", "tramo de escalera", "trappelob")),
     ("space", ("room", "space", "raum", "raeume", "rume", "local", "rum", "ruimte", "ruum", "pomieszcz",
@@ -330,7 +334,9 @@ def storey_mention(question: str, storey_names: list[str]) -> tuple[int | None, 
     named = [i for i, n in enumerate(storey_names) if word and re.search(r"\b" + word + r"\b", fold(n or ""))]
     if len(named) == 1:
         return named[0], f"'{m.group(0).strip()}' -> storey '{storey_names[named[0]]}' (ordinal word)"
-    anyn = [i for i, n in enumerate(storey_names) if re.search(r"(?<![\d.])0*" + str(abs(num)) + r"(?![\d])", n or "")]
+    # the sign matters: 'basement floor' (-1) is not '1.OG' (Finnish 'kellarikerros' -> 'basement floor' -> 1.OG @ 0.75)
+    rx_n = (r"-\s*0*" + str(abs(num)) if num < 0 else r"(?<![\d.\-])0*" + str(num)) + r"(?![\d])"
+    anyn = [i for i, n in enumerate(storey_names) if re.search(rx_n, n or "")]
     if len(anyn) == 1:
         return anyn[0], f"'{m.group(0).strip()}' -> storey '{storey_names[anyn[0]]}' (number in its name)"
     return None, f"'{m.group(0).strip()}' matches no single storey"
@@ -477,6 +483,15 @@ def parse(question: str) -> Intent:
             it.metric, it.kind, it.attr = "length", "storey", "height"
     if re.search(r"\b(types?|typen|tipos?|typer|tuubid|typy|tipuri)\b", t) and not names:
         it.group_by = "type"
+    if kind not in (None, "storey", "space") and not names and re.search(
+            r"\b(respective (counts?|numbers?|quantit\w*)|their (counts?|numbers?|quantit\w*)|with (their )?(counts?|"
+            r"quantit\w*|numbers?)|how many of each|of each (kind|type|sort)|each kind|which kinds?|what kinds?)\b", t):
+        # "What plumbing fixtures are in this building and their respective counts?" (W5/Q 04:47, 4351 demo step 6):
+        # a list by type with counts, from the model, instead of the fact-card LLM ('not listed ... Estimate: ...')
+        it.group_by = "type"
+        if metric == "text":
+            metric = it.metric = "count"
+
     if re.search(r"\b(by|per|for each|each|on each|across( all)?)\b.{0,12}\b(level|floor|storey|story|geschoss|etage)s?\b"
                  r"|\b(level|floor|storey)[- ]by[- ](level|floor|storey)\b|\bbreakdown\b.{0,20}\b(level|floor|storey)", t):
         it.group_by = "storey"

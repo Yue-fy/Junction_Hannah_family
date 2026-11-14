@@ -86,12 +86,52 @@ def yesno_ok(value, gold):
     return said == str(gold).lower()
 
 
+def parts_ok(value, parts):
+    """Every gold number appears among the answer's numbers (ints exact, else within 2 %); '1,200' / '12,05' read.
+    parts may be a list of alternatives ([[36, 28], [64]]: both numbers, or their sum)."""
+    if parts and isinstance(parts[0], list):
+        return any(parts_ok(value, alt) for alt in parts)
+    s = str(value or "")
+    s = re.sub(r"(?<=\d)[,'’ ](?=\d{3}\b)", "", s)  # thousands separators
+    s = re.sub(r"(?<=\d),(?=\d{1,2}\b)", ".", s)  # decimal comma
+    nums = [float(x) for x in re.findall(r"-?\d+(?:\.\d+)?", s)]
+    for g in sorted(parts, key=lambda g: float(g).is_integer()):  # each gold needs its OWN number (80.34 ≠ 80.83)
+        hit = [n for n in nums if abs(n - g) <= (0 if float(g).is_integer() else 0.02 * abs(g))]
+        if not hit:
+            return False
+        nums.remove(min(hit, key=lambda n: abs(n - g)))
+    return True
+
+
 def ece(rows, bins=10):
     b = defaultdict(list)
     for c, ok in rows:
         b[min(int(c * bins), bins - 1)].append((c, ok))
     n = len(rows)
     return sum(len(v) / n * abs(sum(c for c, _ in v) / len(v) - sum(o for _, o in v) / len(v)) for v in b.values())
+
+
+def rescore(rows):
+    """Score the rows the eval scorer leaves open (yes/no, multi-part, 'which', accepted text), in place."""
+    for r in rows:
+        k = (r.get("meta") or {}).get("kind", "")
+        if k == "yesno:link":  # "do the plan and the model agree?": a bare count does not answer it
+            v = str(r["value"] or "")
+            said = "yes" if YES.search(v) else "no" if NO.search(v) else None
+            r["correct"] = said == str(r.get("gold")).lower()
+        elif k.startswith("yesno"):
+            r["correct"] = yesno_ok(r["value"], r.get("gold"))
+        elif (r.get("meta") or {}).get("parts"):  # v14 multi-part: every gold number must be in the answer
+            r["correct"] = parts_ok(r["value"], r["meta"]["parts"])
+        elif (r.get("meta") or {}).get("accept_re"):  # v14 'which': the answer must name the right thing
+            r["correct"] = bool(re.search(r["meta"]["accept_re"], str(r["value"] or ""), re.I))
+        elif (r.get("meta") or {}).get("accept"):  # v10 scan text: any accepted substring in the answer
+            norm2 = lambda x: re.sub(r"\s+", "", str(x or "").lower())
+            r["correct"] = any(norm2(a_) in norm2(r["value"]) for a_ in r["meta"]["accept"])
+        elif k == "judge:ifc-text":  # v6 'which floor': the storey name must appear in the answer
+            norm = lambda x: re.sub(r"[\s.]+", "", str(x or "").lower())
+            r["correct"] = norm(r.get("gold")) in norm(r["value"])
+    return rows
 
 
 def main():
@@ -101,16 +141,7 @@ def main():
     ap.add_argument("--rerun", default=None, help="another run over the same questions: report answer changes")
     a = ap.parse_args()
     rows = [json.loads(line) for line in open(a.run)]
-    for r in rows:
-        k = (r.get("meta") or {}).get("kind", "")
-        if k.startswith("yesno"):
-            r["correct"] = yesno_ok(r["value"], r.get("gold"))
-        elif (r.get("meta") or {}).get("accept"):  # v10 scan text: any accepted substring in the answer
-            norm2 = lambda x: re.sub(r"\s+", "", str(x or "").lower())
-            r["correct"] = any(norm2(a_) in norm2(r["value"]) for a_ in r["meta"]["accept"])
-        elif k == "judge:ifc-text":  # v6 'which floor': the storey name must appear in the answer
-            norm = lambda x: re.sub(r"[\s.]+", "", str(x or "").lower())
-            r["correct"] = norm(r.get("gold")) in norm(r["value"])
+    rescore(rows)
     out = []
     p = out.append
 

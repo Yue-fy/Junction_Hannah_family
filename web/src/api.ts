@@ -1,4 +1,4 @@
-import type { Answer, ExampleQuestion, FileInfo, Kg } from "./types";
+import type { Answer, ExampleQuestion, FileInfo, Kg, RoomGraph } from "./types";
 
 // All calls go to `/api/*`; the Vite middleware forwards to W4's API (:8100) or falls back to the mock.
 export type Backend = "live" | "mock" | "disk" | "kg" | "unknown";
@@ -35,6 +35,10 @@ export const exampleQuestions = (path: string) =>
   call<{ questions: ExampleQuestion[] }>(`/api/questions?path=${encodeURIComponent(path)}`).then((r) => r.questions);
 
 export const knowledgeGraph = (path: string) => call<Kg>(`/api/kg?path=${encodeURIComponent(path)}`);
+
+/** Rooms + door links of a CubiCasa plan (R1's room graph from the cached CubiCasa5K segmentation; local only). */
+export const roomGraph = (path: string) => fetch(`/api/rooms?path=${encodeURIComponent(path)}`)
+  .then((r) => (r.ok ? (r.json() as Promise<RoomGraph>) : Promise.reject(new Error(`${r.status}`))));
 
 export const ask = (path: string, question: string, solver?: string, solverArgs?: Record<string, unknown>) =>
   call<Answer>("/api/ask", {

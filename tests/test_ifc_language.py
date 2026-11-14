@@ -22,6 +22,9 @@ def run(monkeypatch):
     import stoa.router.prior as prior
 
     monkeypatch.setattr(prior, "known_template", lambda q: False)
+    import stoa.solvers.ifc.solver as ifc_solver
+
+    monkeypatch.setattr(ifc_solver, "_known_wording", lambda q: False)
 
     def go(question, raw, eng, translated=True):
         calls = []

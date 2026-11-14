@@ -609,3 +609,104 @@ with [A]/[B] + "the ground floor normally has the entrance and kitchen" fixed no
 two-storey v3 plan (4828, whose segmentation also merges TYÖH + KHH + LH into one region). Kept in the graph dict
 (`parts`, `room['part']`), off in graph_text (show_parts=False). Per-floor questions need a floor label reader
 ('1 KRS' / '2 KRS', 'upper floor') and better segmentation first; n = 2 plans is too few to tune on.
+
+### 8j. Routing per-room questions to the room graph inside the pipeline (untouched probe v4 + live pipeline run)
+Why: 8i showed the room graph answers per-room questions the pipeline answers at whole-plan scope; this decides
+WHICH questions to hand it and measures the change inside the real pipeline (night 528cadd), not by simulation.
+**Trigger** `experiments/r1/room_graph/route.py` `per_room(question, path)` → `{fire, fire_any, area, kind, why}`:
+regexes for a room as owner ("windows of the kitchen", "does the bathroom have"), relations (entered from, opens
+onto, next to, share a wall, "A and B adjacent", reachable without), locate ("which room has the bathtub", "where's
+the toilet"), superlatives ("largest bedroom"), plus a few fi/de/fr/sv/it forms (not translated by the front end).
+"number of balconies in this drawing" / "(kitchen and bathroom combined)" stay whole-plan. Raster files only.
+False fires (`route_eval.py`): **0 raster-gated fires on all 127,044 dataset questions and on smoke / dev / hard /
+hard2 / hardL_open / cc5k_heldout / train_gate** (text-only fires exist on swiss / ifc wordings, gated out by file
+type), so wiring it cannot move any existing score. Recall: route_probe.txt (written before the trigger ran) 25/26 →
+26/26 after fixes; route_probe2.txt (untouched, 42 fresh wordings) **19/24 recall, 0/18 false** before its own fixes
+(24/24, 0/18 after).
+**Untouched probe v4** (`probe/probe_v4.jsonl`, committed 3949e0e BEFORE any solver ran): 24 by-eye Qs on 6 fresh
+plans from CubiCasa5K's official test list that are in neither our train nor test split (2 are two-storey sheets);
+15 ask for printed room areas, 9 are relations / per-room counts.
+| v4 (untouched) | relations + per-room counts (9) | printed room areas (15) | all 24 |
+|---|---:|---:|---:|
+| pipeline (night 528cadd) | 2 | 8 | 10 |
+| vlm_direct | 3 | 8 | 11 |
+| room_graph solve() alone | **8** | 2 | 10 |
+| **pipeline + route (areas excluded)** | **8** | 8 | **16** |
+So the room graph wins scope and relations but LOSES printed-area questions (2/13 when routed): its area reader's
+VLM boxes put printed numbers into the wrong regions (1264: eight '1.5' values attached to the hall; 9976 two-storey:
+most printed areas unattached), while the pipeline's VLM reads "HUONE 22 11,5" next to the label directly. Hence
+**fire = room-scoped AND not an area question** (`AREA_Q`: area/size/how big/m²/fläche/pinta-ala/superficie…).
+**Live run** (`pipeline_rg.py` registers `pipeline_rg` = Pipeline + the route; standard `stoa.eval`, leaderboard
+lines `pipeline_rg-probe_v*`): all 78 by-eye probe Qs / 20 plans: **54/78 vs pipeline 37/78, +21.8 pts [+8.2,
++35.1] (plan-cluster bootstrap), McNemar 22 vs 5 p = 0.0015**; untouched v4 alone 16 vs 10 (6 vs 0, p = 0.031).
+Evidence on 7.7% → 67.9% of answers; cost $0.077 → $0.228 per 1k (one more local 8B call, ~1.5k tokens; $0 hosted);
+per-room counts now attach only the counted windows/doors (each note names its room) so "located items = answer".
+The 5 lost: 3 real (v1 dev: bathroom doors 1 vs 2; 'largest room' → bedroom; balcony accessed from 'entry'), 2
+pipeline run-to-run noise on questions the route does not touch.
+**PITFALL found:** the hook must sit in `Pipeline.solve` after the language front end and BEFORE `decompose()`: the
+composer splits "How many windows do the two bedrooms have in total?" into "windows on this plan" + "bedrooms" = 6
+(gold 2), so a hook in `_solve_atomic` never sees the room scope (2 probe Qs lost that way in the first live run).
+Limits: n = 78 by-eye Qs on 20 plans written by one person; confidence is still a rule (capped at 0.75 in the
+wrapper). Next for areas: attach printed areas from an OCR text layer (W3's) instead of VLM boxes.
+**Addendum (same cycle): OCR text layer as the graph's source, and an area cross-check.** W3's tiled text layer
+(`stoa.solvers.raster.textlayer`, VLM text spotting per 1100 px tile) gives tile-accurate boxes for every label and
+printed number (1264: OLOHUONE 17,0 / KEITTIÖ 14,5 / HUONE 11,5 / LH 3,0 all in the right regions, where the
+whole-image reader had put eight '1.5' values in the hall). `room_graph(..., textlayer=True)` /
+`solve(..., textlayer=True)` (env `R1_RG_TEXTLAYER=1`) takes labels and printed areas from it, so plans without a
+cached label read (hidden test plans) get labels too. solve() with it: relations / per-room counts 45/53 vs 43/53
+(noise), routed area questions 9/18 vs pipeline 7/18 vs old solve 5/18; all area questions 10/23 vs pipeline 11/23 —
+a tie, so areas still stay with the pipeline. But the two disagree informatively: **when the pipeline's area and the
+text-layer graph's area agree (2%), the pipeline was right 6/6; when they disagree, 5/17.** `pipeline_rg
+area_xcheck=1` (`area_crosscheck()`): room-scoped area question → pipeline answers → graph cross-check; agree → the
+graph's room box (+ printed value) as evidence and conf ≥ 0.75, disagree → conf ≤ 0.3 and "the room graph reads X m²"
+in `missing`; the value never changes. Live on all 78: area answers right 11/23 both ways, **evidence 0 → 6, conf ≥
+0.7 on 6 (6 right), area AUROC 0.51 → 0.88** (all Qs 0.69 → 0.74). Cost $0.228 → $0.523 per 1k on this mix (one
+text layer per plan, ~3–7k tokens in, up to 5k out; local). n = 6 agreements: the direction is clear, the 0.75 is a
+guess. `xcheck_eval.py` reproduces the table. Text-layer PITFALL: 9 of 20 CubiCasa tiles hit the 2,500-token cap
+and 1841 came back with 3 items (a loop), so dense plans lose labels at the end of the list.
+NEGATIVE (exploratory, same cycle): per-floor questions on two-storey sheets cannot lean on printed floor titles —
+the OCR text layer finds one on 1 of 4 two-storey probe sheets ('1 KRS' on 6007; none on 4828, 5046, 9976). A floor
+split needs layout cues (entrance door, stair position, which part holds the kitchen), not text. Latency note for the
+demo: a cold text layer took 6–165 s per plan with the GPU saturated (1–2 tiles, up to 2,500 tokens out per tile).
+**Addendum (cycle 244): the combined build.** night-W4 4d4187f (per_room route before the composer) merged with
+night-W3 ac981b3 (text mode for CubiCasa non-count Qs) and night-R1: 54/78 overall, but area 9/23 with 15 at conf ≥
+0.7 and only 6 right (9 confident-wrong: room_graph's in-atomic area fallback '19.5 m²' / 'bedroom' @ 0.70, W3 text
+mode's wrong printed number for 'largest bedroom' / 'sauna' / sums @ 0.75). Applying `area_crosscheck` offline
+(`xcheck_sim.py`, graph values from the logged traces, plus a new cap for non-numeric answers to area questions):
+conf ≥ 0.7 on 4 (all right), area AUROC 0.56 → 0.76, accuracy unchanged. W3's text mode and my text-layer graph read
+the same OCR layer, so their agreement is not fully independent; still 4/4 agreements were right here.
+
+### 8k. Questions ABOUT the links: a project knowledge graph that answers, not only cross-checks (measured)
+Stoa point 4 says linking data earns points; Q's red team (v17, KNOWLEDGE 08:47) showed the obvious follow-up
+questions a judge asks after seeing "drawing 46 = model 46 ✓" all fail: "do the plan and the model agree on the
+windows of '1.korrus'?" → a bare 55, "how many windows are in the model but not drawn?" → 297 @ 0.98 (whole model),
+"how many floor plan sheets?" → 1, "which sheet shows the server room?" → "no sheet information".
+Method (`experiments/r1/kg_qa/kgqa.py`, read-only over W1's `stoa.kg.project_graph`): the project graph becomes
+numbered fact rows — F = files (plan / section / elevation sheets with their storey, model, discipline models, same
+building in ifc_bench), S = storeys (elevation, plan sheet or NONE, model door/window/room counts), C = W1's
+cut-plane comparison per storey (model, cut by the 1.2 m plane, drawn on the sheet's SVG twin, drawn from other
+storeys; "UNKNOWN" when the twin tags no such class), R = rooms (name, storey, area, plan, pdf_pt box; only rooms
+sharing a token with the question are shown). Sheet counts / 'is there a section' are answered in Python with no
+model call; everything else is ONE local text call returning {op, rows, a, b} (count_rows, lookup_storey /
+lookup_sheet, agree, diff, greater, list_storeys, exists, none) and Python computes the value from the cited rows
+(W2's 'point at rows' method). Yes/no questions never get a diff (op is coerced). Agree answers carry the reason:
+"no (IFC model 55 windows on '1.korrus', plan draws 52; the other 3 lie entirely above/below the plan's 1.2 m section
+plane, so the drawing is consistent with the model)". Evidence = the room's box on its sheet, or the sheet files.
+Trigger `is_link_question()` (en/de/fi/fr/sv/it/nl forms: plan-vs-model agreement words, 'how many <sheet noun>',
+'which <sheet noun> shows', storeys without a plan / without rooms, 'another dataset', 'on which floor is <room>'):
+**0 fires on all 127,044 dataset questions and on every open split** (dev, hard, hard2, hardL, smoke, train,
+train_gate, unused, cc5k_heldout); recall 20/21 on the fresh probe, 8/8 on v17's link rows.
+Probe (`probe_kg.jsonl`, 21 Qs on 6 non-test IFC projects in EN/DE/FI/FR; gold from file names, the IFC index and
+the SVG twins' data-guid counts, independent of stoa.kg; committed 798069f before any run). Wrapper `pipeline_kg`
+(Pipeline + kg_qa when the trigger fires on ifc_models/ifc_bench; no value → the normal pipeline):
+| probe | pipeline | pipeline_kg | conf ≥ 0.8 (pipeline → kg) | tokens/Q |
+|---|---|---|---|---|
+| fresh probe_kg (21) | 4/21 | **20/21** (16 won / 0 lost, McNemar p < 0.0001) | 4 @ 0 right → 17 @ 17 right | 4,332 → 1,970 |
+| Q v17 (9, used while building) | 2/9 | **9/9** (7 / 0) | 2 @ 1 right → 9 @ 9 right | 3,325 → 2,223 |
+Runs: 20261114-085547-pipeline-probe_kg-f75d / -090314-pipeline_kg-probe_kg-6ea6; -085617-pipeline-v17-0ec1 /
+-090327-pipeline_kg-v17-1eeb (pipeline = merge-tree archive of W4 4d4187f + W3 ac981b3 + R1; pipeline_kg = night-R1).
+stoa.eval leaves text answers unscored, so `compare.py` scores with the probe's regexes. Honest limits: one author
+wrote both the probe and the system (wording bias; the trigger is a regex list), n is small, IFC only (Swiss
+PDF↔DXF↔PNG and raster↔IFC links are not covered), and the one miss is "does the 'UG2' plan show doors the model
+does not assign to 'UG2'?" (drawn_other). Note the gdynia/warmond plan twins tag only IfcSpace: there the C rows
+say UNKNOWN and kg_qa answers with conf 0.2 + a 'missing' line instead of claiming agreement.

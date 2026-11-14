@@ -1,0 +1,10 @@
+# c5 round 4 (W1-written 05:15, before running): vertical distances between two named storeys
+PATH ../ifc_bench/fantasy_hotel_1_arc.ifc
+What is the floor-to-floor height between GROUND FLOOR and FIRST FLOOR?
+How far apart vertically are 'GROUND FLOOR' and 'L3'?
+What is the height difference between storey 'FIRST FLOOR' and storey 'L3'?
+What is the elevation of 'L3'?
+How tall is the storey 'FIRST FLOOR'?
+PATH ../ifc_bench/hitos_arc.ifc
+What is the vertical distance between 'kjeller' and '3.etg'?
+What is the storey height of 'u.etg'?

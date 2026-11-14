@@ -20,6 +20,16 @@ from stoa.solvers import register
 from stoa.solvers.base import BaseSolver
 from stoa.solvers.vector import tableqa
 from stoa.solvers.vector.pdftables import pdf_tables
+from stoa.solvers.vector import sheettext
+from stoa.solvers.vector.pdftext import SCALE_RE, text_groups
+
+TEXT_ID = 800000  # row ids of the `text` table (text groups: tags, note paragraphs, title-block fields)
+TEXT_DOC = ("- `text`: text groups of the sheet outside the tables, {n} rows, columns ['row_id', 'view', 'text']: "
+            "a room/unit TAG is one row with its stacked lines joined by ' / ' (e.g. 'COMMUNITY / ROOM / 115 - 410 SF / "
+            "A-2 Occupancy / 27.3 O.L.'), a note paragraph or title-block field is one row; `view` = the title of the "
+            "drawing (plan/section) the group sits under, e.g. 'LIFE SAFETY PLAN - BASEMENT' (None = title block or "
+            "unknown). Use it for questions about plans, tags, notes and the title block (use `.str.contains(..., "
+            "regex=False)` or `.str.extract` on `text`; one tag row = one room/unit).")
 
 DOC = """Tables rebuilt from the text layer of one construction drawing sheet (US units; values are strings exactly
 as printed, e.g. "108 SF", "3' - 0\\"", "A1"; empty string = blank cell; multi-line headers are joined; a header
@@ -187,13 +197,14 @@ def _clean(name: str) -> str:
 
 @register("schedule")
 class ScheduleSolver(BaseSolver):
-    """Options: backend=local|nvidia, min_rows=3."""
+    """Options: backend=local|nvidia, text=1 (0: no `text` table of tags/notes/title block)."""
 
     extensions = (".pdf",)
 
-    def __init__(self, backend: str = "local", **kwargs):
+    def __init__(self, backend: str = "local", text: int | str = 1, **kwargs):
         super().__init__(**kwargs)
         self.backend = backend
+        self.use_text = str(text) not in ("0", "false", "no")
 
     def can_handle(self, path: str, question: str) -> bool:
         if Path(path).suffix.lower() != ".pdf" or source_of(path) in ("swiss_dwellings", "ifc_models"):
@@ -201,10 +212,41 @@ class ScheduleSolver(BaseSolver):
         return True
 
     def solve(self, path: str, question: str) -> Answer:
+        a = self._solve_tables(path, question)
+        if not self.use_text or (a.value is not None and a.confidence >= 0.5) or \
+                (a.trace and str(a.trace[0]).startswith("sheet text:")):
+            return a
+        # a schedule sheet whose tables gave no confident answer: the question may be about the plan / notes / title
+        # block printed next to the schedule (held-out A000: drawing index + site plan). One more read, of the text
+        # groups and the table rows together; kept only if it cites printed rows and is surer.
+        pdf = str(abspath(path))
+        tabs, _ = pdf_tables(pdf)
+        groups = [g for g in text_groups(pdf) if g.n_lines >= 2 or g.kind == "list" or
+                  (len(g.text) >= 12 and re.search(r"[A-Za-z]{3}", g.text))]
+        if not groups:
+            return a
+        b = self._sheet_text(path, question, [t for t in tabs if len(t.df.columns) >= 3], groups)
+        if b.value is not None and b.evidence and b.confidence > a.confidence:
+            b.trace = list(a.trace) + [f"the schedule tables gave no confident answer ({a.value!r}, conf "
+                                       f"{a.confidence:.2f}); read the sheet's printed text groups instead"] + list(b.trace)
+            return b
+        return a
+
+    def _solve_tables(self, path: str, question: str) -> Answer:
         pdf = str(abspath(path))
         tabs, rows = pdf_tables(pdf)
-        if not tabs:
-            return self.abstain("no tables found in the PDF text layer")
+        # a sheet without a real schedule (a plan, life-safety or notes sheet): its page-wide "rows" glue unrelated tags
+        # and note columns together, so the model gets the text groups instead (tags, paragraphs, two-column lists;
+        # plus any table of >= 3 columns). Schedule sheets keep exactly the old prompt: adding the text table there
+        # changed the code the model wrote (dev A-801 'rooms listed' 29 -> 27).
+        schedule_sheet = any(len(t.df) >= 4 and len(t.df.columns) >= 3 for t in tabs)
+        groups = [g for g in text_groups(pdf) if g.n_lines >= 2 or g.kind == "list" or
+                  (len(g.text) >= 12 and re.search(r"[A-Za-z]{3}", g.text))] \
+            if self.use_text and not schedule_sheet else []
+        if groups:
+            return self._sheet_text(path, question, [t for t in tabs if len(t.df.columns) >= 3], groups)
+        if not tabs and not groups:
+            return self.abstain("no tables or text found in the PDF text layer")
         tables: dict[str, pd.DataFrame] = {}
         boxes: dict[int, tuple] = {}
         desc = []
@@ -238,12 +280,25 @@ class ScheduleSolver(BaseSolver):
                     boxes[nid] = tuple(min(c.box[k] for c in r.cells) if k < 2 else max(c.box[k] for c in r.cells)
                                        for k in range(4))
                     nid += 1
-        tables["notes"] = pd.DataFrame(notes[:300])
-        if notes:
+        if notes or not groups:
+            tables["notes"] = pd.DataFrame(notes[:300], columns=["row_id", "text"])
             tables["notes"].index = pd.Index([n["row_id"] for n in notes[:300]])
-        desc.append(f"- `notes`: other text lines of the sheet (legends, keys, general notes), {len(notes[:300])} rows,"
-                    " columns ['row_id', 'text']")
+            desc.append(f"- `notes`: other text lines of the sheet (legends, keys, general notes), {len(notes[:300])} "
+                        "rows, columns ['row_id', 'text']")
+        if groups:
+            # plans / notes sheets: text that is not a table (tags, paragraphs, title block), one row per group;
+            # multi-line groups (tags, paragraphs) first, as only the first 160 rows are shown to the model
+            groups.sort(key=lambda g: g.n_lines < 2)
+            trows = []
+            for k, g in enumerate(groups[:400]):
+                trows.append({"row_id": TEXT_ID + k, "view": g.view, "text": g.text[:300]})
+                boxes[TEXT_ID + k] = g.box
+            tables["text"] = pd.DataFrame(trows)
+            tables["text"].index = pd.Index([r["row_id"] for r in trows])
+            desc.append(TEXT_DOC.format(n=len(trows)))
         doc = DOC.format(tables="\n".join(desc))
+        if "notes" not in tables:  # plan / notes sheet: legends and notes are text groups
+            doc = doc.replace("`notes`", "`text`").replace("notes[notes.text", "text[text.text")
         trace = [f"{len(tabs)} tables from the PDF text layer: " + "; ".join(
             f"{n} ({len(df)}x{len(df.columns) - 1})" for n, df in tables.items())]
         try:
@@ -269,6 +324,9 @@ class ScheduleSolver(BaseSolver):
         if isinstance(value, str):
             unit = None
             value = re.sub(r"(\d+')\s*-\s*(\d)", r"\1-\2", value).strip()  # 5' - 10 3/8" -> 5'-10 3/8"
+        elif unit == "count" and abs(float(value) - round(float(value))) >= 0.05:
+            unit = None  # "27.3 O.L." is a number, not a count: keep it as printed
+            value = round(float(value), 2)
         elif unit == "count":
             value = int(round(float(value)))
         elif isinstance(value, float):
@@ -276,8 +334,11 @@ class ScheduleSolver(BaseSolver):
         if unit not in ("count", "ft2", "m2", "ft", "m", None):
             unit = None
         row_label = {}
+        if "text" in tables:
+            for _, row in tables["text"].iterrows():
+                row_label[int(row["row_id"])] = f"text: {row['text'][:80]}" + (f" (view {row['view']})" if row["view"] else "")
         for name, df in tables.items():
-            if name == "notes" or df.empty:
+            if name in ("notes", "text") or df.empty:
                 continue
             qty = next((c for c in df.columns if re.search(r"^(count|qty|quantity|no\.?)$", str(c).strip(), re.I)), None)
             key = df.columns[1] if len(df.columns) > 1 else None
@@ -311,10 +372,24 @@ class ScheduleSolver(BaseSolver):
         about_table = re.search(r"schedul|listed|table|legend|\bkey\b|specified|finish", question, re.I)
         about_drawing = re.search(r"\b(drawn|shown|depicted|visible)\b|\bin\s+(?:the\s+)?(?:enlarged\s+)?plan\b",
                                   question, re.I)
+        used_text = [i for i in res.get("used", []) if TEXT_ID <= i < 900000 and i in boxes]
+        assumptions = ["tables rebuilt from the PDF text layer (row/column alignment); the model wrote "
+                       "the query, the numbers come from the extracted rows"]
+        if used_text and len(used_text) == n_rows_used:
+            # the answer comes from text groups (tags, notes, title block), not schedule rows: grouping stacked lines
+            # into tags is a heuristic (a tag can merge with a neighbour or be split), so less sure than a schedule
+            # row; aggregates over many tags more so. Fresh probe (experiments/w2/sheet_probe), not calibrated yet.
+            conf = min(conf, 0.75 if len(used_text) == 1 else 0.6)
+            assumptions = [f"read from {len(used_text)} printed text group(s) of the sheet (room/unit tags, notes, "
+                           "title block); stacked lines within ~0.6 line heights were grouped into one tag"]
         if about_drawing and not about_table:
-            conf = min(conf, 0.15)
-            missing.append("the question is about symbols drawn on a plan; schedules and text can't count those "
-                           "(needs symbol detection on the drawing)")
+            if used_text and len(used_text) == n_rows_used and unit == "count":
+                conf = min(conf, 0.5)
+                missing.append("counted the printed tags; rooms/elements drawn without a tag are not counted")
+            elif not used_text:
+                conf = min(conf, 0.15)
+                missing.append("the question is about symbols drawn on a plan; schedules and text can't count those "
+                               "(needs symbol detection on the drawing)")
         if value == 0 and not evidence:
             conf = min(conf, 0.2)
         elif value == 0 and unit == "count":
@@ -325,7 +400,7 @@ class ScheduleSolver(BaseSolver):
             missing.append("none of the rows the answer used contains the identifier named in the question")
         named = [w for w in re.findall(r"(\w+)\s+schedules?\b", question.lower()) if w not in ("the", "a", "this")]
         known = " ".join([t.title for t in tabs] + [str(c) for df in tables.values() for c in df.columns] +
-                         [str(v) for n, df in tables.items() if n != "notes" for v in df.head(60).to_numpy().ravel()]).lower()
+                         [str(v) for n, df in tables.items() if n != "notes" for v in (df if n == "text" else df.head(60)).to_numpy().ravel()]).lower()
         hm = re.search(r"how many\s+(.*?)(?:\b(?:are|is|does|do|have|has|use|uses|in|on|of|with|that|which)\b|[?,(]|$)",
                        question, re.I)
         counted = [w for w in re.findall(r"[a-z]{4,}", hm.group(1).lower())
@@ -367,6 +442,90 @@ class ScheduleSolver(BaseSolver):
             conf = min(conf, 0.2)  # the answer only repeats an identifier from the question
             missing.append(f"the answer {value!r} repeats the question's identifier; the table row was not found")
         return Answer(value=value, unit=unit, confidence=conf, evidence=evidence, trace=trace, solver=self.name,
-                      assumptions=["tables rebuilt from the PDF text layer (row/column alignment); the model wrote "
-                                   "the query, the numbers come from the extracted rows"],
-                      missing=missing)
+                      assumptions=assumptions, missing=missing)
+
+    def _sheet_text(self, path: str, question: str, tabs, groups) -> Answer:
+        """A sheet without a schedule: answer from its text groups (tags, notes, title block, two-column lists) and
+        the rows of any small table, by row pointing + Python arithmetic (sheettext.py)."""
+        rows, boxes = [], {}
+        for k, g in enumerate(groups[:600]):
+            rows.append({"id": TEXT_ID + k, "view": g.view, "text": g.text})
+            boxes[TEXT_ID + k] = g.box
+        rid = 700000
+        for t in tabs:
+            named = [c for c in t.df.columns if not re.fullmatch(r"col\d+", str(c)) and re.search(r"[A-Za-z]{2}", str(c))]
+            if not t.title and len(named) < 0.5 * len(t.df.columns):
+                continue  # rows of dimension strings on a plan ("col5: -; col10: 5' - 0\"") only mislead the model
+            for (_, r), b in zip(t.df.iterrows(), t.row_boxes):
+                txt = "; ".join(f"{c}: {v}" for c, v in r.items() if str(v).strip())
+                rows.append({"id": rid, "view": t.title or None, "text": f"table row: {txt}"})
+                boxes[rid] = b
+                rid += 1
+        trace = [f"sheet text: {len(groups)} text groups (tags, notes, title block) + {rid - 700000} rows of small "
+                 "named tables"]
+        try:
+            res = sheettext.ask(question, rows, backend=self.backend)
+        except Exception as e:  # noqa: BLE001
+            return Answer.abstain(self.name, f"sheet text QA failed: {type(e).__name__}: {e}", trace)
+        trace += res["trace"]
+        if res["value"] is None or (isinstance(res["value"], str) and NOT_FOUND_RE.match(res["value"])):
+            return Answer.abstain(self.name, "the printed text of the sheet does not contain the answer "
+                                             f"(op={res['op']})", trace)
+        by_id = {r["id"]: r for r in rows}
+        evidence = [Evidence(file=path, page=0, bbox=[round(v, 1) for v in boxes[i]], bbox_space="pdf_pt",
+                             note=f"text: {by_id[i]['text'][:80]}" + (f" (view {by_id[i]['view']})" if by_id[i]["view"] else ""))
+                    for i in res["used"] if i in boxes]
+        # fresh probe (experiments/w2/sheet_probe, 20 Qs, no dataset questions on these sheets): not calibrated yet,
+        # so below the schedule rows' 0.85; aggregates (count/sum over tags) can miss an untagged or split tag
+        conf = 0.75 if res["op"] == "lookup" else 0.6
+        missing = []
+        if not res["ok"]:
+            conf = min(conf, 0.4)
+            missing.append("a value the model cited is not printed in the row it cited")
+        if not evidence:
+            conf = min(conf, 0.3)
+            missing.append("no printed row supports the answer")
+        about_drawing = re.search(r"\b(drawn|shown|depicted|visible)\b", question, re.I)
+        if res["op"] == "count" and about_drawing:
+            conf = min(conf, 0.5)
+            missing.append("counted the printed tags; elements drawn without a tag are not counted")
+        ids = tableqa.id_tokens(question, path)
+        if isinstance(res["value"], str) and res["value"].strip().upper() in ids:
+            conf = min(conf, 0.2)
+            missing.append(f"the answer {res['value']!r} repeats the question's identifier")
+        cited = " ".join(by_id[i]["text"] for i in res["used"] if i in by_id).upper()
+        if ids and evidence and not any(re.search(rf"(?<![\w.-]){re.escape(x)}(?![\w-])", cited) for x in ids):
+            conf = min(conf, 0.3)  # "pier P13" but no cited row contains P13 (S-101: a scale string at 0.75)
+            missing.append("none of the cited text rows contains the identifier named in the question")
+        if isinstance(res["value"], str) and SCALE_RE.search(res["value"]) and not re.search(r"\bscale", question, re.I):
+            conf = min(conf, 0.2)  # "vertical reinforcing of pier P13" -> '1/2" = 1'-0"' (the detail's scale)
+            missing.append("the answer is a drawing scale, but the question does not ask for a scale")
+        if re.search(r"\bschedul", question, re.I):
+            # the question is about a schedule, but no schedule table could be rebuilt (or it did not answer):
+            # a schedule drawn among details (S-101 pier schedule) is mangled into text groups
+            conf = min(conf, 0.3)
+            missing.append("the question is about a schedule, but no schedule table could be rebuilt from this sheet's "
+                           "text; the answer comes from loose text groups")
+        elif res["op"] == "count" and re.search(r"\b(types?|marks?|kinds?)\b", question, re.I):
+            conf = min(conf, 0.4)  # counting types/marks = reading a type list (a schedule) that was not rebuilt
+            missing.append("counting types/marks needs a schedule table, which could not be rebuilt from the text")
+        assumptions = [f"read from {len(evidence)} printed text group(s) of the sheet (room/unit tags, notes, title "
+                       "block); stacked lines within ~0.6 line heights were grouped into one tag"]
+        if res["op"] in ("count", "sum", "max", "min", "mean"):
+            assumptions.append(f"{res['op']} computed in Python over the cited rows' printed values")
+        return Answer(value=res["value"], unit=res["unit"], confidence=conf, evidence=evidence, trace=trace,
+                      solver=self.name, assumptions=assumptions, missing=missing)
+
+
+
+@register("pdf_text")
+class PdfTextSolver(ScheduleSolver):
+    """Any vector PDF with a text layer from OUTSIDE the dataset's known sources (a drawing set handed in at the demo,
+    Stoa's hidden/noon examples): the pipeline routes such PDFs to `pdf_vector`, `pdf_text`, `vlm_direct`, and
+    `schedule` (routed only for opening_design) never saw them. Same reader as `schedule`: rebuilt schedule tables, and
+    the sheet's text groups (tags, notes, title block) by row pointing. Not for swiss_dwellings / ifc_models (their DXF /
+    IFC twins answer) nor opening_design / cubicasa5k (routed elsewhere), so the dataset's answers don't change."""
+
+    def can_handle(self, path: str, question: str) -> bool:
+        return Path(path).suffix.lower() == ".pdf" and \
+            source_of(path) not in ("swiss_dwellings", "ifc_models", "opening_design", "cubicasa5k")
