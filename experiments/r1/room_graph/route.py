@@ -114,13 +114,59 @@ _OTHER = [
     r"\b(?:quale|in\s+quale|da\s+quale)\s+(?:stanza|locale|ambiente)\b|\b(?:stanza|locale)\s+più\s+grande\b",
 ]
 
+# cycle 244: language-general per-room forms (tuned on half A of LLM paraphrases of probes v1-v4, tested on half B;
+# para_route.py).  Room nouns as compound SUFFIXES (Technikzimmer, utilitykamer, makuuhuoneessa) + a determiner.
+_RN_DE = r"\w*(?:zimmer|raum|räume|küche|bad|kammer|diele|flur|sauna|balkon|loggia|terrasse|ankleide|wc|schrank)\w*"
+_RN_NL = (r"\w*(?:kamer|keuken|badkamer|sauna|hal|gang|balkon|berging|toilet|wc|vertrek|ruimte|kast|"
+          r"bijkeuken|washok|zolder)\w*")
+_RN_FR = (r"(?:cuisine|chambre|salon|séjour|salle(?:\s+(?:de|d['’])\s*\w+)?|sauna|entrée|couloir|balcon|buanderie|dressing|"
+          r"pièce|wc|toilettes|placard|cellier|vestibule|penderie|armoire|loggia|terrasse)")
+_RN_IT = (r"(?:cucina|camera(?:\s+da\s+letto)?|soggiorno|bagno|sauna|ingresso|corridoio|balcone|ripostiglio|lavanderia|"
+          r"stanza|locale|armadio|cabina|disimpegno|loggia|terrazzo|salotto)")
+_RN_ES = (r"(?:cocina|dormitorio|habitación|salón|sala|baño|sauna|entrada|pasillo|balcón|lavadero|vestidor|armario|"
+          r"trastero|aseo|recibidor|terraza|cuarto)")
+_RN_FI = (r"(?:keittiö|makuuhuone|olohuone|kylpyhuone|pesuhuone|sauna|eteis|parveke|vaatehuone|kodinhoitohuone|"
+          r"työhuone|wc|käytävä|huone|kylpyhuone|varasto|halli|ruokailutila)\w*")
+_HOWMANY = r"(?:wie\s+viele|combien\s+de|quant[ie]|hoeveel|cuánt[oa]s|kuinka\s+monta|montako|hur\s+många|how\s+many)"
+_MULTI = [
+    # per-room counts: "Wie viele Türen hat das Technikzimmer", "Quante porte ha la stanza", "Hoeveel deuren heeft de
+    # keuken", "¿Cuántas ventanas tiene la cocina?", "Combien de portes a la cuisine"
+    rf"\b{_HOWMANY}\s+\w+\s+(?:hat|haben|hat\s+die|ha|hanno|heeft|hebben|tiene|tienen|a)\s+"
+    rf"(?:der|die|das|den|la|le|l['’]|il|lo|de|het|el|los|las|les)\s*(?:{_RN_DE}|{_RN_NL}|{_RN_FR}|{_RN_IT}|{_RN_ES})\b",
+    # "y a-t-il dans la pièce", "ci sono nella stanza", "zijn er in de keuken", "hay en la cocina", "gibt es im Bad"
+    rf"\b(?:y\s+a-t-il|ci\s+sono|c['’]è|zijn\s+er|is\s+er|hay|gibt\s+es)\s+(?:dans|nella|nel|nello|in|en|im|in\s+der|"
+    rf"in\s+dem)\s+(?:la|le|l['’]|de|het|el)?\s*(?:{_RN_DE}|{_RN_NL}|{_RN_FR}|{_RN_IT}|{_RN_ES})\b",
+    # relations: "Van welk vertrek", "Par quelles pièces", "Da quale stanza", "Desde qué habitación", "From what room",
+    # "Mikä huone avautuu"
+    r"\b(?:van|vanuit|via|door|naar)\s+welke?\s+(?:vertrek|kamer|ruimte)\w*",
+    r"\b(?:de|par|depuis|à\s+partir\s+de)\s+quel(?:le)?s?\s+pièces?\b",
+    r"\b(?:da|attraverso|tramite|per)\s+qual[ei]\s+(?:stanz|local|ambient)\w*",
+    r"\b(?:desde|por|de)\s+(?:qué|cuál(?:es)?)\s+(?:habitaci|cuarto|estancia|sala|espacio)\w*",
+    r"\b(?:von|aus|durch|über)\s+welche[mnrs]?\s+(?:raum|zimmer|räume)\w*",
+    r"\b(?:from|through|via)\s+what\s+(?:room|space)s?\b",
+    r"\bwhat\s+(?:room|space)s?\s+(?:opens?|leads?|gives?|connects?|provides?)\b",
+    r"\b(?:mikä|mitkä|mistä|minkä)\s+(?:huone\w*|tila\w*)\b",
+    r"\b(?:accéder|accedere|acceder|bereiken|toegang|zugang|erreichbar|betreten)\b.{0,40}\b(?:" + _RN_FR + "|" + _RN_IT +
+    "|" + _RN_ES + "|" + _RN_NL + "|" + _RN_DE + r")\b",
+    # per-room area: "Wie groß ist der Schlafraum", "Hoe groot is de keuken", "Kuinka suuri on keittiö",
+    # "Quanto è grande la cucina", "Quelle est la superficie de la chambre", "How much space does the kitchen occupy"
+    rf"\bwie\s+gro(?:ß|ss)\s+(?:ist|sind)\s+(?:der|die|das)\s+(?:\w+\s+)?{_RN_DE}\b",
+    rf"\bhoe\s+groot\s+(?:is|zijn)\s+(?:de|het)\s+(?:\w+\s+)?{_RN_NL}\b",
+    rf"\bkuinka\s+(?:suuri|iso|laaja)\s+on\s+(?:\w+\s+)?{_RN_FI}\b",
+    rf"\bquanto\s+(?:è\s+grande|spazio\s+occupa|misura)\s+(?:la|il|lo|l['’])\s*(?:\w+\s+)?{_RN_IT}\b",
+    rf"\b(?:superficie|surface|taille)\s+(?:de\s+la|du|de\s+l['’]|des)\s*(?:\w+\s+)?{_RN_FR}\b",
+    rf"\b(?:cuánto\s+(?:mide|espacio\s+ocupa)|qué\s+tamaño\s+tiene|superficie\s+de)\s+(?:el|la|los|las)\s+{_RN_ES}\b",
+    rf"\bhow\s+much\s+(?:space|room|floor\s+space)\s+(?:does|do)\s+{_ROOM}\b",
+    rf"\b(?:pinta-?ala)\b.{{0,40}}\b{_RN_FI}\b",
+]
+
 # whole-plan wordings that must win even if a pattern above matches (e.g. 'kitchen and bathroom combined')
 _WHOLE = [
     r"\((?:[^)]*\b(?:kitchen\s+and\s+bathroom|keittiö\s+ja\s+kylpy)[^)]*)\)",
 ]
 
 _KINDS = [("relation", _RELATION), ("locate", _LOCATE), ("superlative", _SUPER), ("room_area", _AREA),
-          ("owner", _OWNER), ("other_lang", _OTHER)]
+          ("owner", _OWNER), ("other_lang", _OTHER), ("multi_lang", _MULTI)]
 _COMPILED = [(k, [re.compile(p, re.I) for p in ps]) for k, ps in _KINDS]
 _WHOLE_RE = [re.compile(p, re.I) for p in _WHOLE]
 _COUNT_OF = re.compile(r"\b(?:number|count|total|amount|quantity|sum|tally|list)\s*$", re.I)
@@ -145,8 +191,10 @@ def text_trigger(question: str) -> dict:
 # questions that ask for an AREA: these stay with the pipeline (route_policy.py: on the untouched probe v4 the
 # pipeline's VLM read printed room areas 6/13 vs room_graph 2/13 -- the area reader's VLM boxes put numbers in the
 # wrong regions), while relations / per-room counts go to room_graph (8/9 vs 2/9 untouched).
-AREA_Q = re.compile(r"\b(?:area|size|how\s+(?:big|large)|square\s+(?:met|feet|foot)|m2|m²|sq\.?\s*m|floor\s+space|"
-                    r"fläche|wie\s+gro(?:ß|ss)|pinta-?ala|superficie|surface|yta|kokoinen)\b", re.I)
+AREA_Q = re.compile(r"\b(?:area|size|how\s+(?:big|large)|how\s+much\s+(?:space|floor\s+space)|square\s+(?:met|feet|foot)|"
+                    r"m2|m²|sq\.?\s*m|floor\s+space|fläche|wie\s+gro(?:ß|ss)|pinta-?ala|superficie|surface|yta|"
+                    r"kokoinen|hoe\s+groot|kuinka\s+(?:suuri|iso|laaja)|quanto\s+(?:è\s+grande|spazio|misura)|taille|"
+                    r"cuánto\s+(?:mide|espacio)|tamaño|oppervlakte|storlek|hur\s+stor)\b", re.I)
 
 
 def per_room(question: str, path: str | Path | None = None) -> dict:
