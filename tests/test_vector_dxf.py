@@ -489,3 +489,19 @@ def test_sheettext_lookup_expands_partial_dimension(monkeypatch):
     rows = [{"id": 7, "view": None, "text": "10' - 0\" REAR SETBACK"}, {"id": 8, "view": None, "text": "SIDE YARD (0ft)"}]
     res = sheettext.ask("What rear setback is shown on the site plan?", rows, context="sheet A000 - SITE PLAN")
     assert res["value"] == "10' - 0\"", res
+
+
+def test_schedule_assembly_multiplier_is_deterministic():
+    """D22: 'every N-wide window assembly consists of N ESDH3066 units' = sum of k x Count over the k-WIDE rows."""
+    import pandas as pd
+
+    from stoa.solvers.vector.schedule_solver import _assembly_total
+
+    df = pd.DataFrame({"row_id": [0, 1, 2], "Mark": ["QQ", "SS", "VV"],
+                       "Type": ["1-WIDE (TEMP ALL) ESDH3066", "2-WIDE (TEMP LOW) ESDH3066", "3-WIDE ESDH3066"],
+                       "Count": [16, 118, 9]})
+    q = "If every N-wide window assembly consists of N ESDH3066 window units, how many ESDH3066 units are needed?"
+    total, rows, formula = _assembly_total(q, {"t2_window_schedule": df, "notes": pd.DataFrame()})
+    assert total == 16 + 2 * 118 + 3 * 9 and rows == [0, 1, 2], formula
+    assert _assembly_total("How many windows of type SS are scheduled?", {"t2": df}) is None
+    assert _assembly_total("If every N-wide assembly consists of N XYZ999 units, how many units?", {"t2": df}) is None

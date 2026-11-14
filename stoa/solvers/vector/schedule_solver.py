@@ -182,6 +182,47 @@ def _qty_sum(value: int, used: list, tables: dict[str, pd.DataFrame], question: 
     return total if total != value else None
 
 
+MULT_Q = re.compile(r"\b(?:N|\d+)[- ]?(wide|panel|leaf|gang|bay|lite|light|unit)s?\b[^?]*?\b(?:consists?|contains?|"
+                    r"comprises?|is made|are made|has|have|equals?|=|holds?|means?|counts? as)\b[^?]*?\b(?:N|\d+)\b", re.I)
+
+
+def _assembly_total(question: str, tables: dict[str, pd.DataFrame], path: str = "") -> tuple[int, list[int], str] | None:
+    """'if every N-wide window assembly consists of N ESDH3066 window units, how many units ...': each row's own
+    '<k>-WIDE' times its Count/Qty, summed over the rows naming the question's item ids. Deterministic, because the
+    LLM-written code dropped the multiplier in 1 of 3 runs under load (S0 09:36, D22: 235 @0.85 vs gold 379).
+    Returns (total, row ids, formula) or None when the question has no per-row multiplier or no such column."""
+    m = MULT_Q.search(question)
+    if not m:
+        return None
+    word = m.group(1).lower()
+    cell_re = re.compile(rf"\b(\d+)\s*-?\s*{word}s?\b", re.I)
+    ids = tableqa.id_tokens(question, path)
+    for name, df in tables.items():
+        if name in ("notes", "text") or df.empty:
+            continue
+        qty = next((c for c in df.columns if re.search(r"^(count|qty|quantity|quan\.?|no\.?|number of units)$",
+                                                          str(c).strip(), re.I) and pd.api.types.is_numeric_dtype(df[c])),
+                   None)
+        if qty is None:
+            continue
+        cols = [c for c in df.columns if c not in ("row_id", qty)]
+        rows = []
+        for _, r in df.iterrows():
+            cells = " | ".join(str(r[c]) for c in cols)
+            km = cell_re.search(cells)
+            if km is None or pd.isna(r[qty]):
+                continue
+            up = cells.upper()
+            if ids and not all(i in up for i in ids):
+                continue
+            rows.append((int(r["row_id"]), int(km.group(1)), float(r[qty])))
+        if len(rows) >= 2:
+            total = int(round(sum(k * q for _, k, q in rows)))
+            formula = " + ".join(f"{k}x{q:g}" for _, k, q in rows)
+            return total, [i for i, _, _ in rows], f"{formula} = {total}"
+    return None
+
+
 SECOND_LOOK = ("\n(The tables are already loaded as pandas DataFrames under these names, with typed numeric columns; "
                "use them directly.)")
 COMPLEX_Q = re.compile(r"\bif\b|\beach\b|\bevery\b|\bper\b|consist|assum|\btimes\b|multipl|\bratio\b|percent|"
@@ -443,7 +484,9 @@ class ScheduleSolver(BaseSolver):
         elif counted and not any(w.rstrip("s")[:5] in known for w in counted):
             conf = min(conf, 0.3)  # "how many pier types": no rebuilt table mentions piers
             missing.append(f"no rebuilt table mentions '{' '.join(counted)}'; the answer comes from other text")
-        if isinstance(value, (int, float)) and not isinstance(value, bool) and conf > 0.5 and _complex(question, res):
+        det = _assembly_total(question, tables, path) if unit == "count" or isinstance(value, (int, float)) else None
+        if det is None and isinstance(value, (int, float)) and not isinstance(value, bool) and conf > 0.5 and \
+                _complex(question, res):
             # S0 04:57: the same dev question gave 379 and 235 at conf 0.85 in two runs (LLM-written code is not
             # deterministic on the server). For multi-step questions/code, draw a second independent query; on
             # disagreement the answer is not sure. Simple lookups (75% of dev) were stable: no second call there.
@@ -469,6 +512,15 @@ class ScheduleSolver(BaseSolver):
                     conf = min(conf, 0.5)
                     missing.append(f"two independent table queries disagree ({value} vs {v2n}); the reading of the "
                                    "schedule is unstable, check the cited rows")
+        if det is not None:
+            total, det_rows, formula = det
+            trace.append(f"per-row multiplier (deterministic): {formula}" +
+                         (" -> agrees with the query" if value == total else f" -> replaces the query's {value!r}"))
+            value, unit = total, "count"
+            conf = 0.85
+            missing = [x for x in missing if not x.startswith("two independent table queries")]
+            evidence = [Evidence(file=path, page=0, bbox=[round(v, 1) for v in boxes[i]], bbox_space="pdf_pt",
+                                 note=row_label.get(i, f"table row {i}")) for i in det_rows if i in boxes]
         if isinstance(value, str) and value.strip().upper() in tableqa.id_tokens(question, path):
             conf = min(conf, 0.2)  # the answer only repeats an identifier from the question
             missing.append(f"the answer {value!r} repeats the question's identifier; the table row was not found")
