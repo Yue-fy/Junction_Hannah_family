@@ -384,7 +384,7 @@ class IfcSolver(BaseSolver):
         for note in it.notes:
             if note.startswith("exclusion"):
                 ans.trace.append(note)
-                if note.startswith("exclusion NOT") and ans.value is not None:
+                if note.startswith("exclusion NOT") and ans.value is not None and not ctx.get("rest_applied"):
                     ans.confidence = min(ans.confidence, 0.3)
                     ans.missing.append(f"the question excludes something the rules can't apply ({note[23:]}); "
                                        "the value ignores the exclusion")
@@ -1042,6 +1042,55 @@ class IfcSolver(BaseSolver):
                                         "the room's (doors count for both rooms they connect)"], [])
         return None
 
+    def _rest(self, path: str, model: str, idx: IfcIndex, it: Intent, question: str, trace: list[str],
+              ctx: dict) -> Answer | None:
+        """"All the other rooms on 'A', leaving out 'B'" / "rooms on 'A' except 'B' and 'C'": the storey's total
+        minus the excluded rooms (W4 03:53: without this the excluded room's own area came back at 0.97)."""
+        import dataclasses
+
+        from stoa.solvers.ifc.parse import _EXCL
+
+        if not it.names or it.metric not in ("area", "count") or it.kind not in ("space", None):
+            return None
+        qf = fold(question)
+        m = _EXCL.search(qf)
+        if not m:
+            return None
+        after = [n for n in it.names if fold(n) in qf[m.start():]]
+        before = [n for n in it.names if n not in after]
+        st_b, oth_b = self._storey_names(idx, dataclasses.replace(it, names=before))
+        if not after or oth_b:
+            return None
+        sg = st_b[0][1].guid if st_b else None
+        ex = []
+        for n in after:
+            ms = match_space(idx, n, sg)
+            if not ms or ms[0].score < 90:
+                return None
+            ex.append((n, ms[0].obj))
+        base = dict(op=None, mod=None, threshold=None, which=False, yes_no=False, top_n=False, group_by=None, notes=[])
+        st: list[str] = []
+        whole = self._answer(path, model, idx, dataclasses.replace(it, names=before, kind="space", kinds=["space"],
+                                                                   **base), st, {"question": "", "compose": False})
+        if whole.value is None or isinstance(whole.value, str):
+            return None
+        if it.metric == "count":
+            val = float(whole.value) - len(ex)
+            exs = [f"{n}" for n, _ in ex]
+        else:
+            areas = [(n, self._floor_area(e, it, [])[0]) for n, e in ex]
+            if any(a is None for _, a in areas):
+                return None
+            val = float(whole.value) - sum(a for _, a in areas)
+            exs = [f"{n} {a:.2f} m²" for n, a in areas]
+        trace.extend(st[-2:])
+        trace.append(f"rest: {whole.value} {whole.unit} minus excluded {', '.join(exs)} = {val:.3f}")
+        ctx["outer"] = ctx["rest_applied"] = True
+        keep = {e.guid for _, e in ex}
+        ev = [x for x in whole.evidence if x.ifc_guid not in keep]
+        return self._final(int(val) if it.metric == "count" else val, whole.unit, it, whole.confidence * 0.95, ev,
+                           trace, whole.assumptions + [f"excluded: {', '.join(n for n, _ in ex)}"], whole.missing)
+
     def _superlative(self, model: str, it: Intent, vals: list, conf: float, trace: list[str], assumptions: list[str],
                      missing: list[str], where_s: str, rank: int = 1) -> Answer:
         """Largest / smallest room (its area, or its name for 'which'/'name of'), or largest minus smallest."""
@@ -1181,6 +1230,9 @@ class IfcSolver(BaseSolver):
 
         from stoa.solvers.ifc.arith import detect
 
+        rest = self._rest(path, model, idx, it, question, trace, ctx)
+        if rest is not None:
+            return rest
         o = detect(question)
         if o is None:
             return None

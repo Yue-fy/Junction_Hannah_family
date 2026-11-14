@@ -180,3 +180,24 @@ def test_room_relations_by_geometry(solver):
     assert no_win.unit == "count" and 0 <= no_win.value < rooms and no_win.confidence <= 0.7
     assert "Flur" in s(ifc, "Which rooms have more than one door?").value
     assert 1 <= s(ifc, "How many windows does the room 'Wohnen' have?").value <= 5
+
+
+@pytest.mark.skipif(not abspath(ESPL).exists(), reason="dataset not available")
+def test_rest_exclusion_and_revit_families(solver):
+    s = solver.solve
+    tot = s(ESPL, "What is the total net floor area of all spaces on '1.korrus'?").value
+    k = s(ESPL, "What is the net floor area of the room 'KORIDOR (119)' on '1.korrus'?").value
+    a = s(ESPL, "How much net floor area (m²) do all the other rooms on '1.korrus' have together, leaving out 'KORIDOR (119)'?")
+    assert a.value == pytest.approx(tot - k, abs=0.01) and a.confidence > 0.8
+    n = s(ESPL, "How many rooms are on '1.korrus' besides 'KORIDOR (119)'?").value
+    assert n == s(ESPL, "How many rooms are there on '1.korrus'?").value - 1
+
+
+def test_revit_family_prefix():
+    from stoa.solvers.ifc.index import Element, type_key_fn
+
+    e = Element(guid="g", cls="IfcBuildingElementProxy", name='Sink Vanity-Round:19" x 19":19" x 19":123456',
+                type_name='19" x 19"')
+    assert type_key_fn([e])(e) == 'Sink Vanity-Round:19" x 19"'
+    e2 = Element(guid="h", cls="IfcWall", name="22_Wall_DD-ytong", type_name="22_Wall_DD-ytong")
+    assert type_key_fn([e2])(e2) == "22_Wall_DD-ytong"

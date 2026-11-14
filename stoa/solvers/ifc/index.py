@@ -141,8 +141,16 @@ def type_key_fn(els: list[Element]):
     type breakdowns: names and types tie on Revit models; where they differ the type object wins 16 of 26 class rows
     (ac20, molio, smiley use types; hitos, sixty5 doors use element names)."""
     def by_type(e: Element) -> str:
-        return strip_id(e.type_name) or strip_id(e.object_type) or strip_id(e.name) or "(untyped)"
-    by_type.how = "the element's IfcTypeObject name (else ObjectType/Name)"
+        t = strip_id(e.type_name) or strip_id(e.object_type) or strip_id(e.name) or "(untyped)"
+        # Revit IFC2X3: the type object holds the TYPE only ('19" x 19"', 'Standard'); the FAMILY is the first part
+        # of the element Name 'Sink Vanity-Round:19" x 19":19" x 19":123' -> 'Sink Vanity-Round:19" x 19"' (W5 03:38)
+        nm = strip_id(e.name) or ""
+        parts = [p.strip() for p in nm.split(":")]
+        fam = parts[0] if len(parts) >= 2 else ""
+        if fam and fam.lower() not in t.lower() and any(p == t.strip() for p in parts[1:]):
+            return f"{fam}:{t}"
+        return t
+    by_type.how = "the element's IfcTypeObject name (else ObjectType/Name), prefixed by the Revit family when the type lacks it"
     return by_type
 
 
