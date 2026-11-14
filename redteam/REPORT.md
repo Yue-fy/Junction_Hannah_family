@@ -200,7 +200,9 @@ Same 205 questions on the code S0 gated at 04:23 (run `20261114-041912-pipeline-
   cascade reaches a VLM, the question text goes to the model and the model obeys it. Guard (sent to W4): an answer
   equal to a number stated in the question → conf ≤ 0.1 (also catches "room 999 (Ballroom)" → 999 m²).
 
-**Patch** `experiments/q/redteam_guards.patch` (not committed to shared code; for W4 and F): (1) in `pipeline.py`,
+**Patch** `experiments/q/redteam_guards.patch` (not committed to shared code; for W4 and F; **superseded**: W4 shipped
+the pipeline hunk as 281a233, F shipped a stricter data.py fix as 62b0d1e (also checks the file size) — do not apply
+the data.py hunk): (1) in `pipeline.py`,
 a deterministic solver's own confidence < 0.5 caps the gate's train rate; (2) in `data.py` `dataset_rel`, cut an
 absolute path at `data/<source>/` only when that file exists in our dataset. pytest 154 passed.
 
