@@ -662,6 +662,62 @@ class IfcSolver(BaseSolver):
                         r"lower) (?:is|lies)|how high (?:is \S+ )?above|(?:height|elevation) of \S+ above)\b|"
                         r"\bhow far\b.{0,30}\b(above|below)\b")
 
+    def _threshold_area(self, path: str, model: str, idx: IfcIndex, it: Intent, question: str, trace: list[str],
+                        ctx: dict) -> Answer | None:
+        """Area of a DERIVED room set (hard3 class, S0 08:22; W1 c6 probe 5): "What percentage of the floor area on S
+        is taken by rooms larger than 20 m²?" = area(rooms > 20) / area(all rooms) x 100 (was the room list at 0.92);
+        "the floor area of the rooms on S without the rooms smaller than 5 m²" = area(rooms >= 5) (was the small
+        rooms' list at 0.3)."""
+        import dataclasses
+
+        from stoa.solvers.ifc.parse import _LOWER as _LOW, _THRESH as _TH
+
+        qf = fold(_QUOTED_RX.sub(" ", question))
+        mt = _TH.search(qf)
+        if not mt or not re.search(r"\b(rooms?|spaces?|raume?|habitaciones|ruimtes?|pieces)\b", qf) or \
+                not re.search(r"\b(area|floor|m2|square|surface|flache|superficie|oppervlak\w*)\b", qf):
+            return None
+        share = re.search(r"\b(percent\w*|share|fraction|proportion|porcentaje|anteil|aandeel|prozent|procent|osuus)\b|%",
+                          qf[:mt.start()] + " " + qf[mt.end():])
+        excl = re.search(r"\b(without|except(?: for)?|excluding|apart from|other than|not counting|ohne|ausser|sin|excepto|"
+                         r"sauf|sans|senza|zonder|behalve)\s+(?:the\s+|all\s+|die\s+|los\s+|les\s+)?(rooms?|spaces?|raume?|"
+                         r"habitaciones|ruimtes?|pieces)\b[^.?]{0,25}$", qf[:mt.end()][: mt.start()] + " ")
+        if not (share or excl):
+            return None
+        low = mt.group(1) in _LOW
+        thr_v = float(mt.group(2).replace(",", "."))
+        op = ("gt" if low else "lt") if excl else ("lt" if low else "gt")
+        base = dict(op=None, which=False, yes_no=False, top_n=False, group_by=None, filters={}, material=None)
+        itp = dataclasses.replace(it, metric="area", kind="space", kinds=["space"], mod="threshold", threshold=(op, thr_v),
+                                  notes=["threshold_sum"], asked_unit=None, **base)
+        st1: list[str] = []
+        part = self._answer(path, model, idx, itp, st1, {"question": question, "threshold_sum": True})
+        if not isinstance(part.value, (int, float)) or isinstance(part.value, bool):
+            return None
+        it.threshold = (op, thr_v)  # the threshold number is used: not a leftover for the guard
+        rel = {"gt": "larger than", "lt": "smaller than"}[op]
+        if excl and not share:
+            ctx["rest_applied"] = True  # the exclusion IS applied (no 'exclusion NOT applied' cap)
+            trace.extend(st1[-3:])
+            trace.append(f"derived set: rooms {rel} {thr_v:g} m² (the question leaves out the others): {part.value} m²")
+            return Answer(value=part.value, unit="m2", confidence=min(part.confidence, 0.85), evidence=part.evidence,
+                          trace=trace, solver=self.name, assumptions=part.assumptions + [
+                              f"rooms left out = those {('smaller' if op == 'gt' else 'larger')} than {thr_v:g} m²"],
+                          missing=part.missing)
+        itw = dataclasses.replace(it, metric="area", kind="space", kinds=["space"], mod=None, threshold=None, notes=[],
+                                  asked_unit=None, **base)
+        st2: list[str] = []
+        whole = self._answer(path, model, idx, itw, st2, {"question": "", "compose": False})
+        if not isinstance(whole.value, (int, float)) or not whole.value:
+            return None
+        pct = float(part.value) / float(whole.value) * 100.0
+        trace.extend(st1[-2:] + st2[-1:])
+        trace.append(f"share: rooms {rel} {thr_v:g} m² {part.value} m² / all rooms {whole.value} m² x 100 = {pct:.2f}%")
+        return Answer(value=round(pct, 3), unit="%", confidence=min(part.confidence, whole.confidence, 0.85),
+                      evidence=part.evidence, trace=trace, solver=self.name,
+                      assumptions=whole.assumptions[:1] + [f"share = floor area of the rooms {rel} {thr_v:g} m² / floor area "
+                                                           "of all rooms x 100"], missing=part.missing)
+
     def _storey_distance(self, model: str, idx: IfcIndex, question: str, trace: list[str]) -> Answer | None:
         """'Floor-to-floor height / vertical distance / height difference between storeys A and B' = |z_B - z_A|
         from IfcBuildingStorey elevations (W1 c5: was the difference of the two storey heights at 0.69)."""
@@ -730,6 +786,8 @@ class IfcSolver(BaseSolver):
                 mc_ = _CMP.search(text_of(question))
                 if mc_:  # the yes/no threshold was used: not a leftover number
                     ctx["outer"], ctx["outer_spans"] = True, [mc_.span()]
+            if ans is None:
+                ans = self._threshold_area(path, model, idx, it, question, trace, ctx)
             if ans is None:
                 ans = self._relation(path, model, idx, it, question, trace, ctx)
             if ans is None:
@@ -2163,7 +2221,7 @@ class IfcSolver(BaseSolver):
                 k = o.basis_kind or (it.kind if it.kind not in (None, "storey") else ("space" if o.basis == "area" else None))
                 if k is None:
                     return None
-                it2 = dataclasses.replace(it, metric=o.basis, kind=k, kinds=[k], asked_unit=o.basis_unit,
+                it2 = dataclasses.replace(it, metric=o.basis, kind=k, kinds=[k], asked_unit=o.basis_unit, attr=None,
                                           side_area=o.basis == "area" and (it.side_area or k == "wall"), **base)
             a, st = run(it2)
             if not num(a):
