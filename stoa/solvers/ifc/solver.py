@@ -2772,7 +2772,11 @@ class IfcSolver(BaseSolver):
                         r"smallest number of)\s+(?:\w+\s+){0,2}?(rooms?|spaces?|doors?|windows?|walls?|columns?|stairs?|"
                         r"slabs?|beams?)\b", qf)
         pre_ = qf[:mc_.start()] if mc_ else ""
-        if mc_ and it.metric in ("area", "text") and not re.search(r"\b(area|m2|square|sq|size|surface|volume|m3|length|"
+        # 'Which floor has the greatest number of doors?' parses as a plain count (Q v25: Italian 'Quale piano ha il maggior
+        # numero di porte?' and its translation -> the whole-model 27 @ 0.97): a which-floor question ranks too
+        if mc_ and (it.metric in ("area", "text") or (it.metric == "count" and it.op is None
+                                                       and re.match(r"\s*(which|what)\b", qf))) \
+                and not re.search(r"\b(area|m2|square|sq|size|surface|volume|m3|length|"
                                                                   r"large|big|small)\b", qf.replace(mc_.group(0), " ")) \
                 and re.search(r"\b(floors?|storeys?|stor(?:y|ies)|levels?)\b", pre_) and not re.search(r"\b(rooms?|spaces?)\b", pre_):
             it.metric = "count"
@@ -3138,7 +3142,8 @@ class IfcSolver(BaseSolver):
                               r"floor|level|geschoss|stockwerk|etage|verdieping|korrus|niveau|planta|piano|kerros|vaning)",
                               qf_)
                 and re.search(r"\b(most|fewest|least|largest|smallest|highest|lowest|meisten|wenigsten|meeste|minste|"
-                              r"more|fewer|less|larger|bigger|greater|smaller)\b", qf_)
+                              r"more|fewer|less|larger|bigger|greater|smaller|greatest|biggest|maggior\w*|minor\w*|piu|"
+                              r"eniten|vahiten|plus|moins)\b", qf_)
                 and storey_mention(ctx.get("question", ""), [s_.name for s_ in idx.storeys])[0] is None):
             # "Which storey has the most doors?": every storey of the model is a candidate
             cand = [s_ for s_ in own_storeys(idx) if s_.name]

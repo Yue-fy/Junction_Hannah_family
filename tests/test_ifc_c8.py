@@ -157,3 +157,18 @@ def test_relative_storey(path, q, want):
 def test_whats_the_difference_is_a_count():
     a = plan_vs_model(ESPL, "If I count the doors on this plan and in the model, what's the difference?")
     assert a is not None and a.value == 0 and a.unit == "count"
+
+
+FRIG = "data/ifc_models/bimspeed-frigento_modello-palazzo-testa-cipriano.ifc"
+
+
+@pytest.mark.skipif(not abspath(FRIG).exists(), reason="frigento not available")
+@pytest.mark.parametrize("q,want", [
+    ("Which floor has the greatest number of doors?", "Piano 1"),  # Q v25: the whole-model 27 @ 0.97
+    ("Which floor has the lowest number of doors?", "Solaio interrato"),
+    ("What is the number of doors?", 27),
+])
+def test_greatest_number_of_is_a_floor_ranking(q, want):
+    from stoa.solvers.ifc.solver import IfcSolver
+
+    assert IfcSolver(plan2d="0", llm="0").solve(FRIG, q).value == want
