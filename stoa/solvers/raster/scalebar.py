@@ -332,6 +332,7 @@ def bars(path: str, backend: str = "local", reread: bool = True, layer: T.TextLa
                                            "the drawn bar)")
                     out[k] = got[0]
     _resolve_ft_m(out)
+    _resolve_unknown(out, tl)
     out.sort(key=lambda b: (-len(b.labels), b.residual / max(1.0, b.labels[-1][1] - b.labels[0][1])))
     _CACHE[key] = out
     return out
@@ -353,6 +354,48 @@ def _resolve_ft_m(bs: list[Bar]) -> None:
                         if x.unit != u:
                             x.notes.append(f"unit {x.unit} -> {u}: the pair's px ratio {r:.3f} = 1 m / 1 ft")
                             x.unit = u
+
+
+# paper widths in mm (long side, short side) for a scale note that names the sheet size: '1:200 (A3)'
+_PAPER = {"A0": (1189, 841), "A1": (841, 594), "A2": (594, 420), "A3": (420, 297), "A4": (297, 210)}
+_METRIC = re.compile(r"\bm²|\bm2\b|\bmetern?\b|\bmeters?\b|\bmetres?\b|\bmètres?\b|\bmetri\b|\bmetros?\b|"
+                     r"\bmittakaava\b|\bmassstab\b|\bmaßstab\b|\béchelle\b|\bscala\b", re.I)
+_IMPERIAL = re.compile(r"\bfeet\b|\bfoot\b|\bsq\.? ?ft\b|\d+'\s*-?\s*\d+\"|\binches\b", re.I)
+
+
+def _resolve_unknown(bs: list[Bar], tl: T.TextLayer) -> None:
+    """A bar whose unit word was not read ('0 2 4 10' with the 'm' missed): (1) the scale note x the paper size it
+    names ('1:200 (A3)': 420 mm across 2480 px at 1:200 = 29.5 px/m) decides m vs ft when the bar fits one within 5%;
+    (2) else a sheet whose texts are metric (m², 'Masse in Metern') and never imperial -> m."""
+    unk = [b for b in bs if b.unit is None]
+    if not unk:
+        return
+    W, H = tl.size
+    text = tl.text()
+    expect = []
+    for it in tl.items:
+        pm = re.search(r"\b(A[0-4])\b", it.text)
+        if not pm:
+            continue
+        for sc in T.parse_scales(it.text):
+            den = sc.get("ratio") or sc.get("denominator")
+            if den:
+                long_mm = _PAPER[pm.group(1)][0]
+                expect.append((max(W, H) / long_mm * 1000 / float(den), f"'{it.text}' on a {max(W, H)} px sheet"))
+    for b in unk:
+        for ppm, why in expect:
+            for u in ("m", "ft"):
+                if abs(b.px_per_unit / (ppm * UNIT_M[u]) - 1) <= 0.05:
+                    b.unit = u
+                    b.notes.append(f"unit not printed with the bar; {why} gives {ppm * UNIT_M[u]:.2f} px per {u}, "
+                                   f"the bar {b.px_per_unit:.2f} -> {u}")
+                    break
+            if b.unit:
+                break
+        if b.unit is None and _METRIC.search(text) and not _IMPERIAL.search(text):
+            b.unit = "m"
+            b.notes.append("unit not printed with the bar; the sheet's texts are metric (m², metres) and never "
+                           "imperial -> assumed metres")
 
 
 def best_bar(path: str, prefer: str | None = None, **kw) -> Bar | None:
