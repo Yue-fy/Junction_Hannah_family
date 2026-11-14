@@ -824,7 +824,9 @@ _LANG_WORDS: dict[str, set[str]] = {
               "teljes".split()),
     "tr": set("kaç ne nedir bu ve bir mi mı alanı katta oda odası toplam kattaki planda".split()),
     "ro": set("câte câți cât care este sunt și pe în din suprafața camere etaj planul acest".split()),
-    "et": set("mitu kui palju on ja kas korrusel ruumi pindala mis".split()),
+    "et": set("mitu kui palju on ja kas korrusel ruumi pindala mis milline millised milliseid protsent protsenti "
+              "protsentides korruse korrus ruum ruumid ruumide ruumil netopinnast pinnast kogupinnast osakaal kokku "
+              "suure moodustab plaanil joonisel hoones mudelis aknaid uksi akende uste".split()),
     "lv": set("cik kāda ir un uz stāvā telpu platība".split()),
     "lt": set("kiek koks yra ir ant aukšte patalpų plotas".split()),
 }
@@ -980,6 +982,9 @@ def _protect(q: str) -> tuple[str, list[str]]:
 def _restore(text: str, spans: list[str]) -> tuple[str, bool]:
     """Put the spans back; a quoted name always comes back with its own quote marks, whether or not the model
     kept the quotes around the placeholder. ok = every placeholder appeared exactly once."""
+    # the model sometimes writes [1] / [[1] for [[1]] (F 08:30: Estonian hard2r rows fell back to the original)
+    text = re.sub(r"\[{1,2}\s*(\d{1,2})\s*\]{1,2}",
+                  lambda m: f"[[{m.group(1)}]]" if 1 <= int(m.group(1)) <= len(spans) else m.group(0), text)
     ok = all(len(re.findall(rf"\[\[{i}\]\]", text)) == 1 for i in range(1, len(spans) + 1))
     for i in range(len(spans), 0, -1):  # [[12]] before [[1]]
         sp = spans[i - 1]
@@ -1063,6 +1068,24 @@ def to_english(question: str, *, keep: Sequence[str] = COVERED_LANGS, force: boo
     except Exception as e:  # noqa: BLE001  (server down: answer on the original rather than fail)
         return Translation(question, guess, False, False, question, f"translation failed ({type(e).__name__})")
     text, ok = _restore(eng, spans) if eng else (question, False)
+    if not ok and spans and lang != "en":
+        # one corrective turn, only on a lost placeholder (R2 08:45: Estonian '... korruse [[1]] netopinnast' came back
+        # as "the floor's net area" without [[1]]); the retry costs a call only on these failures
+        try:
+            need = ", ".join(f"[[{i}]]" for i in range(1, len(spans) + 1))
+            msgs = [{"role": "user", "content": masked}, {"role": "assistant", "content": r.text},
+                    {"role": "user", "content": f"Your translation lost or changed a placeholder. Each of {need} must "
+                                                "appear exactly once, in the role it has in the source. Reply with the "
+                                                "corrected JSON only."}]
+            r2 = chat(msgs, system=_TR_SYSTEM + _TR_GLOSSARY, backend=backend, model=model, max_tokens=300,
+                      temperature=0.0, json_schema=_TR_SCHEMA)
+            eng2 = str((extract_json(r2.text) or {}).get("english", "")).strip()
+            if eng2:
+                t2, ok2 = _restore(eng2, spans)
+                if ok2:
+                    text, ok = t2, True
+        except Exception:  # noqa: BLE001
+            pass
     if lang == "en":
         res = Translation(question, "en", False, True, question)
     elif not ok:
