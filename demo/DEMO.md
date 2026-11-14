@@ -130,6 +130,10 @@ new surface (storeys in everyday words, "whole building" in Swedish, "1,200 euro
   not in test 2), and **prices with a thousands separator**: "€1,500 per door" → 69.0 at 0.92 — type "1500 euros".
   If one of these comes up, open the evidence and say it: "the trace shows what it computed — this is a known
   failure, it's on the failure slide."
+  *If the stage build is newer than bb94fe4 and includes W1 059e9c4 (pre-merge check #4, 08:27):* prices with
+  thousands separators, "how many floors" (5), "top floor" (39) and "1.korrus and 2.korrus together" (88) are right;
+  but "How many doors are on the ground floor?" is then answered at confidence 0.29 (still 46) — prefer
+  "on '1.korrus'". Re-run the pre-flight on the stage build either way.
 - Esplanades rooms are labelled in Estonian; English room words work and the card says which labels it used:
   "How many kitchens are on this floor?" → 10 ('ELUTUBA+KÖÖK'), "How many toilets …?" → 13, "How big is the server
   room?" → 4.26 m². Avoid "laundry room" (PESUKODA isn't mapped; flagged at 0.30).

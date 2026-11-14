@@ -34,6 +34,9 @@ caused by the perturbation, not by the drawing.
      building in total" on a single-floor Swiss plan → that floor's 36 / 4 at 0.99 (W2).
    - v6: "How many floors does this building have?" → 7 at 0.85 (foundation and roof counted, W1); v5: Finnish
      "kellarikerroksessa" → 50 at 0.88 (W1).
+   **Newer (08:27, pre-merge #4 with the owners' 08:16–08:26 commits, 516 rows incl. v15): 11 left** — bug 17,
+   "how many floors", "kellarikerros" and the 7th-floor premises fixed; v15 shows bug 18 on Swiss plans is 0/10
+   (5 more at ≥ 0.95); W1 059e9c4 drops 7 right "ground floor" answers to 0.29 (see "Pre-merge check #4").
    Unscored but visible: two-part questions to dxf answer one part at 0.60 ("3" with unit m² for "how many rooms
    and what is their total area", bug 20, W2); on scans, unanswerable questions still get an invented number (514
    seats at 0.34) with no reason given (v10, W4).
