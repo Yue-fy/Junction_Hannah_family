@@ -414,6 +414,15 @@ floor?" on the esplanades demo sheet (1.–5.korrus) → **46 at 0.98**, the she
 is flagged at 0.29 (W1). CubiCasa "bedrooms on the second floor" → 3 at 0.75. Ordinals that exist work ("3rd floor"
 → 42, "floor 5" → 39, at 0.53).
 
+## v9 (05:03): a Finnish judge on the demo drawings — 14 Qs, run `20261114-050255-pipeline-v9-e629` (night 753eccb)
+Junction is in Helsinki. Finnish counts storeys from the ground ('1. kerros' = esplanades '1.korrus').
+**11/14 right, none wrong at conf ≥ 0.8.** Right: windows "ensimmäisessä kerroksessa" 55 (0.88), rooms / columns
+"tässä kerroksessa" 50 / 37, doors "viidennessä kerroksessa" 39 (0.53), "Paljonko tämän kerroksen ovet maksavat
+yhteensä, jos yksi ovi maksaa 450 euroa?" 20,700 (ifc rules, 0.75), Swiss apartments 4, apartment B 80.83, A + B
+161.17, WC + washbasins 8 (0.95), CubiCasa sauna yes (0.96), WC seats 2. Wrong, flagged: "Mikä on käytävän KORIDOR
+(119) pinta-ala?" → 142.24 at 0.30 (all corridors summed; same as the unquoted English), "Montako kerrosta
+rakennuksessa on?" → 7 at 0.75, Swiss "Montako ovea pohjapiirroksessa on?" → 0 at 0.32 (dxf's LLM-written query).
+
 ## Verification on night 753eccb (05:00; W1 74728cf cross-language check, R2 glossary, W2 15ad113, W4 1431466)
 Run `20261114-045855-pipeline-questions-93c5`, all 418 rows; subsets by `subset_stats.py <run> N`.
 
@@ -441,8 +450,8 @@ many floors" → 7; v8 scope premises ×5.
 - Rotated, grayscale, heavily compressed and half-resolution copies of a plan: 30/30 right, at the same confidence.
 
 ## Re-run
-`questions.jsonl` now has 418 rows: v1 (174) + v2 (31) + v3 Swiss compositions (42) + v4 CubiCasa compositions (36) +
-v5 natural references (70) + v6 judge questions on the demo drawings (21) + v7 scope words in 9 languages (36) + v8 scope premises (8) = 418; earlier rows are byte-identical across builds (checked with cmp), so runs on the first 205 /
+`questions.jsonl` now has 432 rows: v1 (174) + v2 (31) + v3 Swiss compositions (42) + v4 CubiCasa compositions (36) +
+v5 natural references (70) + v6 judge questions on the demo drawings (21) + v7 scope words in 9 languages (36) + v8 scope premises (8) + v9 Finnish judge (14) = 432; earlier rows are byte-identical across builds (checked with cmp), so runs on the first 205 /
 283 rows compare directly (`python3 $JUNCTION_SHARED/artifacts/Q/subset_stats.py <run> 283`). Build with
 `PYTHONHASHSEED=0 PYTHONPATH=.`; v5 calls the ifc solver for its gold (deterministic, < 1 s per row).
 ```

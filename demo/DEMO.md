@@ -123,6 +123,10 @@ By source on sealed test: Swiss vector plans 98 % areas / 100 % counts; IFC mode
 - Swiss plan — safe: apartments (4), "combined area of apartments A and B" (161.17 m²), "how many square feet is
   apartment B" (870), "by how many m² is B larger than A" (0.49). Avoid "How big is the Küche?" on floors with several
   kitchens (sums them, bug 14).
+- A Finnish judge (measured on 753eccb, v9: 11/14, nothing wrong at ≥ 0.8): "Kuinka monta huonetta tässä kerroksessa
+  on?" 50, "Montako ikkunaa ensimmäisessä kerroksessa on?" 55, "Paljonko tämän kerroksen ovet maksavat yhteensä, jos
+  yksi ovi maksaa 450 euroa?" 20,700, "Mikä on asunnon B pinta-ala?" 80.83, "Onko asunnossa sauna?" kyllä/yes. Avoid
+  "Mikä on käytävän KORIDOR (119) pinta-ala?" (142 at 0.30) and "Montako kerrosta rakennuksessa on?" (7).
 - CubiCasa plan — "How big is this apartment?" gives ≈ 84 m² at confidence 0.05 with "no known scale: estimate" —
   a good moment to show "we know what we don't know".
 

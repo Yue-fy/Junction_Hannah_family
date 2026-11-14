@@ -549,6 +549,29 @@ def main():
     for q, g in [("How many doors are on the 3rd floor?", 42), ("How many doors are on floor 5?", 39)]:
         out.append(row(E, q, g, "count", "count", "scope-ordinal", "same", note="Estonian 3./5.korrus"))
 
+    # ===== v9 (05:05): a Finnish judge on the demo drawings (Junction is in Helsinki) ============================
+    # Finnish counts storeys from the ground: '1. kerros' = the ground floor = esplanades '1.korrus' (Estonian, same).
+    fi_judge = [
+        (E, "Montako ikkunaa ensimmäisessä kerroksessa on?", 55, "count", "count", "1. kerros = 1.korrus 55"),
+        (E, "Kuinka monta huonetta tässä kerroksessa on?", 50, "count", "count", "IfcSpace in 1.korrus"),
+        (E, "Montako pilaria tässä kerroksessa on?", 37, "count", "count", "IfcColumn in 1.korrus"),
+        (E, "Mikä on käytävän KORIDOR (119) pinta-ala?", 63.84, "m2", "area", "dataset gold 63.84"),
+        (E, "Paljonko tämän kerroksen ovet maksavat yhteensä, jos yksi ovi maksaa 450 euroa?", 20700, None, "count",
+         "46 x 450 (price; scored as a number)"),
+        (E, "Montako kerrosta rakennuksessa on?", 5, "count", "count", "1.-5.korrus (+ foundation and roof levels)"),
+        (E, "Montako ovea viidennessä kerroksessa on?", 39, "count", "count", "5. kerros = 5.korrus 39"),
+        (SW, "Montako asuntoa tässä kerroksessa on?", 4, "count", "count", "dataset apartments 4"),
+        (SW, "Montako ovea pohjapiirroksessa on?", 36, "count", "count", "dataset doors 36"),
+        (SW, "Mikä on asunnon B pinta-ala?", 80.83, "m2", "area", "dataset apartment B 80.83"),
+        (SW, "Montako WC-istuinta ja pesuallasta piirustuksessa on yhteensä?", 8, "count", "count", "WC 4 + basins 4"),
+        (SW, "Kuinka monta neliötä asunnot A ja B ovat yhteensä?", 161.17, "m2", "area", "80.83 + 80.34"),
+        (CC, "Onko asunnossa sauna?", "yes", None, "text", "dataset saunas 1"),
+        (CC, "Montako WC-istuinta asunnossa on?", 2, "count", "count", "dataset WC seats 2"),
+    ]
+    for path, q, g, unit, typ, note in fi_judge:
+        kind = "yesno:fi-judge" if typ == "text" else "judge-fi:" + path.split("/")[1].split("_")[0]
+        out.append(row(path, q, g, unit, typ, kind, "same", note=note))
+
     with open(OUT, "w", encoding="utf-8") as f:
         for r in out:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
