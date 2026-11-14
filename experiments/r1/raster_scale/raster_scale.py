@@ -264,6 +264,7 @@ def main() -> None:
 
     # ---- the 'typical apartment' guess (what a VLM does with no scale): median printed total of the other half
     tots = [r for r in ok if r["truth_kind"] == "total" and r["door_px"] and r["n_doors"] >= a.min_doors]
+    blend_cal = {}
     if len(tots) >= 10:
         g_err, d_err = [], []
         for half in (True, False):
@@ -294,6 +295,19 @@ def main() -> None:
                     b_err.append(abs(math.exp(wh * math.log(de) + (1 - wh) * math.log(g)) / sum(r["totals"]) - 1))
             print(f"  blend w={w}{ws if ws else ''}: err p50 {100 * q(b_err, .5):.1f}%, within 10% {100 * sum(e <= .1 for e in b_err) / len(b_err):.0f}%,"
                   f" within 20% {100 * sum(e <= .2 for e in b_err) / len(b_err):.0f}%")
+        # final blend for calib.json: all plans; weight from variances; band = quantiles of log(true / blend)
+        g_all = st.median([sum(r["totals"]) for r in tots])
+        c_all = st.median([math.log(r["door_px"] / r["truth"]) for r in tots])
+        vd = st.pvariance([-2 * math.log(r["door_px"] / math.exp(c_all) / r["truth"]) for r in tots])
+        vg = st.pvariance([math.log(g_all / sum(r["totals"])) for r in tots])
+        w_all = vg / (vg + vd)
+        lres = [math.log(sum(r["totals"]) / math.exp(w_all * math.log(r["interior_px"] / (r["door_px"] / math.exp(c_all)) ** 2)
+                                                      + (1 - w_all) * math.log(g_all))) for r in tots]
+        blend_cal = {"typical_apartment_m2": round(g_all, 1), "blend_w": round(w_all, 3),
+                     "blend_log_true_over_est_80": [round(q(lres, .1), 4), round(q(lres, .9), 4)],
+                     "n_totals": len(tots)}
+        print(f"  final blend: typical {g_all:.1f} m2, w {w_all:.2f}, 80% band true/est x[{math.exp(q(lres, .1)):.2f}, "
+              f"{math.exp(q(lres, .9)):.2f}] (in-sample)")
         print(f"apartment total area, {len(tots)} plans (cross-fit): typical-apartment guess err p50 "
               f"{100 * q(g_err, .5):.1f}% (within 10% {100 * sum(e <= .1 for e in g_err) / len(g_err):.0f}%) vs door "
               f"scale p50 {100 * q(d_err, .5):.1f}% (within 10% {100 * sum(e <= .1 for e in d_err) / len(d_err):.0f}%, "
@@ -312,7 +326,8 @@ def main() -> None:
                "within2_area_check": round(d["within2_area"], 3),
                "within20_area_check": round(d["within20_area"], 3), "area_err_p50_check": round(d["area_err_p50"], 4),
                "coverage80_crossfit": round(d["coverage80_crossfit"], 3), "min_doors": a.min_doors,
-               "source": "experiments/r1/raster_scale/raster_scale.py on TRAIN cubicasa plans with printed areas"}
+               "source": "experiments/r1/raster_scale/raster_scale.py on TRAIN cubicasa plans with printed areas",
+               **blend_cal}
         Path(__file__).with_name("calib.json").write_text(json.dumps(out, indent=1) + "\n")
         print("wrote", Path(__file__).with_name("calib.json"), out)
 
@@ -321,7 +336,7 @@ def main() -> None:
     def room_w(r, p):  # implied door opening (m) for one printed room
         return r["door_px"] / math.sqrt(p["px"] / p["m2"])
     pool = [r for r in rows if r["door_px"] and r["n_doors"] >= a.min_doors and r["per_room"]]
-    errs, inband, seg = [], 0, []
+    errs, inband, seg, by_cls = [], 0, [], {}
     for half in (True, False):
         fit = [math.log(room_w(r, p)) for r in pool if r["fit"] == half for p in r["per_room"]]
         if len(fit) < 10:
@@ -335,6 +350,7 @@ def main() -> None:
             for p in r["per_room"]:
                 ratio = p["px"] / s_est ** 2 / p["m2"]  # est / printed
                 errs.append(abs(ratio - 1))
+                by_cls.setdefault(p["cls"], []).append(abs(ratio - 1))
                 inband += math.exp(2 * lo) <= 1 / ratio <= math.exp(2 * hi)  # true/est = exp(2r)
                 if r.get("truth_kind") == "total":  # segmentation-only error at the plan's (non-circular) true scale
                     seg.append(abs(p["px"] / r["truth"] ** 2 / p["m2"] - 1))
@@ -344,6 +360,8 @@ def main() -> None:
               f"{math.exp(st.median(allw)):.3f} m): err p50 {100 * q(errs, .5):.1f}%, within 10% "
               f"{100 * sum(e <= .1 for e in errs) / len(errs):.0f}%, within 20% {100 * sum(e <= .2 for e in errs) / len(errs):.0f}%, "
               f"printed value inside the 80% band {100 * inband / len(errs):.0f}%")
+        print("  by CC5K region class: " + ", ".join(f"{k} n={len(v)} p50 {100 * q(v, .5):.0f}%"
+                                                      for k, v in sorted(by_cls.items(), key=lambda kv: -len(kv[1]))))
         if a.write_calib:
             cp = Path(__file__).with_name("calib.json")
             d = json.loads(cp.read_text()) if cp.exists() else {}

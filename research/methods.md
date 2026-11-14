@@ -383,6 +383,46 @@ on train_gate (`threshold_side.py`, `crosscheck.threshold_confidence()`):
 
 The pipeline today gives "at least two WC seats?" 0.82 whether the answer is right or wrong (hard2: 0.82 vs 0.79).
 
+### 8e. Area on a raster plan with no scale: printed areas first, then door widths (measured)
+Stoa's own example of "a best estimate, not a refusal" is a plan with no scale ("assumed standard door width 0.9 m").
+Today the pipeline sends a cubicasa area question to the base VLM. It reads a printed area correctly, but at
+confidence 0.32 and with no evidence. With nothing printed, it guesses (74 m², conf 0.05) with no assumptions.
+
+**Ground truth without dataset labels.** Many cubicasa plans print areas: a room's ("MH 13.0 m²") or the
+apartment's ("3h+k+s 85 m2"). One local VLM call per plan reads them with boxes (`find_areas.py`, __PREV__ of
+__NSAMP__ TRAIN plans print at least one). A printed room area inside one CC5K room region gives that plan's true
+px/m (median over ≥ 2 consistent rooms); a printed apartment total over all interior regions gives it too. Rule: any
+area ≥ 40 m² or "NhK…" text is a total (no room is that big; several apartment totals are summed).
+
+**Estimators, 2-fold cross-fit by plan** (`raster_scale.py`; constant and band fitted on one half, errors on the other):
+
+__TABLE__
+
+The implied door opening is __DOOR__ m (IQR), i.e. Finnish 8M–9M interior doors, so the constant is physical, not
+just fitted. Wall thickness and a "typical plan resolution" are much worse: plan resolutions vary 3–4× (true px/m
+p10–p90 __RES__).
+
+**Shrinkage helps the apartment total.** A log-blend of the door estimate with the typical training apartment
+(__TYP__ m²), weighted by the two error variances (no grid search), lowers the cross-fit median error from __D16__ to
+__BL__. The helper uses the blend for whole-apartment areas and states it in `assumptions`.
+
+**Single rooms are harder.** A room's area from its CC5K region errs by __ROOM__ (median), and the 80% band covers
+only __RCOV__: regions are fragments or merges of the printed room. Rooms get their own constant (__W0R__ m;
+regions are smaller than printed net areas) and a wide band, so state the band.
+
+**Within the 2% scoring tolerance:** ~2% of plans. A door-derived area is an honest estimate, not a scored answer.
+The value is in the interval, the assumptions and the evidence (doors measured, regions summed).
+
+**Use** (`experiments/r1/raster_scale/scale.py`, CC5K caches, no torch; D8: cc5k=1 path; CC BY-NC):
+1. `printed_areas(path)` (one VLM call): if the asked room or apartment prints its area, answer that number, with
+   the text box as evidence and the CC5K region class under it. Cross-check it with step 2: inside the band → ✓.
+2. Otherwise `estimate_area(path, "apartment" | "kitchen" | …)` → value, `interval80`, confidence = P(within 2%),
+   assumptions ("no scale printed; assumed the median door opening is 0.81 m, 7 doors measured", shrinkage), missing
+   ("a scale bar, dimension strings or printed room areas"), door boxes and region boxes as evidence.
+Doors do not transfer to other raster styles (swiss PNG 3%, Revit 0–12%), so this is for cubicasa-style plans only.
+Leak note (D8): the CC5K maps on our TRAIN plans are from a model that saw most of them in pretraining; the truth is
+printed text, not CC5K labels. Error on the few plans from CC5K's own val/test lists: __LEAK__.
+
 ### 8f. What the cubicasa second reader is worth (measured; cost cascade, 8b)
 The pipeline runs raster (VLM label reader) as a second opinion on every LoRA count and moves the confidence by
 agreement. That made cubicasa ~20× more expensive (S0 03:56: $0.02 → $0.42 per 1k). The values never change, so

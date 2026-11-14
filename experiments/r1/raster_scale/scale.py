@@ -52,13 +52,31 @@ def _rel(path: str) -> str:
     return p[i:] if i >= 0 else p
 
 
+LIVE_MAPS = ART / "cc5k_seg_live"
+
+
+def _record(path: str, live: bool = True) -> dict | None:
+    """Cached CC5K record, else (live=True) one CPU run of predict.py via the adapter (also saves the room map)."""
+    rec = _counts().get(_rel(path))
+    if rec or not live:
+        return rec
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "cc5k_model"))
+    try:
+        import adapter
+        os.environ.setdefault("CC5K_SAVE_MAPS", str(LIVE_MAPS))
+        return adapter.counts_for(str(path))
+    except Exception:  # noqa: BLE001  (no torch env / weights: no estimate)
+        return None
+
+
 def door_scale(path: str, min_doors: int = 2, room: bool = False) -> dict | None:
     """px per metre from the median CC5K door opening, or None (not a cached plan, or fewer than min_doors).
 
     room=False: constant + band fitted on printed APARTMENT totals (use for whole-plan areas and lengths).
     room=True: constant + band fitted on printed ROOM areas vs single CC5K regions (wider: region matching is noisy).
     """
-    rec = _counts().get(_rel(path))
+    rec = _record(path)
     if not rec:
         return None
     boxes = rec.get("counts", {}).get("doors", {}).get("boxes", [])
@@ -92,6 +110,8 @@ def room_regions(path: str, min_px: int = 200) -> list[dict]:
     import numpy as np
 
     npz = ART / "cc5k_seg" / f"{Path(path).stem}.npz"
+    if not npz.exists():
+        npz = LIVE_MAPS / f"{Path(path).stem}.npz"
     if not npz.exists():
         return []
     rooms = np.load(npz)["rooms"]
@@ -144,11 +164,54 @@ def estimate_area(path: str, target: str = "apartment") -> dict | None:
     best = px / sc["px_per_m"] ** 2
     lo, hi = sc["area_factor_80"]
     what = "all interior rooms (balconies excluded)" if cls is None else f"{len(use)} '{cls}' region(s)"
+    c = _calib()
+    shrink = []
+    if cls is None and "blend_w" in c:  # whole apartment: shrink toward the typical apartment (cross-fit: less error)
+        door_only = best
+        w, g = c["blend_w"], c["typical_apartment_m2"]
+        best = math.exp(w * math.log(best) + (1 - w) * math.log(g))
+        lo, hi = (math.exp(v) for v in c["blend_log_true_over_est_80"])
+        shrink = [f"door-scale area {door_only:.1f} m² shrunk toward the typical training apartment ({g:.0f} m²) "
+                  f"with weight {1 - w:.2f}, because the door scale alone errs by ~{100 * c['area_err_p50_check']:.0f}% (median)"]
     return {
         "value": round(best, 1), "unit": "m2", "interval80": [round(best * lo, 1), round(best * hi, 1)],
         "confidence": sc["confidence"],
         "regions": [{"cls": r["cls"], "m2": round(r["px"] / sc["px_per_m"] ** 2, 1), "bbox": r["bbox"]} for r in use],
         "door_boxes": sc["boxes"],
-        "assumptions": sc["assumptions"] + [f"area = pixel area of {what} from the CubiCasa5K room segmentation"],
+        "assumptions": sc["assumptions"] + [f"area = pixel area of {what} from the CubiCasa5K room segmentation"]
+        + shrink,
         "missing": sc["missing"],
     }
+
+
+def printed_areas(path: str, backend: str = "local") -> list[dict]:
+    """Areas printed on the plan ('12,5 m²', '3h+k+s 85 m2') with image-px boxes: ONE local VLM call (cached).
+
+    When the plan prints the asked area, that number is the answer (exact) and its box is the evidence; the door
+    estimate above is then only a cross-check ('door scale says 79 m², 80%: 59–120 ✓'). Each item gets the CC5K
+    room class under its box when the map is cached ('room'), and 'total' when it looks like an apartment total.
+    """
+    import sys
+    from PIL import Image
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+    from stoa import llm
+    from experiments.r1.raster_scale.find_areas import PROMPT, parse, upscale
+    from experiments.r1.raster_scale.raster_scale import TOTAL, instances, room_at
+
+    data = Path(os.environ.get("STOA_DATA", "/home/fangy4/work/projects/junction-data/stoa-full/junction-dataset"))
+    p = Path(path) if Path(path).is_absolute() else data / _rel(path)
+    img = Image.open(p).convert("RGB")
+    r = llm.chat(PROMPT, images=[upscale(img)], backend=backend, max_tokens=600, max_pixels=6_000_000, cache=True,
+                 extra_body={"repetition_penalty": 1.05})
+    items = parse(r.text, *img.size)
+    npz = ART / "cc5k_seg" / f"{Path(path).stem}.npz"
+    if npz.exists():
+        import numpy as np
+        inst, meta = instances(np.load(npz)["rooms"])
+        for it in items:
+            rid = room_at(inst, it["box"])
+            it["room"] = meta[rid]["cls"] if rid else None
+    for it in items:
+        it["total"] = bool(TOTAL.search(it["text"])) or it["m2"] >= 40
+    return items
