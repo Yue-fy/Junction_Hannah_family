@@ -26,3 +26,16 @@ Has the IFC model got more doors on this storey than the floor plan?
 By how many windows does the model exceed this plan on '1.korrus'?
 How many fewer windows does this plan show than the model has?
 Does the model have more windows than doors on '1.korrus'?
+# second round (link rows of Q v23 / R1 probe_kg wrong in plan_vs_model)
+Are there windows in the 3D model that this sheet does not draw?
+Are there doors in the model that this plan does not show?
+By how many doors does this plan differ from the IFC model?
+By how many windows does this plan differ from the IFC model?
+Does the plan differ from the model in the number of windows?
+How many windows on '1.korrus' are in the model but not drawn on this plan?
+Which windows of the model does this plan not show?
+Is there a discrepancy between this plan and the IFC model in the number of doors?
+Is there a mismatch between the plan and the model for windows on '1.korrus'?
+Unterscheiden sich Grundriss und IFC-Modell bei der Anzahl der Fenster?
+Do the plan and the IFC model agree on the number of windows?
+Do the floor plan and the model agree or differ on the doors?
