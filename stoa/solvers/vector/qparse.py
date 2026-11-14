@@ -58,7 +58,7 @@ CONCEPTS: dict[str, tuple[list[str], list[str]]] = {
                ["Treppenhaus", "Cage d'escalier", "Vano scala"]),
     "lift": ([r"lifts?", r"elevators?", r"aufz[üu]ge?", r"ascenseurs?", r"ascensor[ei]"], ["Lift", "Ascenseur", "Ascensore"]),
     "cellar": ([r"cellars?", r"basement\s+compartments?", r"kellerabteile?", r"compartiments?\s+caves?"],
-               ["Compartiment cave"]),
+               ["Compartiment cave", "Vano cantina", "Kellerabteil", "Keller", "Cave", "Cantina"]),
     "room": ([r"zimmer", r"pi[èe]ces?", r"stanz[ae]"], ["Zimmer", "Pièce", "Stanza", "Raum"]),
 }
 
@@ -343,8 +343,8 @@ def parse(question: str, vocab: list[str] | None = None, room_numbers: set[str] 
     # area questions -------------------------------------------------------------------------------
     if is_area and not (is_count and not re.search(r"m²|m2\b|square|ft|area|fl[äa]che|surface|superficie|yta\b|ytan\b|arean\b|oppervl", ql)):
         qtype = "area"
-        if not labels and not concept_terms and not nums:
-            labels = bare_labels(q, vocab)
+        if not labels and not nums:
+            labels = bare_labels(q, vocab) or labels
         scoped_label = apts and (labels or concept_terms) and not re.search(NEG_APT_W, ql) and \
             not re.search(SHARE_W, ql) and not re.search(TIMES_W, ql) and len(apts) == 1
         if nums:
@@ -438,6 +438,8 @@ def parse(question: str, vocab: list[str] | None = None, room_numbers: set[str] 
                     break
         # "bath" inside "bathtub" is the same object; "apartment" in "apartment A" is not a count of apartments
         terms = [Term("count", k, p) for k, p in sorted(found.items(), key=lambda kv: kv[1])]
+        if not terms:
+            terms = [Term("count_label", lab, p) for lab, p in bare_labels(q, vocab)]
         if not terms:
             for c, (words, labs) in CONCEPTS.items():
                 for p in _find_words(words, ql)[:1]:
@@ -666,4 +668,6 @@ ATTR_W = re.compile(r"\bfire\b|feuer|\bincendi|\bbrand(?:schutz|widerstand)|u-?v
                     r"\bwho\b|\bwer\b|\bqui\b|\bchi\b|\bbuilt\b|\byear\b|\bbaujahr|\bcolou?r|\bfarbe|couleur|colore|"
                     r"\bbrand\b|manufactur|hersteller|fabricant|\brent\b|\bmiete\b|\bloyer\b|insulation|d[äa]mmung|"
                     r"isolation|temperature|acoustic|schall|\bvolume\b|\bvolumen\b|\bweight\b|gewicht|\bpoids\b|"
-                    r"\bwidth\s+of\s+(?:the\s+)?(?:door|window)|\bopening\s+direction|\bswing\b|\bhinge", re.I)
+                    r"\bwidth\s+of\s+(?:the\s+)?(?:door|window)|\bopening\s+direction|\bswing\b|\bhinge|"
+                    r"how\s+(?:tall|high)\b|\btall\b|\bfinish(?:es|ing)?\b|flooring|floor\s+covering|bodenbelag|"
+                    r"rev[êe]tement|rivestimento", re.I)

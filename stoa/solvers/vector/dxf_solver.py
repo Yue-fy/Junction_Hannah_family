@@ -146,6 +146,18 @@ def _echo(question: str, value) -> str | None:
     return None
 
 
+def _in_tables(value: str, tables: dict) -> bool:
+    """A text answer is grounded when it is yes/no, an apartment/room reference, or occurs in some table cell."""
+    v = value.strip().lower()
+    if v in ("yes", "no") or re.fullmatch(r"(?:apartment|room)\s+\S+(?:\s*\(.*\))?", v):
+        return True
+    for df in tables.values():
+        for col in df.columns:
+            if df[col].dtype == object and df[col].astype(str).str.lower().str.contains(re.escape(v), regex=True).any():
+                return True
+    return False
+
+
 def _translate(question: str, backend: str = "local"):
     """stoa.llm.to_english for languages outside en/fi/de/fr/it (one local LLM call; names and numbers are masked
     and restored byte-identical). None when nothing was translated or a name/number was lost."""
@@ -715,6 +727,10 @@ class DxfSolver(BaseSolver):
         conf = 0.6 if evidence else 0.45
         missing = [] if evidence else ["the query did not report which rooms it used"]
         echo = _echo(question, value)
+        if isinstance(value, str) and not echo and not _in_tables(value, tables):
+            conf = min(conf, 0.15)  # e.g. "floor finish of the Bagno" -> "tile": typed by the model, in no table
+            missing.append(f"the answer {value!r} does not occur in the drawing's tables (typed by the model)")
+            trace.append("guard: text answer not found in any table -> confidence <= 0.15")
         if echo:
             conf = min(conf, 0.15)  # Q red team: "fire rating of the entrance door of apartment A" -> "apartment A"
             missing.append(f"the answer {value!r} only repeats {echo} named in the question; the tables do not hold "
