@@ -172,6 +172,11 @@ paired IFC's IfcWindow/IfcDoor counts as ground truth (`resbim_check.py`):
 Windows transfer to an unseen style; doors don't (Revit draws thin swing arcs). `predict.py` now resizes
 images whose long side is over 3000 px to 2000 px and maps the boxes back to original pixels.
 
+**Second unseen style: swiss PNG twins** (A3 at 150 dpi, gold from the DXF; 145 plans in R2's count splits;
+`swiss_png_check.py`). Windows: 26% exact, 43% within ±1, against the LoRA's 12% and the base VLM's 8% on the same
+dev questions. Sinks: 34% (LoRA 46%). WC seats: 7%. Doors: 0%, because the model finds about 3% of them. Across both
+unseen styles, the detector transfers for windows only.
+
 **Room segmentation as a cross-check (Stoa point 4).** Room-type regions = components of room class
 (Bed Room 5, Bath 6, Kitchen 3, Outdoor 1) ≥ min_frac·H·W (val-chosen: 1.2e-2, 1.2e-2, 1.6e-2, 2.4e-2;
 `config.ROOMS_FROZEN`). On cc5k_heldout the pipeline's answer is right 92–96% of the time when it agrees
