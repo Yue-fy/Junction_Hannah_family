@@ -370,3 +370,4 @@ select, input[type="search"], textarea { border: 1px solid var(--line); border-r
 
 /* calibrated 90% range under a count (R1 interval90) */
 .value .range { display: block; margin-top: 4px; font-size: 12px; font-weight: 600; letter-spacing: 0; color: var(--muted); }
+.ev-item.contrast .n { background: #7b4fd6; color: #fff; }

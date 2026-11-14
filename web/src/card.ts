@@ -126,7 +126,8 @@ function evLabel(ev: Evidence[], g: { idx: number[]; first: number }, n: number,
   const where = has2D && has3D ? "2D + 3D" : has3D ? "3D" : has2D ? "2D" : "";
   const projected = items.some((x) => /projected: not drawn/i.test(x.note ?? ""));
   const files = new Set(items.map((x) => x.file.split("/").pop()));
-  return `<li class="ev-item" data-i="${g.idx.find((i) => ev[i].bbox) ?? g.first}" title="${esc([...files].join(" · "))}"><span class="n">${n}</span><span class="t">${step}${esc(note.replace(/\s*\|\s*projected: not drawn on this plan\s*$/i, ""))}${projected ? `<span class="proj" title="Not drawn on this plan (cut at 1.2 m): box = the element's footprint from the IFC model">projected</span>` : ""}</span><span class="w">${where}</span></li>`;
+  const notIn = items.some((x) => /^NOT in the answer:/.test(x.note ?? ""));
+  return `<li class="ev-item${notIn ? " contrast" : ""}" data-i="${g.idx.find((i) => ev[i].bbox) ?? g.first}" title="${esc([...files].join(" · "))}"><span class="n">${n}</span><span class="t">${step}${esc(note.replace(/\s*\|\s*projected: not drawn on this plan\s*$/i, ""))}${projected ? `<span class="proj" title="Not drawn on this plan (cut at 1.2 m): box = the element's footprint from the IFC model">projected</span>` : ""}</span><span class="w">${where}</span></li>`;
 }
 
 /** Long text answers (often "- item" lists from the model fact card): a compact list, folded after 8 lines. */

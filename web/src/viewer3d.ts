@@ -46,6 +46,8 @@ function ifcApi(): Promise<WebIFC.IfcAPI> {
 }
 
 const HL = new THREE.Color("#ff6a13");
+/** Elements shown for contrast, not as the answer's evidence (e.g. same-kind fixtures a text answer leaves out). */
+const HL2 = new THREE.Color("#7b4fd6");
 
 export class Viewer3D {
   readonly el: HTMLElement;
@@ -385,7 +387,7 @@ export class Viewer3D {
   }
 
   /** Highlight elements by GlobalId; returns how many were found. Storey GUIDs select that storey. */
-  highlight(guids: string[], frame = true): number {
+  highlight(guids: string[], frame = true, contrast: Set<string> = new Set()): number {
     this.ensureGuidIndex();
     for (const o of this.hlGroup.children) (o as THREE.Mesh).geometry.dispose();
     this.hlGroup.clear();
@@ -394,12 +396,14 @@ export class Viewer3D {
       side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2, depthTest: true });
     const spaceMat = new THREE.MeshLambertMaterial({ color: HL, emissive: HL, emissiveIntensity: 0.4, transparent: true, opacity: 0.55,
       side: THREE.DoubleSide, depthWrite: false });
+    const mat2 = new THREE.MeshLambertMaterial({ color: HL2, emissive: HL2, emissiveIntensity: 0.35, transparent: true, opacity: 0.92,
+      side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2, depthTest: true });
     for (const gid of guids) {
       const id = this.guidToId.get(gid);
       if (id === undefined) continue;
       if (this.storeys.some((s) => s.id === id)) continue; // storey context, not an element
       const isSpace = this.spaceBuckets.has(id);
-      const m = this.elementMesh(id, isSpace ? spaceMat : mat);
+      const m = this.elementMesh(id, isSpace ? spaceMat : contrast.has(gid) ? mat2 : mat);
       if (m) {
         this.hlGroup.add(m);
         found++;

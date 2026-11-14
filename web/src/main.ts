@@ -511,7 +511,7 @@ async function showAnswer(a: Answer, roundTripMs: number) {
     const miss = missed.map((n) => `${n.name} ×${n.guids.length}`).join(", ");
     ev.push(...missed.flatMap((n) => n.guids.map((g, i) => ({
       file: askedPath, ifc_guid: g,
-      note: `NOT in the answer: ${n.name} (${i + 1} of ${n.guids.length})${i === 0 && n === missed[0] ? `; cross-check: the model also has ${miss} of the same kind, which the answer does not mention ✗` : ""}`,
+      note: `NOT in the answer: ${n.name} (${i + 1} of ${n.guids.length})${i === 0 && n === missed[0] ? `; cross-check: the model also has ${miss} of the same kind (purple in 3D), which the answer does not mention ✗` : ""}`,
     }) as Answer["evidence"][number])));
     await showAnswer({
       ...a, evidence: [...ev, ...a.evidence],
@@ -527,7 +527,8 @@ function applyEvidence3D(a: Answer) {
   if (!v || v.file !== state.ifc) return;
   const guids = a.evidence.filter((e) => e.ifc_guid).map((e) => e.ifc_guid!);
   const storeyIds = new Set(guids.map((g) => v.storeyOfGuid(g)).filter((s): s is number => s !== null));
-  const n = v.highlight(guids, true);
+  const contrast = new Set(a.evidence.filter((e) => e.ifc_guid && /^NOT in the answer:/.test(e.note ?? "")).map((e) => e.ifc_guid!));
+  const n = v.highlight(guids, true, contrast);
   if (storeyIds.size === 1) {
     const s = [...storeyIds][0];
     v.setStorey(s);
