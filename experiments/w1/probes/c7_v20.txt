@@ -1,0 +1,47 @@
+# c7 (09:45) Q v20 rows (link questions in new wordings; gold from Q) + own variants (gold from file names / GUID tags)
+PATH bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf
+# gold no
+Is the window count on this sheet consistent with the BIM model?
+# gold 3
+How many of the model's windows on '1.korrus' does this drawing not show?
+# gold 3 (own)
+How many windows of the model are not shown on this plan?
+# gold 0 (own; all 46 doors drawn)
+Which doors of the model on '1.korrus' does this plan not show?
+# gold no / yes
+Are all the windows of '1.korrus' in the IFC model drawn on this plan?
+Are all the doors of '1.korrus' in the IFC model drawn on this plan?
+# gold yes / no
+Vastaako tämän pohjapiirustuksen ovien määrä IFC-mallia?
+Kas sellel plaanil on sama palju aknaid kui mudelis korrusel „1.korrus“?
+# gold no
+Stimmen Grundriss und IFC-Modell bei der Anzahl der Fenster überein?
+# gold 5
+How many drawings belong to this building model?
+# gold plan-01
+On which sheet can I find the room 'PESUKODA (115)'?
+# gold plan-03-3-korrus
+Which sheet is the floor plan of '3.korrus'?
+# gold plan-05 (own)
+Which drawing shows the fifth floor?
+PATH kit-smiley-west_ac-20-smiley-west-10-bldg_plan-03-1-og.pdf
+# gold yes
+Is every door of '1.OG' in the model drawn on this floor plan?
+# gold 4
+How many floor plan sheets are there for this building?
+# gold yes
+Stimmen Grundriss und IFC-Modell bei der Anzahl der Türen im Geschoss '1.OG' überein?
+# gold plan-01-kg
+Which sheet shows the storey 'KG'?
+# gold plan-02-eg (own)
+Which sheet shows the ground floor?
+PATH bimspeed-warmond_ar_plan-03-1-level.pdf
+# gold 8
+How many floor plan sheets are there for this building?
+# gold 2 / 4
+How many section drawings belong to this model?
+How many elevation drawings are there for this building?
+# gold plan-03 (only on '1. Level')
+On which sheet is the room 'Stair (414B-XX-001-001)'?
+# gold plan-08-attic
+Which sheet shows the attic?

@@ -198,3 +198,18 @@ def test_storey_distance_wordings(solver):
     a = solver.solve(ESPL, q)
     assert a.value.startswith("yes") and a.confidence > 0.8
     assert solver.solve(SMILEY, "How far is '2.OG' above 'KG', in metres?").value == pytest.approx(8.04, abs=0.01)
+
+
+@pytest.mark.skipif(not abspath(WARM1).exists(), reason="dataset not available")
+def test_area_derived_hard3_class(solver):
+    # S0 08:22 hard3 class (area x stated constant / share / derived set); gold = own atomic answers
+    s = solver.solve
+    wl = s(WARM1, "What is the total length of the walls on '1. Level'?").value
+    ra = s(WARM1, "What is the total net floor area of all rooms on '1. Level', in m²?").value
+    big = s(WARM1, "What is the total area of the rooms on '1. Level' that are larger than 20 m²?").value
+    assert s(WARM1, "If the walls on '1. Level' are 2.6 m high, what is their total side area?").value == pytest.approx(wl * 2.6, rel=1e-3)
+    a = s(WARM1, "If the rooms on '1. Level' have a ceiling height of 2.5 m, what is their total volume in m³?")
+    assert a.value == pytest.approx(ra * 2.5, rel=1e-3) and a.unit == "m3"
+    a = s(WARM1, "What percentage of the net floor area on '1. Level' is taken by rooms larger than 20 m²?")
+    assert a.value == pytest.approx(100 * big / ra, abs=0.01) and a.unit == "%"
+    assert s(WARM1, "What is the usable room area on '1. Level' if 10% is lost to furniture?").value == pytest.approx(ra * 0.9, rel=1e-3)

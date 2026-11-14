@@ -367,3 +367,77 @@ def test_pdf_text_only_for_pdfs_outside_the_dataset_sources():
     for p in ("data/swiss_dwellings/site1_bldg2_floor3.pdf", "data/opening_design/CTR/A700.pdf",
               "data/ifc_models/x_plan-01.pdf", "/somewhere/plan.png"):
         assert not s.can_handle(p, "How many doors?"), p
+
+
+def test_sheettext_feet_inch_arithmetic():
+    """Aggregates over printed feet-inch lengths are computed in feet and printed back (not '7' - 10 1/4"' -> 7)."""
+    from stoa.solvers.vector.sheettext import _fmt_ftin, _ftin
+    assert abs(_ftin("7' - 10 1/4\"") - (7 + 10.25 / 12)) < 1e-9 and _ftin("-12' - 8\"") == -(12 + 8 / 12)
+    assert _ftin("4000 PSI") is None and _ftin("3\"") is None
+    assert _fmt_ftin(_ftin("22' - 5\"") - _ftin("11' - 3 1/8\"")) == "11' - 1 7/8\""
+
+
+@needs_data
+def test_dxf_whole_building_on_a_one_floor_plan():
+    """Every swiss building in the data has one floor drawn: 'the whole building' is answered for this floor at <= 0.5,
+    saying so (Q: 36 doors @0.99)."""
+    from stoa.solvers import get_solver
+    s = get_solver("dxf", llm=0)
+    p = "data/swiss_dwellings/site1000_bldg2082_floor9385.pdf"
+    a = s.solve(p, "Wie viele Türen gibt es im ganzen Gebäude?")
+    assert a.value == 36 and a.confidence <= 0.5 and any("floor 9385 of building 2082" in x for x in a.assumptions)
+    b = s.solve(p, "How many doors are there on this floor plan?")
+    assert b.value == 36 and b.confidence > 0.9
+
+
+def test_qparse_inbox_c6_wordings():
+    """Cycle 6 inbox (F/Q/W4/W5 08:20-08:55): apartment letters before the noun / after 'apt.' or a hyphen,
+    post-positive exclusions, m² and ft² words in DE/FR/IT, qualifier nouns, two questions in one, by-how-much
+    comparatives, count ratios."""
+    from stoa.solvers.vector import qparse
+    P = lambda q, nums=None: qparse.parse(q, ["Küche", "Bad", "Balkon"], room_numbers=nums)  # noqa: E731
+    for q in ("What is the net floor area of the D apartment?", "Net floor area of apartment-D?",
+              "What is the net floor area of apt. D?", "What is the net floor area of D apartment in m²?",
+              "Apartment D: what is its net floor area in m², balconies excluded?",
+              "Wie viele Quadratmeter hat die Wohnung D, Balkone und Terrassen nicht mitgerechnet?",
+              "Quanti metri quadrati ha l'appartamento D, terrazze escluse?",
+              "Surface nette du logement D en m², hors balcons ?"):
+        qr = P(q)
+        assert [(t.kind, t.arg) for t in qr.terms] == [("area_apartment", "D")], (q, qr.describe())
+    assert P("A flat roof: how many doors are there?").terms[0].scope is None
+    qr = P("How many doors does this floor have, including the apartment entrance doors?")
+    assert [(t.kind, t.arg) for t in qr.terms] == [("count", "door")]
+    qr = P("Count the doors, including the entrance doors of the apartments.")
+    assert [(t.kind, t.arg, t.scope) for t in qr.terms] == [("count", "door", None)]
+    qr = P("How many doors are in the apartments?")
+    assert [(t.kind, t.arg, t.scope) for t in qr.terms] == [("count", "door", ["*"])]
+    assert P("How many apartments have a bathtub?").describe().count("count(") == 2  # a verb between: not a modifier
+    assert P("Wie viele Türen und wie viele Fenster sind auf diesem Grundriss eingezeichnet?").op == "list"
+    assert P("How many doors and windows are there, respectively?").op == "list"
+    assert P("Wie viele Türen und Fenster gibt es insgesamt auf diesem Grundriss?").op == "sum"
+    assert P("How many doors and windows are drawn on this floor plan?").op == "sum"  # ambiguous: keep the sum
+    qr = P("Di quanti m² il locale 2.05 è più grande del locale 2.02?", {"2.05", "2.02"})
+    assert qr.op == "diff" and qr.qtype == "area" and qr.op_sure and [t.arg for t in qr.terms] == ["2.05", "2.02"]
+    assert P("Di quanto è più grande la stanza 2.27 rispetto alla 2.28?", {"2.27", "2.28"}).op == "diff"
+    assert P("Di quanti locali è composto l'appartamento A?").op != "diff"
+    qr = P("What is the ratio of window count to door count on this floor?")
+    assert qr.op == "ratio" and [t.arg for t in qr.terms] == ["window", "door"]
+    assert P("Wie groß sind die Räume 2.05 und 2.02 zusammen, in Quadratfuß?", {"2.05", "2.02"}).unit == "ft2"
+    assert P("Qual è il numero totale di porte e finestre su questa pianta?").qtype == "count"
+
+
+def test_dxf_price_times_count_and_outdoor_exclusion():
+    from stoa.solvers.vector import qparse
+    from stoa.solvers.vector.dxf_solver import _outdoor_only_exclusion, _price, _same_number
+    P = lambda q: qparse.parse(q, [], room_numbers=None)  # noqa: E731
+    for q, n, cur in (("If each door costs 1,200 euros, what do all the doors on this floor plan cost in total?", 1200, "EUR"),
+                      ("Wenn jede Tür 1.200 Euro kostet, was kosten alle Türen auf diesem Grundriss zusammen?", 1200, "EUR"),
+                      ("At 450 euros per washbasin, how much do all the washbasins on this floor cost?", 450, "EUR"),
+                      ("How much do the bathtubs cost if one bathtub costs 2,000 euros?", 2000, "EUR"),
+                      ("Flooring costs 45 euros per m². What does flooring apartment B cost?", 45, "EUR")):
+        p = _price(q, P(q))
+        assert p is not None and p[0] == n and p[1] == cur, (q, p)
+    assert _price("If all doors together cost 43,200 euros, what does one door cost?", P("how many doors")) is None
+    assert _same_number("1,200", 1200) and _same_number("1.200", 1200) and not _same_number("12", 1200)
+    assert _outdoor_only_exclusion("What is the net floor area of apartment A in m², excluding balconies, loggias and terraces?")
+    assert not _outdoor_only_exclusion("What is the area of all rooms excluding apartment A?")

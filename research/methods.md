@@ -710,3 +710,43 @@ wrote both the probe and the system (wording bias; the trigger is a regex list),
 PDF↔DXF↔PNG and raster↔IFC links are not covered), and the one miss is "does the 'UG2' plan show doors the model
 does not assign to 'UG2'?" (drawn_other). Note the gdynia/warmond plan twins tag only IfcSpace: there the C rows
 say UNKNOWN and kg_qa answers with conf 0.2 + a 'missing' line instead of claiming agreement.
+**Robustness on wordings R1 did not write (same cycle).** The local LLM rewrote each of the 29 link questions 3× in
+English and once in each of fi/de/fr/it/sv/nl/et/es (318 rows, gold unchanged, `probe_para.jsonl`, committed before
+scoring; `paraphrase.py`). The first regex trigger caught only 48% (fi 7%, it 10%). Broadened with language-general
+signals — a model word AND a plan/drawing word in one question (0 of 127,044 dataset Qs have both), a drawing-set
+phrase, 'which drawing/sheet/feuillet/foglio/ritning/hoja', plural storeys + a negation + a room word — tuned on half
+A (by original question) and tested on half B: **trigger recall on held-out B 42/153 → 126/153 (+ the to_english
+front end for sv/nl/et/es: 133/153), still 0 false fires on 128,535 dataset + open-split Qs; kg_qa right on B 114/153
+(75%) with 106/115 confident answers right.** Then four general fixes after looking at errors on both halves
+(in-sample from here): room retrieval by name-token prefix ('Serverraum' ↔ SERVER) and all rooms when nothing matches
+(≤80 rooms), the specific sheet kind beats the generic 'plan' word ('plans de coupe'), yes/no detection without a
+count cue + 'all/every/aligned' → agree, deterministic storey lists: **258/318 = 81% right, conf ≥ 0.8 on 244 with
+232 right (95%)**; by language en 91%, fr 97%, de/es/sv 90%, nl 83%, it 62%, et 59%, fi 50% (fi/et/it misses are
+mostly the trigger on poor machine translations: 'kerrosluokka', 'paperi'). Fresh probe_kg after the broadening:
+20/21 again (kg21 now fires and is answered 'no' @ 0.8: the drawn-from-another-storey case stays the known miss);
+v17 9/9. Runs -091809-pipeline_kg-probe_kg-624b, -091829-pipeline_kg-v17-2f7f.
+
+**8j addendum (cycle 244): per_room trigger on wordings R1 did not write.** The local LLM rewrote the 78 probe
+questions 3× in English + once in fi/de/sv/fr/it/nl/es (780 rows, `probe/probe_para.jsonl`, committed before scoring;
+`para_route.py make|score`, trigger as asked, then after the to_english front end for uncovered languages). Recall
+on the 73 originals that fire: non-area `fire` 68% overall (en 80%, de 58%, fr 57%, it 58%, nl 25%). Added
+language-general forms — compound room-noun suffixes (Technik*zimmer*, utility*kamer*), per-room counts with
+'hat/ha/heeft/tiene/a + det + room', 'y a-t-il dans / ci sono nella / zijn er in / hay en', relation question words in
+6 languages ('van welk vertrek', 'par quelles pièces', 'da quale stanza', 'desde qué habitación', 'from what room'),
+per-room area forms, AREA_Q in 8 languages — tuned on half A (by original question): **held-out half B non-area fire
+65% → 78% (A 71% → 87%), still 0 text fires on 85,514 dataset CubiCasa questions** (route_eval.py; other sources stay
+behind the raster + cubicasa gate). End to end on 40 routed non-English half-B paraphrases: room_graph 33/40 vs 36/40
+for the same questions in English (4 lost / 1 won: balcony/terrace access, the known relation failure); conf ≥ 0.7 on
+30 (25 right). Since W4's pipeline imports `experiments.r1.room_graph.route.per_room`, this lands with the merge.
+**8k addendum: before/after on current night (31397eb + R1, W1's in-ifc link answers included) and Q's v20.**
+| probe | night pipeline | pipeline_kg | conf ≥ 0.8 (night → kg) |
+|---|---|---|---|
+| fresh probe_kg (21) | 9/21 | **21/21** (12 won / 0 lost, p = 0.0005) | 7 @ 3 right → 20 @ 20 right |
+| Q v17 (9) | 7/9 | 9/9 | 5 @ 5 → 9 @ 9 |
+| Q v20 (19, Q's own new wordings/models) | 6/19 | **19/19** (13 won / 0 lost) | 6 @ 4 → 18 @ 18 |
+Runs 20261114-092552-pipeline-{probe_kg-4e8a,v17-2f04,v20-c62a} vs -092552-pipeline_kg-{probe_kg-0902,v17-6ebe,v20-5fb5}.
+v20 caveat: its first run on b44392a was 12/19; the trigger broadening was done before I saw v20, but the sheet
+formatter fix (3 confident misses where the text said 'no plan sheet' while the evidence was the sheet) came from
+it. Night's 4 confident-wrong answers on probe_kg all come from ifc as asked (sheets in total → 4 @ 0.85; FR 'même
+nombre de portes' → 18 @ 0.97; 'more windows on DG1 than the plan shows' → 'no (36 = 36)' @ 0.89; 'storeys with no
+rooms' → a room name @ 0.90), so kg_qa must run BEFORE ifc on a link question, not as a fallback after it.

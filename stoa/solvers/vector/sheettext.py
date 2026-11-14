@@ -93,6 +93,33 @@ def _num(s) -> float | None:
         return None
 
 
+FTIN_RE = re.compile(r"^\s*(-?\d+)\s*'\s*-?\s*(?:(\d+)(?:\s+(\d+)/(\d+))?|(\d+)/(\d+))?\s*\"?\s*$")
+
+
+def _ftin(s) -> float | None:
+    """"7' - 10 1/4\"" -> 7.854 (feet); None if not a feet-inch dimension."""
+    m = FTIN_RE.match(str(s))
+    if not m:
+        return None
+    ft = int(m.group(1))
+    inch = float(m.group(2) or 0) + (int(m.group(3)) / int(m.group(4)) if m.group(3) else 0) + \
+        (int(m.group(5)) / int(m.group(6)) if m.group(5) else 0)
+    return ft + (inch / 12 if ft >= 0 else -inch / 12)
+
+
+def _fmt_ftin(v: float) -> str:
+    total = round(abs(v) * 12 * 16) / 16
+    ft, inch = int(total // 12), total - 12 * int(total // 12)
+    whole, frac = int(inch), inch - int(inch)
+    fr = ""
+    if frac:
+        n, d = int(round(frac * 16)), 16
+        while n % 2 == 0 and d > 1:
+            n, d = n // 2, d // 2
+        fr = f" {n}/{d}"
+    return f"{'-' if v < 0 else ''}{ft}' - {whole}{fr}\""
+
+
 def _norm(s: str) -> str:
     return re.sub(r"[\s'\"]", "", str(s).lower())
 
@@ -154,6 +181,19 @@ def ask(question: str, rows: list[dict], backend: str = "local") -> dict:
     if op == "count":
         out.update(value=len(items), unit="count")
     elif op in ("sum", "max", "min", "mean"):
+        dims = [_ftin(it.get("value")) for it in items]
+        if all(d is not None for d in dims):
+            # feet-inch lengths ("7' - 10 1/4\""): computed in feet, answered as printed / in feet-inches
+            pairs = list(zip(dims, items))
+            if op in ("max", "min"):
+                x, it = (max if op == "max" else min)(pairs, key=lambda p: p[0])
+                val = f"{it.get('label')} ({it.get('value')})" if which else str(it.get("value"))
+                out.update(value=val, unit=None, used=[it["row"]] if which else out["used"])
+            else:
+                v = sum(dims) if op == "sum" else sum(dims) / len(dims)
+                out.update(value=_fmt_ftin(v), unit=None)
+            trace.append(f"{op} over {len(dims)} feet-inch lengths = {out['value']} (computed in Python)")
+            return out
         nums = [(_num(it.get("value")), it) for it in items]
         if any(v is None for v, _ in nums):
             out["ok"] = False

@@ -8,6 +8,7 @@ Cross-check (linked data): a room's DXF polygon area vs. the "16.78 m²" printed
 
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 
@@ -125,6 +126,70 @@ def _opcheck(question: str, backend: str = "local") -> str | None:
     return m.group(1) if m else None
 
 
+_EACH_W = r"(?:per|each|every|for\s+each|for\s+every|a|an|one|a\s+single|any|je|pro|par|chaque|ogni|cada|jede[rnms]?|une?|ein(?:e)?)"
+_UNIT_ASK = re.compile(r"\b(?:what|how\s+much)\s+(?:does|would|will|is)\s+(?:one|a|each|a\s+single|every|the\s+average)\b|"
+                       r"\bper\s+(?:door|window|unit|piece|item)\s*\?\s*$|\bcost\s+per\b", re.I)
+
+
+def _price(question: str, qr: qparse.Query) -> tuple[float, str, str] | None:
+    """A stated price or rate the answer is multiplied by: '1,200 euros per door', 'each door costs …', 'si chaque
+    fenêtre coûte 650 €', '45 euros per m²' -> (factor, unit, why), or None. Detection reuses W1's ifc arith module
+    (stoa/solvers/ifc/arith.py); a fallback covers fixtures it has no kind for ('450 euros per washbasin'). Only for a
+    single count kind or an area (Q 08:30/08:55: table-QA code multiplied ALL objects in 2 of 5 runs)."""
+    if not qr.terms or qr.op != "sum" or _UNIT_ASK.search(question):
+        return None
+    try:
+        from stoa.solvers.ifc.arith import _CUR, currency, detect, text_of
+        o = detect(question)
+        t = text_of(question)
+    except Exception:  # noqa: BLE001 - module missing or changed: no price path
+        return None
+    one_kind = qr.qtype == "count" and len(qr.terms) == 1 and qr.terms[0].kind == "count"
+    if o is not None and o.op == "mul" and o.n:
+        if o.basis == "count" and one_kind and o.basis_kind in (None, qr.terms[0].arg):
+            return float(o.n), o.unit or "count", o.why
+        if o.basis == "area" and qr.qtype == "area" and o.basis_unit in (None, "m2", "ft2") and o.unit:
+            if o.basis_unit == "ft2":
+                qr.unit = "ft2"
+            return float(o.n), o.unit, o.why
+    cur = currency(t)
+    if cur and one_kind:
+        kw = "|".join(qparse.KIND_WORDS.get(qr.terms[0].arg, []))
+        amt = r"(?:" + _CUR + r"\s*)?(\d+(?:\.\d+)?)\s*(?:" + _CUR + r")?"
+        for rx in (amt + r"\s*" + _EACH_W + r"\s+(?:" + kw + r")\b",
+                   r"\b" + _EACH_W + r"\s+(?:" + kw + r")\b[^.?;]{0,30}?" + amt):
+            for m in re.finditer(rx, t):
+                if re.search(_CUR, m.group(0)) and (n := next((float(g) for g in m.groups()
+                                                             if g and re.fullmatch(r"\d+(?:\.\d+)?", g)), None)):
+                    return n, cur, f"price {n:g} {cur} per {qr.terms[0].arg}"
+    return None
+
+
+def _outdoor_only_exclusion(question: str) -> bool:
+    """Every exclusion clause of the question names only outdoor spaces or shafts (no apartment, room or label)."""
+    ql = question.lower()
+    spans = [m.group(0) for m in re.finditer(qparse.EXCL_CLAUSE, ql)] + [m.group(0) for m in re.finditer(qparse.POST_EXCL, ql)]
+    if not spans:
+        return False
+    for sp in spans:
+        rest = re.sub(qparse._OUT_N + r"|\b(?:and|or|und|oder|et|ou|e|o|the|die|les|i|le|gli|all|any|excluding|except|"
+                      r"without|not|counting|excluded|ohne|hors|sans|senza|esclus\w*|exclu\w*|ausgenommen|nicht|"
+                      r"mitgerechnet|in|m²|m2|voids?|vides?|lufträume?)\b|[,.()]", " ", sp)
+        if rest.strip():
+            return False
+    return True
+
+
+def _same_number(tok: str, n: float) -> bool:
+    for c in (tok.replace(",", ""), tok.replace(".", "").replace(",", "."), tok.replace(",", "."), tok.replace("'", "")):
+        try:
+            if abs(float(c) - n) < 1e-9:
+                return True
+        except ValueError:
+            pass
+    return False
+
+
 WHICH_APT = (r"^\s*(?:which|what|in\s+which|welche[rs]?|in\s+welcher|quel(?:le)?|dans\s+quel|quale|in\s+quale|welk(?:e)?)\s+"
              r"(?:apartment|flat|unit|dwelling|wohnung|wohneinheit|appartement|logement|appartamento|woning)\b")
 
@@ -196,7 +261,7 @@ def _in_scope(fm: FloorModel, kind: str, bbox, scope: list[str] | None) -> bool:
 
     b = sbox(*bbox)
     for u in fm.units:
-        if u.label in scope and u.poly is not None:
+        if (u.label in scope or "*" in scope) and u.poly is not None:
             if kind in ("door", "window"):
                 if u.poly.buffer(0.3).intersects(b):
                     return True
@@ -220,11 +285,12 @@ def _eval_term(fm: FloorModel, t: qparse.Term, qr: qparse.Query) -> _Part:
         items = fm.items.get(kind, [])
         if t.scope:
             items = [it for it in items if _in_scope(fm, kind, it.bbox, t.scope)]
-            missing = [] if all(u.poly is not None for u in fm.units if u.label in t.scope) else \
+            missing = [] if all(u.poly is not None for u in fm.units if u.label in t.scope or "*" in t.scope) else \
                 [f"no UNIT_OUTLINE for apartment(s) {t.scope}"]
             how = ("objects touching the UNIT_OUTLINE (±0.3 m)" if kind in ("door", "window")
                    else "objects whose centre lies inside the UNIT_OUTLINE")
-            asm = [f"counted {KIND_DESC[kind]}", f"restricted to apartment(s) {', '.join(t.scope)}: {how}"]
+            where = "all apartments (not the common areas)" if "*" in t.scope else f"apartment(s) {', '.join(t.scope)}"
+            asm = [f"counted {KIND_DESC[kind]}", f"restricted to {where}: {how}"]
             return _Part(len(items), 0.8 if kind in ("door", "window") else 0.9, [(it.bbox, it.note) for it in items],
                          [f"{kind}s in apartment(s) {t.scope} = {len(items)}"], asm, missing)
         n = window_count(fm) if kind == "window" else len(items)
@@ -443,7 +509,37 @@ class DxfSolver(BaseSolver):
             return None, "no DXF sibling", None
         return load_floor(str(abspath(dxf_rel))), dxf_rel, None
 
+    # "the whole building" on a plan of ONE floor (every swiss_dwellings building in the data has exactly one floor
+    # drawn: 1,040 buildings x 1 floor). Q 04:58/08:45: 36 doors @0.99 for "in the whole building".
+    BUILDING_W = re.compile(
+        r"\b(?:whole|entire|complete) (?:building|house)\b|\ball (?:the )?(?:floors|storeys|stories|levels)\b|"
+        r"\bevery (?:floor|storey|story|level)\b|\b(?:does|do) the building have\b|\bthe building (?:as a whole|in total)\b|"
+        r"\b(?:ganzen?|gesamten?|komplette[nm]?) (?:Gebäude|Haus)|\balle[nm]? (?:Geschosse|Stockwerke[n]?|Etagen)\b|"
+        r"\b(?:tout le|l'ensemble du) bâtiment|\bbâtiment (?:entier|complet)|\btous les étages\b|"
+        r"\b(?:l')?intero edificio|\btutto l'edificio|\bedificio intero|\btutti i piani\b|"
+        r"\b(?:het )?(?:hele|gehele) (?:gebouw|pand)|\balle verdiepingen\b|\bhela (?:byggnaden|huset)\b|\balla våningar\b|"
+        r"\bkoko (?:rakennu|talo)|\bkaikki(?:ssa)? kerrok|\btodo el edificio\b|\bedificio (?:entero|completo)\b|"
+        r"\btodas las plantas\b|\btodos los pisos\b", re.I)
+
     def solve(self, path: str, question: str) -> Answer:
+        ans = self._solve_guarded(path, question)
+        if ans.value is not None and (self.BUILDING_W.search(question) or
+                                      any(self.BUILDING_W.search(str(t)) for t in ans.assumptions[:1])):
+            m = re.search(r"site(\d+)_bldg(\d+)_floor(\d+)", path)
+            floors = sorted({re.search(r"_floor(\d+)", f).group(1) for f in
+                             (os.listdir(abspath(path).parent) if m else [])
+                             if f.startswith(f"site{m.group(1)}_bldg{m.group(2)}_floor")}) if m else []
+            if len(floors) <= 1:
+                where = f"floor {m.group(3)} of building {m.group(2)}" if m else "one floor"
+                ans.confidence = round(min(ans.confidence, 0.5), 3)
+                ans.assumptions = [*ans.assumptions, f"only {where} is drawn (no other floor of this building is in "
+                                                     "the data); the answer counts this floor only"]
+                ans.missing = [*ans.missing, "the other floors of the building are not in the data, so the whole-building "
+                                             "total is unknown"]
+                ans.trace.append("guard: the question asks about the whole building, the data has one floor -> conf <= 0.5")
+        return ans
+
+    def _solve_guarded(self, path: str, question: str) -> Answer:
         """Translate-first for languages the rules were never written for (S0/F 04:05: the sealed hard2r drop is
         language), then the rule/table-QA answer, then guards that check the answer fits what was asked."""
         tr = _translate(question, self.backend) if self.llm else None
@@ -477,11 +573,18 @@ class DxfSolver(BaseSolver):
         qr = qparse.parse(question, vocab, room_numbers={r.number for r in fm.rooms if r.number})
         trace = [f"parsed: {qr.describe()}", *[f"parse note: {n}" for n in qr.notes]]
         opcheck_cap = opcheck_rewrite = False
-        if self.llm and not qparse.covered(question, qr):
+        price = _price(question, qr)
+        cq = question
+        if price is not None:
+            trace.append(f"stated price/rate: {price[2]} -> answer = {price[0]:g} x the quantity from the rules")
+            kw = "|".join(qparse.KIND_WORDS.get(qr.terms[0].arg, ["door"])) if qr.qtype == "count" else r"m²|m2|square\s+\w+"
+            cq = re.sub(r"\b(?:each|every|one|chaque|jede[rnms]?|ogni|cada|any)\b|\bper\s+(?:" + kw + ")", " ", question, flags=re.I)
+        if self.llm and not qparse.covered(cq, qr):
             ans = self._tableqa(path, dxf_rel, fm, question, trace)
             if ans is not None:
                 return ans
-        elif self.llm and self.opcheck and qr.terms and qr.op in ("sum", "diff") and not _known_template(question):
+        elif self.llm and self.opcheck and price is None and not qr.op_sure and qr.terms and qr.op in ("sum", "diff") \
+                and not _known_template(question):
             # unseen wording that the rules read as a plain value/sum/difference: one short LLM call checks the
             # operation (any language); on disagreement the table QA answers instead (F/S0 hard2p/hard2q lesson:
             # keyword rules miss reworded operators and then answer the simpler question confidently)
@@ -489,6 +592,12 @@ class DxfSolver(BaseSolver):
             neg = qr.op == "diff" and qr.terms[0].kind == "area_total"  # the floor-minus-apartment rule fired
             ok = letter is None or (qr.op == "sum" and letter == "A") or (qr.op == "diff" and (
                 (letter == "B" and not neg) or (letter == "G" and neg)))
+            if not ok and letter == "G" and qr.op == "sum" and _outdoor_only_exclusion(question):
+                # W4 08:31: "net floor area of apartment A, excluding balconies, loggias and terraces" read as 'floor
+                # minus apartment A'; balconies are never in a net area, so the exclusion changes nothing
+                ok = True
+                trace.append("operation check: the excluded part is only balconies/loggias/terraces/shafts, which the "
+                             "net area never contains -> the rules' sum stands")
             trace.append(f"operation check (LLM): '{letter}' = {OPCHECK_KINDS.get(letter, '?')}; rules applied "
                          f"{qr.op} -> {'agree' if ok else 'disagree'}")
             if not ok and (rw := _rewrite_by_op(qr, letter)) is not None:
@@ -642,6 +751,13 @@ class DxfSolver(BaseSolver):
             if qr.absolute and value < 0:
                 value = -value
                 trace.append("'difference between' is symmetric: reported as a positive number")
+        elif qr.op == "list":  # two questions in one: one number per part
+            names = [(t.note.replace("concept ", "") if t.note.startswith("concept") else
+                      (t.arg if isinstance(t.arg, str) else "/".join(t.arg or []))) for t in qr.terms]
+            value = "; ".join(f"{int(round(v))} {n}{'' if str(n).endswith('s') else 's'}" if v is not None else f"? {n}"
+                              for v, n in zip(vals, names))
+            unit = None
+            trace.append(f"two questions in one: {value}")
         else:
             value = sum(known)
             if len(known) > 1:
@@ -657,6 +773,12 @@ class DxfSolver(BaseSolver):
             assumptions.append("converted m² -> ft² (1 m² = 10.7639 ft²)")
         elif unit == "m2":
             value = round(value, 2)
+        if price is not None and isinstance(value, (int, float)):
+            base, base_unit = value, unit
+            value, unit = round(price[0] * base, 2), price[1]
+            trace.append(f"price x quantity: {price[0]:g} {unit} x {base} {base_unit} = {value}")
+            assumptions.append(f"cost = the stated {price[2]} x {base} {base_unit} from the drawing")
+            conf = min(conf, 0.95)
         # linked data: the PDF text layer is an independent rendering of the same drawing -> cross-check
         mapper = _Mapper(path, dxf_rel, tf0)
         if fm.supported is not None:
@@ -695,7 +817,7 @@ class DxfSolver(BaseSolver):
                              f"'{r.name or '-'}' ✗ -> confidence <= 0.3")
             elif r is not None:
                 trace.append(f"name check: room {n} '{asked}' fits the plan label '{r.name}' ✓")
-        extra = qparse.unused_numbers(question, qr)
+        extra = [x for x in qparse.unused_numbers(question, qr) if price is None or not _same_number(x, price[0])]
         if extra:
             conf = min(conf, 0.3)  # F/S0: a stated price/rate/constant the rules did not apply -> the agent does it
             missing.append(f"the question states {', '.join(extra[:3])}, which this rule answer does not use (a price, "

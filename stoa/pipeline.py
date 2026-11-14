@@ -41,7 +41,7 @@ from pathlib import Path
 
 from stoa.contract import Answer, Cost, Evidence
 from stoa.data import siblings, source_of
-from stoa.router import gating, prior
+from stoa.router import budget, gating, prior
 from stoa.router.canonical import canonical
 from stoa.router.compose import combine, decompose
 from stoa.router.intent import _COUNT, DERIVED, Intent, extra_structure, modifiers, parse
@@ -53,6 +53,8 @@ UNSEEN_SCALE = 0.92  # unseen wording, ONE plain concept: hard's cubicasa paraph
 UNSEEN_MAX = 0.75  # an unseen wording never enters the >= 0.8 'trust' bin (F 04:05, hard2q aggregate)
 XCHECK_DISAGREE = 0.5  # agent vs an unsure rules answer to the same quantity, disagreeing (D19 (5))
 XCHECK_CAP = 0.7  # a disagreeing cross-check (✗) caps confidence (S0 04:00: sealed test, 21 such answers at >= 0.8, 76% right)
+LINK_IFC_ACCEPT = 0.8  # link question: ifc as asked answers when kg_qa gives nothing, at >= this (D20-4)
+LINK_DISAGREE = 0.6  # link question: kg_qa vs ifc as asked, same answer shape, different values
 UNSEEN_STRUCT_CAP = 0.35  # unseen wording WITH extra structure (comparison/exclusion words, numbers): F, held-out: 33%
 
 
@@ -201,6 +203,8 @@ _APT_REFS = [
 ]
 _OUT_EN = r"(?:balcon(?:y|ies)|terraces?|loggias?|outdoor (?:spaces?|areas?))"
 _EXCL_AFTER = re.compile(rf"\b({_OUT_EN}(?:\s*(?:,|and)\s*{_OUT_EN})*)\s+(?:excluded|not included)\b", re.I)
+# F 09:10 typo probe: "apartment D net area in sq m (no balconies)" -> dxf measured the balconies (11/30)
+_EXCL_NO = re.compile(rf"(\(\s*|,\s*|\bwith\s+)no\s+({_OUT_EN}(?:\s*(?:,|or|and)\s*{_OUT_EN})*)\b", re.I)
 # fr/de/it fronted exclusions ("…, balcons exclus ?" -> dxf answered the balcony area, F 08:40)
 _OUT_FR, _OUT_DE, _OUT_IT = r"(?:balcons?|terrasses?|loggias?)", r"(?:Balkone?|Terrassen?|Loggien|Loggias?)", \
     r"(?:balconi|balcone|terrazz[ie]|logge)"
@@ -212,12 +216,34 @@ _EXCL_AFTER_ML = [
 ]
 
 
+# F 09:10 quick-typing probe (same gold, controls 98.6%): typos a live judge makes. "area of room 5,11" (decimal comma)
+# -> vlm_direct 2/30; "apartment d without balconies" 12/30; 'appartment' 19/30, 'apartmnet' 14/30; "net area in sq m" 11/30
+_ROOM_COMMA = re.compile(r"\b([Rr]ooms?|[Rr]aum|[Pp]ièce|[Ll]ocale|[Hh]uone|[Rr]um)\s+(\d{1,2}),(\d{2})\b(?!,?\d)")
+_APT_TYPO = re.compile(r"\b([Aa])p(?:partment|artmnet|parment|artmet|artement(?=\s+[A-Za-z]\b\s*(?:without|excluding|in|net|$|[?,.])))\b")
+_APT_LOWER = re.compile(r"\b((?:[Aa]partment|[Ff]lat|[Uu]nit|[Ww]ohnung|[Aa]ppartement|[Aa]ppartamento)\s+)([a-z])"
+                        r"(?=\s*(?:$|[?,.;:)]|'s\b|\s(?:without|excluding|excl\.?|including|in|net|on|has|have|ohne|"
+                        r"sans|senza|exkl\.?|inkl\.?|ist|hat|est|a|è|ha)\b))")
+_SQM = re.compile(r"\bsq\.?\s?m\b\.?|\bsqm\b|\bsq\.?\s?met(?:re|er)s?\b", re.I)
+
+
+def normalise_typos(question: str) -> str:
+    q = _ROOM_COMMA.sub(lambda m: f"{m.group(1)} {m.group(2)}.{m.group(3)}", question)
+    if q != question:  # "rooms 2,03 and 2,05": the rest of the list too
+        q = re.sub(r"(\b(?:and|und|et|e|ja|och) |, )(\d{1,2}),(\d{2})\b(?!,?\d)",
+                   lambda m: f"{m.group(1)}{m.group(2)}.{m.group(3)}", q)
+    q = _APT_TYPO.sub(lambda m: m.group(1) + "partment", q)
+    q = _APT_LOWER.sub(lambda m: m.group(1) + m.group(2).upper(), q)
+    return _SQM.sub("m²", q)
+
+
 def normalise_refs(question: str) -> str:
-    q = question
+    q = normalise_typos(question)
     for rx, fmt in _APT_REFS:
         q = rx.sub(lambda m: (lambda t: t[:1].upper() + t[1:] if m.start() == 0 else t)(fmt.format(id=m.group("id"))), q)
     # "balconies excluded" -> "excluding balconies" (dxf read the fronted form as the balcony area, F 08:28)
     q = _EXCL_AFTER.sub(lambda m: "excluding " + m.group(1), q)
+    q = _EXCL_NO.sub(lambda m: ("(" if m.group(1).startswith("(") else ", " if m.group(1).startswith(",") else "")
+                     + "excluding " + m.group(2), q)
     for rx, fmt in _EXCL_AFTER_ML:
         q = rx.sub(lambda m: fmt.format(x=m.group(1)), q)
     return q
@@ -408,6 +434,74 @@ def _fits(task: str, ans: Answer | None) -> bool:
     return k is None or task not in ("count", "area", "volume", "length") or k == task
 
 
+def _fuzzy_count_cue(question: str) -> bool:
+    """W3 09:27: a mistyped counting cue ("Kunika monta saunaa …", OSA <= 1 on monta/kuinka/anzahl/combien/…; 0 fires on
+    113k dataset questions) is still a how-many question (raster's right 0 was capped at 0.3)."""
+    try:
+        from stoa.solvers.raster.classes import fuzzy_count_cue
+    except Exception:  # noqa: BLE001
+        return False
+    try:
+        return bool(fuzzy_count_cue(question))
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _clip(v, n: int = 120) -> str:
+    """Text for a trace line, cut at a word boundary (W5 09:21: the demo card shows trace lines verbatim)."""
+    t = " ".join(str(v).split())
+    if len(t) <= n:
+        return t
+    cut = t[:n].rsplit(" ", 1)[0].rstrip(",;:(")
+    return (cut or t[:n]) + " …"
+
+
+def _link_shape(v) -> tuple[str, object] | None:
+    """('num', x) | ('yn', 'yes'|'no') | None: the comparable core of a link answer ("no: model 55, plan draws 52"
+    -> ('yn', 'no'); 3 -> ('num', 3.0)); anything else (names, lists) is not compared."""
+    x = _num(v)
+    if x is not None:
+        return "num", round(x, 6)
+    m = re.match(r"\s*(yes|no|ja|nein|oui|non|kyllä|ei|sì|si|nej|nee)\s*($|[:;,.(\u2014-])", str(v or ""), re.I)
+    if m:
+        return "yn", "yes" if m.group(1).lower() in ("yes", "ja", "oui", "kyllä", "sì", "si") else "no"
+    return None
+
+
+# Q 09:16 (Stoa point 3 audit, 647 red-team answers): of 92 answers below 0.5, 34 carry only a PROCESS note in `missing`
+# ("no located evidence from this solver", "not backed by a tool result"); Stoa wants what the documents lack. For the
+# usual unanswerable topics, name the absent fact and where it would be found. Changes no value or confidence.
+_PROCESS_NOTE = re.compile(r"no located evidence|not backed by a tool|no reliable reading|not traced to any value|"
+                           r"did not reach an answer|stopped after \d+ model calls|LLM budget", re.I)
+_ABSENT_FACTS = [
+    (re.compile(r"\b(rent|price|prices|cost|costs|costing|budget|€|eur|chf|usd|dollars?|euros?)\b|\$\s?\d", re.I),
+     "prices and costs are not part of construction drawings: a unit price (per m² or per item) from a cost plan, tender "
+     "or market data is needed; the drawing gives only the quantities"),
+    (re.compile(r"\bu-?values?\b|\bthermal\b|\binsulation\b|energy (?:class|rating|label|performance)|heat loss", re.I),
+     "thermal properties (U-values, insulation) are not shown on a plan: the energy report or the wall/roof build-up "
+     "schedule states them"),
+    (re.compile(r"\b(?:what|which) year\b|\bwhen (?:was|were|is)\b.*\b(built|constructed|drawn|made|designed|completed)\b|"
+                r"\bconstruction year\b|\byear of construction\b|\bbuilt in\b", re.I),
+     "a date: the title block or the project record states it; none was read with certainty here"),
+    (re.compile(r"\b(occupants?|residents?|inhabitants|tenants|how many people|persons? (?:live|can live|living))\b", re.I),
+     "occupancy is not drawn on a plan (it depends on use): the number of bedrooms gives only an estimate "
+     "(about 1-2 persons each)"),
+    (re.compile(r"\bfire[- ](?:rating|resistance|class|protection)|\bEI ?\d{2}\b|\bfire[- ]rated\b", re.I),
+     "fire ratings are stated in the door/wall schedule or the fire safety plan, not on this sheet"),
+    (re.compile(r"\b(architect|owner|client|contractor|engineer|designer)\b", re.I),
+     "the names of the parties are in the title block; none was read with certainty on this sheet"),
+]
+
+
+def _absent_fact(question: str, ans: Answer) -> None:
+    if ans.confidence >= 0.5 or any(not _PROCESS_NOTE.search(str(m)) for m in ans.missing):
+        return
+    for rx, line in _ABSENT_FACTS:
+        if rx.search(question):
+            ans.missing = [*ans.missing, line]
+            return
+
+
 def _cost_of(ans: Answer) -> Cost:
     c = ans.cost
     return Cost.model_validate(c) if isinstance(c, dict) else (c or Cost())
@@ -424,7 +518,7 @@ class Pipeline(BaseSolver):
                  compose: int | str = 1, normalise: int | str = 1, crosscheck: int | str = 1, agent: int | str = 1,
                  raw_first: int | str = 1, raw_accept: float | str = 0.45, raster_first: int | str = 1,
                  cc5k: int | str = 1, lora: int | str = 1, lora_second: int | str = 0, lora_conf: str = "own", translate: int | str = 1,
-                 translate_cap: float | str = 0.9, both_readings: int | str = 1, **kwargs):
+                 translate_cap: float | str = 0.9, both_readings: int | str = 1, links: int | str = 1, **kwargs):
         super().__init__(**kwargs)
         # R2's language front end (stoa.llm.should_translate / to_english): a non-English question the rules can't read
         # is translated to English once (local model, quoted names/numbers verbatim) and answered in English
@@ -434,6 +528,9 @@ class Pipeline(BaseSolver):
         # bin 97.1/99.1/100% right (R2/F 04:57: right translated answers all sat at 0.75)
         self.translate_cap = float(translate_cap)
         self.both_readings = bool(int(both_readings))
+        # Stoa point 4 (Q v17, D20-4): questions about the drawing set / plan <-> model links on an IFC project go to
+        # ifc as asked (W1's GlobalId set differences), then R1's kg_qa over stoa.kg; 0 = off
+        self.links = bool(int(links))
         self.accept = float(accept)
         self.agree = {"1": "cheap", "0": "never", "2": "always"}.get(str(agree), str(agree))  # cheap|never|always
         self.api = bool(int(api))
@@ -482,6 +579,17 @@ class Pipeline(BaseSolver):
 
     # -- main -------------------------------------------------------------------------------------
     def solve(self, path: str, question: str) -> Answer:
+        """One question, metered as a whole (D20-2): optional LLM steps stop once the question's budget is spent."""
+        from stoa.router import budget
+
+        with budget.question():
+            ans = self._solve_question(path, question)
+            n = budget.note()
+            if n and ans.value is not None:
+                ans.assumptions = [*ans.assumptions, n]
+        return ans
+
+    def _solve_question(self, path: str, question: str) -> Answer:
         t0 = time.perf_counter()
         try:  # caches, gates and the KG key on the dataset-relative path (F 03:49: absolute paths missed them)
             from stoa.data import dataset_rel
@@ -510,9 +618,19 @@ class Pipeline(BaseSolver):
         original = question
         question = normalise_scope(normalise_refs(normalise_numbers(question)), source_of(path))
         asked = question
+        link = self._link_question(path, asked, t0) if self.links else None
+        if link is not None:
+            return link
         question, tr_note, tr_cost = self._front_end(question) if self.translate else (question, None, None)
         if question != asked:  # the English translation may say "the B apartment in m²" (hardL_open tr: 321.76 @ 0.95)
             question = normalise_scope(normalise_refs(normalise_numbers(question)), source_of(path))
+            link = self._link_question(path, question, t0, asked=asked) if self.links else None
+            if link is not None:
+                if tr_cost:
+                    link.cost = _cost_of(link).add(tr_cost)
+                link.trace = [f"language front end: {tr_note}", *link.trace]
+                link.assumptions = [*link.assumptions, tr_note] if tr_note else link.assumptions
+                return link
         ans = self._per_room(path, question, t0)
         if ans is None:
             plan = decompose(source_of(path), question) if self.compose else None
@@ -540,7 +658,8 @@ class Pipeline(BaseSolver):
         elif tr_note:
             ans.trace = [f"language front end: {tr_note}"] + ans.trace
         if ans.value is not None and str(ans.unit or "").lower() == "count" and ans.confidence > 0.3 and \
-                not any(rx.search(x) for rx in (_COUNT, _COUNT_CUE) for x in (question, asked)):
+                not any(rx.search(x) for rx in (_COUNT, _COUNT_CUE) for x in (question, asked)) and \
+                not _fuzzy_count_cue(asked):
             # Q 04:18: "How big is the room 'Hall (0.1)'?" -> ifc '5 count' at 0.97. A count nobody asked for is a
             # misreading (0 such answers on dev/hard/hard2 = 3,182 questions, so this costs nothing measured)
             ans.trace.append("a count answer, but the question asks no 'how many': confidence capped at 0.3")
@@ -583,6 +702,7 @@ class Pipeline(BaseSolver):
                 ans.trace.append(f"converted {ans.value} {ans.unit} to {v:.4g} {want} (the question asks in {want})")
                 ans.assumptions = [*ans.assumptions, f"{ans.value} {ans.unit} = {round(v, 2)} {want}"]
                 ans.value, ans.unit = round(v, 2), want
+        _absent_fact(asked, ans)
         if ans.evidence and any(e.bbox or getattr(e, "ifc_guid", None) for e in ans.evidence):
             # W5 08:32: a LoRA count that got room-segmentation boxes afterwards still said "no located evidence"
             ans.missing = [m for m in ans.missing if "no located evidence" not in str(m)]
@@ -656,6 +776,8 @@ class Pipeline(BaseSolver):
         rules solver is also given to the rules solvers in its ORIGINAL wording (no LLM pass of ours). Same answer ->
         confidence = the surer of the two, no translation cap ('agree'); different -> the surer one, capped at 0.5
         ('disagree'). Only rules answers are lifted (vlm/raster/LoRA/agent readings never are)."""
+        if budget.skip("the second reading of the original wording"):
+            return None
         if ans.value is None or str(ans.solver or "").split("/")[-1] not in ("dxf", "ifc", "schedule", "pdf_vector",
                                                                               "pdf_text"):
             return None
@@ -884,6 +1006,86 @@ class Pipeline(BaseSolver):
         ans.cost = _cost_of(ans).add(Cost(llm_calls=m.calls, llm_tokens_in=m.llm_tokens_in,
                                           llm_tokens_out=m.llm_tokens_out, gpu_seconds=round(m.gpu_seconds, 3)))
 
+    def _link_question(self, path: str, question: str, t0: float, asked: str | None = None) -> Answer | None:
+        """D20-4 (Stoa point 4; Q v17, R1 09:06, W1 09:01): a question about the drawing SET or the plan <-> model
+        relation on an IFC project ("Do the floor plan and the IFC model agree on the windows on 'S'?", "How many
+        windows on 'S' are in the model but not drawn on this plan?", "How many floor plan sheets?", "Which storeys
+        have no plan?"). R1's narrow trigger (experiments.r1.kg_qa.is_link_question: 0 fires on the 127,044 dataset
+        questions and every open split), before the composer (it split "do the plan and the model agree on the
+        windows" into counts: bug 21, 297 @ 0.98).
+        Order measured here (R1 probe_kg, 21 Qs): ifc as asked first, kept at >= 0.8 -> 16/21 with 4 confident-wrong
+        (ifc answered '18' to a yes/no 'le même nombre', the largest room to 'which storeys have no rooms', 4 plan
+        sheets to 'plans, sections and elevations', DG1 vs itself); R1's kg_qa first -> 20/21. So: kg_qa first (fact
+        rows from stoa.kg + one local call, Python computes); ifc as asked (0 LLM) only cross-checks it when both
+        answers have the same shape (number vs number, yes/no vs yes/no): same -> ✓ + ifc's GUID evidence, different
+        -> ✗ capped at LINK_DISAGREE. kg_qa gives nothing -> ifc's answer if >= LINK_IFC_ACCEPT, else None (the
+        normal pipeline answers, as before this route existed)."""
+        if source_of(path) not in ("ifc_models", "ifc_bench"):
+            return None
+        try:
+            from experiments.r1.kg_qa.kgqa import is_link_question, solve as kg_solve
+
+            hit = is_link_question(question)
+        except Exception:  # noqa: BLE001  (R1's module missing: no link route)
+            return None
+        if not hit.get("fire"):
+            return None
+        trace = [f"route: link question ({hit.get('why')}) -> project knowledge graph (R1 kg_qa over stoa.kg); "
+                 "ifc as asked checks it"]
+        try:
+            k = kg_solve(path, question)
+            if not isinstance(k, Answer):
+                k = Answer.model_validate(k)
+        except Exception as e:  # noqa: BLE001
+            trace.append(f"kg_qa: error {type(e).__name__}")
+            k = None
+        a = None
+        # ifc only where W1 reads the link deterministically (GlobalId set differences, plan sheets: 0 LLM), or when
+        # kg_qa gave nothing; on other kinds ifc falls back to its LLM text reader (+1.2k tokens/Q, not comparable)
+        ifc = self._get("ifc") if (k is None or k.value is None or re.search(
+            r"plan vs model|count sheets", str(hit.get("why")))) else None
+        if ifc is not None:
+            try:
+                a = ifc.solve(path, question)
+                if not isinstance(a, Answer):
+                    a = Answer.model_validate(a)
+            except Exception as e:  # noqa: BLE001
+                trace.append(f"ifc: error {type(e).__name__}")
+                a = None
+        a_ok = a is not None and a.value is not None
+        if k is None or k.value is None:
+            if a_ok and float(a.confidence or 0) >= LINK_IFC_ACCEPT:
+                out = a.model_copy(deep=True)
+                out.trace = trace + ["project knowledge graph: no answer", f"ifc (question as asked): {a.value} "
+                                     f"{a.unit or ''} at conf {a.confidence:.2f}, accepted (>= {LINK_IFC_ACCEPT})"] + \
+                    [f"[ifc] {t}" for t in a.trace[-10:]]
+                out.solver = "pipeline/ifc"
+                out.cost.wall_seconds = round(time.perf_counter() - t0, 4)
+                return out
+            return None
+        out = k.model_copy(deep=True)
+        out.trace = trace + ["project knowledge graph: " f"{k.value} {k.unit or ''} at conf {k.confidence:.2f}"] + \
+            [f"[kg_qa] {t}" for t in k.trace]
+        if a_ok and float(a.confidence or 0) >= 0.5:  # ifc's own unsure prose ("No information ...") is no reading
+            ka, ia = _link_shape(k.value), _link_shape(a.value)
+            if ka is not None and ia is not None and ka[0] == ia[0]:
+                if ka[1] == ia[1]:
+                    out.trace.append(f"cross-check: ifc as asked says {_clip(a.value)} ✓")
+                    out.evidence = [*out.evidence, *[e for e in a.evidence if getattr(e, "ifc_guid", None)][:12]]
+                elif out.confidence > LINK_DISAGREE:
+                    out.trace.append(f"cross-check: ifc as asked says {_clip(a.value)} (conf "
+                                     f"{float(a.confidence or 0):.2f}) ✗: confidence capped at {LINK_DISAGREE}")
+                    out.confidence = LINK_DISAGREE
+                    out.missing = [*out.missing, f"the IFC reader answered {_clip(a.value)} to the same question"]
+            else:
+                out.trace.append(f"ifc as asked: {_clip(a.value)} (another kind of answer; not compared)")
+        elif a_ok:
+            out.trace.append(f"ifc as asked: unsure ({float(a.confidence or 0):.2f}); not compared")
+        out.solver = "pipeline/kg_qa"
+        out.cost = _cost_of(k).add(_cost_of(a)) if a is not None else _cost_of(k)
+        out.cost.wall_seconds = round(time.perf_counter() - t0, 4)
+        return out
+
     def _per_room(self, path: str, question: str, t0: float) -> Answer | None:
         """D19 (4), R1 08:27: R1's measured per-room route (experiments.r1.room_graph.route.per_room: room-scoped /
         relational / superlative questions on a raster, not area questions; 0 fires on every dataset/dev/hard split)
@@ -996,7 +1198,10 @@ class Pipeline(BaseSolver):
                 best.trace = trace + [f"[{label}] {t}" for t in best.trace[-8:]]
                 best.solver = f"pipeline/{label}"
                 return best
-        if why:
+        sk = budget.skip("the general agent") if why and unsure is not None and _fits(intent.task, unsure[1]) else None
+        if sk:  # D20-2: a reading exists and the question's LLM budget is spent: no agent run on top
+            trace.append(sk)
+        elif why:
             ans = self._run_agent(path, question, why, t0)
             if ans is not None:
                 ans.trace = trace + ans.trace  # intent, "dxf as asked: unsure", then the agent's steps
@@ -1042,6 +1247,11 @@ class Pipeline(BaseSolver):
             s = self._get(name)
             if s is None:
                 continue
+            if answers or (unsure is not None and _fits(intent.task, unsure[1])):
+                sk = budget.skip(f"{name} (another reader)")
+                if sk:  # D20-2: a reading exists and the question's LLM budget is spent
+                    trace.append(sk)
+                    break
             if name in raw_abstained and not (canon and canon != question):
                 trace.append(f"{name}: already asked this exact question (not understood): skipped")
                 continue
@@ -1160,7 +1370,7 @@ class Pipeline(BaseSolver):
                 best.value is not None and not best.evidence:
             self._room_evidence(path, best, trace, intent.target)
         if self.crosscheck and best.value is not None:
-            self._kg_crosscheck(path, intent, best, trace)
+            self._kg_crosscheck(path, intent, best, trace, question)
         measured = any(re.search(r"scale bar|flood fill", str(x), re.I)
                        for x in [*(e.note for e in best.evidence), *best.trace]) if best.value is not None else False
         if intent.task in ("area", "length", "volume") and best.value is not None and not measured and \
@@ -1431,7 +1641,7 @@ class Pipeline(BaseSolver):
                 best.missing = [*best.missing, f"the router read this as a {intent.task} question; {name} answered "
                                                f"in {a.unit} with confidence {a.confidence:.2f}"]
             if self.crosscheck:
-                self._kg_crosscheck(path, intent, best, trace)
+                self._kg_crosscheck(path, intent, best, trace, question)
             best.cost = total
             best.cost.wall_seconds = round(time.perf_counter() - t0, 4)
             best.trace = trace + [f"[{name}] {t}" for t in best.trace[-8:]]
@@ -1492,8 +1702,16 @@ class Pipeline(BaseSolver):
                 return out
         return ans
 
-    def _kg_crosscheck(self, path: str, intent: Intent, ans: Answer, trace: list[str]) -> None:
+    def _kg_crosscheck(self, path: str, intent: Intent, ans: Answer, trace: list[str], question: str = "") -> None:
         """Stoa point 4: compare with another source of the same building (W1's stoa.kg, when available)."""
+        mods = [m for m in modifiers(question) if m != "multi"] + [m for m in modifiers(question) if m in DERIVED] \
+            if question else []
+        if mods:
+            # W1 09:25: "How many rooms on '1.korrus' are larger than 50 m²?" -> ifc 4 @ 0.92 compared with the storey's
+            # 50 rooms (✗) -> 0.645. A filtered / combined quantity is not what the linked source counts
+            trace.append(f"cross-check skipped: the question applies an operation ({', '.join(dict.fromkeys(mods))}); "
+                         "the linked source knows only plain totals")
+            return
         try:
             from stoa.kg import crosscheck
         except Exception:  # noqa: BLE001 - not merged yet

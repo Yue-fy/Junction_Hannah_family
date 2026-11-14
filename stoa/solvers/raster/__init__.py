@@ -69,8 +69,13 @@ _COUNT_CUE = re.compile(r"how many|number of|wie viele|anzahl|combien|nombre de|
 
 def labelled_query(question: str) -> str | None:
     """The quoted room label of a 'how many rooms labelled X' question (greedy: "Cage d'escalier" stays whole)."""
-    m = _LABELLED.search(question or "")
-    return m.group(1).strip() if m and _COUNT_CUE.search(question) else None
+    if not _COUNT_CUE.search(question or ""):
+        return None
+    m = _LABELLED.search(question)
+    if m:
+        return m.group(1).strip()
+    from stoa.solvers.raster.apartment import unquoted_label
+    return unquoted_label(question)
 GATE_FILE = Path(__file__).with_name("gate.json")
 COND_FILE = Path(__file__).with_name("cond_prior.json")  # experiments/w3/cv/cond_prior.py --write
 
@@ -120,13 +125,15 @@ class RasterSolver(BaseSolver):
     extensions = IMG_EXT
 
     def __init__(self, gate: str = "", backend: str = "local", target_px: int | str = 2_000_000,
-                 text: int | str = 1, offdomain: int | str = 1, twins: int | str = 1, **kwargs):
+                 text: int | str = 1, offdomain: int | str = 1, twins: int | str = 1, doors: int | str = 1,
+                 **kwargs):
         super().__init__(**kwargs)
         self.backend = backend
         self.target_px = int(target_px)
         self.text = bool(int(text))  # text-grounded answers on scans (textqa.py); `--solver-arg text=0` = off
         self.offdomain = bool(int(offdomain))  # non-CubiCasa images: labels for rooms, abstain on symbols
         self.twins = bool(int(twins))  # 0 = act as if no vector twin existed (simulates an unseen PNG-only plan)
+        self.doors = bool(int(doors))  # off-domain door counts from drawn swing arcs (doorarcs.py); 0 = abstain
         self.gate = load_gate()
         for part in filter(None, (gate or "").split(",")):
             c, m = part.split(":")
@@ -258,9 +265,60 @@ class RasterSolver(BaseSolver):
         lab = labelled_query(question or "")
         if lab or cls in ROOM_CLASSES:
             return self._sheet_veto(path, question or "", self._text_count(path, cls, lab, trace, question))
+        twinless = not self.twins or not ({".pdf", ".dxf", ".ifc"} & set(_siblings(path)))
+        if cls == "door" and self.doors and twinless:  # with a twin, dxf/pdf_vector count exactly: no text layer here
+            ans = self._door_arcs(path, trace)
+            if ans is not None:
+                return ans
         return Answer(value=None, unit="count", solver=self.name, trace=trace + ["abstain (off-domain symbol class)"],
                       missing=[f"a {cls.replace('_', ' ')} detector for this drawing style (raster's are fitted on "
                                f"CubiCasa plans only)"])
+
+    def _door_arcs(self, path: str, trace: list[str]) -> Answer | None:
+        """Doors on a plan without a vector twin: every drawn swing arc (doorarcs.py; radius 0.55-1.35 m from the
+        scale bar), plus one for each door on the red apartment boundary (the dataset counts such a door once per
+        side). TRAIN Swiss floors, 60 (experiments/w3/doorwin): visible arcs found 0.9 recall / 0.95+ precision,
+        counts exact on 7/60 floors (the DXF also counts doors no drawing shows), median error -2. An estimate whose
+        every door a reader can check, not an exact count. None without a metric scale bar."""
+        from stoa.solvers.raster import doorarcs as DA
+        from stoa.solvers.raster import scalebar as SB
+        from stoa.solvers.raster import textlayer as T
+
+        img_path = self._raster_file(path)
+        if img_path is None:
+            return None
+        try:
+            tl = T.text_layer(img_path, backend=self.backend)
+            bar = next((b for b in SB.bars(img_path, layer=tl) if b.unit in SB.UNIT_M and b.px_per_m), None)
+        except Exception as e:  # noqa: BLE001
+            trace.append(f"door arcs: no scale ({type(e).__name__})")
+            return None
+        if bar is None:
+            trace.append("door arcs: no metric scale bar, so the door radius in pixels is unknown")
+            return None
+        import numpy as np
+        from PIL import Image
+
+        dets = DA.detect(T._abspath(img_path), bar.px_per_m)
+        rgb = np.asarray(Image.open(T._abspath(img_path)).convert("RGB"))
+        dup = [d for d in dets if DA.red_near(rgb, d, bar.px_per_m) >= DA.DUP_RED]
+        n = len(dets) + len(dup)
+        ev = [Evidence(file=path, page=0, bbox=d["box"], bbox_space="image_px",
+                       note=f"door {k + 1}: swing arc r {d['r_m']:.2f} m" + (" (on the apartment boundary: counted "
+                                                                             "twice)" if d in dup else ""))
+              for k, d in enumerate(dets)]
+        if bar.box:
+            ev.append(Evidence(file=path, page=0, bbox=[round(v, 1) for v in bar.box], bbox_space="image_px",
+                               note=f"scale bar: {bar.px_per_m:.1f} px per m"))
+        trace.append(f"door arcs: {len(dets)} swing arcs (scale {bar.px_per_m:.1f} px/m) + {len(dup)} on an "
+                     f"apartment boundary = {n}")
+        return Answer(value=n, unit="count", confidence=DA.CONF, evidence=ev, solver=self.name, trace=trace,
+                      assumptions=["a door = a drawn swing arc of radius 0.55-1.35 m at the scale bar's scale; sliding "
+                                   "doors, openings without a swing and doors under labels are missed",
+                                   f"{len(dup)} doors on the red apartment boundary counted once per side, as the "
+                                   f"source data does"],
+                      missing=["a vector twin (DXF/PDF) of this plan for an exact count: the image alone matched the "
+                               "exact count on 7 of 60 TRAIN floors (median error -2 doors)"])
 
     def _text_count(self, path: str, cls: str | None, label: str | None, trace: list[str],
                     question: str | None = None) -> Answer:
