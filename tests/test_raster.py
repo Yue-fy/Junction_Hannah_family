@@ -122,6 +122,11 @@ def test_textlayer_parsers_and_merge():
     assert T.parse_scales("MITTAKAAVA 1:50")[0]["ratio"] == 50
     assert T.parse_scales("SCALE: 1:125,000")[0]["ratio"] == 125000
     assert T.parse_scales("drawn 12:30") == []
+    # Finnish/Swedish slash form (W5 04:31): a scale only next to a scale word or with a standard denominator
+    assert T.parse_scales("ASEMAPIIRROS M.K. 1/500")[0]["ratio"] == 500
+    assert T.parse_scales("POHJA 1/100")[0]["ratio"] == 100
+    assert T.parse_scales("Skala 1/75")[0]["ratio"] == 75
+    assert T.parse_scales("1/16") == [] and T.parse_scales("3/4 1/2") == []
     # Qwen bbox_2d JSON (0..1000) -> pixels of a 2000x1000 tile; loops (> 6 repeats) dropped
     items = T.parse_items('[{"bbox_2d": [100, 100, 200, 150], "text": "SAUNA"}, '
                           '{"bbox_2d": [500, 500, 600, 550], "text": "12\'-6\\""}]', 2000, 1000)
