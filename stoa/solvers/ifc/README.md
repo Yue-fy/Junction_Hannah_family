@@ -147,3 +147,31 @@ also end to end through `pipeline`). ifc_models train/dev/hard/hard2 stay 100% w
   above B' and 'is the floor-to-floor height … more than 3 m' (yes/no); Italian/other 'whole building' words; room
   labels typed without quotes ('Living (414B-19-001-002)', F's wording probe 125 -> 135/135).
 Tests: `tests/test_ifc_c6.py`.
+
+## Answers that are sets: room lists, storey sets, where a room is (cycle 7, 09:10–10:00)
+Q's red-team v19 (list answers on the demo model) found 4 confident misses at 0.90–0.92; a fresh probe written before
+fixing (`experiments/w1/probes/c7_lists.txt`, 28 Qs on esplanades / warmond / digitalhub / smiley, en/et/de, gold =
+the model's own rooms and counts) had 12/28 right with 9 confident-wrong -> 28/28, 0 (pipeline end to end 38/38 incl.
+10 later rows). Outputs: `$JUNCTION_SHARED/artifacts/W1/probes-c7/`.
+- `room_filter(idx, question)`: the room set a question names outside quotes: a room label of the model written in
+  the question (1–3 words, plural endings: 'ELUTUBA+KÖÖK rooms', 'Gruppenbüros', 'Kellerräume', 'the living
+  rooms'), else a multilingual room type (`arith.ROOM_TYPES`: 'WCs' -> toilet). Threshold lists / counts / sums over
+  every room of a storey now keep only that set ('Which ELUTUBA+KÖÖK rooms are smaller than 25 m²?' 34 -> 1 room).
+  'Which bedrooms …' and German 'Welche … Räume/Gruppenbüros …' are threshold lists too.
+- `_storey_select` (before the other rules): (1) **storey sets by a threshold**: 'Which floors have more than 55
+  rooms?', 'How many floors have fewer than 42 doors?', 'Which floors have a total floor area of more than 860 m²?' ->
+  each used storey with the same rule as 'How many X are on S?' / 'What is the <measure> of S?', keep those that pass
+  (value names only the passing floors; the rest are in the assumptions). Confidence = 0.9 × the lowest of the
+  passing floors and close calls (a floor far from the threshold cannot flip the set). (2) **where a room is**: 'On
+  which floors is there a room called MAGAMISTUBA?', 'On which floor is the room SERVER?', "On which storey is the
+  space 'LIFT'?" (was the sheet storey's room count 50 at 0.97), 'On which floor is the kitchen?' (type, 0.8).
+- `rooms_named(idx, question)`: quoted name / 'called X' / 'room 117' -> exact LongName / Name / 'LongName (Name)',
+  else all rooms with that label, else `room_filter`.
+- `_plan_vs_model`: **which sheet shows a room** ('Which sheet shows the server room?' -> plan-01-1-korrus, storey
+  '1.korrus', SERVER (117); evidence = the room's box on the sheet (GlobalId-tagged) + its GUID in the model) and
+  **'Does this drawing show every window that the model has on S?'** (drawn ⊇ modelled: 'no: 52 of the 55 …; 3 lie
+  wholly above/below the cut plane').
+- Text: 'between 20 and 25 m2' (the upper bound was missing), the model's label in list texts.
+No dataset question (0 of 3,034 non-test ifc_models / ifc_bench) uses these wordings; ifc_models train/dev/hard/hard2
+0 answers changed; F's area (137) and count (301) probes 0 changed; c4–c6 probes (266) 0 changed. Tests:
+`tests/test_ifc_c7.py`.
