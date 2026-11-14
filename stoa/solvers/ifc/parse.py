@@ -330,7 +330,9 @@ def storey_mention(question: str, storey_names: list[str]) -> tuple[int | None, 
     named = [i for i, n in enumerate(storey_names) if word and re.search(r"\b" + word + r"\b", fold(n or ""))]
     if len(named) == 1:
         return named[0], f"'{m.group(0).strip()}' -> storey '{storey_names[named[0]]}' (ordinal word)"
-    anyn = [i for i, n in enumerate(storey_names) if re.search(r"(?<![\d.])0*" + str(abs(num)) + r"(?![\d])", n or "")]
+    # the sign matters: 'basement floor' (-1) is not '1.OG' (Finnish 'kellarikerros' -> 'basement floor' -> 1.OG @ 0.75)
+    rx_n = (r"-\s*0*" + str(abs(num)) if num < 0 else r"(?<![\d.\-])0*" + str(num)) + r"(?![\d])"
+    anyn = [i for i, n in enumerate(storey_names) if re.search(rx_n, n or "")]
     if len(anyn) == 1:
         return anyn[0], f"'{m.group(0).strip()}' -> storey '{storey_names[anyn[0]]}' (number in its name)"
     return None, f"'{m.group(0).strip()}' matches no single storey"

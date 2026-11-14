@@ -164,3 +164,27 @@ def test_should_translate_fires_only_on_unparsed_non_english():
     assert not should_translate("Wie viele WC-Schüsseln sind auf diesem Grundriss eingezeichnet?")
     assert should_translate("Kolik saun je na tomto půdorysu?")  # Czech: the rules can't read it
     assert should_translate("Mekkora a(z) '00 Begane grond' szinten lévő összes fal teljes hossza méterben?")
+
+
+def test_protect_keeps_grouped_thousands_as_one_number():
+    from stoa.llm import _protect, _restore
+
+    for q, num in [("Wenn eine Tür 1'200 CHF kostet, was kosten alle Türen auf 'Level 2'?", "1'200"),
+                   ("Ile kosztują drzwi, jeśli jedne kosztują 1 200 zł?", "1 200"),
+                   ("Quanto costa se una porta costa 1’200 CHF?", "1’200")]:
+        masked, spans = _protect(q)
+        assert num in spans and "'200" not in masked and "200" not in masked
+        assert _restore(masked, spans) == (q, True)
+
+
+def test_should_translate_fires_on_unread_compositions_outside_rule_languages():
+    from stoa.llm import should_translate
+
+    # Swedish 'och' + 'totalt': the composer reads neither, so the question reached the LoRA as balconies only
+    assert should_translate("Hur många toalettstolar och balkonger finns det totalt på planritningen?")
+    assert should_translate("Hur många sovrum och bastur finns det totalt på planritningen?")
+    # two classes + a 'total' word the composer reads (NL 'in totaal'): keep the original (no translation cap)
+    assert not should_translate("Hoeveel deuren en ramen staan er in totaal op deze plattegrond?")
+    # rule languages compose themselves; no conjunction -> nothing to split
+    assert not should_translate("Wie viele Türen und Fenster gibt es insgesamt?")
+    assert not should_translate("Hur många dörrar finns det?")

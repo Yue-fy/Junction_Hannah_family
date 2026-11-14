@@ -1,10 +1,10 @@
 import "./style.css";
-import { ask, benchmark, exampleQuestions, fileUrl, knowledgeGraph, listFiles, onBackend, secondOpinion } from "./api";
+import { ask, benchmark, exampleQuestions, fileUrl, knowledgeGraph, listFiles, onBackend, roomGraph, secondOpinion } from "./api";
 import { renderBench } from "./bench";
 import { agentAsks, crossChecks, renderCard } from "./card";
 import { markAnswerCheck, renderKg } from "./kg";
-import type { Answer, FileInfo, KgRoom } from "./types";
-import { Viewer2D } from "./viewer2d";
+import type { Answer, FileInfo, KgRoom, RoomGraph } from "./types";
+import { roomName, roomShown, Viewer2D } from "./viewer2d";
 import type { Viewer3D } from "./viewer3d"; // loaded lazily: web-ifc + three are ~4 MB
 import tourSteps from "../fixtures/tour.json";
 
@@ -146,6 +146,52 @@ $("fitBtn").addEventListener("click", () => {
   if (v3d && state.answer) applyEvidence3D(state.answer);
 });
 
+// --- room graph on CubiCasa plans (R1, experiments/r1/room_graph): rooms + the doors that link them, drawn on the plan.
+// Read from the cached pretrained-CubiCasa5K segmentation by the middleware (GET /api/rooms), no language model.
+let roomsOn = false;
+async function showRooms(on: boolean) {
+  roomsOn = on;
+  $("roomsBtn").classList.toggle("on", on);
+  const leg = $("rgLegend");
+  const f = state.file;
+  if (!on || !f || f.source !== "cubicasa5k") {
+    v2d.setRoomGraph(null);
+    leg.hidden = true;
+    return;
+  }
+  leg.hidden = false;
+  leg.textContent = "Reading the rooms…";
+  try {
+    const g = await roomGraph(f.path);
+    if (state.file?.path !== f.path || !roomsOn) return;
+    v2d.setRoomGraph(g);
+    leg.innerHTML = roomLegend(g);
+    // open with the best-connected room's links lit (the hall, usually), so the graph reads without hovering
+    const hub = leg.querySelector<HTMLElement>("[data-room]");
+    if (hub) {
+      v2d.focusRoom(hub.dataset.room!);
+      hub.addEventListener("mouseenter", () => v2d.focusRoom(hub.dataset.room!));
+    }
+  } catch (e) {
+    v2d.setRoomGraph(null);
+    leg.textContent = `No room graph for this plan (${e}).`;
+  }
+}
+function roomLegend(g: RoomGraph) {
+  const byId = new Map(g.rooms.map((r) => [r.id, r]));
+  const name = (id: string) => { const r = byId.get(id); return r ? roomName(r) : id; };
+  const inside = g.rooms.filter((r) => r.cls !== "outdoor" && roomShown(r));
+  const hub = [...inside].sort((a, b) => (b.door_to ?? []).filter((x) => x !== "outside").length - (a.door_to ?? []).filter((x) => x !== "outside").length)[0];
+  const nHub = (hub?.door_to ?? []).filter((x) => x !== "outside").length;
+  const entrances = g.doors.filter((d) => d.between.includes("outside")).length;
+  const scale = g.scale?.assumptions?.[0];
+  return `<b>Room graph</b> · ${inside.length} rooms · ${g.doors.length} doors${entrances ? ` (${entrances} to the outside)` : ""}`
+    + `${hub && nHub >= 2 ? ` · <b class="rg-hub" data-room="${esc(hub.id)}">${esc(name(hub.id))}</b> leads to ${nHub} rooms` : ""} · hover a room for its links`
+    + `<small>Rooms, doors and windows from the pretrained CubiCasa5K model (Kalervo et al. 2019, CC BY-NC 4.0) + geometry rules; no language model.`
+    + `${scale ? ` ~m²: ${esc(scale)}` : ""}</small>`;
+}
+$("roomsBtn").addEventListener("click", () => void showRooms(!roomsOn));
+
 $("benchBtn").addEventListener("click", async () => {
   const el = $("bench");
   if (!el.hidden) return void (el.hidden = true);
@@ -228,7 +274,10 @@ async function openFile(f: FileInfo, question = "", keep: Answer | null = null, 
     markAnswerCheck($("linked"), undefined, undefined);
     $("xbanner").hidden = true;
     $("card").className = "card empty";
-    $("card").innerHTML = `<p class="hint">Ask a question about this ${f.ext === ".ifc" ? "model" : "drawing"}.</p>`;
+    // the first thing a visitor reads: what every answer carries
+    $("card").innerHTML = `<p class="hint">Ask about this ${f.ext === ".ifc" ? "model" : "drawing"} in any language, or pick an example. Every answer
+      shows how sure we are, what it cost and how it was worked out, and points at where it came from (${f.ext === ".ifc" ? "elements in the 3D model" : "boxes on the drawing"}),
+      checked against a second source when there is one.</p>`;
   }
   $("pick").hidden = true;
   $("bench").hidden = true;
@@ -262,6 +311,8 @@ async function openFile(f: FileInfo, question = "", keep: Answer | null = null, 
       label.textContent = `could not render: ${e}`;
     }
   }
+  $("roomsBtn").hidden = f.source !== "cubicasa5k";
+  if (state.file?.path === f.path) void showRooms(roomsOn);
   if (keep && state.file?.path === f.path) {
     showAnswer(keep, 0);
     if (focusIndex !== null) focusEvidence(focusIndex);
@@ -596,7 +647,7 @@ function focusEvidence(i: number) {
 // --- demo tour: one step per key press, each one sentence for the presenter ----------------------------------------
 // Steps live in fixtures/tour.json (one source for this tour and fixtures/record.py, which pre-records its answers):
 // {file, q, note, bench?, second? (ask NVIDIA Nemotron too), locate? (click "Show where")}. Add a step = add a line there.
-const TOUR: { file: string; q: string; note: string; bench?: boolean; second?: boolean; locate?: boolean }[] = tourSteps;
+const TOUR: { file: string; q: string; note: string; bench?: boolean; second?: boolean; locate?: boolean; rooms?: boolean }[] = tourSteps;
 let tourStep = -1;
 let tourBack = false;
 // presenter keys: → next step, ← previous step (not while typing a question)
@@ -624,9 +675,11 @@ $("tourBtn").addEventListener("click", async () => {
     const f = state.files.find((x) => x.path === t.file) ?? (await listFiles("", t.file, 5)).find((x) => x.path === t.file)
       ?? (await listFiles(src, t.file, 5, false)).find((x) => x.path === t.file);
     if (!f) return;
+    roomsOn = !!t.rooms; // each step sets the room overlay itself; drawn as soon as the plan is loaded
     await openFile(f, t.q);
   } else $<HTMLTextAreaElement>("question").value = t.q;
-  await runAsk();
+  if (!!t.rooms !== roomsOn) await showRooms(!!t.rooms);
+  if (t.q) await runAsk();
   if (t.second) document.querySelector<HTMLButtonElement>("#card .second-btn")?.click();
   if (t.locate) document.querySelector<HTMLButtonElement>("#card .locate-btn")?.click();
 });
