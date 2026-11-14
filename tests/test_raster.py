@@ -253,3 +253,28 @@ def test_swiss_png_without_twin_goes_to_text_mode(monkeypatch):
     monkeypatch.setattr(R, "_siblings", lambda p: {".png": p})
     assert R.RasterSolver()._text_mode("data/swiss_dwellings/x.png", q)
     assert not R.RasterSolver()._text_mode("data/cubicasa5k/x.png", q)
+
+
+def test_sheet_kind_titles_and_room_questions():
+    """sheet.py (Q 05:04): view titles from a text layer; only count/size questions about rooms need a floor plan."""
+    from stoa.solvers.raster import sheet as S
+    from stoa.solvers.raster.textlayer import TextItem, TextLayer
+
+    tl = TextLayer(path="x.jpg", size=(1000, 800), items=[
+        TextItem("NORTH ELEVATION", [100, 700, 300, 730]), TextItem("PLAN OF PINTLE", [500, 100, 600, 110]),
+        TextItem("SEE THE FLOOR PLAN ON SHEET 3 FOR ALL ROOM NAMES AND DOORS", [10, 10, 400, 20])])
+    kinds = [(h["kind"], h["title"]) for h in S.title_kinds(tl)]
+    assert kinds[0] == ("elevation", True)  # biggest short title first
+    assert ("floor_plan", False) in kinds  # the long note is not a title
+    assert all(k != "floor_plan" for k, t in kinds if t)  # 'PLAN OF PINTLE' is a detail view, not a floor plan
+    k = S.sheet_kind("x.jpg", use_vlm=False, layer=tl)
+    assert k["has_plan"] is None  # a 'plan' word is present -> the text rule does not decide
+    tl.items = tl.items[:1]
+    assert S.sheet_kind("x.jpg", use_vlm=False, layer=tl)["has_plan"] is False
+    tl.items.append(TextItem("POHJA 1/100", [100, 100, 200, 120]))
+    assert S.sheet_kind("x.jpg", use_vlm=False, layer=tl)["has_plan"] is True
+    assert S.needs_plan("How many bedrooms are shown on this floor plan?")
+    assert S.needs_plan("Montako makuuhuonetta asunnossa on?") and S.needs_plan("Wie viele Zimmer hat die Wohnung?")
+    assert not S.needs_plan("How many windows are on the north elevation?")
+    assert not S.needs_plan("What is the name of the hall?")
+    assert S.veto("data/cubicasa5k/x.png", "How many bedrooms?") is None  # CubiCasa sheets are plans
