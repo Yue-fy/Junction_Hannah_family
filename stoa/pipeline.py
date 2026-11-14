@@ -337,6 +337,8 @@ ROOM_REL = re.compile(
     r"|\bmistä huoneesta|\bminkä huoneen kautta|\bmihin huoneeseen|\bsuurin huone|\bvon welchem raum|\bdurch welchen raum"
     r"|\bgrö(?:ß|ss)te(?:r|n)? raum|\bfrån vilket rum|\bgenom vilket rum|\bstörsta rummet",
     re.I)
+_AREA_UNIT_WORD = re.compile(r"m²|\bm2\b|square (?:met|feet|foot)|sq\.? ?m\b|mètres? carrés?|metri quadrati|\bmq\b|"
+                             r"quadratmeter|neliömet|neliöt|kvadratmeter|vierkante meter", re.I)
 _AREA_SUM = re.compile(r"\b(?:total|combined|summed|together|sum of)\b[^?]{0,40}\barea|\barea of (?:the )?(?:two|three|all|both)\b|"
                        r"\barea of [^?]{1,40}\band\b", re.I)
 IMG_EXT = (".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp", ".gif")
@@ -1325,6 +1327,12 @@ class Pipeline(BaseSolver):
             if a.value is None:
                 if any("not understood" in str(x) for x in [*a.missing, *a.trace[-2:]]):
                     abstained.add(name)
+                continue
+            if intent.task == "area" and str(a.unit or "").lower() == "count" and _AREA_UNIT_WORD.search(question):
+                # F 08:40: "Combien de mètres carrés fait l'appartement B (hors balcons …)?" -> dxf read 'combien' as a
+                # count and counted the balconies (1 count). A question that names an area unit is not answered by a count
+                trace.append(f"{name} (question as asked): {a.value} count, but the question asks for square metres: "
+                             "dropped")
                 continue
             apt = intent.filters.get("apartment")
             if apt and intent.task == "area" and "rest" not in modifiers(question) and any(
