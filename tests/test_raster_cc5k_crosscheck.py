@@ -101,3 +101,21 @@ def test_a_third_count_switches_to_the_joint_confidence_table():
     assert agree_det_only.confidence == cx._joint("door", False, True)
     assert any("raster 7" in t for t in agree_det_only.trace)
     assert cx.check(DRAWING, "count:door:drawing", lora(4, 0.6)).confidence == cx._table()["targets"]["door"]["agree"]
+
+
+def test_detector_only_range_grows_with_the_count_and_never_goes_below_zero():
+    lo, hi = cx.detector_interval("windows", 3)
+    assert 0 <= lo <= 3 <= hi
+    big = cx.detector_interval("window", 15)
+    assert big[1] - big[0] >= hi - lo
+    assert cx.detector_interval("shower_bath", 2) is None
+
+
+@needs_cache
+def test_raster_cc5k_answers_carry_the_range():
+    from stoa.solvers.raster_cc5k import RasterCC5KSolver
+    a = RasterCC5KSolver().solve(DRAWING, "How many windows are shown on this floor plan?")
+    line = [t for t in a.trace if t.startswith("interval90:")]
+    assert a.value == 11 and line
+    lo, hi = map(int, line[0].split("[")[1].rstrip("]").split(","))
+    assert lo <= 11 <= hi

@@ -65,4 +65,14 @@ class RasterCC5KSolver(BaseSolver):
                                 trace=[f"CC5K_PYTHON={os.environ.get('CC5K_PYTHON', a.PY)}"])
         ans.solver = self.name
         ans.trace.append("pretrained CubiCasa5K multi-task model (Kalervo et al. 2019), weights CC BY-NC 4.0")
+        try:  # calibrated range (leak-safe: fitted on CC5K val, coverage checked on CC5K test; crosscheck.py)
+            from stoa.solvers.raster_cc5k.crosscheck import detector_interval
+            rng = detector_interval(t, int(ans.value)) if ans.value is not None else None
+        except Exception:  # noqa: BLE001 - no table: no range
+            rng = None
+        if rng is not None:
+            ans.trace.append(f"interval90: [{rng[0]}, {rng[1]}]")
+            if rng[0] < rng[1]:
+                ans.missing = [*ans.missing, f"exact count not certain: 90% range {rng[0]}–{rng[1]} (held the true "
+                                             f"count ~90% of the time on held-out CubiCasa5K drawings)"]
         return ans

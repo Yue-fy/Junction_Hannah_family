@@ -15,7 +15,10 @@ FROZEN = {"windows": (2e-4, 5), "doors": (2e-4, 0)}
 
 def load(st, tag):
     p = os.path.join(SEG, tag + st + ".npz")
-    return {"icons": np.load(p)["icons"]} if os.path.exists(p) else None
+    try:
+        return {"icons": np.load(p)["icons"]} if os.path.exists(p) else None
+    except Exception:  # noqa: BLE001 - being written by infer.py
+        return None
 
 
 def rows(split, gold, t, grid):
