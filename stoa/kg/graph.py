@@ -530,9 +530,13 @@ def _crosscheck(path: str, intent, answer) -> str | None:
         if task == "count" and target in _TARGET_CLASSES and scope in (None, "drawing", "storey"):
             classes = _TARGET_CLASSES[target]
             model_classes = ("IfcStair",) if target == "stair" else classes
+            sg = {idx.elements[x].storey for x in guids if x in idx.elements}
             if st is None and guids:  # .ifc question: take the storey of the answer's own elements
-                sg = {idx.elements[x].storey for x in guids if x in idx.elements}
                 st = idx.storey(next(iter(sg))) if len(sg) == 1 else None
+            elif st is not None and len(sg) == 1 and next(iter(sg)) != st.guid and idx.storey(next(iter(sg))) is not None:
+                # 'How many walls are there on the ground floor?' asked on the 1.OG sheet: the answer (81, EG's walls)
+                # was checked against the SHEET's storey (70) -> false ✗, 0.97 -> 0.68 (W1 c8); check the asked storey
+                st = idx.storey(next(iter(sg)))
             if st is None:
                 return None
             mc = len(idx.in_storey(st.guid, *model_classes))

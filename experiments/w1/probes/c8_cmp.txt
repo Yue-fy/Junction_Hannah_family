@@ -1,0 +1,41 @@
+# cycle 8 probe, written before fixing. Comparative link questions (Q 10:09) and role-word confidence (Q 10:01).
+# esplanades 1.korrus sheet: model windows 55, plan draws 52 (from earlier probes)
+PATH bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf
+Does this plan show fewer windows than the IFC model has on the same storey?
+Does this plan show more windows than the IFC model has on the same storey?
+Does the plan show as many windows as the model has on this storey?
+Are there fewer windows on this drawing than in the model?
+Does the model have more windows on '1.korrus' than this plan shows?
+Does the model have fewer windows on '1.korrus' than this plan shows?
+Does this sheet show fewer doors than the IFC model has on the same storey?
+Zeigt dieser Plan weniger Fenster als das IFC-Modell im selben Geschoss hat?
+Näyttääkö tämä piirustus vähemmän ikkunoita kuin mallissa on samassa kerroksessa?
+How many more windows does the model have on this storey than the plan shows?
+# smiley-west 1.OG sheet: roles from another storey's sheet (gold EG walls 81, basement 60)
+PATH kit-smiley-west_ac-20-smiley-west-10-bldg_plan-03-1-og.pdf
+How many walls are there on the ground floor?
+Count the walls at ground level.
+Wie viele Wände hat das Erdgeschoss?
+How many walls are in the basement?
+How many walls does the floor shown on this sheet have?
+PATH bsc-esplanades_1807-ep-ar-v18_plan-01-1-korrus.pdf
+Le plan montre-t-il moins de fenêtres que la maquette IFC à cet étage ?
+¿Muestra este plano menos ventanas que el modelo IFC en la misma planta?
+Toont deze plattegrond minder ramen dan het IFC-model op dezelfde verdieping?
+Has the IFC model got more doors on this storey than the floor plan?
+By how many windows does the model exceed this plan on '1.korrus'?
+How many fewer windows does this plan show than the model has?
+Does the model have more windows than doors on '1.korrus'?
+# second round (link rows of Q v23 / R1 probe_kg wrong in plan_vs_model)
+Are there windows in the 3D model that this sheet does not draw?
+Are there doors in the model that this plan does not show?
+By how many doors does this plan differ from the IFC model?
+By how many windows does this plan differ from the IFC model?
+Does the plan differ from the model in the number of windows?
+How many windows on '1.korrus' are in the model but not drawn on this plan?
+Which windows of the model does this plan not show?
+Is there a discrepancy between this plan and the IFC model in the number of doors?
+Is there a mismatch between the plan and the model for windows on '1.korrus'?
+Unterscheiden sich Grundriss und IFC-Modell bei der Anzahl der Fenster?
+Do the plan and the IFC model agree on the number of windows?
+Do the floor plan and the model agree or differ on the doors?

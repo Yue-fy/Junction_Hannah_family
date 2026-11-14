@@ -20,6 +20,9 @@ model), starts Vite on :5173 if needed, and asks every tour question once so the
 API cache (`DEMO_WARM=0` skips that; `fixtures/recorded.json` is not changed). Then open http://localhost:5173.
 
 - `STOA_DATA` must point at the dataset root (default: the team path in `AGENTS.md`).
+- `STOA_TEXT_BACKEND=local2` (D21): free-text IFC answers use the 35B on :8002 (judged 62 vs 54 % on ifc_bench, p95
+  6.6 vs 18.2 s; falls back to :8001 by itself). `demo.sh` sets it for the API and Vite it starts; uploads' questions
+  get it by default. Starting the API by hand: `STOA_TEXT_BACKEND=local2 $JUNCTION_VENV/bin/python -m uvicorn stoa.api:app --port 8100`.
 - `/api/*` goes to W4's API (`STOA_API_URL`, default `http://127.0.0.1:8100`, see `docs/CONTRACT.md`;
   start it with `$JUNCTION_VENV/bin/python -m uvicorn stoa.api:app --port 8100` from the repo root).
   If that server is down, the dev server answers from a **mock** (`mock/stoaApi.ts`): files and example
@@ -46,7 +49,27 @@ set's "different" drawings get: e.g. a Swiss plan PDF alone → 36 doors with 36
 3D, 0 LLM calls); a Swiss PNG alone → apartments 4 (LoRA), apartment B 77.79 m² at 0.5 with the room labels and
 the unit outline boxed. Needs the Python env (no mock answers for uploads). The example chips switch to general
 questions (floor-plan ones for drawings, model ones for IFC).
-Optional **style** under the upload box, for images: "Nordic apartment plan (CubiCasa-like)" stores the file under
+**A sheet together with its model.** Select (or drop) several files at once with an `.ifc` among them, e.g. a plan
+PDF + its model: they go into one new folder (`POST /api/upload/set`, files hard-linked, folder named by their content),
+so the sheet lists the model as its `.ifc` sibling (same stem, or the only `.ifc` in the folder: the rule of
+`stoa.data.ifc_model_for`, F 749e5c3). The pipeline then answers from the model for the storey the sheet shows (W1
+reads it from the sheet's title when the file name says nothing), and the page opens 2D + 3D side by side with the
+counted elements lit in 3D. Checked (cycle 8): esplanades 2.korrus sheet renamed `A102.pdf` + model `house.ifc` →
+doors 42, rooms 60, walls 156 (all = dataset), rooms > 40 m² = KORIDOR (202) 78.40, KORIDOR (205) 63.84, TREPIKODA
+(201) 45.50 (= dataset), 1 s each, 0 LLM calls. A lone PDF sheet says how to get this ("upload the .ifc too"); without
+it the sheet goes the vision way (Q 09:58: 0/5). Rooms the model answer cites are also boxed on the 2D sheet: `server/ask_upload.py`
+`sheet_labels` maps each cited GlobalId to the room's number + name (W1's `stoa.kg.links`) and finds that printed
+label in the PDF's text layer (60 of 60 rooms on the 2.korrus sheet), with a "the sheet's own text labels N of the M
+rooms ✓" check. Doors and windows have no printed label, so they show in 3D only (the GlobalId layer of a dataset
+sheet is its SVG twin, which an upload does not have).
+**Show where · door swings** (uploaded images that are not CubiCasa-style, door counts): W3's door-swing reader
+(`raster`, `twins=0`, geometry, no model call, ~20 s) boxes each swing arc it finds and adds a ✓/✗ line. Lone Swiss
+PNG (samples/swiss-floor-plan.png): answer 26 @ 0.11, reader 35 boxes, ✗ shown (gold 36).
+**Style** under the upload box, for images. Default "guess from the image": R2's `experiments/r2/style/style.py`
+(image features, no model call, ~0.2 s) and, when it says CubiCasa at p ≥ 0.8, the file is read as below (W5 c8:
+1 of 90 random non-CubiCasa images passed that bar; 3 of 12 CubiCasa plans came out 'scan', which changes nothing, so
+only an applied guess is shown: "Nordic apartment plan (guessed from the image, p 0.99)"). "other drawing" skips the
+guess. "Nordic apartment plan (CubiCasa-like)" stores the file under
 `<id>/data/cubicasa5k/` (virtual path `upload/<id>/cubicasa5k/<name>`), so `stoa.data.source_of()` says cubicasa5k
 and the readers trained on those plans may answer: the LoRA counter's per-concept gate, and **Show where · symbol
 detector**, which runs the pretrained CubiCasa5K model live on the new image (~2 s, no cache needed). Example: a
@@ -222,7 +245,7 @@ known-good answer while a solver regression is fixed, and say why in a `"note"`)
 | `src/viewer3d.ts` | web-ifc → merged three.js meshes per storey; storey filter, highlight/frame by GlobalId, picking |
 | `src/card.ts` | answer card (value, confidence, "understood as" intent + compound plan, cross-check badge, cost tier/time/tokens/€, trace or the agent's reasoning chain, second opinion, evidence) |
 | `src/kg.ts` | knowledge-graph strip and drawer (linked files, drawing-vs-model checks, rooms, storeys) |
-| `mock/stoaApi.ts` | `/api/*` middleware: forwards to :8100, falls back to the mock (and to `stoa.kg` for `/kg`); uploads (`POST /api/upload`, `upload/...` paths) |
+| `mock/stoaApi.ts` | `/api/*` middleware: forwards to :8100, falls back to the mock (and to `stoa.kg` for `/kg`); uploads (`POST /api/upload`, `POST /api/upload/set`, `upload/...` paths) |
 | `server/ask_upload.py` | answers a question about an uploaded file (absolute path outside the dataset) the way the API's POST /ask does |
 
 ## Licences

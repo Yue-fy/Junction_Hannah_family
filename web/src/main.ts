@@ -1,5 +1,5 @@
 import "./style.css";
-import { ask, benchmark, exampleQuestions, fileUrl, knowledgeGraph, listFiles, onBackend, roomGraph, secondOpinion, upload } from "./api";
+import { ask, benchmark, exampleQuestions, fileUrl, knowledgeGraph, listFiles, onBackend, roomGraph, secondOpinion, upload, uploadSet } from "./api";
 import { renderBench } from "./bench";
 import { agentAsks, crossChecks, renderCard, roomKindsIn } from "./card";
 import { markAnswerCheck, renderKg } from "./kg";
@@ -297,6 +297,17 @@ const APARTMENT_QUESTIONS = [
   "Is there a sauna?",
   "What is the total floor area in m²?",
 ];
+// An uploaded sheet linked to the IFC model uploaded with it: the IFC rules answer about the sheet's own storey (W1 reads
+// it from the sheet's title when the file name says nothing). W5 cycle 8: all six right on a renamed esplanades sheet
+// (A102.pdf + house.ifc: 42 doors, 60 rooms, 156 walls, 3 rooms > 40 m², KORIDOR (202) 78.40 m², 60 windows).
+const SHEET_MODEL_QUESTIONS = [
+  "How many doors are on this floor plan?",
+  "Which rooms on this floor plan are larger than 40 m²?",
+  "How many rooms are on this floor plan?",
+  "Which room on this floor plan is the largest?",
+  "How many walls are shown on this floor plan?",
+  "How many windows are on this floor plan?",
+];
 const IFC_QUESTIONS = [
   "How many doors are in this model?",
   "How many storeys does this building have?",
@@ -344,7 +355,7 @@ async function refreshFiles() {
     const sib = Object.keys(f.siblings ?? {}).map((e) => `<span class="ext">${esc(e.slice(1))}</span>`).join("");
     const upl = f.source === "upload";
     return `<li data-i="${i}" class="${state.file?.path === f.path ? "on" : ""}"><span class="src ${esc(f.source)}">${upl ? "yours" : esc(f.source.replace(/_.*/, ""))}</span>
-      <span class="name" title="${esc(upl ? `${name} (uploaded, kept on this machine)` : f.path)}">${esc(name)}</span><span class="meta">${upl ? "new" : `${f.n_questions} q`} ${upl ? "" : sib}</span></li>`;
+      <span class="name" title="${esc(upl ? `${name} (uploaded, kept on this machine)` : f.path)}">${esc(name)}</span><span class="meta">${upl ? "new" : `${f.n_questions} q`} ${upl && Object.keys(f.siblings ?? {}).length < 2 ? "" : sib}</span></li>`;
   }).join("") || `<li class="none">No files match.</li>`;
 }
 $("files").addEventListener("click", (e) => {
@@ -359,21 +370,33 @@ $("search").addEventListener("input", () => {
 $("source").addEventListener("change", refreshFiles);
 
 // --- your own drawing: upload (button or drop anywhere) → saved on this machine → asked like any other file ---
-async function uploadFile(file: File) {
+// Several files at once with an .ifc among them (a plan sheet + its model) are linked as one building (one folder).
+const STYLE_NAMES: Record<string, string> = { cubicasa5k: "Nordic apartment plan", swiss_dwellings: "Swiss dwelling plan",
+  ifc_models: "sheet drawn from a BIM model", scan: "historical scan" };
+async function uploadFiles(files: File[]) {
+  if (!files.length) return;
   const box = $("uploadBox");
   const msg = $("uploadMsg");
   box.classList.add("busy");
   box.classList.remove("err");
-  msg.textContent = `uploading ${file.name} (${(file.size / 1e6).toFixed(1)} MB)…`;
+  const names = files.map((f) => f.name).join(" + ");
+  msg.textContent = `uploading ${names} (${(files.reduce((n, f) => n + f.size, 0) / 1e6).toFixed(1)} MB)…`;
   try {
-    const style = /\.(png|jpe?g)$/i.test(file.name) ? $<HTMLSelectElement>("uploadStyle").value : "";
-    const f = await upload(file, style);
-    if (!uploads.some((u) => u.path === f.path)) uploads.unshift(f);
-    msg.textContent = `${file.name} · ask it anything below`;
+    const linked = files.length > 1 && files.some((f) => /\.ifc$/i.test(f.name));
+    const style = $<HTMLSelectElement>("uploadStyle").value;
+    let got: FileInfo[] = [];
+    for (const file of files) got.push(await upload(file, /\.(png|jpe?g)$/i.test(file.name) ? (linked ? "none" : style) : ""));
+    if (linked) got = await uploadSet(got.map((f) => f.path));
+    for (const f of [...got].reverse()) if (!uploads.some((u) => u.path === f.path)) uploads.unshift(f);
+    const first = got.find((f) => f.ext !== ".ifc" && f.siblings?.[".ifc"]) ?? got[0];
+    const g = first.style_guess;
+    msg.textContent = linked ? `${names} · linked as one building: ask below`
+      : files.length > 1 ? `${files.length} files uploaded · ask below`
+      : `${files[0].name}${g && first.style === g.style ? ` · looks like a ${STYLE_NAMES[g.style] ?? g.style}` : ""} · ask it anything below`;
     $<HTMLSelectElement>("source").value = "";
     $<HTMLInputElement>("search").value = "";
     await refreshFiles();
-    await openFile(f);
+    await openFile(first);
     $("question").focus();
   } catch (e) {
     box.classList.add("err");
@@ -384,10 +407,36 @@ async function uploadFile(file: File) {
 }
 $<HTMLInputElement>("uploadInput").addEventListener("change", (e) => {
   const input = e.target as HTMLInputElement;
-  const file = input.files?.[0];
+  const files = [...(input.files ?? [])];
   input.value = "";
-  if (file) void uploadFile(file);
+  void uploadFiles(files);
 });
+/** "your upload · Nordic apartment plan (guessed from the image, p 0.93) · linked to house.ifc · not in the dataset" */
+function uploadMeta(f: FileInfo) {
+  const g = f.style_guess;
+  const style = f.style ? ` · ${STYLE_NAMES[f.style] ?? f.style}${g && g.style === f.style ? ` (guessed from the image, p ${g.p.toFixed(2)})` : ""}`
+    : ""; // other guesses change nothing (W5 c8: 3 of 12 random CubiCasa plans came out 'scan' at p 0.92-0.98), so say nothing
+  const model = f.ext !== ".ifc" ? f.siblings?.[".ifc"] : undefined;
+  const others = (f.set ?? []).filter((p) => p !== f.path).map((p) => p.split("/").pop()!);
+  const set = model ? ` · linked to ${model.split("/").pop()}` : others.length ? ` · uploaded with ${others.join(", ")}` : "";
+  return `your upload${style}${set} · not in the dataset`;
+}
+/** What happens to an upload, said before the first question. */
+function uploadHint(f: FileInfo) {
+  const model = f.ext !== ".ifc" ? f.siblings?.[".ifc"]?.split("/").pop() : undefined;
+  if (model)
+    return `<p class="hint">This sheet is new to the system and came with its model <b>${esc(model)}</b> (the only IFC uploaded with it),
+      so the IFC rules answer from the model, for the storey the sheet shows (read from its title when the file name says nothing),
+      and the counted elements light up in 3D. No template, no cached answer.</p>`;
+  const way = f.ext === ".ifc" ? "the IFC rules, then the reasoning agent"
+    : f.ext === ".pdf" ? "the PDF's own lines and text, then the local vision model"
+    : f.style ? "as a Nordic apartment plan: the counter fine-tuned on CubiCasa5K plans, with the pretrained symbol detector to mark what it counts"
+    : "printed text and scale read from the image, then the local vision model";
+  const tip = f.ext === ".pdf" ? `<p class="hint">Is it a sheet of a BIM model? Upload the sheet <b>and</b> its .ifc together (select both, or drop
+      both at once): the answers then come from the model and show in 3D.</p>` : "";
+  return `<p class="hint">This file is new to the system: no template, no CAD or IFC twin, nothing cached. It goes the general way (${way}),
+      so expect lower confidence, said honestly, and a first answer that takes longer.</p>${tip}`;
+}
 let dragDepth = 0;
 const hasFiles = (e: DragEvent) => [...(e.dataTransfer?.types ?? [])].includes("Files");
 document.addEventListener("dragenter", (e) => {
@@ -408,8 +457,7 @@ document.addEventListener("drop", (e) => {
   e.preventDefault();
   dragDepth = 0;
   $("dropHint").hidden = true;
-  const file = e.dataTransfer?.files?.[0];
-  if (file) void uploadFile(file);
+  void uploadFiles([...(e.dataTransfer?.files ?? [])]);
 });
 
 /** Open a file. With `keep`, the current answer stays and its evidence on this file is drawn (multi-sheet). */
@@ -422,7 +470,7 @@ async function openFile(f: FileInfo, question = "", keep: Answer | null = null, 
   history.replaceState(null, "", url);
   document.querySelectorAll("#files li").forEach((li) => li.classList.toggle("on", state.files[Number((li as HTMLElement).dataset.i)]?.path === f.path));
   $("fileTitle").textContent = f.path.split("/").pop()!;
-  $("fileMeta").textContent = f.source === "upload" ? `your upload${f.style ? " · Nordic apartment plan" : ""} · not in the dataset` : `${f.source} · ${f.n_questions} questions`;
+  $("fileMeta").textContent = f.source === "upload" ? uploadMeta(f) : `${f.source} · ${f.n_questions} questions`;
   $("credit").innerHTML = creditLine(f);
   if (!keep) {
     markAnswerCheck($("linked"), undefined, undefined);
@@ -432,9 +480,7 @@ async function openFile(f: FileInfo, question = "", keep: Answer | null = null, 
     // the first thing a visitor reads: what every answer carries
     $("card").innerHTML = `<p class="hint">Ask about this ${f.ext === ".ifc" ? "model" : "drawing"} in any language, or pick an example. Every answer
       shows how sure we are, what it cost and how it was worked out, and points at where it came from (${f.ext === ".ifc" ? "elements in the 3D model" : "boxes on the drawing"}),
-      checked against a second source when there is one.</p>${f.source === "upload" ? `<p class="hint">This file is new to the system: no template,
-      no CAD or IFC twin, nothing cached. It goes the general way (${f.ext === ".ifc" ? "the IFC rules, then the reasoning agent" : f.ext === ".pdf" ? "the PDF's own lines and text, then the local vision model" : f.style ? "as a Nordic apartment plan: the counter fine-tuned on CubiCasa5K plans, with the pretrained symbol detector to mark what it counts" : "printed text and scale read from the image, then the local vision model"}),
-      so expect lower confidence, said honestly, and a first answer that takes longer.</p>` : ""}`;
+      checked against a second source when there is one.</p>${f.source === "upload" ? uploadHint(f) : ""}`;
   }
   $("pick").hidden = true;
   $("bench").hidden = true;
@@ -526,7 +572,8 @@ async function loadExamples(f: FileInfo) {
     const interleaved: typeof uniq = [];
     for (let k = 0; interleaved.length < uniq.length; k++)
       for (const l of byType.values()) if (l[k]) interleaved.push(l[k]);
-    const general = f.source === "upload" ? (f.ext === ".ifc" ? IFC_QUESTIONS : f.style ? APARTMENT_QUESTIONS : UPLOAD_QUESTIONS) : GENERIC_QUESTIONS;
+    const general = f.source === "upload" ? (f.ext === ".ifc" ? IFC_QUESTIONS : f.siblings?.[".ifc"] ? SHEET_MODEL_QUESTIONS
+      : f.style ? APARTMENT_QUESTIONS : UPLOAD_QUESTIONS) : GENERIC_QUESTIONS;
     const pick = qs.length ? [...english.filter((q) => q.has_fixture), ...interleaved.filter((q) => !q.has_fixture)].slice(0, 4)
       : general.map((question) => ({ question, type: "", unit: null }));
     chips.innerHTML = pick.map((q) => `<button type="button" class="chip" title="${esc(q.question)}">${esc(q.question.length > 64 ? q.question.slice(0, 61) + "…" : q.question)}</button>`).join("");
@@ -538,7 +585,7 @@ async function loadExamples(f: FileInfo) {
     const menu = qs.length ? qs : pick.map((q) => ({ ...q, has_fixture: false }));
     const opt = (q: string, star = false) => `<option value="${esc(q)}">${star ? "★ " : ""}${esc(q.length > 110 ? q.slice(0, 107) + "…" : q)}</option>`;
     const hard = harder.filter((q) => !menu.some((m) => m.question === q));
-    sel.innerHTML = `<option value="">${qs.length ? "More example questions" : f.ext === ".ifc" ? "Questions for any model" : "Questions for any drawing"} (${menu.length}${hard.length ? ` + ${hard.length} harder` : ""})…</option>`
+    sel.innerHTML = `<option value="">${qs.length ? "More example questions" : f.ext === ".ifc" ? "Questions for any model" : f.source === "upload" && f.siblings?.[".ifc"] ? "Questions for a sheet + its model" : "Questions for any drawing"} (${menu.length}${hard.length ? ` + ${hard.length} harder` : ""})…</option>`
       + (hard.length ? `<optgroup label="Harder: lists, plan vs model, prices, sums (no dataset template)">${hard.map((q) => opt(q)).join("")}</optgroup><optgroup label="From the dataset">` : "")
       + menu.map((q) => opt(q.question, q.has_fixture)).join("") + (hard.length ? "</optgroup>" : "");
   } catch {
@@ -685,7 +732,7 @@ async function showAnswer(a: Answer, roundTripMs: number) {
       if (loc.solver === "rooms") return locateRooms(a, askedPath, askedQ);
       // a second reader answers the same question; its boxes become the evidence, with a cross-check line
       const t0 = performance.now();
-      const r = await ask(askedPath, askedQ, loc.solver);
+      const r = await ask(askedPath, askedQ, loc.solver, loc.args);
       if (state.file?.path !== askedPath) return;
       const same = r.value !== null && Number(r.value) === Number(a.value);
       const ev = (r.evidence ?? []).filter((e) => e.bbox);

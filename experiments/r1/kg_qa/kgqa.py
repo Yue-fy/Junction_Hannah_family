@@ -250,7 +250,134 @@ Return JSON {{"op", "rows", "a", "b", "why"}}. Pick ONE op and cite the row ids 
 Use a/b = "none" unless op is diff or greater."""
 
 
+# --- v23 fixes (Q 09:45 + R1 probe_r1v5): comparatives, two-part questions, this sheet's storey, storey roles ---
+# 'more/fewer ... than' in en/de/fi/fr/sv/it/nl/es/et: the yes/no is a comparison with a DIRECTION, never 'agree?'
+_MORE = r"\b(more|mehr|enemmän|useampi\w*|plus|fler|più|meer|más|rohkem)\b"
+_FEWER = r"\b(fewer|less|weniger|vähemmän|harvempi\w*|moins|färre|mindre|meno|minder|menos|vähem)\b"
+_THAN = r"\b(than|als|kuin|que|qu'|än|di|che|dan|kui)\b"
+_PLAN_SIDE = (r"\b(plan|floor ?plan|drawing|sheet|drawn|here|grundriss\w*|zeichnung\w*|gezeichnet|blatt|piirustu\w*|"
+              r"pohja\w*|piirretty|dessin\w*|dessiné\w*|feuille|ritning\w*|ritad\w*|pianta|tavola|disegn\w*|tekening|"
+              r"plattegrond|getekend|plano|dibujad\w*|joonis\w*)\b")
+_MODEL_SIDE = r"\b(ifc|bim|model\w*|maquette|modell\w*|malli\w*|modèle|modello|modelo|mudel\w*)\b"
+# 'this sheet / this plan / here': the storey of the sheet the question is asked on
+_THIS = (r"\b(this|dieser|diesem|diesen|dieses|tämä\w*|tällä|tässä|ce|cette|denna|detta|den här|questa|questo|deze|"
+         r"dit|este|esta|see|selle)\s+(plan\w*|floor ?plan|drawing|sheet|grundriss|zeichnung|blatt|piirustu\w*|"
+         r"pohja\w*|feuille|dessin|ritning\w*|pianta|tavola|disegno|tekening|plattegrond|plano|dibujo|joonis\w*|"
+         r"storey|floor|level|geschoss|kerros\w*|niveau|étage|våning|piano|verdieping|planta|korrus\w*)\b|\bhere\b")
+# two questions in one ('Which storey does this sheet show, and does its door count match the model?')
+_SPLIT = (r",?\s+(?:and|und|ja|et|och|e|en|y)\s+(?=(?:if so,?\s+|falls ja,?\s+|si oui,?\s+|om så,?\s+)?"
+          r"(?:do|does|is|are|how|which|what|was|were|has|have|can|stimmt|stimmen|wie|welche\w*|ist|sind|hat|"
+          r"onko|ovatko|täsmää\w*|kuinka|montako|est-ce|combien|quel\w*|stämmer|hur|vilke\w*|quant\w*|quale|"
+          r"corrispond\w*|hoeveel|welke|klopt|kloppen|cuánt\w*|qué|cuál|coincid\w*|mitu|kas)\b)")
+_BASEMENT_Q = (r"\b(basement|cellar|keller(geschoss)?|untergeschoss|kellari\w*|sous-sol|källar\w*|cantina|"
+               r"seminterrato|kelder|sótano|kelder|kelder\w*|kelder)\b")
+_BASEMENT_NAME = r"^\s*(kg|ug|u\d|b\d|-\d)(?![a-z0-9])|\b(keller|untergeschoss|basement|cellar|kellari|sous-sol|källare|kelder)\b"
+
+
+_WHAT = {"doors": r"\b(doors?|türen?|ov(i|et|ia|ea)|portes?|dörr\w*|port[ae]|deur\w*|puertas?|uks\w*)\b",
+         "windows": r"\b(windows?|fenster\w*|ikkun\w*|fenêtres?|fönster\w*|finestr\w*|ramen|raam|ventanas?|aken\w*)\b",
+         "rooms": r"\b(rooms?|räume?n?|raum|huone\w*|pièces?|rum(men)?|stanz\w*|ruimtes?|habitaci\w*|ruum\w*|spaces?)\b",
+         "walls": r"\b(walls?|wände|wand|seinä\w*|murs?|vägg\w*|mur[io]|muren|muur|paredes?|sein\w*)\b",
+         "columns": r"\b(columns?|stützen?|säulen?|pilar\w*|poteaux?|pelare?|pilastr\w*|colonn\w*|kolom\w*|columnas?)\b"}
+
+
+def _role_storey(question: str, rows: list[dict]) -> tuple[str | None, str]:
+    """A storey ROLE word ('ground floor', 'Erdgeschoss', 'basement') -> the storey it names, with why. W1's rule
+    (stoa.solvers.ifc.parse.storey_mention, KNOWLEDGE 09:36): a storey NAMED so (EG / GF / RDC / KG / UG / Keller),
+    else the storey with rooms nearest elevation 0 (ground) / the lowest storey below 0 with rooms (basement)."""
+    try:
+        from stoa.solvers.ifc.parse import _GROUND_NAME, _GROUND_Q, fold, ground_reference
+    except Exception:  # noqa: BLE001
+        return None, ""
+    t = " " + fold(question) + " "
+    srows = [r for r in rows if r["id"][0] == "S"]
+    if not srows:
+        return None, ""
+    elev = {}
+    for r in srows:
+        m = re.search(r"elevation (-?[\d.]+) m", r["text"])
+        elev[r["storey"]] = float(m.group(1)) if m else 0.0
+    m = _GROUND_Q.search(t)
+    if m and not ground_reference(t, m.start()):
+        named = [r["storey"] for r in srows if _GROUND_NAME.search(fold(r["storey"] or ""))]
+        if len(named) == 1:
+            return named[0], f"'{m.group(0).strip()}' = storey '{named[0]}' (named as the ground floor)"
+        live = [r["storey"] for r in srows if r.get("rooms") or r.get("doors")] or [r["storey"] for r in srows]
+        s = min(live, key=lambda n: abs(elev[n]))
+        return s, f"'{m.group(0).strip()}' = storey '{s}' (the storey with rooms nearest elevation 0; assumed)"
+    m = re.search(_BASEMENT_Q, t)
+    if m:
+        named = [r["storey"] for r in srows if re.search(_BASEMENT_NAME, fold(r["storey"] or ""))]
+        if len(named) == 1:
+            return named[0], f"'{m.group(0).strip()}' = storey '{named[0]}' (named as the basement)"
+        below = [r["storey"] for r in srows if elev[r["storey"]] < -1.0 and (r.get("rooms") or r.get("doors"))]
+        if below:
+            s = max(below, key=lambda n: elev[n])  # the first storey below ground
+            return s, f"'{m.group(0).strip()}' = storey '{s}' (the first storey below ground with rooms; assumed)"
+    return None, ""
+
+
+def _compare_sides(q: str) -> tuple[str, str, str] | None:
+    """('drawn'|'model', '>'|'<', why) for 'does the plan show fewer X than the model' style questions."""
+    mm, mf = re.search(_MORE, q), re.search(_FEWER, q)
+    th = re.search(_THAN, q)
+    if not (mm or mf) or not th:
+        return None
+    cmp_ = mm if (mm and (not mf or mm.start() < mf.start())) else mf
+    if th.start() < cmp_.start():
+        return None
+    head = q[:th.start()]
+    p, mo = re.search(_PLAN_SIDE, head), re.search(_MODEL_SIDE, head)
+    if p and mo:
+        subj = "drawn" if p.start() < mo.start() else "model"
+    elif p or mo:
+        subj = "drawn" if p else "model"
+    else:
+        tail = q[th.end():]
+        p2, m2 = re.search(_PLAN_SIDE, tail), re.search(_MODEL_SIDE, tail)
+        if bool(p2) == bool(m2):
+            return None
+        subj = "model" if p2 else "drawn"  # 'than the plan' -> the subject is the model's count
+    op = ">" if cmp_ is mm else "<"
+    return subj, op, f"'{cmp_.group(0)} … {th.group(0).strip()}': {subj} {op} {'model' if subj == 'drawn' else 'drawn'}"
+
+
+def _first_sentence(s: str, n: int = 140) -> str:
+    s = re.split(r"(?<=[.!?])\s+|\s+(?:But|However|Wait)\b", str(s).strip(), maxsplit=1)[0]
+    return s if len(s) <= n else s[:n].rsplit(" ", 1)[0] + "…"
+
+
 def solve(path: str, question: str, backend: str = "local") -> Answer:
+    """One link question; a two-part one ('Which storey …, and does …?') is answered part by part and joined."""
+    parts = re.split(_SPLIT, question.strip(), maxsplit=1, flags=re.I)
+    if len(parts) == 2 and len(parts[0].split()) >= 3 and len(parts[1].split()) >= 2:
+        p1 = parts[0].rstrip(" ,;") + "?"
+        p2 = re.sub(r"^(if so,?|falls ja,?|si oui,?|om så,?)\s+", "", parts[1].strip(), flags=re.I)
+        a1 = _solve_one(path, p1, backend)
+        a2 = _solve_one(path, p2, backend, llm_question=f"{question}\n(Answer ONLY its last part now: \"{p2}\")")
+        if a1.value is None or a2.value is None:
+            a = a1 if a2.value is None else a2
+            a.confidence = min(a.confidence, 0.5)
+            a.missing = [*a.missing, "two-part question: only one part could be answered from the linked facts"]
+            a.trace = [f"kg_qa: two-part question -> '{p1}' | '{p2}'", *a.trace]
+            return a
+        a1.value = f"{a1.value}; {a2.value}"
+        a1.unit = None
+        a1.confidence = min(a1.confidence, a2.confidence)
+        a1.evidence = (a1.evidence + [e for e in a2.evidence if e not in a1.evidence])[:12]
+        a1.trace = [f"kg_qa: two-part question -> '{p1}' | '{p2}' (answered separately, joined)", *a1.trace,
+                    *a2.trace]
+        a1.missing = [*a1.missing, *a2.missing]
+        c1, c2 = a1.cost, a2.cost
+        a1.cost = Cost(llm_tokens_in=c1.llm_tokens_in + c2.llm_tokens_in, llm_tokens_out=c1.llm_tokens_out
+                       + c2.llm_tokens_out, gpu_seconds=c1.gpu_seconds + c2.gpu_seconds,
+                       api_calls=c1.api_calls + c2.api_calls, llm_calls=c1.llm_calls + c2.llm_calls,
+                       wall_seconds=round(c1.wall_seconds + c2.wall_seconds, 3))
+        return a1
+    return _solve_one(path, question, backend)
+
+
+def _solve_one(path: str, question: str, backend: str = "local", llm_question: str | None = None) -> Answer:
     t0 = time.perf_counter()
     from stoa.llm import chat, cost_meter, extract_json
 
@@ -283,10 +410,17 @@ def solve(path: str, question: str, backend: str = "local") -> Answer:
                       trace=[f"kg_qa: {hit['why']} -> storeys of the IFC model with no {key}: "
                              f"{[r['storey'] for r in got]} (deterministic, no model call)"],
                       cost=Cost(wall_seconds=round(time.perf_counter() - t0, 3)))
-    view = _retrieve(rows, question)
+    lq = llm_question or question
+    view = _retrieve(rows, lq)
     byid = {r["id"]: r for r in rows}
+    role, role_why = _role_storey(question, rows)
+    hint = []
+    if role:
+        # Q v23: 'Which sheet shows the ground floor?' on the 1.OG sheet -> the open sheet @0.85 (gold EG)
+        srow = next(r for r in rows if r["id"][0] == "S" and r["storey"] == role)
+        hint = [f"[H1] in this question {role_why}; its row is {srow['id']}"]
     with cost_meter() as m:
-        res = chat(PROMPT.format(rows="\n".join(f"[{r['id']}] {r['text']}" for r in view), q=question),
+        res = chat(PROMPT.format(rows="\n".join([*(f"[{r['id']}] {r['text']}" for r in view), *hint]), q=lq),
                    backend=backend, max_tokens=400, temperature=0.0, json_schema=SCHEMA)
     js = extract_json(res.text) or {}
     if isinstance(js, list):
@@ -298,7 +432,15 @@ def solve(path: str, question: str, backend: str = "local") -> Answer:
                               r"número de)\b", ql))
     yesno = bool(re.match(_YESNO, ql)) or (not counting and op == "diff")
     trace_fix = None
-    if yesno and op in ("diff", "greater") and re.search(_AGREE_ONLY, ql):
+    cmp_ = _compare_sides(ql) if (yesno and not counting) else None
+    # 'the same storey / floor' names the storey, it is not 'agree' (Q v23: 'fewer windows than the IFC model has on
+    # the same storey?' -> agree -> 'no (55 vs 52)')
+    ql_agree = re.sub(r"\b(the )?(same|selben?|gleichen?|samma|même|stesso|zelfde|mismo|sama\w*)\s+"
+                      r"(storey|story|floor|level|geschoss|stockwerk|etage|ebene|våning\w*|niveau|étage|piano|"
+                      r"verdieping|planta|piso|kerros\w*|korrus\w*)\b", " ", ql)
+    if cmp_ and op in ("agree", "diff", "greater"):
+        op, trace_fix = "greater", f"comparative yes/no {cmp_[2]} (direction from the question, not the model)"
+    elif yesno and op in ("diff", "greater") and re.search(_AGREE_ONLY, ql_agree):
         op, trace_fix = "agree", f"yes/no 'all/every/agree' question: {op} -> agree"
     elif yesno and op == "diff":
         op, trace_fix = "greater", "yes/no question: diff -> greater"
@@ -306,6 +448,52 @@ def solve(path: str, question: str, backend: str = "local") -> Answer:
     trace = [f"kg_qa: {len(rows)} fact rows ({len(view)} shown); op {op} on {[r['id'] for r in cited]}"]
     if trace_fix:
         trace.append("kg_qa: " + trace_fix)
+    this = (ctx.get("this") or {}).get("name")
+    try:
+        from stoa.solvers.ifc.parse import quoted_names
+        named = quoted_names(question)
+    except Exception:  # noqa: BLE001
+        named = []
+    st_names = [r["storey"] for r in rows if r["id"][0] == "S"]
+    names_other = [n for n in st_names if n and n != this and re.search(
+        r"(?<![\w.])" + re.escape(n.lower()) + r"(?![\w])", ql)]
+    if (op in ("agree", "diff", "greater") and this and re.search(_THIS, ql) and not names_other
+            and not (role and role != this) and not [n for n in named if n != this]):
+        # Q v23 'Are there windows in the 3D model that this sheet does not draw?' cited 2.korrus's row (60 vs 53)
+        cs = [r for r in cited if r["id"][0] == "C"]
+        if cs and cs[0]["storey"] != this:
+            own = next((r for r in rows if r["id"][0] == "C" and r["storey"] == this and r["what"] == cs[0]["what"]),
+                       None)
+            if own:
+                cited = [own, *[r for r in cited if r is not cs[0]]]
+                trace.append(f"kg_qa: 'this sheet' = storey '{this}': {cs[0]['id']} ('{cs[0]['storey']}') -> {own['id']}")
+    q_st = [n for n in named if n in st_names]
+    target = q_st[0] if len(set(q_st)) == 1 else (role or (this if not names_other and not q_st else None))
+    assign_q = re.search(r"(not|n't|nicht|ei|pas|non|inte|niet|no)\b.{0,40}(assign|belong|zugeordnet|kuulu|attribu|"
+                         r"assegn|tilldela|toegewezen|asign|recogni|määrat)", ql)
+    if (op == "none" or not [r for r in cited if r["id"][0] == "C"]) and yesno and target and \
+            re.search(_MODEL2, ql) and (cmp_ or assign_q or re.search(_AGREE_ONLY, ql_agree) or re.search(_AGREE, ql)):
+        # the model cited no C row (r1v5 'Does this plan show more doors than the IFC model has on the same floor?',
+        # Swedish 'Stämmer antalet fönster på ritningen med IFC-modellen för våningen …?' -> op none under load):
+        # the storey (quoted / role / this sheet's) + the element word in the question pick the row deterministically
+        what = next((w for w, rx in _WHAT.items() if re.search(rx, ql)), None)
+        own = next((r for r in rows if r["id"][0] == "C" and r["storey"] == target and r["what"] == what), None)
+        if own:
+            op, cited = ("greater" if (cmp_ or assign_q) else "agree"), [own]
+            trace.append(f"kg_qa: no C row cited -> {own['id']} ({what} on storey '{own['storey']}', deterministic)")
+    if role and op in ("agree", "diff", "greater") and not named and not names_other:
+        cs = [r for r in cited if r["id"][0] == "C"]
+        if cs and cs[0]["storey"] != role:
+            own = next((r for r in rows if r["id"][0] == "C" and r["storey"] == role and r["what"] == cs[0]["what"]),
+                       None)
+            if own:
+                cited = [own, *[r for r in cited if r is not cs[0]]]
+                trace.append(f"kg_qa: storey role {role_why}: {cs[0]['id']} -> {own['id']}")
+    if role and op in ("lookup_sheet", "lookup_storey", "none") and not re.search(_ROOMW, ql) and not named:
+        srow = next(r for r in rows if r["id"][0] == "S" and r["storey"] == role)
+        if {r.get("storey") for r in cited} != {role}:
+            trace.append(f"kg_qa: storey role {role_why}: {[r['id'] for r in cited]} -> {srow['id']}")
+            cited, op = [srow], ("lookup_sheet" if op == "none" else op)
     value, unit, conf, ev, missing = None, None, 0.0, [], []
 
     def evid(r, note):
@@ -358,6 +546,23 @@ def solve(path: str, question: str, backend: str = "local") -> Answer:
             ev = [e for r in cited if (e := evid(r, r["text"][:80]))]
             if op == "lookup_storey" and asks_sheet:
                 trace.append("kg_qa: question asks for a sheet -> sheet formatting")
+    elif (op in ("diff", "greater") and len({r["storey"] for r in cited if r["id"][0] == "C"}) >= 2
+          and len({r["what"] for r in cited if r["id"][0] == "C"}) == 1):
+        # two storeys compared ('How many more doors are on '1.korrus' than on '5.korrus'?'): model counts, in the
+        # order the question names the storeys (was C1 model - C1 drawn = 0 @0.8, v17)
+        cs = {r["storey"]: r for r in cited if r["id"][0] == "C"}
+        order = sorted(cs, key=lambda s: (ql.find(s.lower()) if s.lower() in ql else 10 ** 6))
+        c1, c2 = cs[order[0]], cs[order[1]]
+        d = c1["model"] - c2["model"]
+        if op == "diff":
+            value, unit, conf = d, "count", 0.8
+        else:
+            mm_, mf_ = re.search(_MORE, ql), re.search(_FEWER, ql)
+            fewer = bool(mf_) and not (mm_ and mm_.start() < mf_.start())
+            value, conf = ("yes" if (d < 0 if fewer else d > 0) else "no") + f" ('{c1['storey']}' {c1['model']} vs " \
+                f"'{c2['storey']}' {c2['model']} {c1['what']} in the IFC model)", 0.75
+        ev = [Evidence(file=c1["plan"], note=c1["text"][:160]), Evidence(file=c2["plan"], note=c2["text"][:160])]
+        trace.append(f"kg_qa: two storeys compared: '{c1['storey']}' {c1['model']} - '{c2['storey']}' {c2['model']}")
     elif op in ("agree", "diff", "greater") and len([r for r in cited if r["id"][0] == "C"]) >= 1:
         c = next(r for r in cited if r["id"][0] == "C")
         if c.get("drawn") is None:
@@ -383,6 +588,19 @@ def solve(path: str, question: str, backend: str = "local") -> Answer:
                 # elements DRAWN on this plan that the model puts on another storey (crossing the cut plane)
                 a, va, b, vb = "drawn from other storeys", c.get("drawn_other", 0), "zero", 0
                 trace.append("kg_qa: question asks about drawn elements of other storeys -> drawn_other")
+            if cmp_ and op == "greater" and a != "drawn from other storeys":
+                subj, rel = cmp_[0], cmp_[1]
+                a, b = subj, ("model" if subj == "drawn" else "drawn")
+                va, vb = c.get(a), c.get(b)
+                if va is not None and vb is not None:
+                    yes = va > vb if rel == ">" else va < vb
+                    word = "more" if rel == ">" else "fewer"
+                    side = {"drawn": "the plan draws", "model": "the IFC model has"}
+                    rel_txt = ("the same number" if va == vb else ("more" if va > vb else "fewer"))
+                    value = (f"{'yes' if yes else 'no'} ({side[a]} {va} {c['what']} on '{c['storey']}', "
+                             f"{side[b]} {vb}: {rel_txt}" + (f", not {word})" if not yes else ")"))
+                    conf = 0.85
+                    va = vb = None  # done
             if va is not None and vb is not None:
                 if op == "diff":
                     value, unit, conf = va - vb, "count", 0.8
@@ -401,7 +619,7 @@ def solve(path: str, question: str, backend: str = "local") -> Answer:
         missing.append("the linked sheet set / model facts do not answer this question")
     cost = Cost(llm_tokens_in=m.llm_tokens_in, llm_tokens_out=m.llm_tokens_out, gpu_seconds=m.gpu_seconds,
                 api_calls=m.api_calls, llm_calls=m.calls, wall_seconds=round(time.perf_counter() - t0, 3))
-    trace.append(f"kg_qa: why: {str(js.get('why', ''))[:160]}")
+    trace.append(f"kg_qa: why: {_first_sentence(js.get('why', ''))}")  # W5 09:33: one sentence on the card
     return Answer(value=value, unit=unit, confidence=conf if value is not None else min(conf, 0.2),
                   evidence=ev[:12], trace=trace, solver="kg_qa", missing=missing, cost=cost,
                   assumptions=["counts of 'drawn' elements come from the sheet's vector twin (IFC GUID per element)"])
