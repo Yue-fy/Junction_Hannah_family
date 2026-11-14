@@ -235,7 +235,7 @@ class Cost:
             # Disk-cache hits are billed as if computed (F, 00:53): a warm dev run must cost the same as the
             # cold test run Stoa will see.
             if is_local(res.backend):
-                self.gpu_seconds += gpu_seconds_estimate(res.prompt_tokens or 0, res.completion_tokens or 0)
+                self.gpu_seconds += gpu_seconds_estimate(res.prompt_tokens or 0, res.completion_tokens or 0, res.backend)
             else:
                 self.api_calls += 1
 
@@ -277,10 +277,17 @@ def cost_meter():
 # because it includes queueing behind other agents' requests (F, 00:19: 0.5 s idle vs 7.8 s busy).
 PREFILL_TPS = float(os.environ.get("LLM_PREFILL_TPS", 25_000))
 DECODE_TPS = float(os.environ.get("LLM_DECODE_TPS", 1_000))
+# :8002 = Qwen3.6-35B-A3B-FP8 (D21, free-text answers). Measured 09:40 on the same GPU, 16 concurrent requests
+# (experiments/r2/tput.py): prefill 25.3k tok/s (8B under other agents' load at the same time: 14.5k), decode 722 tok/s
+# (8B: 856). ~3B active parameters, so per token it costs about what the 8B does; decode is billed at the measured
+# 700 tok/s (1.4x the 8B constant) so the demo's cost line stays honest (D21 item 4).
+PER_BACKEND_TPS = {"local2": (float(os.environ.get("LLM2_PREFILL_TPS", 25_000)),
+                              float(os.environ.get("LLM2_DECODE_TPS", 700)))}
 
 
-def gpu_seconds_estimate(tokens_in: int, tokens_out: int) -> float:
-    return round(tokens_in / PREFILL_TPS + tokens_out / DECODE_TPS, 4)
+def gpu_seconds_estimate(tokens_in: int, tokens_out: int, backend: str = "local") -> float:
+    pre, dec = PER_BACKEND_TPS.get(backend, (PREFILL_TPS, DECODE_TPS))
+    return round(tokens_in / pre + tokens_out / dec, 4)
 
 
 def _charge(res: "ChatResult") -> "ChatResult":
@@ -295,7 +302,7 @@ def _charge(res: "ChatResult") -> "ChatResult":
         return res
     tin, tout = res.prompt_tokens or 0, res.completion_tokens or 0
     if is_local(res.backend):
-        record_cost(llm_calls=1, llm_tokens_in=tin, llm_tokens_out=tout, gpu_seconds=gpu_seconds_estimate(tin, tout))
+        record_cost(llm_calls=1, llm_tokens_in=tin, llm_tokens_out=tout, gpu_seconds=gpu_seconds_estimate(tin, tout, res.backend))
     else:
         record_cost(llm_calls=1, llm_tokens_in=tin, llm_tokens_out=tout, api_calls=1, api_tokens_in=tin,
                     api_tokens_out=tout)
