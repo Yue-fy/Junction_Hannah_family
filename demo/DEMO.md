@@ -90,18 +90,28 @@ By source on sealed test 2: Swiss vector plans 99.0 %, IFC models 100 % (397/397
 ## 2:35–2:55 · Where it breaks, and why (slide 4 — the failure analysis)
 Slide image: `demo/redteam-rounds.png` (SVG next to it; regenerate with `python3 experiments/q/plot_rounds.py` and
 headless chromium, numbers from `redteam/REPORT.md`). **Say only this (≈ 20 s, 60 words):**
-> "We tried to break it ourselves: 564 adversarial questions — rewordings, nine languages, rotated scans, rooms that
-> don't exist, questions no drawing can answer. Every confident mistake had one cause: we checked the number, not
-> that it answered what was asked. Each bar is a round of fixes. On the build we're showing, 338 of 339 confident
-> answers are right."
-(Numbers by stage build — say the line for the build on stage: bb94fe4 (test 2): "494 … 283 of 290"; c1d6149:
-"564 … 338 of 339"; 62754aa: "564 … 336 of 337"; 62754aa + the 08:41 heads (pre-merge #6): "564 … every one of 350
-confident answers was right".)
+> "We tried to break it ourselves: over 600 adversarial questions — rewordings, nine languages, rotated scans, rooms
+> that don't exist, questions no drawing can answer. Every confident mistake had one cause: we checked the number,
+> not that it answered what was asked. Each bar is a round of fixes. On the build we're showing, all 360 confident
+> answers are right — and it never just refuses."
+(Numbers by stage build — say the line for the build on stage: be57171 (09:05): "609 … all 360"; bb94fe4 (test 2):
+"494 … 283 of 290"; c1d6149: "564 … 338 of 339"; 62754aa: "609 … 337 of 339". "Never just refuses": 0 of 647
+answers on be57171 are a bare refusal, and every wrong one carries an assumption or a "missing" line — see backup.)
 
 Point at the chart: the families already asked go to 0 after each fix; each new family finds the same cause on a
 new surface (storeys in everyday words, "whole building" in Swedish, "1,200 euros", two-part questions).
 
 **Backup for questions (don't read out):**
+- **Newest (09:05, night be57171, 609 questions v1–v18): 360 of 360 confident scored answers right; 3 false
+  premises still answered confidently ("whole building" on a single-floor plan). The two newest families (v19 list
+  answers, v20 plan↔model link wordings, 38 questions, the chart's last bar) found 6 more confident misses**, e.g.
+  "Which living rooms are smaller than 30 m²?" → every room < 30 m², "How many of the model's windows does this
+  drawing not show?" → 297. Same root cause, new surface.
+- **"We know what we don't know" (Stoa's point 3), measured on all 622 answers of be57171:** 0 bare refusals (5
+  "unknown" text answers to questions no drawing answers: rent, construction year, U-value, cost, occupants); every
+  answer below confidence 0.3 says what is missing (35/35); all 33 wrong answers carry an assumption or a "missing"
+  line. Honest caveat: 108 of those lines are process notes ("no located evidence from this solver"), not what the
+  building's documents lack.
 - **Newest (08:45, pre-merge #6 = night 62754aa + the 08:41 heads): 3 of 564 at confidence ≥ 0.8 — all three are
   "whole building" asked on a single-floor plan — and 350 of 350 confident scored answers right.**
 - **Latest merged (08:37, night c1d6149): 4 of 564 at confidence ≥ 0.8, and 338 of 339 confident scored answers right** (`redteam/REPORT.md` "Pre-merge check #5"; the chart's last bar). Left:

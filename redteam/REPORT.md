@@ -791,6 +791,30 @@ says "row F4 = …plan-03-3-korrus.pdf" and the evidence box IS that file; the s
 right sheet next to an answer that denies it. Neither path answers "How many of the model's windows on '1.korrus'
 does this drawing not show?" (297 at 0.98 both; kg_qa's trigger doesn't fire on that wording).
 
+## "You know what you don't know — but refusing is not useful" (Stoa point 3), audited on be57171 (09:15)
+All 622 answers of run `…-090509-…-v19b-a85a` (+ 25 v19b/v20 rows: same picture), by confidence band:
+
+| confidence | answers | value None | with a "missing" line | with assumption or missing | wrong / scored |
+|---|---:|---:|---:|---:|---:|
+| < 0.3 | 35 | 0 | 35 | 35 | 9 / 13 |
+| 0.3–0.5 | 57 | 0 | 51 | 52 | 16 / 48 |
+| 0.5–0.8 | 161 | 0 | 83 | 117 | 5 / 153 |
+| ≥ 0.8 | 369 | 0 | 101 | 293 | 3 / 366 |
+
+- **0 of 647 answers are a bare refusal**; all 33 wrong answers carry an assumption or a "missing" line; on the 42
+  false-premise / unanswerable rows 37 say what is missing and 31 are below 0.5.
+- **But the "missing" lines are often about our process, not about the building's documents:** "no located evidence
+  from this solver" is the most common line (108 answers), then "the agent's answer is not backed by a tool result"
+  (8). Of the 92 answers below 0.5, 52 name something specific (e.g. "3 rooms match 'Soggiorno/pranzo' on this floor;
+  name the room number", "printed areas for 7 rooms; one room flood-filled"), 34 only a process note, 6 nothing.
+- 5 questions no drawing answers get the string "unknown" (construction year, monthly rent, number of occupants,
+  U-value, construction cost) with "the agent's answer is not backed by a tool result" as the only explanation. Stoa's
+  ask is a best estimate + the assumption + what is missing: "occupants: ≈ 4–5 (3 bedrooms; occupancy is not on a
+  floor plan)", "rent: not derivable from a drawing; needs the location and the market rent per m²; the apartment
+  is ≈ 77 m²". A false premise answered from the prior ("apartment Z" → 74.78 at 0.04, missing "a reliable reading of
+  apartment on this drawing") should say "this plan labels apartments A–D; there is no Z" (raster already does this
+  on PNGs, W3 08:46). Owner: W4 (pipeline/agent missing lines), W5 (card wording).
+
 ## For Saturday noon: red-team Stoa's example questions in one command (`redteam/from_examples.py`)
 Put Stoa's examples in a jsonl (`path`, `question`, and `answer` / `unit` when known; a path may be absolute), then
 ```
