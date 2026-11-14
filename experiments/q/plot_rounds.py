@@ -11,12 +11,12 @@ FAMS = ["v1–v2 noise, injection, images, false premises (205 Qs)", "v3–v4 �
 SIZES = [205, 78, 70, 65, 22, 10, 61, 53]
 ROUNDS = [("04:15", "0589ce3"), ("04:19", "58073d5"), ("04:33", "W4 fix"), ("04:41", "cc1ca5b"), ("04:46", "dde6347"),
           ("04:59", "753eccb"), ("05:05", "+W1/W2/W4"), ("05:12", "+W1 basement"),
-          ("08:16", "bb94fe4 = test 2"), ("08:27", "+5 heads"), ("08:37", "c1d6149")]
+          ("08:16", "bb94fe4 = test 2"), ("08:27", "+5 heads"), ("08:37", "c1d6149"), ("08:45", "62754aa+5")]
 ASKED = {7: 450, 8: 494, 9: 516}  # rounds that asked only part of a family (08:16: v14 without v15)
 DATA = [[8, None, None, None, None, None, None, None], [7, None, None, None, None, None, None, None],
         [2, None, None, None, None, None, None, None], [2, 2, None, None, None, None, None, None],
         [0, 0, 18, None, None, None, None, None], [0, 0, 11, 9, None, None, None, None], [0, 0, 6, 9, 0, None, None, None],
-        [0, 0, 1, 6, 0, 2, None, None], [0, 0, 1, 6, 0, 2, 0, 3], [0, 0, 0, 3, 0, 0, 0, 8], [0, 0, 0, 3, 0, 0, 0, 1]]
+        [0, 0, 1, 6, 0, 2, None, None], [0, 0, 1, 6, 0, 2, 0, 3], [0, 0, 0, 3, 0, 0, 0, 8], [0, 0, 0, 3, 0, 0, 0, 1], [0, 0, 0, 3, 0, 0, 0, 0]]
 W, H = 1100, 600
 L, R, T, B = 70, 30, 200, 90          # plot margins
 YMAX = 24

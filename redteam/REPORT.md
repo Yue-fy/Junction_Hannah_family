@@ -39,6 +39,8 @@ caused by the perturbation, not by the drawing.
    scored answers at ≥ 0.8 right** — bug 17, bug 18 (English), "how many floors", "kellarikerros" and the 7th-floor
    premises fixed (see "Pre-merge check #5"); left: one-floor "whole building" ×3 (W2), Finnish two-number → one
    part at 0.95 (W4). (#4 at 08:27: 11 left, with a W1 "ground floor" confidence drop that #5's W1 commit undoes.)
+   **Newest (08:45, pre-merge #6 on night 62754aa + five newer heads): 3 left, all false premises ("whole building" on a
+   single-floor plan, W2); 350 of 350 scored answers at ≥ 0.8 right** (see "Night 62754aa and pre-merge check #6").
    Unscored but visible: two-part questions to dxf answer one part at 0.60 ("3" with unit m² for "how many rooms
    and what is their total area", bug 20, W2); on scans, unanswerable questions still get an invented number (514
    seats at 0.34) with no reason given (v10, W4).
@@ -623,6 +625,17 @@ fixed on the English Swiss path** (W4 0319d93: "door: 36; window: 28" at 0.98, c
 building" ×3 (dxf, W2) and Finnish "Montako ovea ja montako ikkunaa …" → doors only 36 at 0.95 (agent, W4).
 Below 0.8 but wrong: DE/FR/IT/NL/SV two-number questions summed by dxf (64 at 0.59–0.69, W2), bug 19 (0.77),
 Italian "in tutto l'edificio" (0.53–0.68). Scorer-invisible: "in cm²" / "in SF" answered in m² at 0.96–0.99 (bug 6).
+
+## Night 62754aa and pre-merge check #6 (08:45): 62754aa + F 0012458 + W1 15c6b2c + W4 032bf3e + R1 41363f5 + R2 a699667
+All 564 rows. **62754aa (S0 cycle 37 round 2) vs c1d6149: 6 won, 0 lost** (run `20261114-084148-pipeline-questions-v16-59a3`;
+scored 92.5 %, 336/337 at ≥ 0.8 right): Swedish/Dutch two-number questions now listed, Swedish CubiCasa compositions,
+"Which floor has the fewest doors?" → 5.korrus at 0.89. **Snapshot #6: 5 more won, 0 lost** (run `…-084138-…-v16-a2e6`):
+**scored 93.5 %, 350 of 350 scored answers at conf ≥ 0.8 right**, core 283 0/24 premises at ≥ 0.8; **bug 18 fixed in every
+language** (W4 9496e99: compose's list plan runs before the English-only 'and' gate; DE/FR/IT/FI "door: 36; window: 28" at
+0.98, CubiCasa "bedroom: 3; bathroom: 1" at 0.90). **The only confident misses left: "whole building" asked on the
+single-floor Swiss plan → the floor's 36 / 4 at 0.99 (×3, dxf, W2).** Side effects on right answers (lower confidence,
+not errors): two prompt-injection rows 0.99 / 0.95 → 0.25 / 0.30; IFC two-number questions via compose at 0.39 (ifc's own
+split gave 0.80; the list op multiplies part confidences).
 
 ## For Saturday noon: red-team Stoa's example questions in one command (`redteam/from_examples.py`)
 Put Stoa's examples in a jsonl (`path`, `question`, and `answer` / `unit` when known; a path may be absolute), then
