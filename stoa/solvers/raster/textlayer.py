@@ -163,10 +163,36 @@ def _abspath(path: str) -> Path:
     return Path(os.environ.get("STOA_DATA", ".")) / path
 
 
+_tags: dict[tuple, str] = {}
+
+
+def file_tag(path: str) -> str:
+    """'' for a dataset file (its name is unique, so existing cache keys stay valid); else '#<content sha1>'. Uploads
+    are all saved as <dir>/<sha>/plan.png (W5), so a key on the file NAME gave every upload the text layer of the
+    first one ever read (artifacts/W3/textlayer/plan.*.json, written 09:00 by a test upload): wrong labels, areas
+    and scale bar on every later upload."""
+    import hashlib
+
+    p = _abspath(path)
+    try:
+        st = p.stat()
+    except OSError:
+        return ""
+    k = (str(p), st.st_mtime_ns, st.st_size)
+    if k not in _tags:
+        data = os.environ.get("STOA_DATA")
+        try:
+            inside = bool(data) and p.resolve().is_relative_to(Path(data).resolve())
+        except (OSError, ValueError):
+            inside = False
+        _tags[k] = "" if inside else "#" + hashlib.sha1(p.read_bytes()).hexdigest()[:16]
+    return _tags[k]
+
+
 def _disk_key(path: str, tile: int, backend: str) -> Path:
     import hashlib
 
-    h = hashlib.sha1(f"{VERSION}|{Path(path).name}|{tile}|{backend}".encode()).hexdigest()[:16]
+    h = hashlib.sha1(f"{VERSION}|{Path(path).name}{file_tag(path)}|{tile}|{backend}".encode()).hexdigest()[:16]
     return CACHE_DIR / f"{Path(path).stem[:60]}.{h}.json"
 
 
@@ -174,7 +200,7 @@ def text_layer(path: str, backend: str = "local", tile: int = 1100, upscale_to: 
                max_tokens: int = 2500, workers: int = 6) -> TextLayer:
     """All printed text of a raster drawing with image_px boxes. Cached in memory and on disk (artifacts/W3/textlayer);
     the cost of the reading is charged to the caller every time (cold-run accounting, as elsewhere in raster)."""
-    key = f"{path}|{backend}|{tile}"
+    key = f"{path}{file_tag(path)}|{backend}|{tile}"  # (a server may overwrite one upload path with a new plan)
     with _glock:
         lk = _locks.setdefault(key, threading.Lock())
     with lk:

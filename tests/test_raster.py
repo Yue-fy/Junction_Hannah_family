@@ -406,3 +406,24 @@ def test_doorarcs_quarter_arc_not_circle(tmp_path):
     assert len(dets) == 1
     assert abs(dets[0]["c"][0] - 150) < 6 and abs(dets[0]["c"][1] - 200) < 6
     assert abs(dets[0]["r_m"] - 0.9) < 0.06
+
+
+def test_text_layer_cache_key_is_per_content_for_uploads(tmp_path, monkeypatch):
+    """Uploads are all saved as <dir>/<sha>/plan.png: two different uploads must not share a text-layer cache entry,
+    while a dataset file keeps its name-only key (existing caches stay valid)."""
+    from PIL import Image
+
+    from stoa.solvers.raster import textlayer as T
+
+    data = tmp_path / "data_root"
+    (data / "data" / "swiss_dwellings").mkdir(parents=True)
+    monkeypatch.setenv("STOA_DATA", str(data))
+    a, b = tmp_path / "up" / "aa" / "plan.png", tmp_path / "up" / "bb" / "plan.png"
+    for p, c in ((a, 0), (b, 255)):
+        p.parent.mkdir(parents=True)
+        Image.new("RGB", (8, 8), (c, c, c)).save(p)
+    assert T.file_tag(str(a)) and T.file_tag(str(a)) != T.file_tag(str(b))
+    assert T._disk_key(str(a), 1100, "local") != T._disk_key(str(b), 1100, "local")
+    ds = data / "data" / "swiss_dwellings" / "site1_bldg1_floor1.png"
+    Image.new("RGB", (8, 8)).save(ds)
+    assert T.file_tag("data/swiss_dwellings/site1_bldg1_floor1.png") == ""
