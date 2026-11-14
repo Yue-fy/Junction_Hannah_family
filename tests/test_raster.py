@@ -322,6 +322,14 @@ def test_apartment_net_area_sums_printed_rooms_inside_the_unit_boundary(tmp_path
     assert r is not None and r["value"] == 23.75 and [d["id"] for d in r["dropped"]] == ["1.03"]
     assert A.net_area(str(p), tl, q.replace("apartment A", "apartment B"), px_per_m=30.0)["value"] == 20.0
     assert A.net_area(str(p), tl, q.replace("apartment A", "apartment C"), px_per_m=30.0) is None
+    assert A.unit_letter("Is this apartment a duplex?") is None  # the letter must be a capital
+    lab = A.room_set(str(p), tl, "What is the total net area in m² of all rooms labelled 'Zimmer' on this floor?", 30.0)
+    assert lab["scope"] == "floor" and lab["value"] == 35.5
+    floor = A.room_set(str(p), tl, "What is the total net floor area in m² of all numbered indoor rooms on this floor "
+                                   "(excluding balconies, loggias, terraces and other outdoor spaces, shafts and voids)?",
+                       30.0)
+    assert floor["value"] == 43.75 and [d["id"] for d in floor["dropped"]] == ["1.03"]
+    assert A.room_set(str(p), tl, "What is the area of the kitchen?", 30.0) is None  # not a summed-area question
     # unknown-unit bar: '1:200 (A3)' on a 2480-px sheet = 29.52 px/m
     bar = SB.Bar(unit=None, px_per_unit=29.6, labels=[(0, 0, [0, 0, 1, 1]), (10, 296, [0, 0, 1, 1])],
                  box=[0, 0, 296, 10], residual=1.0, source="layer")

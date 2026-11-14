@@ -358,8 +358,7 @@ def _resolve_ft_m(bs: list[Bar]) -> None:
 
 # paper widths in mm (long side, short side) for a scale note that names the sheet size: '1:200 (A3)'
 _PAPER = {"A0": (1189, 841), "A1": (841, 594), "A2": (594, 420), "A3": (420, 297), "A4": (297, 210)}
-_METRIC = re.compile(r"\bm²|\bm2\b|\bmetern?\b|\bmeters?\b|\bmetres?\b|\bmètres?\b|\bmetri\b|\bmetros?\b|"
-                     r"\bmittakaava\b|\bmassstab\b|\bmaßstab\b|\béchelle\b|\bscala\b", re.I)
+_METRIC = re.compile(r"\bm²|\bm2\b|\bmetern?\b|\bmeters?\b|\bmetres?\b|\bmètres?\b|\bmetri\b|\bmetros?\b", re.I)
 _IMPERIAL = re.compile(r"\bfeet\b|\bfoot\b|\bsq\.? ?ft\b|\d+'\s*-?\s*\d+\"|\binches\b", re.I)
 
 

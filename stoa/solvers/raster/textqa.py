@@ -88,7 +88,7 @@ def answer(path: str, question: str, image_path: str | None = None, backend: str
         except Exception:  # noqa: BLE001 - a bar is a bonus, never a reason to fail the question
             bars = []
     unit_q = _AREA_Q.search(question) and A.unit_letter(question)
-    if bars and unit_q:
+    if _AREA_Q.search(question) and _sum_scope(question, tl):
         got = _unit_area_answer(img_path, question, tl, bars, solver)
         if got is not None:
             return got
@@ -227,7 +227,25 @@ def _room_area_answer(img_path: str, question: str, tl: T.TextLayer, bars: list,
 # nothing tuned on them; gold = DXF room sums; artifacts/W3/apartment_eval_hybrid.jsonl): within 2% when every room
 # in the unit has a printed area 19/20; 1-2 rooms flood-filled 6/12; all rooms filled (plans without printed areas)
 # 18/56 (within 5% 38/56); some room not measurable 2/8.
+# + floor totals ('all numbered indoor rooms', 51 Qs) and 'all rooms labelled X' (48 Qs) on the same plans
+# (artifacts/W3/area_sums_eval.jsonl), within 2% by (scope, kind): floor printed 6/6, some 5/6, filled 2/25, partial 1/14;
+# labelled printed 11/17 (a room whose name was not read drops out), filled 18/31.
 UNIT_CONF = {"printed": 0.85, "some": 0.5, "filled": 0.3, "partial": 0.2}
+SUM_CONF = {"unit": UNIT_CONF, "floor": {"printed": 0.85, "some": 0.6, "filled": 0.1, "partial": 0.1},
+            "labelled": {"printed": 0.6, "some": 0.5, "filled": 0.5, "partial": 0.2}}
+
+
+def _sum_scope(question: str, tl: T.TextLayer) -> bool:
+    """A summed-area question raster can answer from room labels: one unit's rooms, rooms labelled X, or the floor's
+    rooms. A question that names a room number on this plan is a single-room question (room path)."""
+    from stoa.solvers.raster import measure as M
+
+    if A.unit_letter(question):
+        return True
+    ids = {i.text.strip().rstrip(".") for i in tl.items}
+    if any(rid in ids for rid in M._ROOM_ID.findall(question)):
+        return False
+    return bool(A.labelled_name(question) or A._FLOOR_SUM.search(question))
 
 
 def _unit_area_answer(img_path: str, question: str, tl: T.TextLayer, bars: list, solver: str):
@@ -236,16 +254,18 @@ def _unit_area_answer(img_path: str, question: str, tl: T.TextLayer, bars: list,
     from stoa.solvers.raster import measure as M
 
     bar = next((b for b in bars if b.px_per_m), None)
-    r = A.net_area(img_path, tl, question, bar.px_per_m if bar else None)
+    r = A.room_set(img_path, tl, question, bar.px_per_m if bar else None)
     if r is None:
         return None
     ft = bool(re.search(r"\b(sq\.? ?ft|square feet|ft²|ft2)\b", question, re.I))
     k = 1 / 0.3048 ** 2 if ft else 1.0
     lab = r["label"]
-    ev = [Evidence(file=img_path, page=0, bbox=[round(x, 1) for x in lab.box], bbox_space="image_px",
-                  note=f"unit label '{lab.text}'"),
-          Evidence(file=img_path, page=0, bbox=[round(x, 1) for x in r["region_box"]], bbox_space="image_px",
-                   note=f"apartment {r['letter']}: the region inside its drawn boundary line")]
+    ev = []
+    if lab is not None:
+        ev = [Evidence(file=img_path, page=0, bbox=[round(x, 1) for x in lab.box], bbox_space="image_px",
+                       note=f"unit label '{lab.text}'"),
+              Evidence(file=img_path, page=0, bbox=[round(x, 1) for x in r["region_box"]], bbox_space="image_px",
+                       note=f"apartment {r['letter']}: the region inside its drawn boundary line")]
     parts = []
     for rm in r["rooms"]:
         name = f"{rm['id'] or ''} {rm['name']}".strip() or "room"
@@ -259,9 +279,20 @@ def _unit_area_answer(img_path: str, question: str, tl: T.TextLayer, bars: list,
                                note=f"{name}: no printed area; flood-filled outline {rm['measured']['m2']:.2f} m²"))
     n, nm = len(r["rooms"]), len(r["measured"])
     kind = "partial" if r["unmeasured"] else "printed" if nm == 0 else "some" if nm <= 2 and nm < n else "filled"
-    conf = UNIT_CONF[kind]
-    assumptions = [f"apartment {r['letter']} = the area enclosed by the coloured dash-dot unit boundary around the label "
-                   f"'{lab.text}'; its rooms are the room labels inside it ({n})"]
+    conf = SUM_CONF[r["scope"] if not r["name"] else "labelled"][kind]
+    if r["scope"] == "unit":
+        assumptions = [f"apartment {r['letter']} = the area enclosed by the coloured dash-dot unit boundary around the "
+                       f"label '{lab.text}'; its rooms are the room labels inside it ({n})"]
+    elif r["name"]:
+        assumptions = [f"the rooms labelled '{r['name']}' are the {n} room(s) whose printed name reads so"]
+        unnamed = [x for x in A._rooms(tl) if x["label"] is not None and not x["name"]]
+        if unnamed:
+            missing_names = f"{len(unnamed)} numbered room(s) have no readable name; any of them labelled " \
+                            f"'{r['name']}' is missing from the sum"
+            assumptions.append(missing_names)
+    else:
+        assumptions = [f"the floor's rooms are its {n} room labels"
+                       + (" with a room number" if A._NUMBERED_Q.search(question) else "")]
     if r["dropped"]:
         assumptions.append("left out as outdoor space: " + ", ".join(f"{d['id'] or ''} {d['name']}".strip()
                                                                     for d in r["dropped"]))
@@ -270,6 +301,9 @@ def _unit_area_answer(img_path: str, question: str, tl: T.TextLayer, bars: list,
         W = M.WITHIN
         assumptions.append(f"{nm} room(s) have no printed area and were measured by flood fill with the scale bar "
                            f"({bar.px_per_m:.2f} px per m)")
+        if r["scope"] == "floor" and not r["name"]:
+            missing.append("whole-floor sums of flood-filled rooms run ~5% low (median) and were within 2% for only "
+                           "2 of 25 test floors")
         missing.append(f"printed areas for {nm} room(s): a flood-filled room is within 5% for {100 * W['5%']:.0f}% of "
                        f"held-out rooms; whole units with filled rooms were within 5% for 38 of 56 (all filled)")
     if r["unmeasured"]:
@@ -279,9 +313,11 @@ def _unit_area_answer(img_path: str, question: str, tl: T.TextLayer, bars: list,
         assumptions.append("scale: " + bar.notes[-1])
     total = round(r["value"] * k, 2)
     return Answer(value=total, unit="ft2" if ft else "m2", confidence=conf, solver=solver, evidence=ev[:14],
-                  trace=[f"apartment {r['letter']}: label '{lab.text}' at {[round(x) for x in lab.box]}; region inside "
-                         f"the unit boundary {[round(x) for x in r['region_box']]} ({r['region_m2']} m² inside the "
-                         "line)", "rooms: " + " + ".join(parts) + f" = {r['value']:g} m²"],
+                  trace=([f"apartment {r['letter']}: label '{lab.text}' at {[round(x) for x in lab.box]}; region "
+                          f"inside the unit boundary {[round(x) for x in r['region_box']]} ({r['region_m2']} m² inside "
+                          "the line)"] if lab is not None else [f"scope: {r['scope']}"
+                                                                + (f", rooms labelled '{r['name']}'" if r['name'] else "")])
+                  + ["rooms: " + " + ".join(parts) + f" = {r['value']:g} m²"],
                   assumptions=assumptions, missing=missing)
 
 

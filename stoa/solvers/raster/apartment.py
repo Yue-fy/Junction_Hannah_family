@@ -23,7 +23,7 @@ from stoa.solvers.raster import textlayer as T
 
 _UNIT_WORD = (r"(?:apartments?|apartment|appartements?|appartamento|appartamenti|wohnung|whg\.?|app\.?|appt\.?|"
               r"apt\.?|unit|logement|asunto|huoneisto|lägenhet|lagenhet|dwelling|flat)")
-_Q_UNIT = re.compile(rf"\b{_UNIT_WORD}\s*['\"«“]?([A-Z])['\"»”]?(?![\w])", re.I)
+_Q_UNIT = re.compile(rf"(?i:\b{_UNIT_WORD})\s*['\"«“]?([A-Z])['\"»”]?(?![\w])")
 _LABEL = re.compile(r"^\s*(?:Whg|Wohnung|App|Appt|Apt|Appartement|Appartamento|Apartment|Unit|Logement|Lgt|"
                     r"Wohneinheit|WE|Asunto|As)\.?\s*([A-Z])\s*$", re.I)
 _NET_Q = re.compile(r"net|netto|nette?|summ|somme|somma|sum|total|gesamt|insgesamt|wohnfl|floor area|surface|"
@@ -97,7 +97,7 @@ def _rooms(layer: T.TextLayer) -> list[dict]:
                 best = (k, a)
                 break
         names = [i for i in layer.items if i is not rid and not _ROOM_ID.match(i.text.strip()) and
-                 not re.search(r"\d", i.text) and abs(i.cx - rid.cx) < 3 * h and -2.6 * h < i.cy - rid.cy < 0]
+                 not _LABEL.match(i.text) and not re.search(r"\d", i.text) and abs(i.cx - rid.cx) < 3 * h and -2.6 * h < i.cy - rid.cy < 0]
         name = min(names, key=lambda i: rid.cy - i.cy).text if names else ""
         if best:
             used.add(best[0])
@@ -115,34 +115,75 @@ def _rooms(layer: T.TextLayer) -> list[dict]:
     return out
 
 
-def net_area(path: str, layer: T.TextLayer, question: str, px_per_m: float | None,
+_LABELLED = re.compile(r"(?:labell?ed|named|called|marked|bezeichnet|beschriftet|mit der bezeichnung|intitulées?|"
+                       r"étiquetées?|nommées?|denominat[eia]|etichettat[eia]|chiamat[eia]|nimetty|merkitty|märkt[a]?)"
+                       r"\s*[«'\"‘“„]([^'\"’”»“]{1,40})[»'\"’”“]", re.I)
+_FLOOR_SUM = re.compile(r"\b(total|sum|summe|gesamt\w*|insgesamt|somme|totale|somma|complessiv\w*|yhteensä|"
+                        r"all (?:numbered )?(?:indoor )?rooms|aller? |toutes les|tutt[ei] le)\b", re.I)
+_SHAFT_Q = re.compile(r"shaft|void|schächt|schacht|luftr[aä]um|gaine|\bvides?\b|cavedi|vuot|kuilu", re.I)
+_SHAFT_NAME = re.compile(r"schacht|luftraum|gaine|^vide|cavedio|vuoto|shaft|void|kuilu", re.I)
+_TOTAL_LINE = re.compile(r"total|gesamt|summe|yht|yhteensä|asuinpinta|wohnfl|nutzfl|bgf|ngf|gfa|nfa|somme|totale|"
+                         r"surface habitable|superficie utile|bostadsyta|boyta|net area|gross", re.I)
+_NUMBERED_Q = re.compile(r"numbered|nummeriert|numérotées?|numerat[ei]|numeroid", re.I)
+
+
+def labelled_name(question: str) -> str | None:
+    m = _LABELLED.search(question)
+    return m.group(1).strip() if m else None
+
+
+def room_set(path: str, layer: T.TextLayer, question: str, px_per_m: float | None,
              grow_m: float = 0.15, mode: str = "hybrid") -> dict | None:
-    """Sum of the printed areas of the rooms inside the unit's boundary (outdoor rooms dropped when the question
-    excludes them); rooms with a number but no printed area are measured by flood fill when a scale is known."""
+    """The rooms a summed-area question is about, with their areas: one unit's rooms ('apartment B': inside its drawn
+    boundary), the rooms labelled X ('all rooms labelled «Bad»'), or every (numbered) indoor room of the floor. Outdoor
+    rooms (and shafts/voids) are dropped when the question excludes them; rooms with a number but no printed area are
+    measured by flood fill when a scale is known (mode 'hybrid'). None when the question is none of these."""
     letter = unit_letter(question)
+    name = labelled_name(question)
     labels = unit_labels(layer)
-    if not letter or letter not in labels:
-        return None
-    lab = labels[letter]
+    comp, lab, scope = None, None, "floor"
     rgb = np.asarray(Image.open(T._abspath(path)).convert("RGB"))
     H, W = rgb.shape[:2]
-    # dash-dot gaps: 3-7 px on 2480-px A3 renders (29.6 px/m); growing by 3-5 px closed all 4 units of the Q plan
-    grow = max(3, int(round(grow_m * px_per_m))) if px_per_m else 4
-    comp = region(rgb, (int(lab.cx), int(lab.cy)), grow)
-    if comp is None:
+    if letter:
+        if letter not in labels:
+            return None
+        lab = labels[letter]
+        # dash-dot gaps: 3-7 px on 2480-px A3 renders (29.6 px/m); growing by 3-5 px closed all 4 units of Q's plan
+        grow = max(3, int(round(grow_m * px_per_m))) if px_per_m else 4
+        comp = region(rgb, (int(lab.cx), int(lab.cy)), grow)
+        if comp is None:
+            return None
+        if any(k != letter and comp[int(it.cy), int(it.cx)] for k, it in labels.items()):
+            return None  # the region holds another unit's label: the boundary has a gap
+        scope = "unit"
+    elif not (name or _FLOOR_SUM.search(question)):
         return None
-    others = [k for k, it in labels.items() if k != letter and comp[int(it.cy), int(it.cx)]]
-    if others:  # the region holds another unit's label: the boundary has a gap
+    all_rooms = _rooms(layer)
+    if scope == "floor" and sum(r["label"] is not None for r in all_rooms) < 2:
+        # a floor sum needs numbered rooms: on other sheets (scans, uploads) printed areas may be site or total areas
         return None
     excl = bool(_OUTDOOR_Q.search(question))
+    excl_shaft = bool(_SHAFT_Q.search(question))
+    numbered = bool(_NUMBERED_Q.search(question))
     rooms, dropped, unmeasured, measured = [], [], [], []
     from stoa.solvers.raster import measure as M
     ink = None
-    for r in _rooms(layer):
-        cx, cy = (r["label"].cx, r["label"].cy) if r["label"] is not None else (r["cx"], r["cy"])
-        if not (0 <= int(cy) < H and 0 <= int(cx) < W) or not comp[int(cy), int(cx)]:
+    for r in all_rooms:
+        if r["area"] is not None and _TOTAL_LINE.search(r["area"]["line"]):
+            continue  # a printed total ('Wohnfläche 81 m²', 'yht. 56 m²') is not a room
+        if scope == "floor" and r["label"] is None and not name:
             continue
-        if excl and r["name"] and _OUTDOOR_NAME.search(r["name"]):
+        cx, cy = (r["label"].cx, r["label"].cy) if r["label"] is not None else (r["cx"], r["cy"])
+        if not (0 <= int(cy) < H and 0 <= int(cx) < W):
+            continue
+        if comp is not None and not comp[int(cy), int(cx)]:
+            continue
+        if numbered and r["label"] is None:
+            continue
+        if name and not (r["name"] and (T.norm(r["name"]) == T.norm(name) or T.match_score(name, r["name"]) >= 0.9)):
+            continue
+        if not name and ((excl and r["name"] and _OUTDOOR_NAME.search(r["name"])) or
+                         (excl_shaft and r["name"] and _SHAFT_NAME.search(r["name"]))):
             dropped.append(r)
             continue
         if r["area"] is None:
@@ -162,9 +203,15 @@ def net_area(path: str, layer: T.TextLayer, question: str, px_per_m: float | Non
     if not rooms:
         return None
     total = sum(r["area"]["value"] if r["area"] else r["measured"]["m2"] for r in rooms)
-    ys, xs = np.nonzero(comp)
-    reg_m2 = comp.sum() / px_per_m ** 2 if px_per_m else None
-    return {"letter": letter, "label": lab, "value": round(total, 2), "rooms": rooms, "dropped": dropped,
-            "unmeasured": unmeasured, "measured": measured,
-            "region_box": [float(xs.min()), float(ys.min()), float(xs.max() + 1), float(ys.max() + 1)],
-            "region_m2": round(reg_m2, 2) if reg_m2 else None}
+    out = {"scope": scope, "letter": letter, "name": name, "label": lab, "value": round(total, 2), "rooms": rooms,
+           "dropped": dropped, "unmeasured": unmeasured, "measured": measured, "region_box": None, "region_m2": None}
+    if comp is not None:
+        ys, xs = np.nonzero(comp)
+        out["region_box"] = [float(xs.min()), float(ys.min()), float(xs.max() + 1), float(ys.max() + 1)]
+        out["region_m2"] = round(comp.sum() / px_per_m ** 2, 2) if px_per_m else None
+    return out
+
+
+def net_area(path: str, layer: T.TextLayer, question: str, px_per_m: float | None, **kw) -> dict | None:
+    """One unit's net area (room_set with a unit letter)."""
+    return room_set(path, layer, question, px_per_m, **kw) if unit_letter(question) else None
