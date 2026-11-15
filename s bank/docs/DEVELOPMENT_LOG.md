@@ -191,6 +191,23 @@ This log records implementation progress, decisions, verification evidence, and 
 - Final full verification after the review fix: 427 tests discovered, 426 passed and one older optional browser flow skipped (23.366 seconds). The rendered Home/chat flow passed at all three viewport sizes. JavaScript/Python syntax and whitespace checks passed. The running local demo serves the updated assets from the same preserved database.
 - The user requested one local commit for this card and its technical documentation, without a push. Their `.env.example` deletion and untracked root implementation brief remain excluded.
 
+### V3: personal coach (2026-11-15)
+
+Driven by user feedback on the V2 demo. The plan is `docs/COACH_V3_PLAN.md`; work was split into lanes and run by parallel agents in separate git worktrees, then merged and checked together.
+
+- **Rigid "what kind of spender" answer.** Root cause: the model derived percentages itself, the number check rejected them and the offline text took over. Fixed with precomputed shares in tool results, rounding tolerance for approximate figures and sentence trimming before fallback. Fallbacks now log a reason to stderr.
+- **Safe to spend.** The old seven-day figure held back almost nothing (Alex: EUR 3,288.31). It now runs until payday and holds back known bills, a Surprise must-pays buffer and the reserve floor (Alex, September: EUR 1,138.27, about EUR 162 a day, payday 22 Oct). Safe to save is shown alongside.
+- **Baskets renamed** to Must-pays, Surprise must-pays and Little leaks, with one-line explanations and examples (FI/SV need native review).
+- **Money profile ("Me" tab).** Server-side entries with visible source, edit/delete/forget, "Things I noticed" suggestions, a first-visit onboarding in Coach and a steady coaching mode after job loss or a big loss. The coach says when it records something.
+- **Taxes.** Tax-card withholding estimate, tax-decision cycle with dates (verified against Vero 2026 calendar), back-tax set-aside plan and refund detection, plus a VAT tile.
+- **Goals** can be edited and deleted, including from chat via review cards.
+- **Charts.** Month-range control, clickable bars with a detail panel, money-in vs money-out by month or year.
+- **Year in review.** Story-style cards for a past year, optional AI captions, saved to the profile.
+- **Peer comparison.** Real Statistics Finland 2022 household consumption by age band (StatFin ktutk 14q4), with caveats shown every time.
+- **Browser walkthrough (Chrome, 390x844)** of every V3 screen. Issues found and fixed: blank tax year saved as last year (tax overview ignored it); empty "add" forms opened in review mode; chart axis labels clipped and the newest month scrolled out of view; tax dialog without padding and a repeated sentence; raw JSON in a noticed item; "went from 9.6% to 9.6%" wording; Taxes hidden on an empty profile.
+- **Tests:** 605 run, 603 pass, 2 optional browser flows skipped, both in the container and in the project folder.
+- **Live evaluation:** not run yet for V3. The cloud workspace cannot reach DeepSeek; it must be checked against the local server with the key in `.env`.
+
 ## Current status
 
 - Product design: frozen for implementation.
@@ -200,6 +217,7 @@ This log records implementation progress, decisions, verification evidence, and 
 - Adaptive/localized UI: EN/FI/SV interaction tests pass; Home recap and WP6 chat acceptance passed in Chrome at 375×812, 390×844 and 1280×800. Broader page/device and human usability checks remain pending.
 - Live agent: WP1/WP2/WP6 are integrated. DeepSeek synthetic amount, scenario and three-turn browser checks passed; numeric/provider failure still falls back offline. Gemini generation is quota-blocked. Broader conversational evaluation and the remaining work packages are not claimed complete.
 - Runbook and technical reference: reconciled with redesigned behavior, supported definitions and remaining bounds.
+- V3 (personal coach, money profile, taxes, year review, peer comparison): implemented and walked through in Chrome at 390x844; live DeepSeek evaluation pending.
 - Dependencies added: none.
 - Publication scope: one local commit per work package, then pause for user confirmation. No new push or PR was requested.
 

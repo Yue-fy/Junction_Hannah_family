@@ -288,3 +288,19 @@ PYTHONPATH="s bank" python3 -m unittest discover -s "s bank/tests" -v
 ```
 
 The optional browser test requires an existing Playwright runtime and Chrome; some tests also bind a local HTTP port. Any permission-related skip or failure must be reported separately from an assertion failure. Do not claim a fresh full-suite pass unless that full command has actually completed successfully in the current verification run.
+
+## 11. V3 additions
+
+New backend modules, all stdlib and read-only unless noted:
+
+- `spender.py`: archetype from basket shares, regularity and big-ticket frequency; `irregular_buffer` sizes the Surprise must-pays reserve from the last 12 months.
+- `forecast.safe_until_payday`: payday from salary history, known bills before payday, buffer, reserve floor; profile inputs (saving target, emergency months, debts) adjust it.
+- `explore.py`, `cashflow.py`: grouping and per-period income/consumption/savings/net with complete-period flags.
+- `money_profile.py` (writes): `profile_entries` table, per-key validation, sources, coaching mode, transaction-based suggestions, planning inputs, a short profile summary for the agent prompt. Only the customer's confirmed entries are stored.
+- `tax.py`: tax calendar in `data/tax/fi_tax_calendar_2026.json`, withholding estimate from user-entered tax-card data, cycle stage, back-tax plan, refund detection, VAT learning card. Not tax advice; MyTax is the official source.
+- `year_review.py`, `year_story.py`: yearly facts and story cards; captions are optional AI text over fixed numbers.
+- `benchmarks.py`: maps S-Coach categories to COICOP groups (Groceries 01, Restaurants 11.1.1, Lifestyle 03, Health 06, Transportation 07.2+07.3, Entertainment 09) and compares a monthly average with the 2022 age-band figures in `data/benchmarks/consumption_by_age_2022.json`.
+
+Frontend: `web/v3.js` wires the new pages into `app.js` through a small set of guarded hooks (`onNavigate`, `onLoad`, `reset`, `onLanguage`, `handleClick`), so a V3 failure cannot break the V2 pages. Drafts (goals, profile entries, tax details) use one review dialog; empty drafts open in edit mode.
+
+Known limits: archetype and basket names in Finnish and Swedish need native review; peer data describes households in 2022, not individuals today; V3 live-model quality is not yet evaluated.

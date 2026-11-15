@@ -192,3 +192,42 @@ The response is an unsaved planning scenario. It uses only the supplied amount a
 - VAT rows are always `estimated`; `rate_source` states whether MCC or category supplied the band, while `mapping_quality` distinguishes direct MCC, documented category fallback, broad estimate, and unmapped rows. `coverage_basis_points` is mapping coverage, not an accuracy or confidence score.
 - VAT facts expose `method_version` and `rate_map_version`; their fact IDs bind those versions and the per-row rate evidence.
 - Financing history is always `historical_context_only` and never current credit advice.
+
+## V3 additions (2026-11-15)
+
+All new reads follow the envelope and money rules above. All new writes require `"confirmed": true` and are recorded in `audit_events`; profile writes are undoable through `POST /api/undo`.
+
+### Reads
+
+| Endpoint | Parameters | Result |
+|---|---|---|
+| `GET /api/safe-to-spend` | adds `horizon=until_payday` (default for the Home card) or `week` | Until-payday estimate: balance minus known bills before payday, the Surprise must-pays buffer and the reserve floor; returns `next_payday`, `per_day_cents` and each held-back line. Uses `money_profile.planning_inputs` when the customer has a profile |
+| `GET /api/spender-profile` | `month`, `months` (default 12) | Archetype id and label, the signals behind it, basket shares and a month-by-month stability series |
+| `GET /api/explore` | `start`, `end`, `group_by` (category, role, month, weekday, mcc), `metric`, `top`, optional exact filters | Free MyData-style grouping with row evidence; used by clickable chart detail panels |
+| `GET /api/cashflow` | `start_month`, `end_month`, `granularity=month\|year` | Income, consumption, savings transfers, net and saving rate per period, with `complete` flags |
+| `GET /api/cashflow/summary` | same | `cashflow` plus `comparisons` (best/worst net period, `saving_rate_change` with `direction`) |
+| `GET /api/year-review/options` | none | Years with enough data |
+| `GET /api/year-review` | `year`, `locale` | Year-in-review facts and `story_cards` for the story viewer |
+| `GET /api/profile` | `as_of` or `month` | Money profile: entries with `source` (`you_told_me`, `from_your_transactions`, `from_chat`), coaching `mode` (`normal`/`steady`) and `empty` |
+| `GET /api/profile/suggestions` | `as_of` or `month` | Pending "Things I noticed" items derived from transactions; nothing is stored until confirmed |
+| `GET /api/tax` | `as_of`, optional `tax_year` (defaults to the reference year) | Withholding estimate from the user's tax-card entry, tax-cycle stage and next date, back-tax set-aside plan, detected refund, `tax_entry_id` |
+| `GET /api/vat/card` | `month` | One "Did you know?" VAT tile for the month's largest VAT category |
+| `GET /api/benchmarks` | no `category`: list of supported categories; with `category`, `months`, `month` | Customer's monthly average vs Statistics Finland 2022 households in the same age band, with caveats |
+
+### Writes
+
+| Endpoint | Purpose |
+|---|---|
+| `POST /api/goals/update` | `{goal_id, fields}`: change name, target, date or saved amount |
+| `POST /api/goals/delete` | `{goal_id}` |
+| `POST /api/profile/entries` | Add one entry `{key, value, source}`; validated per key |
+| `POST /api/profile/entries/update` / `.../delete` | Edit or remove one entry by `id` |
+| `POST /api/profile/forget` | Delete the whole money profile (transactions untouched) |
+| `POST /api/profile/suggestions/confirm` / `.../dismiss` | Keep or dismiss a noticed item |
+| `POST /api/profile/migrate-local` | One-time import of the older browser-only notebook |
+| `POST /api/year-review/captions` | Optional AI captions for the story cards (numbers come from the facts, never the model) |
+| `POST /api/year-review/save` | Save the year review into the profile so it can be replayed |
+
+### Agent changes
+
+New read-only tools: `spender_profile`, `irregular_buffer`, `explore`, `cashflow_summary`, `safe_to_save`, `get_profile`, `tax_overview`, `vat_in_my_spending`, `year_review`, `compare_to_peers`. `safe_to_spend` gains `horizon`. `propose_profile_update` and `propose_action` kinds `update_goal`, `delete_goal`, `update_profile` and `open_year_review` only produce review cards; the customer confirms each write in the UI. The prompt includes a short profile summary and the coaching mode. The agent may take up to eight model turns. The number check accepts rounded figures introduced by "about/noin/ungefär"; if a second answer still contains unverified numbers, unverified sentences are removed (`verification: "trimmed"`) before falling back offline.
