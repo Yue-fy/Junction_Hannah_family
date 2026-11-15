@@ -208,6 +208,14 @@ Driven by user feedback on the V2 demo. The plan is `docs/COACH_V3_PLAN.md`; wor
 - **Tests:** 605 run, 603 pass, 2 optional browser flows skipped, both in the container and in the project folder.
 - **Live evaluation:** not run yet for V3. The cloud workspace cannot reach DeepSeek; it must be checked against the local server with the key in `.env`.
 
+### V4 critique and payday-plan positioning (2026-11-15)
+
+Several independent reviewers critiqued the V3 product from customer need, positioning, numbers, language and UX angles (`docs/V4_REVIEW_AND_PLAN.md`, `docs/critique/`). The owner chose the new positioning: a payday plan with a surprise buffer. V4 lanes rebuilt the Home number (`spending_plan`), added the fixed question catalogue with answer cards, steady mode, optional mortgage and tax plans, and personalization guards so existing strengths were kept.
+
+### V5 polish wave and fix wave (2026-11-15)
+
+Owner feedback: redesigned 30-day balance chart, bottom navigation everywhere, optional tax and mortgage plans with worked examples on Goals, designed empty states, spending-over-time line chart with hover/tap values, phone-first layout. Seven V5 lanes (`docs/V5_SPEC.md`) were built in parallel worktrees, then six QA reviewers tested 320–1440 px in EN/FI/SV with edge personas; eight fix lanes (`docs/V5_FIX_SPEC.md`) resolved their findings and fixed one shared vocabulary. Live DeepSeek evaluation (30 questions) returned 30/30 agent answers; its findings (Finnish dates, mixed totals, empathy on job loss, localized categories) were fixed. About 1,000 tests pass.
+
 ## Current status
 
 - Product design: frozen for implementation.
@@ -217,7 +225,8 @@ Driven by user feedback on the V2 demo. The plan is `docs/COACH_V3_PLAN.md`; wor
 - Adaptive/localized UI: EN/FI/SV interaction tests pass; Home recap and WP6 chat acceptance passed in Chrome at 375×812, 390×844 and 1280×800. Broader page/device and human usability checks remain pending.
 - Live agent: WP1/WP2/WP6 are integrated. DeepSeek synthetic amount, scenario and three-turn browser checks passed; numeric/provider failure still falls back offline. Gemini generation is quota-blocked. Broader conversational evaluation and the remaining work packages are not claimed complete.
 - Runbook and technical reference: reconciled with redesigned behavior, supported definitions and remaining bounds.
-- V3 (personal coach, money profile, taxes, year review, peer comparison): implemented and walked through in Chrome at 390x844; live DeepSeek evaluation pending.
+- V3 (personal coach, money profile, taxes, year review, peer comparison): implemented.
+- V4/V5 (payday plan, question catalogue, steady mode, optional mortgage and tax plans with examples, line charts, empty states, bottom navigation, responsive design): implemented, QA-reviewed at 320–1440 px, live DeepSeek eval 30/30.
 - Dependencies added: none.
 - Publication scope: one local commit per work package, then pause for user confirmation. No new push or PR was requested.
 

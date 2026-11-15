@@ -304,3 +304,23 @@ New backend modules, all stdlib and read-only unless noted:
 Frontend: `web/v3.js` wires the new pages into `app.js` through a small set of guarded hooks (`onNavigate`, `onLoad`, `reset`, `onLanguage`, `handleClick`), so a V3 failure cannot break the V2 pages. Drafts (goals, profile entries, tax details) use one review dialog; empty drafts open in edit mode.
 
 Known limits: archetype and basket names in Finnish and Swedish need native review; peer data describes households in 2022, not individuals today; V3 live-model quality is not yet evaluated.
+
+
+## 12. V4 and V5: payday plan
+
+**Positioning.** After a multi-reviewer critique (`docs/V4_REVIEW_AND_PLAN.md`, `docs/critique/`), the product centres on one number: how much the customer can use a day until payday, with a surprise buffer for irregular must-pays. Categories and charts explain that number.
+
+**`forecast.spending_plan`** is the single source for the number (Home, Coach cards, agent tools and the 30-day chart all read it):
+
+- Payday from salary history (pay-day clustering, weekend rule; irregular pay falls back to the plan's next payday).
+- `held_back[]`: bills due before payday, each with `labels{en,fi,sv}` from the shared `labels.py` table; a saved mortgage plan replaces the detected housing payment (no double count, and a payment day after payday is not held back this cycle); a saved surprise-buffer goal is held back.
+- Safety cushion (reserve floor), Surprise buffer (`spender.irregular_buffer`), Everyday basics, Free to spend, Could be saved (`extra_cents`).
+- `daily_life_cents = max(everyday − shortfall, 0) + spendable`; `per_day_cents = daily_life_cents ÷ days to payday`. `shortfall_breakdown` attributes a shortfall to bills, cushion or steady-mode reserve; Home and the 30-day chart use the same definition.
+
+**Optional plans** (`plans.py`, `mortgage.py`): `GET /api/plans/mortgage/projection` and `/preview`, `GET /api/plans/tax` and `/preview` compute without saving. A typed mortgage payment is the one payment used for totals, payoff, yearly principal/interest split, balance curve and rate what-ifs (relative to the shown payment). The tax plan reports `status` and `needs_inputs`; with missing inputs it never claims withholding is enough. Plans are stored as money-profile entries (`plan_mortgage`, `plan_tax`) and surface through `planning_inputs.plan_set_asides`.
+
+**Question catalogue** (`catalogue.py`, `GET /api/catalogue`, answer/match routes): about 29 questions with deterministic answer cards; `profile_note` shows which profile entries were used. `STEADY_STARTERS` replace the default starters when `money_profile.coaching_mode(...) == 'steady'`, and steady-mode cards never suggest saving. Typed text that confidently matches a catalogue question is answered as that card; otherwise the DeepSeek agent runs with tool-grounded numbers (`agent_numbers.py` also checks Finnish date formats).
+
+**Frontend modules (vanilla ES modules, no build step):** `home-v4.js` (payday plan card), `answer-card.js` + `cards-v4.css` (coach cards), `trend-v5.js` (spending line chart), `forecast-v5.js` (30-day balance), `spending-v5.js` (page structure), `goals-v5.js`, `plans.js` + `plans-mortgage.js` + `plans-tax.js`, `empty-states.js` (one illustrated empty-state component used by every chart, list and card), `charts.js` (`lineChart`, `cashflowChart`, `axisEuro`), `session.js` (persona/month survive reload). `design-v5.css` is loaded last and holds the shared button, dialog, width and tap-target (44 px) rules; the tab bar is fixed at the bottom on every viewport.
+
+**Verification.** About 1,000 tests: unit and API tests, i18n completeness for EN/FI/SV, personalization guards (`test_personalization_v4.py`, `test_steady_starters.py`) and headless-Chrome tests at 320–1440 px. Six QA reviews (`docs/critique/qa/`) drove the V5 fix wave. A live DeepSeek run of 30 questions (`docs/critique/live_v4_eval.md`) returned 30/30 agent answers after the fixes. Remaining limits: FI/SV need native review; example mortgage/tax inputs are illustrative, not advice.

@@ -1,3 +1,16 @@
+# S-Coach V5 demo script (payday plan)
+
+About three minutes at phone width (Chrome device toolbar, iPhone 12 Pro 390 × 844). Persona **Alex**, month **September 2026**. Figures come from the demo database; if one differs, trust the screen.
+
+1. **Home — one number.** "You can use about **€38 a day** for food, getting around and fun, €577 until payday." Point at the sum line (`€311 + €266 = €577`) and the account bar: held back for bills, Safety cushion €500, Surprise buffer €205, and **€2,914 could be saved**. Open **Why this number?** to show each bill held back.
+2. **Spending.** Tap the **Surprise must-pays** chip, then a category to see its transactions. Scroll to **How spending changes over time**, switch 12 months, hover/tap points for the month total and top categories. Show **Your balance over the next 30 days**: payday, rent and the tightest day are marked.
+3. **Coach.** Tap a starter such as *How much can I spend this week?* — an instant card. Then type a free question (e.g. *Can I afford a €400 phone this month?*) for the DeepSeek agent; open **How I worked this out**.
+4. **Goals.** "A summer in Italy" shows whether €500 a month fits what is usually left and a better option. Under **Plans (optional)** open **Mortgage → See an example**: monthly payment, payoff date, total interest, balance curve, extra €100/month and ±1 pp rate what-ifs. Then **Tax → See an example**. Tap **Use my own numbers** to show the prefilled form.
+5. **Life happens.** In Coach type *I lost my job last week*, save the note: the app switches to **Steady mode** — starters change and nothing suggests saving. Show it on **Me**, then turn it off (undoable).
+6. **Close in Finnish:** switch the language and ask *Paljonko voin käyttää päivässä palkkapäivään asti?*
+
+---
+
 # S-Coach V3 demo script
 
 The V3 story takes about three minutes on a phone-sized screen (Chrome device toolbar at 390 × 844, or the `/device-preview.html` page). Start the server with the README command so `s bank/.env` is loaded; with a DeepSeek or Gemini key the coach answers with the AI agent, and without one every step still works with the offline answers (tagged "Quick answer (offline)").
