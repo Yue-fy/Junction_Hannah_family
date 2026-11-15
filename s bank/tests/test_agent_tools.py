@@ -76,8 +76,13 @@ class AgentToolsTests(AgentFixture):
         self.assertEqual(safe['this_week_cents'], payday['this_week_cents'])
         save = self.tool('safe_to_save')
         self.assertEqual(save['safe_to_save_cents'], raw_payday['extra_cents'])
-        # Spending room and what could be saved are two parts of the same free money.
-        self.assertEqual(save['spendable_until_payday_cents'] + save['extra_cents'], save['free_cents'])
+        # Daily life until payday and what could be saved never overlap; the model sees only these figures
+        # (the free-choice part and free money are hidden so they cannot be quoted as the total).
+        raw_save = forecast.spending_plan(self.conn, self.customer, '2026-09-28')
+        self.assertEqual(save['daily_life_cents'], raw_save['daily_life_cents'])
+        self.assertEqual(save['daily_life_cents'] - save['everyday_cents'] + save['extra_cents'], raw_save['free_cents'])
+        self.assertNotIn('spendable_until_payday_cents', save)
+        self.assertNotIn('free_cents', save)
         preview = self.tool('forecast_30_days')
         raw_preview = forecast.preview_30_days(self.conn, self.customer, '2026-09-28')
         self.assertEqual(preview['ending_balance_cents'], raw_preview['projected'][-1]['balance_cents'])

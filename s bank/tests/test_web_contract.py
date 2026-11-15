@@ -96,7 +96,9 @@ class WebContractTests(unittest.TestCase):
     def node_app(self, body):
         """Execute the real app with a small DOM boundary and scoped API fixtures."""
         sources = {name: self.read(name) for name in ('app.js', 'api.js', 'state.js', 'charts.js', 'i18n.js', 'experience.js', 'presentation.js', 'coach-narrative.js', 'coach-chat.js', 'answer-card.js', 'monthly-recap.js',
-                                                      'v3.js', 'draft-card.js', 'topic-menu.js', 'money-profile.js', 'year-review.js', 'month-range.js', 'plans.js', 'home-v4.js')}
+                                                      'v3.js', 'draft-card.js', 'topic-menu.js', 'money-profile.js', 'year-review.js', 'month-range.js', 'plans.js', 'home-v4.js', 'trend-v5.js', 'forecast-v5.js', 'spending-v5.js', 'plans-mortgage.js', 'empty-states.js')}
+        # Sibling modules imported by the ones above (e.g. plans-tax.js) are added automatically.
+        sources.update({path.name: path.read_text(encoding='utf-8') for path in WEB.glob('*.js') if path.name not in sources})
         harness = r'''
 import assert from 'node:assert/strict';
 const elements = new Map(), documentListeners = {}, calls=[];
@@ -465,8 +467,8 @@ assert.match(module.runwayChart([{balance_cents:100,date:'2026-09-30'},{balance_
     def test_runway_renders_historical_variation_as_a_labeled_band(self):
         self.node_module('charts.js', '''
 import assert from 'node:assert/strict';
-const chart=module.runwayChart([{balance_cents:10000,status:'observed'}, {balance_cents:9000,status:'scenario',historical_flexible_scenarios:{p25:8500,p50:9000,p75:9500}}]);
-assert.match(chart, /<polygon/);assert.match(chart,/Historical variation/);assert.match(chart,/not a probability interval/);
+const chart=module.runwayChart([{balance_cents:10000,status:'observed'}, {balance_cents:9000,status:'scenario',historical_flexible_scenarios:{p25:8500,p50:9000,p75:9500}}, {balance_cents:8800,status:'scenario',historical_flexible_scenarios:{p25:8200,p50:8800,p75:9400}}]);
+assert.match(chart, /class="fc-band"/);assert.match(chart,/usual range/);assert.doesNotMatch(chart,/probability|Pattern-based/);
 ''')
 
     def test_income_is_an_input_to_the_money_map_not_an_outflow(self):

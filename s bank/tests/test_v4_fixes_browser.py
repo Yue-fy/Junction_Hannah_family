@@ -161,19 +161,25 @@ class V4FixesBrowserTests(unittest.TestCase):
         self.page.wait_for_selector('#profile-content [data-profile-empty]', timeout=10000)
 
     def test_life_event_in_local_date_format_turns_on_steady_mode_and_can_be_turned_off(self):
+        # V5 lane ME: "Since" is a month picker; turning steady mode off asks first and keeps the event.
         self.open(customer='CUST00756')
         self.open_me()
         self.page.click('[data-profile-add]')
         self.page.click('#v3-dialog [data-profile-add-key="life_event"]')
         self.page.select_option('#v3-dialog [data-draft-input="type"]', 'job_loss')
         date_input = self.page.locator('#v3-dialog [data-draft-input="since"]')
-        self.assertEqual(date_input.get_attribute('type'), 'text')
-        self.assertEqual(date_input.get_attribute('placeholder'), 'dd/mm/yyyy')
-        date_input.fill('15/09/2026')
+        self.assertEqual(date_input.get_attribute('type'), 'month')
+        date_input.fill('2026-09')
         self.save_sheet()
         self.page.wait_for_selector('[data-profile-banner="steady"]', timeout=10000)
         self.page.click('[data-profile-banner="steady"] [data-profile-mode-off]')
+        self.page.wait_for_selector('#v3-dialog [data-draft-card]')
+        self.assertEqual(self.page.locator('#v3-dialog [data-draft-change]').count(), 0)
+        self.page.click('#v3-dialog [data-draft-save]')
         self.page.wait_for_selector('[data-profile-banner="steady"]', state='detached', timeout=10000)
+        self.assertEqual(self.page.locator('#profile-content [data-profile-key="life_event"]').count(), 1)
+        self.page.click('[data-profile-undo]')
+        self.page.wait_for_selector('[data-profile-banner="steady"]', timeout=10000)
 
     def test_things_i_noticed_keep_and_not_this(self):
         self.open(customer='CUST00296')
@@ -269,8 +275,8 @@ class V4FixesBrowserTests(unittest.TestCase):
         self.page.click('[data-period-step="-1"]')
         self.page.wait_for_function('document.querySelector("#spending-month")?.value === "2026-08"', timeout=10000)
         self.page.evaluate('document.querySelector("#history-details").open = true')
-        self.page.wait_for_selector('#trend-chart .chart-note', state='attached', timeout=10000)
-        labels = self.page.eval_on_selector_all('#trend-chart .chart-note', 'nodes => nodes.map(node => node.textContent)')
+        self.page.wait_for_selector('#trend-chart .chart-note, #trend-chart .lc-xlabel', state='attached', timeout=10000)
+        labels = self.page.eval_on_selector_all('#trend-chart .chart-note, #trend-chart .lc-xlabel', 'nodes => nodes.map(node => node.textContent)')
         self.assertTrue(labels)
         for label in labels:
             self.assertNotRegex(label, r'\d{2}-\d{2}|^-\d', 'Chart month labels must be month names')

@@ -24,13 +24,13 @@ const genericIntros = new Set([
   'Tässä ovat valitun luokan ja ajanjakson tarkat havaitut tulokset.',
   'Tämä on tallentamaton suunnitteluarvio, joka perustuu valitun luokan havaittuihin menoihin.',
   'Tämä on neutraali erittely havaituista menoista oppimiskoreittain, ei pisteytys tai arvio sinusta.',
-  'Arvio suojaa puskurisi, tunnistetut toistuvat menot ja aiempaan aikatauluttamattomaan kulutukseen perustuvan varan.',
+  'Arvio suojaa turvatyynysi, tunnistetut toistuvat menot ja aiempiin satunnaisiin menoihin perustuvan varauksen.',
   'Nämä ovat havaitut sijoitussiirrot ja nostot, eivät salkun arvoa tai tuottoa.',
   'Här är vad de valda uppgifterna visar.',
   'Här är de exakta observerade resultaten för den valda kategorin och perioden.',
   'Det här är en osparad planeringsöversikt som bygger på observerade utgifter i den valda kategorin.',
   'Det här är en neutral uppdelning av observerade utgifter i lärandekorgarna, inte ett betyg eller omdöme.',
-  'Uppskattningen skyddar bufferten, kvalificerade återkommande utflöden och ett utrymme baserat på tidigare ej schemalagda utgifter.',
+  'Uppskattningen skyddar din säkerhetsmarginal, återkommande utgifter och ett utrymme baserat på tidigare oplanerade utgifter.',
   'Det här är observerade insättningar och uttag, inte portföljvärde eller avkastning.',
 ].map(key));
 
@@ -279,15 +279,15 @@ export function coachNarrative(response = {}, options = {}) {
       answer = [result.safe_to_spend_cents === 0 ? l(
         'There is no room for extra spending before payday' + (end ? ' on ' + end : '') + ': bills, everyday costs and a small cushion take what is in the account.',
         'Ennen palkkapäivää' + (end ? ' ' + end : '') + ' ylimääräiseen kulutukseen ei ole varaa: laskut, arjen menot ja pieni turvatyyny vievät tilillä olevan rahan.',
-        'Det finns inget utrymme för extra utgifter före lönedagen' + (end ? ' ' + end : '') + ': räkningar, vardagsutgifter och en liten marginal tar det som finns på kontot.')
+        'Det finns inget utrymme för extra utgifter före lönedagen' + (end ? ' ' + end : '') + ': räkningar, vardagsutgifter och en liten säkerhetsmarginal tar det som finns på kontot.')
         : l(
         'You can spend about ' + amount(result.safe_to_spend_cents) + ' this week' + (perDay ? ' (about ' + perDay + ' a day)' : '') + (end ? ' until payday on ' + end : '') + '.',
         'Voit käyttää tällä viikolla noin ' + amount(result.safe_to_spend_cents) + (perDay ? ' (noin ' + perDay + ' päivässä)' : '') + (end ? ' palkkapäivään ' + end + ' asti' : '') + '.',
         'Du kan spendera ungefär ' + amount(result.safe_to_spend_cents) + ' den här veckan' + (perDay ? ' (ungefär ' + perDay + ' om dagen)' : '') + (end ? ' fram till lönedagen ' + end : '') + '.')];
       if (free) answer[0] += ' ' + l(
         free + ' is free until then after bills, everyday costs like food, a surprise buffer and a small cushion.',
-        'Vapaata rahaa on siihen asti ' + free + ', kun laskut, arjen menot kuten ruoka, varaus yllättäviin menoihin ja pieni turvatyyny on jätetty sivuun.',
-        free + ' är fritt fram till dess efter räkningar, vardagsutgifter som mat, en buffert för oväntade utgifter och en liten marginal.');
+        'Vapaata rahaa on siihen asti ' + free + ', kun laskut, arjen menot kuten ruoka, yllätyspuskuri ja pieni turvatyyny on jätetty sivuun.',
+        free + ' är fritt fram till dess efter räkningar, vardagsutgifter som mat, en buffert för oväntat och en liten säkerhetsmarginal.');
       if (integer(result.extra_cents) && result.extra_cents > 0) answer.push(l(
         'About ' + amount(result.extra_cents) + ' of that is more than you usually spend, so it could be saved.',
         'Siitä noin ' + amount(result.extra_cents) + ' on enemmän kuin tavallisesti käytät, joten sen voisi säästää.',

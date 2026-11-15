@@ -1,0 +1,288 @@
+/* ==========================================================================
+   S-Coach V5 design system (lane DS). Linked LAST in index.html.
+   Tokens are in styles.css ("V5 design system"). This file only settles shared patterns:
+     1. Buttons: primary / secondary / text link, one pill shape, centred labels, 44px targets.
+     2. "How is this worked out" disclosures: one green link with a chevron.
+     3. Selects and checkboxes.
+     4. Dialogs and sheets: bottom sheet on phones, centred 560px dialog from 600px.
+     5. Header: quiet language control, 44px targets.
+     6. Widths: one frame system for every page.
+     7. Tap targets that were below 44px.
+   It changes no behaviour. Module files keep their own internals.
+   ========================================================================== */
+
+/* ---------- 1. Buttons ---------- */
+
+/* Primary: filled green pill. Full width on phones, content width (min 220px) from 600px. */
+.primary-button:not(#coach-send),
+.draft-btn--primary,
+.profile-button.profile-button-primary,
+.hv4-button,
+.hv4-chip.hv4-chip-primary {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: var(--ds-btn-height); padding: var(--ds-btn-pad);
+  border: 1px solid var(--green); border-radius: var(--ds-btn-radius);
+  background: var(--green); color: #fff;
+  font-size: var(--ds-btn-font); font-weight: 650; line-height: 1.25; text-align: center; text-decoration: none;
+}
+.primary-button:not(#coach-send) { width: 100%; }
+.primary-button:not(#coach-send):hover, .draft-btn--primary:hover, .profile-button.profile-button-primary:hover,
+.hv4-button:hover, .hv4-chip.hv4-chip-primary:hover { background: #00542e; border-color: #00542e; }
+.primary-button:not(#coach-send) span { font-size: inherit; font-weight: inherit; }
+.primary-button:not(#coach-send):disabled { opacity: .5; }
+
+/* Secondary: white pill with a green outline and green label. Never full width, so it never reads as a text field. */
+.secondary-button,
+.draft-btn--secondary,
+.profile-button,
+.hv4-chip:not(.hv4-chip-primary) {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  width: auto; max-width: 100%; min-height: var(--ds-tap); padding: 10px 20px;
+  border: 1.5px solid var(--ds-secondary-line); border-radius: var(--ds-btn-radius);
+  background: var(--ds-secondary-bg); color: var(--green);
+  font-size: var(--ds-btn-font); font-weight: 650; line-height: 1.25; text-align: center;
+  justify-self: start;
+}
+.secondary-button:hover, .draft-btn--secondary:hover, .profile-button:hover, .hv4-chip:not(.hv4-chip-primary):hover {
+  background: var(--ds-secondary-hover); border-color: var(--green);
+}
+.secondary-button span { margin-left: 0; }
+/* Choice buttons (Keep / Not this, toggles) keep their pressed state. */
+.profile-button[aria-pressed="true"] { background: var(--mint); border-color: var(--green); color: var(--deep-green); }
+.profile-button.profile-button-keep[aria-pressed="true"] { background: var(--green); border-color: var(--green); color: #fff; }
+
+/* Text link: green label, no box, 44px tall. Quiet links (Not now) are the same shape in grey. */
+.text-button,
+.draft-btn--quiet,
+.profile-button.profile-button-quiet {
+  min-height: var(--ds-tap); border: 0; border-radius: 8px; background: none;
+  color: var(--ds-link); font-weight: 650; text-decoration: none; text-underline-offset: 3px;
+}
+.text-button:hover, .profile-button.profile-button-quiet:hover { text-decoration: underline; background: none; }
+.draft-btn--quiet, .profile-button.profile-button-quiet { padding: 10px 14px; color: var(--muted); }
+.draft-btn--quiet:hover { color: var(--ink); text-decoration: underline; }
+
+/* Danger: red outline (filled only where it confirms a delete). */
+.profile-button.profile-button-danger, .danger-button {
+  border: 1.5px solid #e2b7a6; border-radius: var(--ds-btn-radius); background: #fff; color: var(--ds-danger);
+}
+.profile-button.profile-button-danger:hover, .danger-button:hover { background: #fdf1ee; border-color: var(--ds-danger); }
+.draft-btn--danger { border-radius: var(--ds-btn-radius); background: var(--ds-danger); color: #fff; }
+
+/* Button rows: wrap, centred on phones; start-aligned from 600px. */
+.draft-card__actions { justify-content: center; gap: 8px 12px; }
+.draft-card__actions .draft-btn--primary, .draft-card__actions .draft-btn--danger { flex: 1 1 100%; }
+.plan-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin: 8px 0 10px; }
+.plan-actions .secondary-button, .tax-plan__actions .secondary-button { margin: 0; }
+.wish-card .secondary-button, .page-heading > .secondary-button { width: auto; }
+
+@media (min-width: 600px) {
+  .primary-button:not(#coach-send) { width: auto; min-width: min(100%, var(--ds-btn-min-width)); justify-self: start; align-self: flex-start; }
+  .tour-actions .primary-button { min-width: 130px; }
+  .draft-card__actions { justify-content: flex-start; }
+  .draft-card__actions .draft-btn--primary, .draft-card__actions .draft-btn--danger { flex: 0 1 auto; min-width: 200px; }
+}
+
+/* ---------- 2. "How is this worked out" disclosures: one green link with a chevron ---------- */
+.forecast-explainer > summary,
+.trend-facts > summary,
+.forecast-method > summary,
+.mg-years > summary,
+.coach-tool-evidence > summary,
+.agent-work > summary,
+.coach-support > summary,
+.evidence-group details > summary,
+.support-card details > summary {
+  display: inline-flex; align-items: center; gap: 6px; min-height: var(--ds-tap); padding: 10px 0;
+  color: var(--ds-link); font-size: 14px; font-weight: 650; line-height: 1.35; list-style: none; cursor: pointer;
+}
+.forecast-explainer > summary::-webkit-details-marker, .trend-facts > summary::-webkit-details-marker,
+.forecast-method > summary::-webkit-details-marker, .mg-years > summary::-webkit-details-marker,
+.coach-tool-evidence > summary::-webkit-details-marker, .agent-work > summary::-webkit-details-marker,
+.coach-support > summary::-webkit-details-marker, .evidence-group details > summary::-webkit-details-marker,
+.support-card details > summary::-webkit-details-marker { display: none; }
+.forecast-explainer > summary::after, .trend-facts > summary::after, .forecast-method > summary::after,
+.mg-years > summary::after, .coach-tool-evidence > summary::after, .agent-work > summary::after,
+.coach-support > summary::after, .evidence-group details > summary::after, .support-card details > summary::after {
+  content: '›'; display: inline-block; font-size: 18px; line-height: 1; transition: transform .15s ease;
+}
+.forecast-explainer[open] > summary::after, .trend-facts[open] > summary::after, .forecast-method[open] > summary::after,
+.mg-years[open] > summary::after, .coach-tool-evidence[open] > summary::after, .agent-work[open] > summary::after,
+.coach-support[open] > summary::after, .evidence-group details[open] > summary::after,
+.support-card details[open] > summary::after { transform: rotate(90deg); }
+.forecast-explainer > summary:hover, .trend-facts > summary:hover, .forecast-method > summary:hover, .mg-years > summary:hover,
+.coach-tool-evidence > summary:hover, .agent-work > summary:hover, .coach-support > summary:hover { text-decoration: underline; text-underline-offset: 3px; }
+.forecast-explainer, .trend-facts.trend5-method { border-top: 0; padding-top: 0; }
+
+/* ---------- 3. Selects and checkboxes ---------- */
+:root select:not([multiple]) {
+  -webkit-appearance: none; appearance: none;
+  padding-right: 40px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23006b3c' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 14px center; background-size: 16px 16px;
+  text-overflow: ellipsis;
+}
+:root .period-stepper select { padding-left: 32px; padding-right: 32px; background-position: right 10px center; }
+:root option { color: var(--ink); background: #fff; }
+input[type=checkbox], input[type=radio] { width: 22px; height: 22px; min-height: 22px; }
+
+/* ---------- 4. Dialogs and sheets ----------
+   ":not(#\#)" lifts specificity above the older per-dialog rules (persona panel, review sheet) without !important. */
+:root dialog:not(#\#) {
+  position: fixed; inset: auto 0 0 0; margin: 0; padding: 0 0 env(safe-area-inset-bottom, 0px);
+  width: 100%; max-width: 100%; max-height: min(92dvh, calc(100dvh - 16px));
+  border: 0; border-radius: var(--ds-dialog-radius) var(--ds-dialog-radius) 0 0;
+  background: var(--paper); color: var(--ink); box-shadow: 0 -16px 60px #17261d2e;
+  overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; z-index: auto;
+}
+:root dialog:not(#\#)::backdrop { background: #102d2273; backdrop-filter: blur(6px); }
+dialog > .sheet-header {
+  position: sticky; top: 0; z-index: 3; display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  min-height: 64px; padding: 10px 12px 10px var(--ds-sheet-pad);
+  background: #f5f8f5f7; backdrop-filter: blur(14px); border-bottom: 1px solid var(--line);
+}
+dialog > .sheet-header h2 { margin: 0; font-size: 19px; line-height: 1.25; letter-spacing: -.3px; }
+dialog > .sheet-header > .wordmark { font-size: 17px; }
+:root dialog .sheet-content { padding: 20px var(--ds-sheet-pad) 28px; }
+:root #v3-dialog-content { padding-left: var(--ds-sheet-pad); padding-right: var(--ds-sheet-pad); }
+:root #v3-dialog-content .draft-card__actions { margin-left: calc(-1 * var(--ds-sheet-pad)); margin-right: calc(-1 * var(--ds-sheet-pad)); padding-left: var(--ds-sheet-pad); padding-right: var(--ds-sheet-pad); }
+:root #coach-context-dialog .coach-context { padding: 20px var(--ds-sheet-pad) 28px; background: var(--paper); }
+
+/* One close control everywhere: a 44px quiet circle. */
+.close-button, .topic-sheet__close, .tax-example__close {
+  display: inline-grid; place-items: center; flex: none;
+  width: var(--ds-tap); height: var(--ds-tap); min-width: var(--ds-tap); min-height: var(--ds-tap); padding: 0;
+  border: 0; border-radius: 50%; background: #e7efe6; color: var(--ink); font-size: 24px; line-height: 1;
+}
+.close-button:hover, .topic-sheet__close:hover, .tax-example__close:hover { background: var(--mint); color: var(--deep-green); }
+.close-button:focus-visible, .topic-sheet__close:focus-visible { outline-offset: 2px; }
+.topic-sheet__close svg { width: 18px; height: 18px; }
+
+/* Customer-and-month sheet: month on every page, links as 48px rows, reset last. */
+html[data-current-view] .context-sheet__content > .period-control { display: block; }
+.context-sheet__content { display: flex; flex-direction: column; }
+.context-sheet__content > label, .context-sheet__content > .period-control > label { margin: 0 0 8px; }
+.context-sheet__content > .period-control { margin-bottom: 18px; }
+.context-sheet__content select { max-width: none; }
+.context-sheet__content .personal-actions { order: 1; display: grid; grid-template-columns: minmax(0, 1fr); justify-content: stretch; gap: 0; margin: 18px 0 0; border-top: 1px solid var(--line); }
+.context-sheet__content .personal-actions .text-button {
+  display: flex; align-items: center; justify-content: space-between; width: 100%; min-height: 52px; margin: 0; padding: 12px 2px;
+  border-bottom: 1px solid var(--line); border-radius: 0; color: var(--ink); font-size: 15px; font-weight: 600; text-align: left;
+}
+.context-sheet__content .personal-actions .text-button::after { content: '›'; color: var(--green); font-size: 20px; font-weight: 400; }
+.context-sheet__content .personal-actions .text-button:hover { text-decoration: none; color: var(--green); }
+.context-sheet__content #reset-demo { order: 2; align-self: flex-start; margin-top: 14px; color: var(--muted); font-weight: 600; }
+
+/* Activity rows: icon, text, amount on one line; the amount never drops below the link. */
+.transaction-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: 12px; }
+.transaction-row > strong { grid-column: auto; text-align: right; }
+
+/* Topic sheet (not a <dialog>): same pattern as the dialogs. */
+.topic-sheet__panel { border-radius: var(--ds-dialog-radius) var(--ds-dialog-radius) 0 0; padding: 0 var(--ds-sheet-pad) calc(20px + env(safe-area-inset-bottom, 0px)); background: var(--paper); }
+.topic-sheet__header { top: 0; margin: 0 calc(-1 * var(--ds-sheet-pad)) 12px; padding: 18px 12px 10px var(--ds-sheet-pad); background: #f5f8f5f7; backdrop-filter: blur(14px); border-bottom: 1px solid var(--line); }
+.topic-sheet__title { margin: 0; font-size: 19px; line-height: 1.25; letter-spacing: -.3px; }
+.topic-sheet__grip { top: 6px; }
+@media (max-width: 599px) {
+  .topic-sheet__panel { height: auto; max-height: min(92dvh, calc(100dvh - 16px)); }
+}
+
+/* Card titles on Spending: one size, whether heading or accordion summary (matches spending-v5 .sp5-card-head). */
+#trends-view .sp5-card .fc-title { font-size: 18px; font-weight: 650; letter-spacing: -.3px; line-height: 1.3; }
+
+/* Year-in-review story stays inside the screen in landscape. */
+.yr-frame { max-height: calc(100dvh - 48px); }
+
+@media (min-width: 600px) {
+  :root { --ds-sheet-pad: 28px; }
+  :root dialog:not(#\#) {
+    inset: 0; margin: auto; width: min(var(--ds-dialog-width), calc(100vw - 48px)); max-width: none; height: fit-content;
+    max-height: min(88dvh, 860px); border: 1px solid #d9e2d7; border-radius: var(--ds-dialog-radius); padding-bottom: 0;
+    box-shadow: 0 24px 80px #17261d33;
+  }
+  dialog > .sheet-header { padding-right: 16px; }
+  .topic-sheet, .topic-sheet:not(#\#) { align-items: center; justify-content: center; padding: 24px; }
+  .topic-sheet__panel, .topic-sheet__panel:not(#\#) {
+    width: min(var(--ds-dialog-width), 100%); max-width: var(--ds-dialog-width); height: auto; max-height: min(88dvh, 860px);
+    border: 1px solid #d9e2d7; border-radius: var(--ds-dialog-radius); padding-bottom: 24px; animation-name: topic-slide-up;
+  }
+  .topic-sheet__grip { display: none; }
+  .topic-sheet__header { border-radius: var(--ds-dialog-radius) var(--ds-dialog-radius) 0 0; }
+}
+
+/* ---------- 5. Header ---------- */
+html .phone-shell .wordmark { min-height: var(--ds-tap); }
+/* Language: a quiet globe button on phones; globe + name, no box, from 600px. The select stays native and labelled. */
+html .phone-shell .language-control select {
+  width: var(--ds-tap); max-width: var(--ds-tap); height: var(--ds-tap); min-height: var(--ds-tap);
+  padding: 0; border: 1px solid transparent; border-radius: 999px;
+  background-color: transparent; color: transparent; font-size: 16px; cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23586e62' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18'/%3E%3C/svg%3E");
+  background-position: center; background-size: 22px 22px; background-repeat: no-repeat;
+}
+html .phone-shell .language-control select:hover { background-color: var(--wash); }
+html .phone-shell .language-control select option { color: var(--ink); }
+@media (min-width: 600px) {
+  html .phone-shell .language-control select {
+    width: auto; max-width: 150px; padding: 0 12px 0 38px; color: var(--muted); font-size: 15px; font-weight: 600;
+    background-position: left 10px center; background-size: 20px 20px;
+  }
+}
+
+/* ---------- 6. Widths ----------
+   Below 1000px every page is one centred column (720px). From 1000px Home, Spending, Goals and Me use the
+   1120px frame, the same as the header, so page edges line up; Coach stays a 720px reading column. */
+@media (min-width: 1000px) {
+  html:is([data-current-view="home"], [data-current-view="trends"], [data-current-view="goals"], [data-current-view="profile"]) { --frame-page: var(--frame-wide); }
+}
+html .phone-shell :is(#trends-view, #goals-view, #profile-view, #journal-view),
+html .phone-shell :is(.app-context, #status-message) { width: 100%; max-width: var(--frame-page); margin-left: auto; margin-right: auto; }
+
+@media (min-width: 1000px) {
+  /* Spending: the ring card and "More" span the frame; the trend and the 30-day balance sit side by side. */
+  html .phone-shell #trends-view { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 24px; }
+  #trends-view > * { grid-column: 1 / -1; }
+  #trends-view > #history-details:not([hidden]), #trends-view > #spending-forecast:not([hidden]) { grid-column: auto; align-self: stretch; }
+  #trends-view:not(:has(> #spending-forecast:not([hidden]))) > #history-details,
+  #trends-view:not(:has(> #history-details:not([hidden]))) > #spending-forecast { grid-column: 1 / -1; }
+  #trends-view > .sp5-heading { flex-direction: row; align-items: flex-end; justify-content: space-between; }
+  #trends-view > .sp5-heading > .period-control { flex: 0 0 360px; width: auto; }
+
+  /* Goals: a lone wish form does not leave an empty half; the form keeps a readable line length. */
+  #goals-view .goal-workspace:has(> #wishes-list:empty) { grid-template-columns: minmax(0, 1fr); }
+  #goals-view .goal-workspace:has(> #wishes-list:empty) #wish-form { max-width: 560px; }
+
+  /* Me: cards in two columns; the header, "Things I noticed" and the footer span both. */
+  #profile-view .profile-page { max-width: none; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px 24px; align-items: stretch; }
+  #profile-view .profile-page > :is(.profile-header, .profile-banner, .profile-noticed, .profile-footer-actions) { grid-column: 1 / -1; }
+  #profile-view .profile-page > .profile-section:only-of-type { grid-column: 1 / -1; }
+  #profile-view .profile-suggestions { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: stretch; }
+  #profile-view .profile-page > .profile-section { align-content: start; }
+}
+
+/* ---------- 7. Tap targets (44px minimum) ---------- */
+html .phone-shell .context-chip, .context-chip { min-height: var(--ds-tap); }
+.period-segments button { min-height: var(--ds-tap); }
+/* spending-v5.css is appended at runtime (after this file), so this selector is one step more specific. */
+html #trends-view .sp5-baskets .spending-groups button, .spending-groups button { min-height: var(--ds-tap); }
+.cashflow-toggle button { min-height: var(--ds-tap); padding: 0 16px; }
+.hv4-seasonal .yr-banner-open { min-height: var(--ds-tap); padding: 0 16px; }
+.hv4-seasonal .yr-banner-dismiss { width: var(--ds-tap); height: var(--ds-tap); min-height: var(--ds-tap); padding: 11px; }
+.intro-chip .intro-chip__open, .intro-chip .intro-chip__hide { min-height: var(--ds-tap); }
+.intro-chip .intro-chip__hide { min-width: var(--ds-tap); }
+.hv4-month-pick select { min-height: var(--ds-tap); }
+#topic-menu-root .topic-button { min-height: var(--ds-tap); }
+.plan-chip, .tax-chip { min-height: var(--ds-tap); }
+.es--compact .es-action { min-height: var(--ds-tap); }
+.goal-actions { flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.goal-actions .text-button { min-width: var(--ds-tap); padding: 10px 12px; }
+.goal-actions .text-button:first-child { margin-left: -12px; }
+.goal-actions .goal-delete { margin-left: auto; color: var(--ds-danger); }
+html .phone-shell .coach-bar .text-button, .coach-bar .text-button { padding: 10px 12px; margin-right: -4px; }
+.wish-suggestions .text-button { min-height: var(--ds-tap); }
+
+/* "What would you like to add?" opens a form: rows with a chevron, not boxes that look like fields. */
+.profile-add-options .onboarding-option { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-color: var(--line); }
+.profile-add-options .onboarding-option::after { content: '›'; flex: none; color: var(--green); font-size: 20px; font-weight: 400; line-height: 1; }
+
+/* V5 merge: the trend card's 3/6/12-month segments are tap targets too. */
+#trend-months button, .trend-months button, #trend-months [role="tab"] { min-height: 44px; }

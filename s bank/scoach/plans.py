@@ -13,7 +13,8 @@ Nothing here is a loan offer, a credit decision, a tax decision or advice.
 Customer text is produced by the UI from the codes and numbers returned here;
 the few English sentences are for the AI coach and the API documentation.
 """
-from datetime import date
+from datetime import date, timedelta
+from statistics import median
 
 from . import money_profile, mortgage, tax
 from .ledger import account_scope
@@ -21,12 +22,28 @@ from .ledger import account_scope
 PLAN_KEYS = {'mortgage': 'plan_mortgage', 'tax': 'plan_tax'}
 OMAVERO_TEXT = 'OmaVero (vero.fi)'
 TAX_PLAN_FOOTER = 'Estimate from what you entered. Your tax decision in OmaVero is the official source.'
+NEEDS_INPUTS_TEXT = {
+    'en': 'Add your tax card numbers (gross salary and tax rate) or an expected back tax to check this.',
+    'fi': 'Lisää verokorttisi tiedot (bruttopalkka ja veroprosentti) tai odotettu jäännösvero, niin voimme tarkistaa tämän.',
+    'sv': 'Lägg till uppgifterna från ditt skattekort (bruttolön och skatteprocent) eller en väntad kvarskatt så kan vi kontrollera det här.',
+}
 # Tax-card check: income this much above the card's income limit, or below it, is mentioned.
 INCOME_ABOVE_LIMIT_BP = 10_500
 INCOME_BELOW_LIMIT_BP = 8_000
 # A back tax the customer expects (before any decision) is spread until this
 # month and day of the next year, when back taxes are commonly first due.
 EXPECTED_DUE_MONTH_DAY = (9, 1)
+# "See an example" on the tax plan: clearly labelled example inputs, run through
+# the same calculation as a real plan (V5 lane TX). Gross €3,100 a month is
+# €37,200 a year, above the €34,000 income limit on the example tax card, so the
+# example shows the tax-card nudge next to the expected back tax.
+TAX_EXAMPLE = {'gross_monthly_cents': 310_000, 'base_rate_bp': 2_150, 'income_limit_cents': 3_400_000,
+               'expected_back_tax_cents': 63_000}
+TAX_PREVIEW_FIELDS = ('gross_monthly_cents', 'base_rate_bp', 'additional_rate_bp', 'income_limit_cents',
+                      'expected_back_tax_cents', 'expected_refund_cents')
+TAX_CARD_FIELDS = ('gross_monthly_cents', 'base_rate_bp', 'additional_rate_bp', 'income_limit_cents')
+# Typical salary after tax for the form hint: median of the salary credits in this window.
+NET_SALARY_WINDOW_DAYS = 92
 
 
 def _single(profile, key):
@@ -177,7 +194,7 @@ def _entry_meta(entry):
             'updated_at': entry['updated_at']}
 
 
-def mortgage_plan(conn, customer_id, as_of=None, *, extra_cents=0, rate_delta_bp=0, profile=None):
+def mortgage_plan(conn, customer_id, as_of=None, *, extra_cents=0, rate_delta_bp=0, profile=None, detail=False):
     """The mortgage plan card: the saved plan's projection (or a prefill to start one).
 
     Returns {plan: 'mortgage', on, entry_id, source, source_label, steady,
@@ -196,10 +213,57 @@ def mortgage_plan(conn, customer_id, as_of=None, *, extra_cents=0, rate_delta_bp
     if entry:
         try:
             result['projection'] = mortgage.projection(entry['value'], as_of, extra_cents=extra_cents,
-                                                       rate_delta_bp=rate_delta_bp, buffer=buffer, steady=steady)
+                                                       rate_delta_bp=rate_delta_bp, buffer=buffer, steady=steady, detail=detail)
         except ValueError as error:
             result['error'] = str(error)
     return result
+
+
+def _payment_sizes_example(conn, customer_id, prefill):
+    """Size the example to the account's payment only when it is plausibly about a home loan.
+
+    A saved mortgage or a payment labelled as a loan counts; a housing payment (which
+    may be rent) counts only for a customer with a home-financing history, e.g. a past
+    home-loan application. Everyone else sees the generic example loan.
+    """
+    from .financing import financing_context
+    if not prefill or not prefill.get('found'):
+        return False
+    if prefill.get('source') in ('profile', 'loan_payment'):
+        return True
+    try:
+        return bool(financing_context(conn, customer_id, 'home').get('available'))
+    except ValueError:
+        return False
+
+
+def mortgage_preview(conn, customer_id, as_of=None, inputs=None, *, extra_cents=0, rate_delta_bp=0):
+    """Compute a mortgage plan without saving anything: GET /api/plans/mortgage/preview.
+
+    With ``inputs`` (a draft plan_mortgage value) the projection uses those numbers.
+    Without, it is the read-only example: a realistic Finnish home loan
+    (mortgage.EXAMPLE_PLAN), sized to the customer's detected loan/housing payment
+    when one is seen. The customer's steady mode and buffer still decide whether
+    extra payments may be suggested.
+    Returns {plan: 'mortgage', example (bool), basis ('generic'|'detected_payment'|
+    'your_numbers'), as_of, steady, saved (a plan is on), prefill, projection
+    (detailed), footer, estimate}.
+    """
+    as_of = _reference(conn, customer_id, as_of)
+    profile = money_profile.get_profile(conn, customer_id, as_of)
+    steady = profile.get('mode') == 'steady'
+    target = _single(profile, 'emergency_fund_target_months')
+    buffer = mortgage.buffer_check(conn, customer_id, as_of, target['value'] if target else None)
+    prefill = mortgage.detect_loan_payment(conn, customer_id, as_of)
+    if inputs is None:
+        value, basis = mortgage.example_plan(prefill if _payment_sizes_example(conn, customer_id, prefill) else None)
+    else:
+        value, basis = money_profile.validate_entry('plan_mortgage', inputs), 'your_numbers'
+    return {'plan': 'mortgage', 'example': inputs is None, 'basis': basis, 'as_of': as_of, 'steady': steady,
+            'saved': _single(profile, 'plan_mortgage') is not None, 'prefill': prefill,
+            'projection': mortgage.projection(value, as_of, extra_cents=extra_cents, rate_delta_bp=rate_delta_bp,
+                                              buffer=buffer, steady=steady, detail=True),
+            'footer': mortgage.CHECK_WITH_BANK, 'estimate': True}
 
 
 def _tax_card_check(conn, customer_id, as_of, card):
@@ -228,7 +292,10 @@ def tax_plan(conn, customer_id, as_of=None, *, profile=None):
     """The tax plan card: monthly set-aside, refund expectation, tax-card check and dates.
 
     Returns {plan: 'tax', on, entry_id, source, source_label, as_of, steady,
-    tax_year (this year's income), has_decision, set_aside (tax_set_aside),
+    tax_year (this year's income), has_decision, status ('needs_inputs' |
+    'set_aside' | 'withholding_looks_ok' | 'nothing_to_set_aside'), needs_inputs (bool:
+    the plan is on but nothing was entered yet, so no claim about the withholding may be
+    made), needs_inputs_text {en, fi, sv}|None, set_aside (tax_set_aside),
     refund {amount_cents, expected_date, source, seen, seen_date}|None,
     tax_card {status: 'missing'|'looks_ok'|'income_above_limit'|
     'income_below_limit'|'pay_differs', ...}, stage {stage, label, next_date,
@@ -264,6 +331,12 @@ def tax_plan(conn, customer_id, as_of=None, *, profile=None):
         dates.append({'date': cycle['next_date'], 'kind': cycle['stage'], 'estimate': cycle.get('date_source') != 'tax_decision'})
     dates.sort(key=lambda item: item['date'])
     card_check = _tax_card_check(conn, customer_id, as_of, card)
+    # With no tax decision, no tax-card numbers and no expected back tax or refund there is
+    # nothing to check yet: the card must ask for inputs, never say withholding looks enough.
+    needs_inputs = bool(entry) and decision is None and card_check['status'] == 'missing' \
+        and not set_aside['instalments'] and refund is None
+    status = 'needs_inputs' if needs_inputs else ('set_aside' if set_aside['monthly_cents'] else
+                                                  ('withholding_looks_ok' if card_check['status'] == 'looks_ok' else 'nothing_to_set_aside'))
     tasks = []
     if set_aside['monthly_cents']:
         tasks.append('Put aside about %s a month until %s for back taxes.' % (tax._euro(set_aside['monthly_cents']), set_aside['until']))
@@ -276,13 +349,91 @@ def tax_plan(conn, customer_id, as_of=None, *, profile=None):
         tasks.append('Income this year looks clearly lower than the income limit on the tax card; the customer may get a refund, or can change the tax card in OmaVero.')
     elif card_check['status'] == 'missing':
         tasks.append('To check the tax card, the customer can add their gross monthly salary and tax-card rate.')
+    if needs_inputs:
+        tasks.append('Nothing has been entered yet, so do not say the withholding looks enough; ask for the tax card numbers first.')
     return {'plan': 'tax', **_entry_meta(entry), 'as_of': as_of, 'steady': profile.get('mode') == 'steady',
-            'tax_year': day.year, 'has_decision': decision is not None, 'set_aside': set_aside, 'refund': refund,
+            'tax_year': day.year, 'has_decision': decision is not None, 'status': status, 'needs_inputs': needs_inputs,
+            'needs_inputs_text': NEEDS_INPUTS_TEXT if needs_inputs else None,
+            'set_aside': set_aside, 'refund': refund,
             'tax_card': card_check,
             'stage': {'stage': cycle['stage'], 'label': cycle['stage_label'], 'next_date': cycle['next_date'],
+                      'tax_year': (calendar or {}).get('tax_year', day.year - 1),
                       'days_until': cycle['days_until'], 'date_source': cycle['date_source'], 'check_note': cycle['check_mytax_note']},
             'dates': dates, 'omavero_text': OMAVERO_TEXT, 'tasks': tasks, 'footer': TAX_PLAN_FOOTER,
+            'prefill': _tax_prefill(conn, customer_id, day, profile),
             'estimate': True, 'not_tax_advice': True}
+
+
+def _tax_prefill(conn, customer_id, day, profile):
+    """The customer's own values for the tax-plan form ("Use my own numbers").
+
+    Tax-card fields come from this year's tax entry, expectations from the saved
+    plan; the account only shows salary after tax, so the typical net salary is
+    returned as a hint (never as the gross salary). Values are None when unknown.
+    """
+    card = _card_entry(profile, day.year)
+    card_value = card['value'] if card and card['value'].get('tax_year') == day.year else {}
+    plan = _single(profile, 'plan_tax')
+    plan_value = plan['value'] if plan else {}
+    out = {field: card_value.get(field) for field in TAX_CARD_FIELDS}
+    out['expected_back_tax_cents'] = plan_value.get('expected_back_tax_cents')
+    out['expected_refund_cents'] = plan_value.get('expected_refund_cents')
+    out['tax_card_entry_id'] = card['id'] if card_value and card.get('id') else None
+    typical = money_profile.typical_salary(conn, customer_id, day.isoformat()) if conn is not None else None
+    # The same "typical month after tax" as Me (median of the last complete months), so the
+    # tax form and Me never show two different salaries.
+    out['net_salary_cents'] = typical['amount_cents'] if typical else None
+    out['net_salary_basis'] = typical['basis'] if typical else None
+    out['net_salary_months'] = typical['months'] if typical else None
+    return out
+
+
+def _preview_inputs(inputs):
+    clean = {}
+    limits = {'base_rate_bp': 10_000, 'additional_rate_bp': 10_000}
+    for field, value in (inputs or {}).items():
+        if field not in TAX_PREVIEW_FIELDS:
+            raise ValueError('Unknown tax preview field: %s' % field)
+        if value is None:
+            continue
+        if type(value) is not int or not 0 <= value <= limits.get(field, 10_000_000_000):
+            raise ValueError('%s must be a nonnegative integer' % field)
+        clean[field] = value
+    return clean
+
+
+def tax_plan_preview(conn, customer_id, as_of=None, *, inputs=None):
+    """Run the tax-plan calculation on given inputs without saving anything.
+
+    ``inputs`` holds any of TAX_PREVIEW_FIELDS (integer cents / basis points).
+    With no inputs the clearly labelled TAX_EXAMPLE is used (``example`` True).
+    The customer's real profile is not read for the numbers (only steady mode
+    and the form prefill), and nothing is written. Returns the tax_plan shape
+    plus {preview: True, example, inputs}; ``on`` is False and ``entry_id`` None.
+    """
+    clean = _preview_inputs(inputs)
+    example = not clean
+    if example:
+        clean = dict(TAX_EXAMPLE)
+    as_of = _reference(conn, customer_id, as_of)
+    day = date.fromisoformat(as_of)
+    real = money_profile.get_profile(conn, customer_id, as_of)
+    plan_value = {'on': True}
+    for field in ('expected_back_tax_cents', 'expected_refund_cents'):
+        if clean.get(field):
+            plan_value[field] = clean[field]
+    by_key = {'plan_tax': {'id': None, 'value': plan_value, 'source': None, 'source_label': None, 'updated_at': None}}
+    card = {field: clean[field] for field in TAX_CARD_FIELDS if field in clean}
+    if card:
+        by_key['tax'] = [{'id': None, 'active': True, 'value': {'tax_year': day.year, **card}}]
+    preview = {'as_of': as_of, 'mode': real.get('mode'), 'by_key': by_key}
+    result = tax_plan(conn, customer_id, as_of, profile=preview)
+    if example:  # the example's tax-card check must not point at the customer's own salary rows
+        result['tax_card'].pop('transaction_refs', None)
+    result.update({'on': False, 'entry_id': None, 'source': None, 'source_label': None, 'updated_at': None,
+                   'preview': True, 'example': example, 'inputs': clean,
+                   'prefill': _tax_prefill(conn, customer_id, day, real)})
+    return result
 
 
 def plans_overview(conn, customer_id, as_of=None):

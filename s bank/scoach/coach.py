@@ -205,8 +205,8 @@ def _planned_response(message, context):
                 f'Med kontobilden från {reference} överstiger din plan på {amount} euro det modellerade veckoutrymmet på {budget} euro med {difference} euro. En mindre budget eller mer tid skulle ge planen mer utrymme.')
         narrative += ' ' + copy(
             'The calculation deducts the reserve and expected costs before showing spending room. This is a planning comparison with recorded history; your current balance and upcoming bills may be different.',
-            'Laskelma vähentää puskurin ja ennakoidut menot ennen käyttövaran näyttämistä. Vertailu perustuu kirjattuun historiaan; nykyinen saldosi ja tulevat laskusi voivat olla erilaisia.',
-            'Beräkningen drar av bufferten och förväntade utgifter innan spenderingsutrymmet visas. Jämförelsen bygger på registrerad historik; ditt aktuella saldo och kommande räkningar kan vara annorlunda.')
+            'Laskelma vähentää turvatyynyn ja ennakoidut menot ennen käyttövaran näyttämistä. Vertailu perustuu kirjattuun historiaan; nykyinen saldosi ja tulevat laskusi voivat olla erilaisia.',
+            'Beräkningen drar av säkerhetsmarginalen och förväntade utgifter innan spenderingsutrymmet visas. Jämförelsen bygger på registrerad historik; ditt aktuella saldo och kommande räkningar kan vara annorlunda.')
     return {**base, 'parameters': {key: context[key] for key in ('reference_date', 'days') if key in context},
             'selected_candidate_id': candidate['id'] if candidate else None,
             'needs_clarification': False, 'clarification_question': None, 'clarification_options': [],
@@ -316,14 +316,14 @@ def _deterministic(message, context):
                 'home_financing_history': 'Linked past mortgage data is historical context only. It is not a current approval or affordability assessment.',
             },
             'fi': {
-                'safe_to_spend': 'Tämä on tämän viikon osuus rahasta, joka on vapaana seuraavaan palkkapäivään asti. Ennen palkkapäivää erääntyvät laskut, puskurisi ja asettamasi säästötavoite on jo jätetty sivuun.',
+                'safe_to_spend': 'Tämä on tämän viikon osuus rahasta, joka on vapaana seuraavaan palkkapäivään asti. Ennen palkkapäivää erääntyvät laskut, turvatyynysi ja asettamasi säästötavoite on jo jätetty sivuun.',
                 'safe_unavailable': 'Tarvitsen enemmän tilihistoriaa ennen kuin voin arvioida turvallisen käyttövaran.',
                 'investment_cashflow': 'Nämä ovat havaitut sijoitussiirrot ja nostot, eivät salkun arvoa tai tuottoa.',
                 'explain_change': 'Selitys perustuu havaittuihin tilitapahtumiin.',
                 'home_financing_history': 'Linkitetyt aiemmat asuntolainatiedot ovat vain historiallista taustatietoa. Ne eivät ole nykyinen maksukyky- tai hyväksyntäarvio.',
             },
             'sv': {
-                'safe_to_spend': 'Det här är veckans del av pengarna som är fria fram till nästa lönedag. Räkningar före lönedagen, en säkerhetsbuffert och ett sparmål du satt är redan avsatta.',
+                'safe_to_spend': 'Det här är veckans del av pengarna som är fria fram till nästa lönedag. Räkningar före lönedagen, din säkerhetsmarginal och ett sparmål du satt är redan avsatta.',
                 'safe_unavailable': 'Jag behöver mer kontohistorik innan jag kan uppskatta ett säkert belopp att spendera.',
                 'investment_cashflow': 'Det här är observerade insättningar och uttag, inte portföljvärde eller avkastning.',
                 'explain_change': 'Förklaringen bygger på observerade kontohändelser.',
@@ -422,8 +422,8 @@ def _deterministic(message, context):
         elif any(term in text for term in ('stressed', 'worried', 'overwhelmed', 'stressa', 'huolissa', 'orolig', 'överväldig')):
             response.update(clarify(context, 'coaching_support',
                 'We can take this one step at a time. What feels most urgent: upcoming bills, day-to-day spending, or building a small buffer?',
-                'Voimme edetä yksi askel kerrallaan. Mikä tuntuu tärkeimmältä: tulevat laskut, arjen menot vai pieni puskuri?',
-                'Vi kan ta ett steg i taget. Vad känns mest angeläget: kommande räkningar, vardagsutgifter eller en liten buffert?'))
+                'Voimme edetä yksi askel kerrallaan. Mikä tuntuu tärkeimmältä: tulevat laskut, arjen menot vai pieni turvatyyny?',
+                'Vi kan ta ett steg i taget. Vad känns mest angeläget: kommande räkningar, vardagsutgifter eller en liten säkerhetsmarginal?'))
         elif any(term in text for term in ('what should i do', 'help me decide', 'balance', 'saldo')):
             response.update(clarify(context, 'coaching_focus',
                 'What would help most: checking room for a small purchase, reviewing upcoming cash flow, or starting a saving plan?',

@@ -81,14 +81,26 @@ def preview_30_days(conn,customer_id,as_of=None,assumptions=None):
     known={r['id'] for r in recurring}
     if set(assumptions)-known: raise ValueError('Unknown recurring assumption')
     events=[]
+    # Salary lands on the same pay day the payday plan uses (dominant pay-day cluster and its
+    # weekend rule), so the 30-day chart and Home never show two different paydays.
+    pattern=payday_pattern(conn,customer_id,reference.isoformat())
     for item in recurring:
         edits=assumptions.get(item['id'],{})
         if set(edits)-{'enabled','amount_cents','median_day'}: raise ValueError('Unknown assumption field')
         if edits.get('enabled',True) is False: continue
         amount=edits.get('amount_cents',item['amount_cents']); day=edits.get('median_day',item['median_day'])
         if type(amount) is not int or type(day) is not int or not 1<=day<=31: raise ValueError('Invalid recurring amount/day')
+        salary_rule=item['transaction_type']=='salary' and amount>0 and 'median_day' not in edits and pattern['dominant']
+        if salary_rule and not pattern['regular']:
+            # Irregular pay: the plan's next payday, then the usual gap between salaries.
+            first,_=next_payday(pattern,reference); gap=_salary_gap(pattern)
+            for k in range(6):
+                scheduled=first+timedelta(days=gap*k)
+                if reference<scheduled<=reference+timedelta(days=30): events.append({**item,'date':scheduled.isoformat(),'amount_cents':amount,'observed':False,'assumption_edited':bool(edits)})
+            continue
         for offset in range(3):
             month=shift_month(reference.strftime('%Y-%m'),offset); y,m=map(int,month.split('-')); scheduled=date(y,m,min(day,calendar.monthrange(y,m)[1]))
+            if salary_rule: scheduled=_cluster_date(pattern['dominant'],y,m,pattern['weekend_rule'])
             if reference<scheduled<=reference+timedelta(days=30): events.append({**item,'date':scheduled.isoformat(),'amount_cents':amount,'observed':False,'assumption_edited':bool(edits)})
     events.sort(key=lambda e:(e['date'],e['id']))
     recurring_refs={ref for item in recurring for ref in item['transaction_refs']}
@@ -154,6 +166,9 @@ _LOCALES = ('en', 'fi', 'sv')
 _MONTHS_SV = ('jan', 'feb', 'mars', 'apr', 'maj', 'juni', 'juli', 'aug', 'sep', 'okt', 'nov', 'dec')
 _MONTHS_EN = ('Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec')
 
+# Held-back item names (EN / FI / SV). Buffer vocabulary (V5 fix spec): "Safety cushion" is
+# the small reserve that is never spent; "Surprise buffer" is money set aside for Surprise
+# must-pays. Nothing else is called a buffer or a cushion.
 HELD_BACK_LABELS = {
     'rent': ('Rent', 'Vuokra', 'Hyra'),
     'utilities': ('Home bills', 'Kodin laskut', 'Hemräkningar'),
@@ -163,25 +178,16 @@ HELD_BACK_LABELS = {
     'debt': ('Loan payment', 'Lainanlyhennys', 'Låneavbetalning'),
     'mortgage': ('Mortgage payment', 'Asuntolainan erä', 'Bolånebetalning'),
     'tax': ('Money for taxes', 'Varaus veroihin', 'Pengar till skatt'),
-    'buffer': ('Surprise costs (health, repairs)', 'Yllättävät menot (terveys, korjaukset)', 'Oväntade utgifter (hälsa, reparationer)'),
-    'emergency_fund': ('Towards your emergency fund', 'Hätärahastoosi', 'Till ditt nödsparande'),
-    'reserve': ('Small safety cushion', 'Pieni turvatyyny', 'Liten säkerhetsmarginal'),
-    'steady_reserve': ('A month of must-pays, kept safe', 'Kuukauden pakolliset menot turvassa', 'En månads nödvändiga utgifter i reserv'),
+    'buffer': ('Surprise buffer', 'Yllätyspuskuri', 'Buffert för oväntat'),
+    'buffer_goal': ('Surprise buffer (your plan)', 'Yllätyspuskuri (oma suunnitelmasi)', 'Buffert för oväntat (din plan)'),
+    'emergency_fund': ('Towards your emergency fund', 'Hätävaraasi', 'Till din sparkudde'),
+    'reserve': ('Safety cushion', 'Turvatyyny', 'Säkerhetsmarginal'),
+    'steady_reserve': ('Safety cushion: a month of must-pays', 'Turvatyyny: kuukauden pakolliset menot', 'Säkerhetsmarginal: en månads nödvändiga utgifter'),
     'everyday': ('Everyday costs until payday (food, getting around)', 'Arjen menot palkkapäivään asti (ruoka, liikkuminen)', 'Vardagsutgifter fram till lönedagen (mat, resor)'),
 }
-CATEGORY_LABELS = {
-    'Groceries': ('Groceries', 'Ruokaostokset', 'Matinköp'),
-    'Restaurants': ('Restaurants', 'Ravintolat', 'Restauranger'),
-    'Lifestyle': ('Shopping and hobbies', 'Ostokset ja harrastukset', 'Shopping och fritid'),
-    'Health': ('Health', 'Terveys', 'Hälsa'),
-    'Home & Tech': ('Home and tech', 'Koti ja tekniikka', 'Hem och teknik'),
-    'Travel': ('Travel', 'Matkat', 'Resor'),
-    'Transportation': ('Getting around', 'Liikkuminen', 'Resor och transport'),
-    'Entertainment': ('Entertainment', 'Viihde', 'Nöje'),
-    'Housing': ('Rent', 'Vuokra', 'Hyra'),
-    'Utilities': ('Home bills', 'Kodin laskut', 'Hemräkningar'),
-    'Invest Deposit': ('Investments', 'Sijoitukset', 'Investeringar'),
-}
+# Category names come from the one server table (scoach/labels.py); only the two bill
+# categories read as the bill they are when held back before payday.
+HELD_CATEGORY_KEYS = {'Housing': 'rent', 'Utilities': 'utilities'}
 LOAN_WORDS = ('loan', 'laina', 'lån', 'credit', 'luotto', 'kredit', 'mortgage')
 
 
@@ -191,8 +197,10 @@ def _labels(key):
 
 
 def _category_labels(category):
-    en, fi, sv = CATEGORY_LABELS.get(category, (category, category, category))
-    return {'en': en, 'fi': fi, 'sv': sv}
+    from .labels import category_labels
+    if category in HELD_CATEGORY_KEYS:
+        return _labels(HELD_CATEGORY_KEYS[category])
+    return category_labels(category)
 
 
 def _euro(cents, locale='en'):
@@ -285,6 +293,13 @@ def payday_pattern(conn, customer_id, as_of=None):
     return pattern
 
 
+def _salary_gap(pattern):
+    """Usual days between salaries for irregular pay (upper quartile of gaps of 7+ days, so not too early; 30 without history)."""
+    dates = [date.fromisoformat(d) for d in pattern.get('salary_dates', [])]
+    gaps = [(b - a).days for a, b in zip(dates, dates[1:]) if (b - a).days >= 7]
+    return percentile_cents(gaps, .75) if gaps else 30
+
+
 def next_payday(pattern, reference):
     """Next plausible pay date strictly after ``reference`` (a pay day on the reference date is already in the balance).
 
@@ -300,8 +315,7 @@ def next_payday(pattern, reference):
     dates = [date.fromisoformat(d) for d in pattern.get('salary_dates', [])]
     if not pattern['regular']:
         # Irregular income: one usual gap after the last salary (upper quartile, so not too early).
-        gaps = [(b - a).days for a, b in zip(dates, dates[1:]) if (b - a).days >= 7]
-        gap = percentile_cents(gaps, .75) if gaps else 30
+        gap = _salary_gap(pattern)
         candidate = (dates[-1] if dates else reference) + timedelta(days=gap)
         while candidate <= reference:
             candidate += timedelta(days=gap)
@@ -392,9 +406,12 @@ def _validate_profile(profile):
         hint = item.get('dedupe_hint')
         if hint is not None and (not isinstance(hint, dict) or not isinstance(hint.get('transaction_type'), str)):
             raise ValueError('dedupe_hint must be {transaction_type, amount_cents}')
+        day_of_month = item.get('day_of_month')
+        if day_of_month is not None and (type(day_of_month) is not int or not 1 <= day_of_month <= 31):
+            raise ValueError('plan day_of_month must be an integer from 1 to 31')
         clean['plan_set_asides'].append({'kind': item['kind'], 'plan': str(item.get('plan') or item['kind']),
                                          'label': str(item.get('label') or ''), 'amount_cents': cents(item.get('amount_cents'), 'plan amount_cents'),
-                                         'until': item.get('until'), 'dedupe_hint': hint})
+                                         'until': item.get('until'), 'dedupe_hint': hint, 'day_of_month': day_of_month})
     if profile.get('tax_set_aside_monthly_cents') is not None:
         clean['tax_set_aside_monthly_cents'] = cents(profile['tax_set_aside_monthly_cents'], 'tax_set_aside_monthly_cents')
     return clean
@@ -474,17 +491,20 @@ def _held(kind, key, amount, when=None, labels=None, source='recurring', **extra
 
 
 _SUMMARY = {
-    'en': {'plan': '{free} is free until payday on {date} ({days} days). A comfortable pace is about {per_day} a day.',
+    'en': {'plan': 'For daily life until payday on {date} ({days} days): everyday basics {everyday} + free to spend {spendable} = {daily_life}, about {per_day} a day.',
+           'plan_short': 'Nothing is free to spend until payday on {date} ({days} days).',
            'extra': 'That leaves about {extra} that could be saved.',
-           'tight': 'Bills, everyday costs and your cushion need {short} more than you have before payday.',
+
            'irregular': 'Your pay day varies, so this plans until {date}.'},
-    'fi': {'plan': 'Palkkapäivään {date} asti ({days} päivää) vapaata rahaa on {free}. Sopiva tahti on noin {per_day} päivässä.',
+    'fi': {'plan': 'Arkeen palkkapäivään {date} asti ({days} päivää): arjen perusmenot {everyday} + vapaasti käytettävissä {spendable} = {daily_life}, noin {per_day} päivässä.',
+           'plan_short': 'Palkkapäivään {date} asti ({days} päivää) vapaasti käytettävää rahaa ei ole.',
            'extra': 'Noin {extra} voisi siirtää säästöön.',
-           'tight': 'Laskut, arjen menot ja turvatyyny vievät {short} enemmän kuin tililläsi on ennen palkkapäivää.',
+
            'irregular': 'Palkkapäiväsi vaihtelee, joten suunnitelma ulottuu {date} asti.'},
-    'sv': {'plan': '{free} är fritt fram till lönedagen {date} ({days} dagar). En lagom takt är ungefär {per_day} om dagen.',
+    'sv': {'plan': 'Till vardagen fram till lönedagen {date} ({days} dagar): vardagsutgifter {everyday} + fritt att spendera {spendable} = {daily_life}, ungefär {per_day} om dagen.',
+           'plan_short': 'Inget är fritt att spendera fram till lönedagen {date} ({days} dagar).',
            'extra': 'Då blir ungefär {extra} över som kan sparas.',
-           'tight': 'Räkningar, vardagsutgifter och marginalen kräver {short} mer än du har före lönedagen.',
+
            'irregular': 'Din lönedag varierar, så planen gäller till {date}.'},
 }
 
@@ -498,16 +518,19 @@ _NOTES = {
     'usual_payday_friday': ('Next payday is your usual pay day: {day}, or the Friday before when it falls on a weekend.', 'Seuraava palkkapäivä on tavallinen palkkapäiväsi: {day}, tai sitä edeltävä perjantai, jos se osuu viikonloppuun.', 'Nästa lönedag är din vanliga lönedag: {day}, eller fredagen innan om den infaller en helg.'),
     'late_salary': ("This month's salary has not arrived on the usual day, so the other pay day seen in your history is used.", 'Tämän kuun palkka ei ole tullut tavallisena päivänä, joten käytetään toista historiastasi näkyvää palkkapäivää.', 'Månadens lön har inte kommit på den vanliga dagen, så den andra lönedagen i din historik används.'),
     'declared': ('Loans and investing you told us about count once this pay cycle, unless a matching regular payment is already held back.', 'Kertomasi lainat ja sijoitukset lasketaan kerran tällä palkkajaksolla, ellei vastaavaa säännöllistä maksua ole jo varattu.', 'Lån och investeringar som du berättat om räknas en gång den här löneperioden, om inte en motsvarande regelbunden betalning redan är avsatt.'),
-    'steady': ('Steady mode: a full month of must-pays ({amount}) is kept safe, no saving is planned and spending stays at your usual pace.', 'Vakaa tila: kuukauden pakolliset menot ({amount}) pidetään turvassa, säästöä ei suunnitella ja käyttö pysyy tavallisessa tahdissa.', 'Stabilt läge: en hel månads nödvändiga utgifter ({amount}) hålls i reserv, inget sparande planeras och utgifterna hålls i din vanliga takt.'),
+    'steady': ('Steady mode: a full month of must-pays ({amount}) is kept as your safety cushion, no saving is planned and spending stays at your usual pace.', 'Rauhallinen tahti: kuukauden pakolliset menot ({amount}) pidetään turvatyynynä, säästöä ei suunnitella ja käyttö pysyy tavallisessa tahdissa.', 'Lugnt tempo: en hel månads nödvändiga utgifter ({amount}) hålls som säkerhetsmarginal, inget sparande planeras och utgifterna hålls i din vanliga takt.'),
     'saving_target': ('Your saving target of {pct} of your last salary ({amount}) is set aside first.', 'Säästötavoitteesi, {pct} viimeisestä palkastasi ({amount}), varataan ensin.', 'Ditt sparmål på {pct} av din senaste lön ({amount}) avsätts först.'),
     'target_no_salary': ('You set a saving target, but no salary was found to apply it to.', 'Asetit säästötavoitteen, mutta palkkaa, johon sitä soveltaa, ei löytynyt.', 'Du har satt ett sparmål, men ingen lön hittades att tillämpa det på.'),
     'no_target': ('No saving target is set, so nothing extra is set aside for saving.', 'Säästötavoitetta ei ole asetettu, joten säästöön ei varata erikseen.', 'Inget sparmål är satt, så inget extra avsätts till sparande.'),
     'everyday_median': ('Everyday costs use your usual month of groceries and getting around, scaled to the days until payday.', 'Arjen menot perustuvat tavalliseen kuukauteesi ruokaostoksissa ja liikkumisessa, suhteutettuna palkkapäivään jäljellä oleviin päiviin.', 'Vardagsutgifterna bygger på din vanliga månad med matinköp och resor, omräknat till dagarna fram till lönedagen.'),
     'cap': ('A comfortable pace is up to one and a half times what you usually spend on eating out, fun and shopping ({amount} until payday); money beyond that is shown as could be saved.', 'Sopiva tahti on enintään puolitoista kertaa se, mitä tavallisesti käytät ulkona syömiseen, vapaa-aikaan ja ostoksiin ({amount} palkkapäivään asti); sen yli menevä raha näytetään säästettävänä.', 'En lagom takt är upp till en och en halv gång det du brukar lägga på restaurang, nöje och shopping ({amount} fram till lönedagen); pengar utöver det visas som möjliga att spara.'),
-    'cap_steady': ('In steady mode a comfortable pace is what you usually spend on eating out, fun and shopping ({amount} until payday); money beyond that is shown as could be saved.', 'Vakaassa tilassa sopiva tahti on se, mitä tavallisesti käytät ulkona syömiseen, vapaa-aikaan ja ostoksiin ({amount} palkkapäivään asti); sen yli menevä raha näytetään säästettävänä.', 'I stabilt läge är en lagom takt det du brukar lägga på restaurang, nöje och shopping ({amount} fram till lönedagen); pengar utöver det visas som möjliga att spara.'),
+    'cap_steady': ('In steady mode a comfortable pace is what you usually spend on eating out, fun and shopping ({amount} until payday); money beyond that is shown as could be saved.', 'Rauhallisessa tahdissa sopiva tahti on se, mitä tavallisesti käytät ulkona syömiseen, vapaa-aikaan ja ostoksiin ({amount} palkkapäivään asti); sen yli menevä raha näytetään säästettävänä.', 'I lugnt tempo är en lagom takt det du brukar lägga på restaurang, nöje och shopping ({amount} fram till lönedagen); pengar utöver det visas som möjliga att spara.'),
+    'buffer_goal': ('Your surprise buffer plan puts about {monthly} aside each payday, so that is held back instead of your usual surprise costs.', 'Yllätyspuskurisuunnitelmasi laittaa sivuun noin {monthly} joka palkkapäivä, joten se varataan tavallisten yllätysmenojen sijaan.', 'Din plan för bufferten för oväntat lägger undan ungefär {monthly} varje lönedag, så det avsätts i stället för dina vanliga oväntade utgifter.'),
+    'mortgage_replaces': ('Your mortgage plan is the same money as the housing payment seen in your account, so it is held back once, as the mortgage payment.', 'Asuntolainasuunnitelmasi on samaa rahaa kuin tililläsi näkyvä asumismaksu, joten se varataan vain kerran, asuntolainan eränä.', 'Din bolåneplan är samma pengar som boendebetalningen på ditt konto, så den avsätts en gång, som bolånebetalning.'),
+    'mortgage_after_payday': ('Your next mortgage payment ({day}) comes after payday, so it is not held back from this pay.', 'Seuraava asuntolainan erä ({day}) on palkkapäivän jälkeen, joten sitä ei varata tästä palkasta.', 'Nästa bolånebetalning ({day}) kommer efter lönedagen, så den avsätts inte från den här lönen.'),
     'protected': ('Categories you protected are kept with everyday costs: {categories}.', 'Suojaamasi luokat lasketaan arjen menoihin: {categories}.', 'Kategorier du skyddat räknas med vardagsutgifterna: {categories}.'),
     'short_history': ('There are fewer than thirty days of history, so everyday costs cannot be estimated yet.', 'Tapahtumahistoriaa on alle 30 päivää, joten arjen menoja ei voi vielä arvioida.', 'Det finns mindre än trettio dagars historik, så vardagsutgifterna kan inte uppskattas än.'),
-    'emergency': ('Your emergency fund goal is {months} months of must-pays ({amount}). About {monthly} a month builds it in a year, so this payday\'s share is set aside as your buffer.', 'Hätärahastotavoitteesi on {months} kuukauden pakolliset menot ({amount}). Noin {monthly} kuukaudessa kerryttää sen vuodessa, joten tämän palkkajakson osuus varataan puskuriksi.', 'Ditt mål för nödsparande är {months} månaders nödvändiga utgifter ({amount}). Ungefär {monthly} i månaden bygger upp det på ett år, så den här löneperiodens del avsätts som buffert.'),
+    'emergency': ('Your emergency fund goal is {months} months of must-pays ({amount}). About {monthly} a month builds it in a year, so this payday\'s share is set aside towards it.', 'Hätävaratavoitteesi on {months} kuukauden pakolliset menot ({amount}). Noin {monthly} kuukaudessa kerryttää sen vuodessa, joten tämän palkkajakson osuus varataan hätävaraan.', 'Målet för din sparkudde är {months} månaders nödvändiga utgifter ({amount}). Ungefär {monthly} i månaden bygger upp den på ett år, så den här löneperiodens del avsätts till sparkudden.'),
 }
 _DAY_TEXT = {'en': ('the {day}th', 'month end'), 'fi': ('kuun {day}. päivä', 'kuun viimeinen päivä'), 'sv': ('den {day}:e', 'sista dagen i månaden')}
 
@@ -533,8 +556,87 @@ def _note_text(key, params, locale):
         elif name == 'months':
             values[name] = format(Decimal(value).normalize(), 'f').replace('.', ',' if locale != 'en' else '.')
         elif name == 'categories':
-            values[name] = ', '.join(_category_labels(c)[locale] for c in value)
+            from .labels import category_label
+            values[name] = ', '.join(category_label(c, locale) for c in value)
     return template.format(**values)
+
+
+# Why the plan is short (V5 fix): money covers bills first, then everyday costs, planned saving,
+# the surprise buffer and last the safety cushion. The first part that cannot be covered is the
+# cause, so a gap made by the cushion is never blamed on bills. Whole euros, like the Home card.
+SHORTFALL_ORDER = ('bills', 'everyday', 'saving', 'buffer', 'cushion')
+_SHORTFALL_TEXT = {
+    'bills': ('Bills before payday ({bills}) are {bills_over} more than your balance ({balance}). Your safety cushion ({cushion}) cannot be kept this time.',
+              'Ennen palkkapäivää erääntyvät laskut ({bills}) ovat {bills_over} enemmän kuin saldosi ({balance}). Turvatyynyäsi ({cushion}) ei voi pitää tällä kertaa.',
+              'Räkningarna före lönedagen ({bills}) är {bills_over} mer än ditt saldo ({balance}). Din säkerhetsmarginal ({cushion}) kan inte behållas den här gången.'),
+    'everyday': ('Bills before payday ({bills}) are covered, but food and getting around until payday ({everyday}) need {everyday_short} more than is left. Your safety cushion ({cushion}) cannot be kept this time.',
+                 'Ennen palkkapäivää erääntyvät laskut ({bills}) on katettu, mutta ruokaan ja liikkumiseen palkkapäivään asti ({everyday}) puuttuu {everyday_short}. Turvatyynyäsi ({cushion}) ei voi pitää tällä kertaa.',
+                 'Räkningarna före lönedagen ({bills}) är täckta, men till mat och resor fram till lönedagen ({everyday}) saknas {everyday_short}. Din säkerhetsmarginal ({cushion}) kan inte behållas den här gången.'),
+    'saving': ('Bills and everyday costs until payday are covered. Your planned saving ({saving}) is {saving_short} more than what is left.',
+               'Laskut ja arjen menot palkkapäivään asti on katettu. Suunniteltu säästösi ({saving}) on {saving_short} enemmän kuin mitä jää.',
+               'Räkningar och vardagsutgifter fram till lönedagen är täckta. Ditt planerade sparande ({saving}) är {saving_short} mer än det som blir kvar.'),
+    'buffer': ('Bills and everyday costs until payday are covered. The surprise buffer ({buffer}) and safety cushion ({cushion}) are {short} short this time.',
+               'Laskut ja arjen menot palkkapäivään asti on katettu. Yllätyspuskuriin ({buffer}) ja turvatyynyyn ({cushion}) puuttuu tällä kertaa {short}.',
+               'Räkningar och vardagsutgifter fram till lönedagen är täckta. Till bufferten för oväntat ({buffer}) och säkerhetsmarginalen ({cushion}) saknas {short} den här gången.'),
+    'cushion': ('Bills and everyday costs until payday are covered. Only {cushion_kept} of your {cushion} safety cushion can be kept, {cushion_short} short.',
+                'Laskut ja arjen menot palkkapäivään asti on katettu. {cushion} turvatyynystäsi voi pitää vain {cushion_kept}, {cushion_short} puuttuu.',
+                'Räkningar och vardagsutgifter fram till lönedagen är täckta. Av din säkerhetsmarginal på {cushion} kan bara {cushion_kept} behållas, {cushion_short} saknas.'),
+    'steady_reserve': ('Bills and everyday costs until payday are covered. Steady mode keeps a month of must-pays ({cushion}) as your safety cushion; {cushion_kept} of it can be kept now, {cushion_short} short.',
+                       'Laskut ja arjen menot palkkapäivään asti on katettu. Rauhallisessa tahdissa turvatyynynä pidetään kuukauden pakolliset menot ({cushion}); siitä voi nyt pitää {cushion_kept}, {cushion_short} puuttuu.',
+                       'Räkningar och vardagsutgifter fram till lönedagen är täckta. I lugnt tempo hålls en månads nödvändiga utgifter ({cushion}) som säkerhetsmarginal; {cushion_kept} av den kan behållas nu, {cushion_short} saknas.'),
+}
+
+
+def shortfall_breakdown(balance, held_back, everyday, steady_reserve=False):
+    """Split a payday-plan gap into its cause (pure; integer cents).
+
+    Parts, covered in this order: bills (held-back kinds bill, loan, tax), everyday
+    (food and getting around until payday), saving (held-back kind goal), buffer
+    (surprise buffer) and cushion (the safety cushion; a month of must-pays in steady
+    mode). Returns {cause: one of SHORTFALL_ORDER or None, cushion_kind: 'reserve'|
+    'steady_reserve', balance_cents, parts {name: {cents, covered_cents, short_cents}},
+    bills_cents, everyday_cents, saving_cents, buffer_cents, cushion_cents,
+    bills_over_balance_cents (bills not covered by the balance), below_zero_cents
+    (how far the account itself would go below zero before payday: bills + everyday -
+    balance, >= 0), cushion_kept_cents, cushion_short_cents, shortfall_cents (sum of
+    every part's short_cents), texts {en, fi, sv} (None when nothing is short)}.
+    """
+    totals = {'bills': 0, 'everyday': max(everyday, 0), 'saving': 0, 'buffer': 0, 'cushion': 0}
+    for item in held_back:
+        part = {'bill': 'bills', 'loan': 'bills', 'tax': 'bills', 'goal': 'saving', 'buffer': 'buffer', 'reserve': 'cushion'}.get(item['kind'], 'bills')
+        totals[part] += item['amount_cents']
+    left = balance; parts = {}; cause = None
+    for name in SHORTFALL_ORDER:
+        covered = min(totals[name], max(left, 0))
+        parts[name] = {'cents': totals[name], 'covered_cents': covered, 'short_cents': totals[name] - covered}
+        left -= totals[name]
+        if cause is None and parts[name]['short_cents'] > 0:
+            cause = name
+    result = {'cause': cause, 'cushion_kind': 'steady_reserve' if steady_reserve else 'reserve', 'balance_cents': balance, 'parts': parts,
+              'bills_cents': totals['bills'], 'everyday_cents': totals['everyday'], 'saving_cents': totals['saving'],
+              'buffer_cents': totals['buffer'], 'cushion_cents': totals['cushion'],
+              'bills_over_balance_cents': parts['bills']['short_cents'],
+              'below_zero_cents': max(totals['bills'] + totals['everyday'] - balance, 0),
+              'cushion_kept_cents': parts['cushion']['covered_cents'], 'cushion_short_cents': parts['cushion']['short_cents'],
+              'shortfall_cents': sum(p['short_cents'] for p in parts.values()), 'texts': None}
+    if cause:
+        key = 'steady_reserve' if cause == 'cushion' and steady_reserve else cause
+        result['texts'] = {}
+        for index, locale in enumerate(_LOCALES):
+            money = lambda cents: _euro_whole(cents, locale)
+            values = {'balance': money(max(balance, 0)), 'bills': money(totals['bills']), 'bills_over': money(parts['bills']['short_cents']),
+                      'everyday': money(totals['everyday']), 'everyday_short': money(parts['everyday']['short_cents']),
+                      'saving': money(totals['saving']), 'saving_short': money(parts['saving']['short_cents']),
+                      'buffer': money(totals['buffer']), 'cushion': money(totals['cushion']),
+                      'cushion_kept': money(parts['cushion']['covered_cents']), 'cushion_short': money(parts['cushion']['short_cents']),
+                      'short': money(parts['buffer']['short_cents'] + parts['cushion']['short_cents'])}
+            result['texts'][locale] = _SHORTFALL_TEXT[key][index].format(**values)
+    return result
+
+
+def _euro_whole(cents, locale='en'):
+    from .money import format_euro
+    return format_euro(cents, locale, 0)
 
 
 def _summary(plan):
@@ -543,16 +645,41 @@ def _summary(plan):
         t = _SUMMARY[locale]
         values = {'free': _euro(plan['free_cents'], locale), 'date': _date_text(plan['next_payday'], locale),
                   'days': plan['days_to_payday'], 'per_day': _euro(plan['per_day_cents'], locale),
-                  'extra': _euro(plan['extra_cents'], locale), 'short': _euro(plan['shortfall_cents'], locale)}
-        lines = [t['plan'].format(**values)]
+                  'extra': _euro(plan['extra_cents'], locale), 'short': _euro(plan['shortfall_cents'], locale),
+                  'everyday': _euro(plan['daily_life_cents'] - plan['spendable_until_payday_cents'], locale),
+                  'spendable': _euro(plan['spendable_until_payday_cents'], locale), 'daily_life': _euro(plan['daily_life_cents'], locale)}
+        lines = [t['plan_short' if plan['shortfall_cents'] and not plan['spendable_until_payday_cents'] else 'plan'].format(**values)]
         if plan['shortfall_cents']:
-            lines.append(t['tight'].format(**values))
+            lines.append(plan['shortfall_breakdown']['texts'][locale])
         elif plan['extra_cents']:
             lines.append(t['extra'].format(**values))
         if plan['payday']['source'] == 'irregular':
             lines.append(t['irregular'].format(**values))
         out[locale] = lines
     return out
+
+
+def _buffer_goal(conn, customer_id, reference):
+    """The customer's saved surprise-buffer goal (template 'buffer') that is not reached yet, or None.
+
+    Returns {goal_id, monthly_cents (what the goal needs each month from the reference
+    month to its target month), remaining_cents, target_date}. The newest buffer goal wins.
+    """
+    import sqlite3
+    try:
+        rows = conn.execute("SELECT id, target_cents, current_saved_cents, target_date FROM goals "
+                            "WHERE customer_id=? AND template='buffer' ORDER BY created_at DESC, id DESC", (customer_id,)).fetchall()
+    except sqlite3.OperationalError:
+        return None
+    for goal_id, target, saved, target_date in rows:
+        remaining = max(int(target) - int(saved or 0), 0)
+        if not remaining:
+            continue
+        end = date.fromisoformat(target_date)
+        months = max((end.year - reference.year) * 12 + end.month - reference.month, 1)
+        return {'goal_id': goal_id, 'monthly_cents': min(-(-remaining // months), remaining),
+                'remaining_cents': remaining, 'target_date': target_date}
+    return None
 
 
 def spending_plan(conn, customer_id, as_of=None, profile=None, reserve_floor_cents=None):
@@ -658,7 +785,7 @@ def spending_plan(conn, customer_id, as_of=None, profile=None, reserve_floor_cen
             entry.update(transaction_type=kind_type, recurring_id=item['id'], category=item['category'])
             held_back.append(entry)
             refs.extend(item['transaction_refs'])
-    unmatched = list(recurring_outflows); skipped = []
+    unmatched = list(recurring_outflows); skipped = []; upcoming = []
     declared = [('loan', 'mortgage' if d['type'] == 'mortgage' else 'debt', 'Debt payment (' + d['type'] + ')', d['monthly_payment_cents'], 'debt') for d in clean['debts'] if d['monthly_payment_cents'] > 0]
     if clean.get('regular_investing'):
         declared.append(('goal', 'regular_investing', 'Regular investing', clean['regular_investing'], 'regular_investing'))
@@ -671,25 +798,46 @@ def spending_plan(conn, customer_id, as_of=None, profile=None, reserve_floor_cen
         held_back.append(_held(kind, key, amount, None, source='declared', transaction_type=legacy_type, recurring_id=None, legacy_label=legacy_label))
     if declared:
         note('declared')
-    # Plans the customer switched on (mortgage, tax): once per pay cycle; a mortgage already paid as a
-    # recurring account payment (dedupe_hint) is not held back twice.
+    # Plans the customer switched on (mortgage, tax). A mortgage plan is the customer's real home
+    # loan, so a recurring payment of the hinted type (a housing payment seen in the account) is
+    # that same money: it is REPLACED by the plan payment, labelled "Mortgage payment", on the
+    # plan's payment day (or the day it is seen paid). Never both. A dated payment after payday
+    # is not held back this pay cycle. Undated plans (tax) are held back once per pay cycle.
     for item in clean['plan_set_asides']:
         if item['amount_cents'] <= 0 or (item['until'] and str(item['until'])[:7] < reference.strftime('%Y-%m')):
             continue
+        key = 'mortgage' if item['plan'] == 'mortgage' else ('tax' if item['kind'] == 'tax' else 'debt')
+        labels = _labels(key) if key == 'mortgage' else {**_labels(key), **({'en': item['label']} if item['label'] else {})}
         hint = item['dedupe_hint']
+        match = None
         if item['kind'] == 'loan' and hint:
             target = hint.get('amount_cents') if type(hint.get('amount_cents')) is int else item['amount_cents']
-            match = next((r for r in unmatched if r['transaction_type'] == hint['transaction_type']
-                          and abs(Decimal(-r['amount_cents'] - target)) <= DECLARED_MATCH_TOLERANCE * target), None)
-            if match is not None:
-                unmatched.remove(match)
-                skipped.append({'label': item['label'] or item['plan'], 'amount_cents': item['amount_cents'], 'plan': item['plan'],
-                                'matched_recurring_id': match['id'], 'matched_amount_cents': -match['amount_cents']})
-                continue
-        key = 'mortgage' if item['plan'] == 'mortgage' else ('tax' if item['kind'] == 'tax' else 'debt')
-        labels = {**_labels(key), **({'en': item['label']} if item['label'] else {})}
-        held_back.append(_held(item['kind'], key, item['amount_cents'], None, labels=labels, source='plan',
-                               transaction_type='plan_' + item['plan'], recurring_id=None, plan=item['plan']))
+            same_type = [r for r in unmatched if r['transaction_type'] == hint['transaction_type']]
+            if hint['transaction_type'] not in ('housing_payment', 'loan_payment'):
+                same_type = [r for r in same_type if abs(Decimal(-r['amount_cents'] - target)) <= DECLARED_MATCH_TOLERANCE * target]
+            match = min(same_type, key=lambda r: (abs(-r['amount_cents'] - target), r['id'])) if same_type else None
+        if match is not None:
+            unmatched.remove(match)
+            replaced = [h for h in held_back if h.get('recurring_id') == match['id']]
+            held_back = [h for h in held_back if h.get('recurring_id') != match['id']]
+            skipped.append({'label': item['label'] or item['plan'], 'amount_cents': item['amount_cents'], 'plan': item['plan'],
+                            'matched_recurring_id': match['id'], 'matched_amount_cents': -match['amount_cents'],
+                            'replaced_by_plan': True, 'replaced_dates': [h['date'] for h in replaced]})
+            note('mortgage_replaces')
+        day_of_month = item.get('day_of_month') or (int(match['median_day']) if match is not None else None)
+        extra = dict(transaction_type='plan_' + item['plan'], recurring_id=None, plan=item['plan'],
+                     replaces_recurring_id=match['id'] if match is not None else None)
+        if item['kind'] == 'loan' and day_of_month:
+            dates = [d for d in (_scheduled_date(reference, offset, day_of_month) for offset in range(3)) if reference < d <= payday]
+            for when in dates:
+                held_back.append(_held(item['kind'], key, item['amount_cents'], when.isoformat(), labels=labels, source='plan', **extra))
+            if not dates:
+                after = next((d for d in (_scheduled_date(reference, offset, day_of_month) for offset in range(4)) if d > payday), None)
+                note('mortgage_after_payday', day=day_of_month)
+                upcoming.append({'plan': item['plan'], 'date': after.isoformat() if after else None,
+                                 'amount_cents': item['amount_cents'], 'labels': labels})
+            continue
+        held_back.append(_held(item['kind'], key, item['amount_cents'], None, labels=labels, source='plan', **extra))
     if clean.get('tax_set_aside_monthly_cents'):
         held_back.append(_held('tax', 'tax', clean['tax_set_aside_monthly_cents'], None, source='declared', transaction_type='tax', recurring_id=None))
 
@@ -757,8 +905,16 @@ def spending_plan(conn, customer_id, as_of=None, profile=None, reserve_floor_cen
         if this_cycle > buffer:
             buffer = this_cycle; buffer_key = 'emergency_fund'; buffer_source = 'profile'
         note('emergency', months=months_target, amount=target, monthly=emergency['monthly_set_aside_cents'])
+    # A saved surprise-buffer goal ("Set aside €400 monthly" on Home) is the customer's own plan:
+    # its monthly amount is held back each payday (not less than the usual surprise costs), so
+    # "could be saved" and the daily number already leave it out. Steady mode plans no saving.
+    buffer_goal = None if steady else _buffer_goal(conn, customer_id, reference)
+    if buffer_goal and buffer_goal['monthly_cents'] >= buffer:
+        buffer = buffer_goal['monthly_cents']; buffer_key = 'buffer_goal'; buffer_source = 'goal'
+        note('buffer_goal', monthly=buffer_goal['monthly_cents'])
     if buffer:
-        held_back.append(_held('buffer', buffer_key, buffer, None, source=buffer_source))
+        held_back.append(_held('buffer', buffer_key, buffer, None, source=buffer_source,
+                               **({'goal_id': buffer_goal['goal_id']} if buffer_key == 'buffer_goal' else {})))
     held_back.append(_held('reserve', reserve_key, reserve_floor_cents, None, source={'demo_default': 'default', 'steady_mode_must_pays': 'profile'}.get(reserve_floor_source, 'request')))
     held_back.sort(key=lambda i: (['bill', 'loan', 'tax', 'goal', 'buffer', 'reserve'].index(i['kind']), i['date'] or '9999', i['label']))
 
@@ -767,6 +923,7 @@ def spending_plan(conn, customer_id, as_of=None, profile=None, reserve_floor_cen
     held_total = sum(i['amount_cents'] for i in held_back)
     raw_free = balance - held_total - everyday
     free = max(raw_free, 0); shortfall = max(-raw_free, 0)
+    breakdown = shortfall_breakdown(balance, held_back, everyday, steady_reserve=reserve_key == 'steady_reserve')
     spendable = free if cap is None else min(free, cap)
     extra = free - spendable
     # The daily number is money for daily life: everyday costs (food, getting around) plus free choices.
@@ -832,6 +989,8 @@ def spending_plan(conn, customer_id, as_of=None, profile=None, reserve_floor_cen
         'planned_saving_basis': planned_basis,
         'free_cents': free,
         'shortfall_cents': shortfall,
+        'shortfall_breakdown': breakdown,
+        'upcoming_after_payday': upcoming,
         'cap_cents': cap,
         'spendable_until_payday_cents': spendable,
         'spendable_cents': spendable,

@@ -125,8 +125,8 @@ def offline_safe_to_spend(conn, customer_id, reference_date):
 
 SAFE_UNTIL_PAYDAY_COPY = {
     'en': 'This is this week\'s share of a comfortable spending pace until your next payday. Bills due before payday, everyday costs like food, a surprise buffer, a small safety cushion and any saving target are already held back. Money beyond a comfortable pace is shown as money that could be saved.',
-    'fi': 'Tämä on tämän viikon osuus sopivasta käyttötahdista seuraavaan palkkapäivään asti. Ennen palkkapäivää erääntyvät laskut, arjen menot kuten ruoka, varaus yllättäviin menoihin, pieni turvatyyny ja mahdollinen säästötavoite on jo jätetty sivuun. Sopivan tahdin ylittävä raha näytetään summana, jonka voisi säästää.',
-    'sv': 'Det här är veckans del av en lagom utgiftstakt fram till nästa lönedag. Räkningar före lönedagen, vardagsutgifter som mat, en buffert för oväntade utgifter, en liten säkerhetsmarginal och ett eventuellt sparmål är redan avsatta. Pengar utöver en lagom takt visas som pengar som kan sparas.',
+    'fi': 'Tämä on tämän viikon osuus sopivasta käyttötahdista seuraavaan palkkapäivään asti. Ennen palkkapäivää erääntyvät laskut, arjen menot kuten ruoka, yllätyspuskuri, pieni turvatyyny ja mahdollinen säästötavoite on jo jätetty sivuun. Sopivan tahdin ylittävä raha näytetään summana, jonka voisi säästää.',
+    'sv': 'Det här är veckans del av en lagom utgiftstakt fram till nästa lönedag. Räkningar före lönedagen, vardagsutgifter som mat, en buffert för oväntat, en liten säkerhetsmarginal och ett eventuellt sparmål är redan avsatta. Pengar utöver en lagom takt visas som pengar som kan sparas.',
 }
 
 
@@ -170,7 +170,8 @@ class Application:
         get_routes = {'/api/health', '/api/personas', '/api/overview', '/api/comparison', '/api/transactions', '/api/trends', '/api/forecast', '/api/safe-to-spend', '/api/investments', '/api/financing', '/api/statistics', '/api/statistics/compare', '/api/taxes', '/api/vat', '/api/goals',
                       '/api/spender-profile', '/api/explore', '/api/cashflow', '/api/cashflow/summary', '/api/year-review/options',
                       '/api/year-review', '/api/profile', '/api/profile/suggestions', '/api/tax', '/api/vat/card', '/api/benchmarks',
-                      '/api/plans', '/api/plans/mortgage/projection', '/api/plans/tax', '/api/catalogue'}
+                      '/api/plans', '/api/plans/mortgage/projection', '/api/plans/mortgage/preview', '/api/plans/tax', '/api/catalogue',
+                      '/api/plans/tax/preview'}
         post_routes = {'/api/scenarios', '/api/scenarios/exclude', '/api/rules', '/api/goals', '/api/goals/link', '/api/goals/update', '/api/goals/delete', '/api/coach', '/api/agent', '/api/tax-plan', '/api/undo', '/api/reset',
                        '/api/year-review/captions', '/api/year-review/save', '/api/profile/entries', '/api/profile/entries/update',
                        '/api/profile/entries/delete', '/api/profile/forget', '/api/profile/suggestions/confirm',
@@ -370,7 +371,7 @@ class Application:
                         return {'categories': benchmark_categories()}
                     return compare_to_peers(conn, customer_id, query['category'], months=int(query.get('months', 12)),
                                             end_month=query.get('month'))
-                if path in {'/api/plans', '/api/plans/mortgage/projection', '/api/plans/tax'}:
+                if path in {'/api/plans', '/api/plans/mortgage/projection', '/api/plans/mortgage/preview', '/api/plans/tax', '/api/plans/tax/preview'}:
                     return self._plans_get(conn, path, customer_id, reference_date, query)
                 if path == '/api/vat/card':
                     from .tax import vat_learn_card
@@ -379,7 +380,12 @@ class Application:
                     return {**card, 'rate_label': card.get('rate_display')}
             if path == '/api/catalogue':
                 from .catalogue import catalogue
-                return catalogue(_locale(query.get('locale', 'en')))
+                from . import money_profile
+                try:
+                    steady = money_profile.coaching_mode(money_profile.get_profile(conn, customer_id, reference_date)) == 'steady'
+                except Exception:
+                    steady = False
+                return catalogue(_locale(query.get('locale', 'en')), steady=steady)
             if path == '/api/catalogue/answer':
                 from .catalogue import answer
                 return {'card': answer(conn, customer_id, month, body['question_id'], body.get('params') or {},
@@ -558,7 +564,12 @@ class Application:
             '/api/benchmarks': common | {'category', 'months', 'month'},
             '/api/plans': common | {'month', 'as_of'},
             '/api/plans/mortgage/projection': common | {'month', 'as_of', 'extra_cents', 'rate_delta_bp'},
+            '/api/plans/mortgage/preview': common | {'month', 'as_of', 'extra_cents', 'rate_delta_bp', 'principal_cents', 'loan_type',
+                                                     'reference_rate', 'reference_rate_bp', 'margin_bp', 'remaining_months',
+                                                     'monthly_payment_cents', 'payment_day'},
             '/api/plans/tax': common | {'month', 'as_of'},
+            '/api/plans/tax/preview': common | {'month', 'as_of', 'gross_monthly_cents', 'base_rate_bp', 'additional_rate_bp',
+                                                'income_limit_cents', 'expected_back_tax_cents', 'expected_refund_cents'},
             '/api/catalogue': common | {'locale', 'month'},
         }
         if path not in allowed:
@@ -571,7 +582,8 @@ class Application:
                 raise ValueError('Missing query parameter: ' + ', '.join(missing))
         if path in {'/api/explore', '/api/spender-profile', '/api/cashflow', '/api/cashflow/summary', '/api/year-review',
                     '/api/year-review/options', '/api/profile', '/api/profile/suggestions', '/api/tax', '/api/vat/card', '/api/benchmarks',
-                    '/api/plans', '/api/plans/mortgage/projection', '/api/plans/tax', '/api/catalogue'}:
+                    '/api/plans', '/api/plans/mortgage/projection', '/api/plans/mortgage/preview', '/api/plans/tax', '/api/catalogue',
+                      '/api/plans/tax/preview'}:
             for field in ('category', 'role', 'transaction_type', 'merchant_id', 'mcc_code'):
                 if field in query and not query[field].strip():
                     raise ValueError('Filters must be nonempty')
@@ -894,19 +906,44 @@ class Application:
 
     @staticmethod
     def _plans_get(conn, path, customer_id, reference_date, query):
-        """Read-only plan views: GET /api/plans, /api/plans/mortgage/projection, /api/plans/tax."""
+        """Read-only plan views: GET /api/plans, /api/plans/mortgage/projection, /api/plans/mortgage/preview, /api/plans/tax."""
         from . import plans
         if path == '/api/plans':
             return plans.plans_overview(conn, customer_id, reference_date)
         if path == '/api/plans/tax':
             return plans.tax_plan(conn, customer_id, reference_date)
+        if path == '/api/plans/tax/preview':
+            # Computes without saving; no inputs means the labelled example (V5 lane TX).
+            inputs = {}
+            for field in plans.TAX_PREVIEW_FIELDS:
+                if field in query:
+                    if not query[field].isdigit():
+                        raise ValueError('%s must be a nonnegative integer' % field)
+                    inputs[field] = int(query[field])
+            return plans.tax_plan_preview(conn, customer_id, reference_date, inputs=inputs)
         def signed(name, low, high):
             text = query.get(name, '0')
             if not (text.lstrip('-').isdigit() and text.count('-') <= 1) or not low <= int(text) <= high:
                 raise ValueError('%s must be an integer from %d to %d' % (name, low, high))
             return int(text)
+        if path == '/api/plans/mortgage/preview':
+            # Computes without saving: the customer's draft numbers, or the example loan when none are given.
+            loan_fields = ('principal_cents', 'loan_type', 'reference_rate', 'reference_rate_bp', 'margin_bp',
+                           'remaining_months', 'monthly_payment_cents', 'payment_day')
+            inputs = None
+            if any(name in query for name in loan_fields):
+                if 'principal_cents' not in query:
+                    raise ValueError('principal_cents is required with loan numbers; leave all out for the example')
+                inputs = {'principal_cents': signed('principal_cents', 1, 10_000_000_000),
+                          'loan_type': query.get('loan_type', 'annuity'), 'reference_rate': query.get('reference_rate', 'euribor_12m'),
+                          'reference_rate_bp': signed('reference_rate_bp', -1000, 2000), 'margin_bp': signed('margin_bp', 0, 2000)}
+                for name, low, high in (('remaining_months', 1, 600), ('monthly_payment_cents', 1, 100_000_000), ('payment_day', 1, 31)):
+                    if name in query:
+                        inputs[name] = signed(name, low, high)
+            return plans.mortgage_preview(conn, customer_id, reference_date, inputs, extra_cents=signed('extra_cents', 0, 1_000_000),
+                                          rate_delta_bp=signed('rate_delta_bp', -500, 500))
         return plans.mortgage_plan(conn, customer_id, reference_date, extra_cents=signed('extra_cents', 0, 1_000_000),
-                                   rate_delta_bp=signed('rate_delta_bp', -500, 500))
+                                   rate_delta_bp=signed('rate_delta_bp', -500, 500), detail=True)
 
     @staticmethod
     def _mutation_result(kind, result):

@@ -66,12 +66,20 @@
 }
 .answer-chip:hover { background: #eaf3e5; border-color: #b8cfb8; }
 
-.quick-notice { padding: 14px; border: 1px solid #f0dfc8; border-radius: 18px; background: #fffaf3; }
-.quick-notice__mode { font-size: 13.5px; line-height: 1.45; color: #6a4b25; }
-.quick-notice__supportive { margin-bottom: 10px; font-size: 15px; line-height: 1.5; color: var(--ink, #163e30); }
-.quick-notice__lead { margin: 12px 0 8px; font-size: 13px; font-weight: 600; color: var(--muted, #586e62); }
+.quick-notice { padding: 2px 2px 0; }
+.quick-notice__mode { margin: 0 0 8px; font-size: 13px; line-height: 1.45; color: var(--muted, #586e62); }
+.quick-notice__supportive { margin: 0 0 10px; padding: 12px 14px; border-radius: 16px; background: var(--wash, #eef6ef); font-size: 15px; line-height: 1.5; color: var(--ink, #163e30); }
 .quick-notice .answer-chips { margin-bottom: 4px; }
 .quick-notice .coach-retry { margin-top: 6px; }
+
+/* V5 fix (lane CO): parts of one whole as one labelled bar with a legend (replaces the unlabeled donut). */
+.card-split__bar { display: flex; gap: 2px; height: 14px; border-radius: 7px; overflow: hidden; background: #e8efe3; }
+.card-split__bar span { display: block; flex-basis: 0; min-width: 6px; }
+.card-split__legend { list-style: none; display: grid; gap: 6px; margin: 12px 0 0; padding: 0; }
+.card-split__legend li { display: grid; grid-template-columns: 10px minmax(0,1fr) auto; align-items: baseline; column-gap: 8px; font-size: 14px; line-height: 1.4; }
+.card-split__legend i { width: 10px; height: 10px; border-radius: 3px; align-self: center; }
+.card-split__label { min-width: 0; color: var(--ink, #163e30); }
+.card-split__value { font-weight: 650; color: var(--ink, #163e30); font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 .intro-chip { display: inline-flex; align-items: center; gap: 2px; margin-top: 14px; border: 1px dashed #b8cfb8; border-radius: 999px; background: var(--white, #fff); }
 .intro-chip button { min-height: 40px; border: 0; background: none; color: var(--green, #006b3c); font-size: 14px; font-weight: 600; }
@@ -87,3 +95,41 @@
 .card-bars__track { grid-column: 1 / -1; height: 6px; border-radius: 3px; background: #e8efe3; overflow: hidden; }
 .card-bars__track span { display: block; height: 100%; border-radius: 3px; background: var(--green, #006b3c); }
 .answer-card .visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+/* ==========================================================================
+   V5 fix (lane CO): more room for the conversation on small screens.
+   - "Browse topics" is a round icon button at the start of the composer row (label from 720px).
+   - A compact Coach bar and header on short screens; the footer line hides once a chat has started there.
+   - The composer and the topic button step aside while the optional intro runs.
+   ========================================================================== */
+html .phone-shell #coach-form .coach-input-row { align-items: flex-end; gap: 8px; }
+html .phone-shell #coach-form #topic-menu-root { display: flex; flex: none; padding: 0; }
+html .phone-shell #coach-form #topic-menu-root .topic-button { width: 48px; min-width: 48px; height: 48px; min-height: 48px; padding: 0; justify-content: center; border-radius: 15px; }
+html .phone-shell #coach-form #topic-menu-root .topic-button__icon { width: 20px; height: 20px; min-width: 20px; }
+html .phone-shell #coach-form #topic-menu-root .topic-button__label { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+html .phone-shell #coach-form #coach-input { flex: 1; min-width: 0; }
+html .phone-shell .coach-bar [data-new-conversation] { padding: 0 12px; margin-right: -4px; border-radius: 12px; }
+html .phone-shell #coach-view #coach-form.coach-composer { background: var(--paper, #f5f7f4); }
+html .phone-shell .coach-bar h1 { white-space: nowrap; }
+html .phone-shell .coach-bar .coach-scope-chip { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+html .phone-shell #coach-input::placeholder { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#coach-view:has(#onboarding-root:not(:empty)) #coach-form { display: none; }
+@media (min-width: 720px) {
+  html .phone-shell #coach-form #topic-menu-root .topic-button { width: auto; padding: 0 16px 0 14px; gap: 8px; }
+  html .phone-shell #coach-form #topic-menu-root .topic-button__label { position: static; width: auto; height: auto; margin: 0; overflow: visible; clip-path: none; }
+}
+@media (max-height: 700px), (max-width: 359px) {
+  html[data-current-view="coach"] .phone-shell .app-header { min-height: 50px; padding-top: calc(3px + env(safe-area-inset-top, 0px)); padding-bottom: 3px; }
+  html .phone-shell .coach-bar { min-height: 48px; padding: 2px 10px 2px 14px; }
+  html .phone-shell .coach-bar h1 { font-size: 17px; }
+  html .phone-shell #coach-view .coach-scroll { padding-top: 12px; }
+  html .phone-shell #coach-view #coach-form.coach-composer { padding: 8px 10px 6px; }
+  html .phone-shell #coach-view.has-chat #coach-mode { display: none; }
+}
+@media (max-width: 359px) {
+  html .phone-shell .coach-bar h1 { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); }
+  html .phone-shell .coach-bar { padding-left: 10px; }
+  html .phone-shell #coach-form #topic-menu-root .topic-button, html .phone-shell #coach-view #coach-send { width: 44px; min-width: 44px; height: 48px; }
+  html .phone-shell #coach-form .coach-input-row { gap: 6px; }
+  html .phone-shell #coach-form #coach-input { padding-left: 10px; padding-right: 8px; }
+}

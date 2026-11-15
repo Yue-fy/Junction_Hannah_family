@@ -42,7 +42,7 @@ class CoachTests(unittest.TestCase):
         fi = interpret('Paljonko voin käyttää tällä viikolla?', {**context, 'interface_locale': 'fi'}, api_key='')
         self.assertEqual(fi['intent'], 'safe_to_spend')
         self.assertEqual(fi['locale'], 'fi')
-        self.assertIn('puskurisi', fi['explanation_blocks'][0]['text'])
+        self.assertIn('turvatyynysi', fi['explanation_blocks'][0]['text'])
         self.assertNotIn('English source text', fi['explanation_blocks'][0]['text'])
 
         sv = interpret('Hjälp mig planera ett sparmål', {**context, 'interface_locale': 'sv'}, api_key='')

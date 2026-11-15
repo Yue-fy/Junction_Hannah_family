@@ -7,6 +7,8 @@
  * fallback is used otherwise.
  */
 import { describePlan } from './plans.js';
+import { meTaxRowHTML } from './plans-tax.js';
+import { emptyArt } from './empty-states.js';
 
 export const PROFILE_KEYS = Object.freeze([
   'life_stage', 'household', 'income_stability', 'saving_rate_target_pct', 'emergency_fund_target_months',
@@ -25,6 +27,7 @@ export const TAX_DECISIONS = Object.freeze(['refund', 'back_tax', 'none']);
 const ONBOARDING_LOANS = ['mortgage', 'student_loan', 'car_loan', 'other'];
 const ASSESSMENT_MONTHS = [5, 6, 7, 8, 9, 10];
 const NOTE_MAX = 500;
+const UPCOMING_MAX = 80; // scoach/money_profile.py _v_upcoming
 
 /** Profile page sections in display order: {id, keys}. Entries of a key not listed here are not shown. */
 export const PROFILE_SECTIONS = Object.freeze([
@@ -34,7 +37,7 @@ export const PROFILE_SECTIONS = Object.freeze([
   {id: 'upcoming', keys: ['upcoming']},
   {id: 'events', keys: ['life_event']},
   {id: 'taxes', keys: ['tax']},
-  {id: 'plans', keys: ['plan_mortgage', 'plan_tax']},
+  {id: 'plans', keys: ['plan_mortgage']}, // plan_tax is shown in the Taxes row (V5 lane TX)
   {id: 'notes', keys: ['note']},
   {id: 'reviews', keys: ['year_review']},
 ].map(Object.freeze));
@@ -52,7 +55,7 @@ const COPY = {
   'key.household': ['Household', 'Kotitalous', 'Hushåll'],
   'key.income_stability': ['How steady my income is', 'Tulojen tasaisuus', 'Hur jämn min inkomst är'],
   'key.saving_rate_target_pct': ['Saving target', 'Säästötavoite', 'Sparmål'],
-  'key.emergency_fund_target_months': ['Emergency fund target', 'Puskurin tavoite', 'Buffertmål'],
+  'key.emergency_fund_target_months': ['Emergency fund target', 'Hätävaran tavoite', 'Mål för sparkudden'],
   'key.regular_investing': ['Regular investing', 'Säännöllinen sijoittaminen', 'Regelbundet investerande'],
   'key.debts': ['Loans', 'Lainat', 'Lån'],
   'key.risk_attitude': ['Attitude to risk', 'Suhtautuminen riskiin', 'Inställning till risk'],
@@ -63,6 +66,7 @@ const COPY = {
   'key.note': ['Note', 'Muistiinpano', 'Anteckning'],
   'key.tax': ['Taxes', 'Verot', 'Skatter'],
   'key.year_review': ['Year in review', 'Vuosikatsaus', 'Årsöversikt'],
+  'key.taxYear': ['Tax details for {year}', 'Verotiedot vuodelta {year}', 'Skatteuppgifter för {year}'],
 
   'source.you_told_me': ['You told me', 'Kerroit minulle', 'Du berättade'],
   'source.from_your_transactions': ['From your transactions', 'Tilitapahtumistasi', 'Från dina transaktioner'],
@@ -72,7 +76,7 @@ const COPY = {
   'life_stage.student': ['Student', 'Opiskelija', 'Studerande'],
   'life_stage.working': ['Working', 'Töissä', 'Arbetar'],
   'life_stage.self_employed': ['Self-employed', 'Yrittäjä', 'Egenföretagare'],
-  'life_stage.between_jobs': ['Between jobs', 'Työnhaussa', 'Mellan jobb'],
+  'life_stage.between_jobs': ['Between jobs', 'Työnhaussa', 'Arbetssökande'],
   'life_stage.parental_leave': ['On parental leave', 'Perhevapaalla', 'Föräldraledig'],
   'life_stage.retired': ['Retired', 'Eläkkeellä', 'Pensionär'],
   'income_stability.steady': ['About the same every month', 'Suunnilleen samat joka kuukausi', 'Ungefär samma varje månad'],
@@ -120,6 +124,7 @@ const COPY = {
   'describe.upcoming.none': ['Nothing planned', 'Ei mitään suunniteltua', 'Inget planerat'],
   'describe.upcoming.cost': ['about {amount}', 'noin {amount}', 'cirka {amount}'],
   'describe.event.since': ['{event} since {date}', '{event} ({date} alkaen)', '{event} (sedan {date})'],
+  'describe.event.ended': ['ended {date}', 'päättyi {date}', 'avslutad {date}'],
   'describe.protected.none': ['None', 'Ei mitään', 'Inga'],
   'describe.tax.rate': ['Tax card {rate}%', 'Verokortti {rate} %', 'Skattekort {rate} %'],
   'describe.tax.additional': ['{rate}% above the income limit', '{rate} % tulorajan ylittävältä osalta', '{rate} % över inkomstgränsen'],
@@ -211,8 +216,16 @@ const COPY = {
   'steady.reason.income_drop': ['Steady mode is on because you told me your income has dropped.', 'Kerroit tulojesi pienentyneen, joten etenemme nyt rauhallisemmin.', 'Du berättade att din inkomst har minskat, så vi tar det lite lugnare nu.'],
   'steady.reason.large_loss': ['Steady mode is on because you told me about a large unexpected cost.', 'Kerroit isosta odottamattomasta menosta, joten etenemme nyt rauhallisemmin.', 'Du berättade om en stor oväntad kostnad, så vi tar det lite lugnare nu.'],
   'steady.reason.generic': ['Steady mode is on while things settle.', 'Etenemme rauhallisemmin, kunnes tilanne tasaantuu.', 'Vi tar det lite lugnare tills läget har stabiliserats.'],
-  'steady.help': ['I’ll focus on must-pays and your buffer, and keep saving suggestions small.', 'Keskityn välttämättömiin maksuihin ja puskuriin, ja säästöehdotukset pidän pieninä.', 'Jag fokuserar på det som måste betalas och på din buffert, och håller sparförslagen små.'],
-  'steady.off': ['Turn off', 'Lopeta', 'Avsluta'],
+  'steady.help': ['I’ll focus on must-pays and your buffer, and keep saving suggestions small.', 'Keskityn välttämättömiin maksuihin ja turvatyynyyn, ja säästöehdotukset pidän pieninä.', 'Jag fokuserar på det som måste betalas och på din säkerhetsmarginal, och håller sparförslagen små.'],
+  'steady.off': ['Turn off steady mode', 'Lopeta rauhallinen tahti', 'Stäng av lugnt tempo'],
+  'steady.offTitle': ['Turn off steady mode?', 'Lopetetaanko rauhallinen tahti?', 'Stänga av lugnt tempo?'],
+  'steady.offIntro': ['Your coach goes back to normal: saving suggestions come back and only your usual safety cushion is kept aside. “{event}” stays on your profile, marked as ended. You can turn steady mode on again at any time.', 'Valmentaja palaa tavalliseen: säästöehdotukset palaavat, ja sivuun pidetään vain tavallinen turvatyyny. ”{event}” jää profiiliisi päättyneeksi merkittynä. Voit ottaa rauhallisen tahdin uudelleen käyttöön milloin vain.', 'Coachen går tillbaka till det vanliga: sparförslagen kommer tillbaka och bara din vanliga säkerhetsmarginal hålls undan. ”{event}” finns kvar i din profil, markerad som avslutad. Du kan slå på lugnt tempo igen när som helst.'],
+  'steady.offIntroGeneric': ['Your coach goes back to normal: saving suggestions come back and only your usual safety cushion is kept aside.', 'Valmentaja palaa tavalliseen: säästöehdotukset palaavat, ja sivuun pidetään vain tavallinen turvatyyny.', 'Coachen går tillbaka till det vanliga: sparförslagen kommer tillbaka och bara din vanliga säkerhetsmarginal hålls undan.'],
+  'steady.offConfirm': ['Turn off', 'Lopeta', 'Stäng av'],
+  'steady.offDone': ['Steady mode is off. Your life event stays on your profile.', 'Rauhallinen tahti on pois päältä. Elämäntapahtuma jää profiiliisi.', 'Lugnt tempo är avstängt. Livshändelsen finns kvar i din profil.'],
+  'steady.undo': ['Undo', 'Kumoa', 'Ångra'],
+  'steady.on': ['Turn steady mode on again', 'Ota rauhallinen tahti uudelleen käyttöön', 'Slå på lugnt tempo igen'],
+  'steady.onDone': ['Steady mode is on again.', 'Rauhallinen tahti on taas käytössä.', 'Lugnt tempo är på igen.'],
   'noticed.title': ['Things I noticed', 'Huomasin nämä', 'Saker jag märkt'],
   'noticed.help': ['Nothing is saved until you choose Keep.', 'Mitään ei tallenneta, ennen kuin valitset Tallenna.', 'Inget sparas förrän du väljer Spara.'],
   'noticed.keep': ['Keep', 'Tallenna', 'Spara'],
@@ -224,7 +237,11 @@ const COPY = {
   'actions.onboarding': ['Start the intro again', 'Vastaa alkukysymyksiin uudelleen', 'Svara på startfrågorna igen'],
   'actions.forget': ['Forget everything', 'Unohda kaikki', 'Glöm allt'],
   'actions.forgetHelp': ['Deletes your whole money profile. Your transactions stay as they are.', 'Poistaa koko talousprofiilisi. Tilitapahtumasi pysyvät ennallaan.', 'Raderar hela din ekonomiprofil. Dina transaktioner påverkas inte.'],
+  'forget.title': ['Forget everything?', 'Unohdetaanko kaikki?', 'Glömma allt?'],
+  'forget.intro': ['This deletes everything on this page: what you told me, your notes, life events, loans, tax details, saved year reviews, and your mortgage and tax plans (they stop being held back on payday). Your transactions and savings goals stay as they are.', 'Tämä poistaa kaiken tällä sivulla olevan: mitä kerroit, muistiinpanosi, elämäntapahtumat, lainat, verotiedot, tallennetut vuosikatsaukset sekä asuntolaina- ja verosuunnitelmasi (niitä ei enää varata palkkapäivänä). Tilitapahtumasi ja säästötavoitteesi pysyvät ennallaan.', 'Det här raderar allt på den här sidan: det du berättat, dina anteckningar, livshändelser, lån, skatteuppgifter, sparade årsöversikter samt din bolåne- och skatteplan (de hålls inte längre undan på lönedagen). Dina transaktioner och sparmål påverkas inte.'],
+  'forget.confirm': ['Delete my profile', 'Poista profiilini', 'Radera min profil'],
   'empty.title': ['Your coach doesn’t know you yet', 'Valmentajasi ei vielä tunne sinua', 'Din coach känner dig inte än'],
+  'empty.titleNoticed': ['Your coach is just getting to know you', 'Valmentajasi on vasta tutustumassa sinuun', 'Din coach har precis börjat lära känna dig'],
   'empty.body': ['Answer a few quick questions so tips fit your life. It takes about a minute, and you can skip anything.', 'Vastaa muutamaan nopeaan kysymykseen, niin vinkit sopivat elämääsi. Se vie noin minuutin, ja voit ohittaa minkä tahansa.', 'Svara på några snabba frågor så att tipsen passar ditt liv. Det tar ungefär en minut och du kan hoppa över vad som helst.'],
   'empty.start': ['Start the intro', 'Aloitetaan', 'Kom igång'],
 
@@ -237,14 +254,14 @@ const COPY = {
   'field.months': ['Months of expenses', 'Montako kuukauden menot', 'Hur många månaders utgifter'],
   'field.investing': ['Investing every month?', 'Sijoitatko kuukausittain?', 'Investerar du varje månad?'],
   'field.monthly': ['Amount a month', 'Summa kuukaudessa', 'Belopp per månad'],
-  'field.loanType': ['Loan {n}', 'Laina {n}', 'Lån {n}'],
-  'field.loanMonthly': ['Loan {n}: monthly payment', 'Laina {n}: kuukausierä', 'Lån {n}: månadsbetalning'],
-  'field.loanRemaining': ['Loan {n}: still to pay', 'Laina {n}: jäljellä', 'Lån {n}: kvar att betala'],
-  'field.what': ['What is coming up ({n})', 'Mitä on tulossa ({n})', 'Vad är på gång ({n})'],
-  'field.when': ['When ({n})', 'Milloin ({n})', 'När ({n})'],
-  'field.cost': ['Rough cost ({n})', 'Arvioitu hinta ({n})', 'Ungefärlig kostnad ({n})'],
+  'field.loanType': ['Type of loan', 'Lainan tyyppi', 'Typ av lån'],
+  'field.loanMonthly': ['Monthly payment', 'Kuukausierä', 'Månadsbetalning'],
+  'field.loanRemaining': ['Still to pay', 'Lainaa jäljellä', 'Kvar att betala'],
+  'field.what': ['What is coming up', 'Mitä on tulossa', 'Vad är på gång'],
+  'field.when': ['Roughly when', 'Suunnilleen milloin', 'Ungefär när'],
+  'field.cost': ['Rough cost', 'Arvioitu hinta', 'Ungefärlig kostnad'],
   'field.eventType': ['What happened', 'Mitä tapahtui', 'Vad hände'],
-  'field.since': ['Since', 'Alkaen', 'Sedan'],
+  'field.since': ['Since which month', 'Mistä kuusta alkaen', 'Sedan vilken månad'],
   'field.eventNote': ['A few words', 'Muutama sana (valinnainen)', 'Några ord (valfritt)'],
   'field.note': ['Note', 'Muistiinpano', 'Anteckning'],
   'field.protected': ['Categories, separated by commas', 'Luokat pilkulla erotettuina', 'Kategorier, åtskilda med kommatecken'],
@@ -300,6 +317,23 @@ const isCents = value => Number.isSafeInteger(value) && value >= 0;
 const cleanText = (value, max = NOTE_MAX) => typeof value === 'string' ? value.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '').trim().slice(0, max) : '';
 const isMonth = value => typeof value === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(value);
 const isDate = value => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}/.test(value) && Number.isFinite(Date.parse(value.slice(0, 10)));
+const asItems = value => Array.isArray(value) ? value : isObject(value) ? [value] : [];
+/** Lower-case the first letter of a value shown after "Label: " (FI/SV/EN style), but leave acronyms and user text alone. */
+export function afterColon(text) {
+  const value = String(text ?? '');
+  return /^\p{Lu}\p{Ll}/u.test(value) ? value.charAt(0).toLocaleLowerCase() + value.slice(1) : value;
+}
+const LIST_KEYS = ['debts', 'upcoming'];
+/**
+ * Split entries whose value is a list (debts, upcoming from the intro or an older draft) into one entry per item,
+ * the shape the server stores and validates. An empty list ("No loans") has nothing to save and is dropped.
+ * @param {Array<{key, value, ...}>} entries
+ * @returns {Array<{key, value, ...}>}
+ */
+export function splitProfileEntries(entries) {
+  return (Array.isArray(entries) ? entries : []).flatMap(entry => (
+    LIST_KEYS.includes(entry?.key) && Array.isArray(entry.value) ? entry.value.map(item => ({...entry, value: clone(item)})) : [entry]));
+}
 
 function number(value, locale, digits = 1) {
   return new Intl.NumberFormat(INTL[profileLocale(locale)], {maximumFractionDigits: digits}).format(value);
@@ -392,7 +426,8 @@ export function describeEntry(entry, locale = 'en', helpers = {}) {
       if (!value?.active) return t('describe.investing.no');
       return isCents(value.monthly_cents) ? t('describe.investing.amount', {amount: h.money(value.monthly_cents)}) : t('describe.investing.yes');
     case 'debts': {
-      const items = Array.isArray(value) ? value : [];
+      // The server stores one loan per entry (an object); onboarding answers and older drafts use a list.
+      const items = asItems(value);
       if (!items.length) return t('describe.debts.none');
       return items.map(item => {
         const loan = DEBT_TYPES.includes(item?.type) ? t('debt.' + item.type) : t('debt.other');
@@ -402,18 +437,22 @@ export function describeEntry(entry, locale = 'en', helpers = {}) {
       }).join('; ');
     }
     case 'upcoming': {
-      const items = Array.isArray(value) ? value : [];
+      const items = asItems(value);
       if (!items.length) return t('describe.upcoming.none');
       return items.map(item => {
         const parts = [cleanText(item?.what, 200)];
         if (item?.month) parts.push(h.monthLabel(item.month));
-        if (isCents(item?.amount_cents)) parts.push(t('describe.upcoming.cost', {amount: h.money(item.amount_cents)}));
+        // Whole euros after "about" (V5 money format).
+        if (isCents(item?.amount_cents)) parts.push(t('describe.upcoming.cost', {amount: h.money(Math.round(item.amount_cents / 100) * 100)}));
         return parts.filter(Boolean).join(', ');
       }).join('; ');
     }
     case 'life_event': {
       const event = LIFE_EVENT_TYPES.includes(value?.type) ? t('event.' + value.type) : t('event.other');
-      let text = value?.since ? t('describe.event.since', {event, date: isMonth(value.since) ? h.monthLabel(value.since) : h.dateLabel(value.since)}) : event;
+      // "Since" is asked as a month (the server stores it as the 1st of that month).
+      const since = isMonth(value?.since) ? value.since : isDate(value?.since) ? value.since.slice(0, 7) : '';
+      let text = since ? t('describe.event.since', {event, date: h.monthLabel(since)}) : event;
+      if (isDate(value?.ended) || isMonth(value?.ended)) text += ', ' + t('describe.event.ended', {date: isMonth(value.ended) ? h.monthLabel(value.ended) : h.dateLabel(value.ended)});
       const note = cleanText(value?.note, 200);
       if (note) text += ' — ' + note;
       return text;
@@ -604,12 +643,13 @@ export function reduceOnboarding(state, action) {
 /**
  * What to save when the customer taps "Save to my money profile".
  * @returns {{entries:Array<{key,value,source:'you_told_me'}>, acceptedSuggestions:string[], dismissedSuggestions:string[]}}
- *   entries in question order (skipped questions omitted; "No loans" is saved as debts: []).
+ *   entries in question order, shaped for POST /api/profile/entries: skipped questions are omitted, each loan and
+ *   each coming-up item is its own entry, and "No loans" saves nothing (the server has no empty-list value).
  */
 export function onboardingResult(state) {
   const answers = state?.answers || {};
-  const entries = ONBOARDING_STEPS.filter(step => Object.prototype.hasOwnProperty.call(answers, step.key))
-    .map(step => ({key: step.key, value: clone(answers[step.key]), source: 'you_told_me'}));
+  const entries = splitProfileEntries(ONBOARDING_STEPS.filter(step => Object.prototype.hasOwnProperty.call(answers, step.key))
+    .map(step => ({key: step.key, value: clone(answers[step.key]), source: 'you_told_me'})));
   const decisions = state?.decisions || {};
   const ids = (state?.suggestions || []).map(item => item?.id).filter(id => typeof id === 'string');
   return {
@@ -699,18 +739,36 @@ function stepControls(step, state, locale, h) {
     default: return '';
   }
 }
-function suggestionCard(item, locale, h, decision) {
+/**
+ * The answers a suggestion offers: its default (save_as) and its alternatives, each {label, key, value}.
+ * Only returned when there is a real choice (two or more distinct answers), e.g. "It is rent" / "It is a mortgage".
+ */
+export function suggestionChoices(item, locale = 'en', helpers = {}) {
+  const alternatives = (Array.isArray(item?.alternatives) ? item.alternatives : []).filter(alt => alt && typeof alt.key === 'string');
+  if (!alternatives.length) return [];
+  const same = (a, b) => a.key === b.key && JSON.stringify(a.value) === JSON.stringify(b.value);
+  const base = item?.save_as && typeof item.save_as.key === 'string' ? item.save_as : null;
+  const list = [];
+  if (base && !alternatives.some(alt => same(alt, base))) list.push({...base, label: describeEntry(base, locale, helpers)});
+  for (const alt of alternatives) list.push({...alt, label: cleanText(alt.label, 80) || describeEntry(alt, locale, helpers)});
+  return list.length > 1 ? list : [];
+}
+function suggestionCard(item, locale, h, decision, {choices = false} = {}) {
   const t = (key, values) => pm(locale, key, values);
-  const value = describeEntry(item, locale, h);
+  // A noticed amount is an estimate: whole euros, as in the question above it ("about €228").
+  const value = describeEntry(item, locale, {...h, money: cents => h.money(Math.round(cents / 100) * 100)});
   const question = cleanText(item?.question, 300) || t('noticed.fallback', {value});
   const evidence = cleanText(item?.evidence?.label, 300);
   const id = esc(item?.id);
+  const options = choices ? suggestionChoices(item, locale, h) : [];
+  const keep = options.length
+    ? options.map((option, index) => '<button type="button" class="profile-button profile-button-keep" data-suggestion-alt="' + id + '" data-alt-index="' + index + '">' + esc(option.label) + '</button>').join('')
+    : '<button type="button" class="profile-button profile-button-keep" data-suggestion-keep="' + id + '" aria-pressed="' + (decision === 'keep' ? 'true' : 'false') + '">' + esc(t('noticed.keep')) + '</button>';
   return '<article class="profile-suggestion" data-suggestion="' + id + '">'
     + '<p class="profile-suggestion-question">' + esc(question) + '</p>'
-    + (cleanText(item?.question, 300) && item?.key !== 'observation' ? '<p class="profile-suggestion-value">' + esc(pm(locale, 'key.' + item.key)) + ': ' + esc(value) + '</p>' : '')
+    + (cleanText(item?.question, 300) && item?.key !== 'observation' && !options.length ? '<p class="profile-suggestion-value">' + esc(pm(locale, 'key.' + item.key)) + ': ' + esc(afterColon(value)) + '</p>' : '')
     + (evidence ? '<p class="profile-suggestion-evidence">' + esc(t('noticed.evidence', {label: evidence})) + '</p>' : '')
-    + '<div class="profile-actions">'
-    + '<button type="button" class="profile-button profile-button-keep" data-suggestion-keep="' + id + '" aria-pressed="' + (decision === 'keep' ? 'true' : 'false') + '">' + esc(t('noticed.keep')) + '</button>'
+    + '<div class="profile-actions">' + keep
     + '<button type="button" class="profile-button" data-suggestion-dismiss="' + id + '" aria-pressed="' + (decision === 'dismiss' ? 'true' : 'false') + '">' + esc(t('noticed.dismiss')) + '</button>'
     + '</div></article>';
 }
@@ -893,7 +951,7 @@ const isActive = entry => entry && entry.active !== false && entry.active !== 0;
 
 /** The active life event that keeps steady mode on (most recent first), or null. */
 export function steadyReasonEntry(profile) {
-  const entries = (profile?.entries || []).filter(entry => isActive(entry) && entry.key === 'life_event' && STEADY_EVENT_TYPES.includes(entry.value?.type));
+  const entries = (profile?.entries || []).filter(entry => isActive(entry) && entry.key === 'life_event' && STEADY_EVENT_TYPES.includes(entry.value?.type) && !entry.value?.ended);
   entries.sort((a, b) => String(b.updated_at || b.created_at || '').localeCompare(String(a.updated_at || a.created_at || '')));
   return entries[0] || null;
 }
@@ -911,14 +969,20 @@ export function groupProfileEntries(entries) {
   }));
 }
 
-function entryCard(entry, locale, h) {
+/** A life event whose steady mode was turned off (it has "ended") and could still be turned back on. */
+function canResumeSteady(entry, profile) {
+  return entry.key === 'life_event' && STEADY_EVENT_TYPES.includes(entry.value?.type) && Boolean(entry.value?.ended) && profile?.mode !== 'steady';
+}
+function entryCard(entry, locale, h, profile = null) {
   const t = (key, values) => pm(locale, key, values);
-  const label = t('key.' + entry.key);
+  // Inside the Taxes section a second "Taxes" heading reads as a duplicate: name the tax year instead.
+  const taxYear = entry.key === 'tax' && Number.isInteger(entry.value?.tax_year) ? entry.value.tax_year : null;
+  const label = taxYear ? t('key.taxYear', {year: taxYear}) : t('key.' + entry.key);
   const id = esc(entry.id);
   const source = PROFILE_SOURCES.includes(entry.source) ? entry.source : 'you_told_me';
   const date = entry.updated_at || entry.created_at;
   const note = entry.key !== 'note' ? cleanText(entry.note, 300) : '';
-  const valueText = describeEntry(entry, locale, h);
+  const valueText = taxYear ? describeEntry({...entry, value: {...entry.value, tax_year: undefined}}, locale, h) : describeEntry(entry, locale, h);
   const valueHtml = entry.key === 'note' ? '<blockquote class="profile-entry-value profile-note">' + esc(valueText) + '</blockquote>' : '<p class="profile-entry-value">' + esc(valueText) + '</p>';
   const extra = entry.key === 'year_review'
     ? '<button type="button" class="profile-button profile-button-primary" data-profile-open-review="' + id + '">' + esc(t('reviews.open')) + '</button>'
@@ -929,8 +993,29 @@ function entryCard(entry, locale, h) {
     + '<p class="profile-entry-meta"><span class="profile-source profile-source-' + esc(source) + '">' + esc(t('source.' + source)) + '</span>'
     + (date ? '<span class="profile-entry-date">' + esc(h.dateLabel(date)) + '</span>' : '') + '</p>'
     + '<div class="profile-actions">' + extra
+    + (canResumeSteady(entry, profile) ? '<button type="button" class="profile-button" data-profile-mode-on="' + id + '">' + esc(t('steady.on')) + '</button>' : '')
     + '<button type="button" class="profile-button profile-button-quiet" data-profile-delete="' + id + '" aria-label="' + esc(t('entry.deleteLabel', {label})) + '">' + esc(t('entry.delete')) + '</button>'
     + '</div></article>';
+}
+
+/** Taxes on Me: one compact row pointing to the tax plan on Goals, then any saved tax details (V5 lane TX). */
+function taxesSection(profile, taxEntries, locale, h) {
+  const plan = (profile?.entries || []).filter(isActive).find(entry => entry.key === 'plan_tax') || null;
+  return '<section class="profile-section profile-taxes" data-profile-section="taxes"><h2>' + esc(pm(locale, 'section.taxes')) + '</h2>'
+    + '<div data-me-tax-slot>' + meTaxRowHTML(plan, null, {locale, money: h.money, dateLabel: h.dateLabel}) + '</div>'
+    + taxEntries.map(entry => entryCard(entry, locale, h, profile)).join('') + '</section>';
+}
+
+/**
+ * Suggestions worth asking now. In steady mode the "is your income steady?" question is hidden (it reads oddly
+ * after a job loss), and once a mortgage plan is on, "is this rent or a mortgage?" has been answered.
+ */
+export function visibleSuggestions(profile, suggestions) {
+  const entries = (profile?.entries || []).filter(isActive);
+  const hasMortgagePlan = entries.some(entry => entry.key === 'plan_mortgage');
+  return (Array.isArray(suggestions) ? suggestions : []).filter(item => item && typeof item.id === 'string')
+    .filter(item => !(profile?.mode === 'steady' && (item.kind === 'income_stability' || item.key === 'income_stability')))
+    .filter(item => !(hasMortgagePlan && item.kind === 'housing'));
 }
 
 /**
@@ -938,8 +1023,9 @@ function entryCard(entry, locale, h) {
  * @param {{entries:Array, by_key?:object, mode?:'normal'|'steady'}} profile  GET profile response
  * @param {Array<{id,key,value,question,evidence:{label},source}>} suggestions  pending suggestions
  * @param {string} locale  'en' | 'fi' | 'sv'
- * @param {{money?:(cents)=>string, dateLabel?:(iso)=>string, monthLabel?:('YYYY-MM')=>string}} helpers
- * @returns {string} HTML. Data attributes: data-profile-mode-off="<life event id or ''>", data-profile-edit="<id>",
+ * @param {{money?:(cents)=>string, dateLabel?:(iso)=>string, monthLabel?:('YYYY-MM')=>string, notice?:{text, undo?:boolean}}} helpers
+ *   notice: a status line shown under the header (e.g. "Steady mode is off" with an Undo button: data-profile-undo).
+ * @returns {string} HTML. Data attributes: data-profile-mode-off="<life event id or ''>", data-profile-mode-on="<id>", data-profile-edit="<id>",
  *   data-profile-delete="<id>", data-profile-open-tax, data-profile-open-review="<id>", data-suggestion-keep="<id>",
  *   data-suggestion-dismiss="<id>", data-profile-add, data-profile-onboarding, data-profile-forget.
  */
@@ -947,7 +1033,7 @@ export function renderProfilePage(profile, suggestions = [], locale = 'en', help
   const h = helpersFor(locale, helpers);
   const t = (key, values) => pm(locale, key, values);
   const entries = (profile?.entries || []).filter(isActive);
-  const pending = (Array.isArray(suggestions) ? suggestions : []).filter(item => item && typeof item.id === 'string');
+  const pending = visibleSuggestions(profile, suggestions);
   let html = '<div class="profile-page"><header class="profile-header"><h1>' + esc(t('page.title')) + '</h1><p class="subtle">' + esc(t('page.subtitle')) + '</p></header>';
   if (profile?.mode === 'steady') {
     const reason = steadyReasonEntry(profile);
@@ -955,27 +1041,25 @@ export function renderProfilePage(profile, suggestions = [], locale = 'en', help
     html += '<section class="profile-banner" role="status" data-profile-banner="steady"><h2>' + esc(t('steady.title')) + '</h2><p>' + esc(text) + '</p><p class="small-text">' + esc(t('steady.help')) + '</p>'
       + '<button type="button" class="profile-button" data-profile-mode-off="' + esc(reason?.id || '') + '">' + esc(t('steady.off')) + '</button></section>';
   }
+  if (helpers.notice) {
+    html += '<section class="profile-banner profile-notice" role="status" data-profile-notice><p>' + esc(helpers.notice.text) + '</p>'
+      + (helpers.notice.undo ? '<button type="button" class="profile-button" data-profile-undo>' + esc(t('steady.undo')) + '</button>' : '') + '</section>';
+  }
   if (!entries.length) {
-    html += '<section class="profile-section profile-empty" data-profile-empty><h2>' + esc(t('empty.title')) + '</h2><p>' + esc(t('empty.body')) + '</p>'
+    html += '<section class="profile-section profile-empty" data-profile-empty>' + emptyArt('person') + '<h2>' + esc(t(pending.length ? 'empty.titleNoticed' : 'empty.title')) + '</h2><p>' + esc(t('empty.body')) + '</p>'
       + '<button type="button" class="primary-button" data-profile-onboarding>' + esc(t('empty.start')) + '</button></section>'
-      + '<section class="profile-section" data-profile-section="taxes"><h2>' + esc(t('section.taxes')) + '</h2><p class="subtle">' + esc(t('taxes.help')) + '</p>'
-      + '<button type="button" class="secondary-button" data-profile-open-tax>' + esc(t('taxes.open')) + '</button></section>';
+      + taxesSection(profile, [], locale, h);
   } else {
     for (const section of groupProfileEntries(entries)) {
-      if (section.id === 'taxes') {
-        html += '<section class="profile-section" data-profile-section="taxes"><h2>' + esc(t('section.taxes')) + '</h2>'
-          + (section.entries.length ? section.entries.map(entry => entryCard(entry, locale, h)).join('') : '<p class="subtle">' + esc(t('taxes.help')) + '</p>')
-          + '<button type="button" class="secondary-button" data-profile-open-tax>' + esc(t('taxes.open')) + '</button></section>';
-        continue;
-      }
+      if (section.id === 'taxes') { html += taxesSection(profile, section.entries, locale, h); continue; }
       if (!section.entries.length) continue;
       html += '<section class="profile-section" data-profile-section="' + section.id + '"><h2>' + esc(t('section.' + section.id)) + '</h2>'
-        + section.entries.map(entry => entryCard(entry, locale, h)).join('') + '</section>';
+        + section.entries.map(entry => entryCard(entry, locale, h, profile)).join('') + '</section>';
     }
   }
   if (pending.length) {
     html += '<section class="profile-section profile-noticed" data-profile-section="noticed"><h2>' + esc(t('noticed.title')) + '</h2><p class="subtle">' + esc(t('noticed.help')) + '</p>'
-      + '<div class="profile-suggestions">' + pending.map(item => suggestionCard(item, locale, h, null)).join('') + '</div></section>';
+      + '<div class="profile-suggestions">' + pending.map(item => suggestionCard(item, locale, h, null, {choices: true})).join('') + '</div></section>';
   }
   html += '<section class="profile-footer-actions"><button type="button" class="primary-button" data-profile-add>' + esc(t('actions.add')) + '</button>';
   if (entries.length) html += '<button type="button" class="secondary-button" data-profile-onboarding>' + esc(t('actions.onboarding')) + '</button>';
@@ -994,15 +1078,16 @@ export function renderAddMenu(locale = 'en') {
 
 /**
  * Wire the Profile page (event delegation). Calls onAction with one of:
- *   {type:'mode_off', id}, {type:'edit', id}, {type:'delete', id}, {type:'open_tax'}, {type:'open_review', id},
+ *   {type:'mode_off', id}, {type:'mode_on', id}, {type:'undo'}, {type:'suggestion_alt', id, index}, {type:'edit', id}, {type:'delete', id}, {type:'open_tax'}, {type:'open_review', id},
  *   {type:'suggestion_keep', id}, {type:'suggestion_dismiss', id}, {type:'add'}, {type:'add_key', key},
  *   {type:'onboarding'}, {type:'forget'}.
  * @returns {() => void} detach function
  */
 export function attachProfilePage(root, {onAction = () => {}} = {}) {
   const map = [
-    ['data-profile-mode-off', 'mode_off', 'id'], ['data-profile-edit', 'edit', 'id'], ['data-profile-delete', 'delete', 'id'],
-    ['data-profile-open-tax', 'open_tax'], ['data-profile-open-review', 'open_review', 'id'],
+    ['data-profile-mode-off', 'mode_off', 'id'], ['data-profile-mode-on', 'mode_on', 'id'], ['data-profile-undo', 'undo'],
+    ['data-profile-edit', 'edit', 'id'], ['data-profile-delete', 'delete', 'id'], ['data-suggestion-alt', 'suggestion_alt', 'id'],
+    ['data-profile-open-tax-plan', 'open_tax_plan'], ['data-profile-open-tax', 'open_tax'], ['data-profile-open-review', 'open_review', 'id'],
     ['data-suggestion-keep', 'suggestion_keep', 'id'], ['data-suggestion-dismiss', 'suggestion_dismiss', 'id'],
     ['data-profile-add-key', 'add_key', 'key'], ['data-profile-add', 'add'], ['data-profile-onboarding', 'onboarding'], ['data-profile-forget', 'forget'],
   ];
@@ -1013,6 +1098,7 @@ export function attachProfilePage(root, {onAction = () => {}} = {}) {
       if (target.hasAttribute(attr)) {
         const action = {type};
         if (field) action[field] = target.getAttribute(attr);
+        if (target.hasAttribute('data-alt-index')) action.index = Number(target.getAttribute('data-alt-index'));
         onAction(action);
         return;
       }
@@ -1033,7 +1119,7 @@ const yesNo = locale => [{value: 'yes', label: pm(locale, 'common.yes')}, {value
  * @returns {{id:string, kind:'profile', key:string, entryId:string|null, title:string, saveLabel:string,
  *   fields:Array<{name,label,type:'text'|'amount'|'date'|'month'|'percent'|'select'|'number',value,options?,required?,min?,max?,maxLength?}>}}
  *   Amount field values are integer cents (or '' when empty); percent/number values are numbers (or '').
- *   List keys (debts, upcoming) use indexed fields (type_0, monthly_0, ...) plus one blank row to add another.
+ *   Loans (debts) and Coming up (upcoming) are one item per entry, exactly as the server stores them.
  */
 export function draftSpecForEntry(entryOrKey, locale = 'en') {
   const entry = typeof entryOrKey === 'string' ? null : entryOrKey;
@@ -1060,32 +1146,31 @@ export function draftSpecForEntry(entryOrKey, locale = 'en') {
       {name: 'monthly', label: t('field.monthly'), type: 'amount', value: cents(value?.monthly_cents)},
     ]; break;
     case 'debts': {
-      const items = Array.isArray(value) ? value : [];
-      const rows = [...items, null];
-      fields = rows.flatMap((item, i) => [
-        {name: 'type_' + i, label: t('field.loanType', {n: i + 1}), type: 'select', value: item?.type || '', options: [{value: '', label: t('common.blank')}, ...selectOptions(DEBT_TYPES, locale, 'debt.')], required: i === 0 && !items.length},
-        {name: 'monthly_' + i, label: t('field.loanMonthly', {n: i + 1}), type: 'amount', value: cents(item?.monthly_payment_cents)},
-        {name: 'remaining_' + i, label: t('field.loanRemaining', {n: i + 1}), type: 'amount', value: cents(item?.remaining_cents)},
-      ]);
+      // One loan per entry, as the server stores it; add another loan with "Add something" again.
+      const item = asItems(value)[0] || null;
+      fields = [
+        {name: 'type', label: t('field.loanType'), type: 'select', value: item?.type || '', options: selectOptions(DEBT_TYPES, locale, 'debt.'), required: true},
+        {name: 'monthly', label: t('field.loanMonthly'), type: 'amount', value: cents(item?.monthly_payment_cents), required: true},
+        {name: 'remaining', label: t('field.loanRemaining'), type: 'amount', value: cents(item?.remaining_cents)},
+      ];
       break;
     }
     case 'upcoming': {
-      const items = Array.isArray(value) ? value : [];
-      const rows = [...items, null];
-      fields = rows.flatMap((item, i) => [
-        {name: 'what_' + i, label: t('field.what', {n: i + 1}), type: 'text', value: item?.what || '', maxLength: 200, required: i === 0 && !items.length},
-        {name: 'month_' + i, label: t('field.when', {n: i + 1}), type: 'month', value: item?.month || ''},
-        {name: 'amount_' + i, label: t('field.cost', {n: i + 1}), type: 'amount', value: cents(item?.amount_cents)},
-      ]);
+      const item = asItems(value)[0] || null;
+      fields = [
+        {name: 'what', label: t('field.what'), type: 'text', value: item?.what || '', max: UPCOMING_MAX, maxLength: UPCOMING_MAX, required: true},
+        {name: 'month', label: t('field.when'), type: 'month', value: item?.month || '', required: true},
+        {name: 'amount', label: t('field.cost'), type: 'amount', value: cents(item?.amount_cents)},
+      ];
       break;
     }
     case 'life_event': fields = [
       {name: 'type', label: t('field.eventType'), type: 'select', value: value?.type || '', options: selectOptions(LIFE_EVENT_TYPES, locale, 'event.'), required: true},
-      {name: 'since', label: t('field.since'), type: 'date', value: value?.since || '', required: true},
+      {name: 'since', label: t('field.since'), type: 'month', value: isMonth(value?.since) ? value.since : isDate(value?.since) ? value.since.slice(0, 7) : '', required: true},
       {name: 'note', label: t('field.eventNote'), type: 'text', value: value?.note || '', maxLength: 200},
     ]; break;
     case 'protected_categories': fields = [{name: 'value', label: t('field.protected'), type: 'text', value: (Array.isArray(value) ? value : []).filter(item => item !== 'none').join(', '), maxLength: 300}]; break;
-    case 'note': fields = [{name: 'value', label: t('field.note'), type: 'text', value: typeof value === 'string' ? value : value?.text || '', maxLength: NOTE_MAX, required: true}]; break;
+    case 'note': fields = [{name: 'value', label: t('field.note'), type: 'text', value: typeof value === 'string' ? value : value?.text || '', max: NOTE_MAX, maxLength: NOTE_MAX, required: true}]; break;
     case 'tax': {
       const v = isObject(value) ? value : {};
       const pct = bp => Number.isFinite(bp) ? bp / 100 : '';
@@ -1170,33 +1255,21 @@ export function draftValueToEntry(key, values = {}, base = undefined) {
       break;
     }
     case 'debts': {
-      value = [];
-      for (const index of indexes(v, 'type_')) {
-        const type = v['type_' + index];
-        const monthly = amount('monthly_' + index);
-        const remaining = amount('remaining_' + index);
-        if (!type) { if (monthly !== undefined) fail('type_' + index, 'error.needChoice'); continue; }
-        if (!DEBT_TYPES.includes(type)) { fail('type_' + index, 'error.needChoice'); continue; }
-        if (monthly === undefined) { if (!errors['monthly_' + index]) fail('monthly_' + index, 'error.needAmount'); continue; }
-        const row = {type, monthly_payment_cents: monthly};
-        if (remaining !== undefined) row.remaining_cents = remaining;
-        value.push(row);
-      }
+      const type = choice(DEBT_TYPES, 'type');
+      const monthly = amount('monthly', true);
+      const remaining = amount('remaining');
+      value = {type, monthly_payment_cents: monthly};
+      if (remaining !== undefined) value.remaining_cents = remaining;
       break;
     }
     case 'upcoming': {
-      value = [];
-      for (const index of indexes(v, 'what_')) {
-        const what = cleanText(v['what_' + index], 200);
-        const month = v['month_' + index];
-        const c = amount('amount_' + index);
-        if (!what) { if (month || c !== undefined) fail('what_' + index, 'error.needText'); continue; }
-        if (!isMonth(month)) { fail('month_' + index, 'error.needMonth'); continue; }
-        const row = {what, month};
-        if (c !== undefined) row.amount_cents = c;
-        value.push(row);
-      }
-      if (!value.length && !Object.keys(errors).length) fail('what_0', 'error.needText');
+      const what = cleanText(v.what, UPCOMING_MAX);
+      if (!what) fail('what', 'error.needText');
+      else if (String(v.what).trim().length > UPCOMING_MAX) fail('what', 'error.tooLong');
+      if (!isMonth(v.month)) fail('month', 'error.needMonth');
+      const c = amount('amount');
+      value = {what, month: v.month};
+      if (c !== undefined) value.amount_cents = c;
       break;
     }
     case 'life_event': {
@@ -1206,6 +1279,9 @@ export function draftValueToEntry(key, values = {}, base = undefined) {
       value = {type, since};
       const note = cleanText(v.note, 200);
       if (note) value.note = note;
+      // Keep "ended" (steady mode turned off) unless the new start month is after it.
+      const ended = isObject(base) ? base.ended : undefined;
+      if ((isDate(ended) || isMonth(ended)) && String(ended).slice(0, 7) >= since.slice(0, 7)) value.ended = ended;
       break;
     }
     case 'protected_categories':
@@ -1249,8 +1325,4 @@ export function draftValueToEntry(key, values = {}, base = undefined) {
       fail('key', 'error.needChoice');
   }
   return {key, value: Object.keys(errors).length ? null : value, errors};
-}
-function indexes(values, prefix) {
-  return Object.keys(values).filter(name => name.startsWith(prefix) && /^\d+$/.test(name.slice(prefix.length)))
-    .map(name => Number(name.slice(prefix.length))).sort((a, b) => a - b);
 }

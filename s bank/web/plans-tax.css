@@ -1,0 +1,38 @@
+/* Tax plan (V5 lane TX): off card with the next official tax date, the labelled example, and the compact Me row. */
+.plan-pill--off { color: var(--muted); background: var(--wash); }
+.tax-plan .plan-benefit { margin-bottom: 12px; }
+.tax-next { display: flex; gap: 12px; align-items: flex-start; margin: 0 0 12px; padding: 12px 14px; border-radius: 14px; background: var(--wash); }
+.tax-next svg.tax-next__icon { flex: 0 0 22px; width: 22px; height: 22px; max-width: 22px; color: var(--green); margin-top: 1px; }
+.tax-next > div { flex: 1 1 auto; min-width: 0; }
+.tax-next__label { margin: 0 0 2px; font-size: 12px; font-weight: 650; letter-spacing: .02em; text-transform: uppercase; color: var(--muted); }
+.tax-next__text { margin: 0; font-size: 15px; line-height: 1.4; font-weight: 600; color: var(--deep-green); }
+.tax-plan__actions { align-items: center; gap: 4px 16px; }
+.tax-plan__actions .secondary-button { margin: 4px 0 10px; }
+.tax-plan__actions .text-button { min-height: 44px; }
+
+.tax-example { margin: 0; padding: 0; border: 0; background: none; }
+.tax-example__intro { margin: 4px 0 4px; font-size: 14px; color: var(--muted); }
+.tax-example__inputs .plan-row { padding: 6px 0; font-size: 13.5px; }
+.tax-example__result { margin: 8px 0 2px; padding: 4px 0 0; border-top: 1px solid var(--line); }
+.tax-example__result .plan-sub { margin-bottom: 4px; }
+.tax-example .plan-note { margin: 4px 0 6px; }
+.tax-example h4 { margin: 12px 0 2px; }
+.tax-example .small-text { margin: 10px 0 6px; }
+.tax-plan--flash { box-shadow: 0 0 0 3px var(--mint), var(--shadow); transition: box-shadow .4s; }
+.tax-plan .plan-row dd { white-space: nowrap; }
+.tax-plan .plan-row dt { min-width: 0; }
+
+/* Me: one compact row instead of a second tax UI */
+.me-tax-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; padding: 4px 0 8px; }
+.me-tax-row__text { flex: 1 1 220px; min-width: 0; }
+.me-tax-row__title { margin: 0 0 4px; display: flex; align-items: center; gap: 8px; }
+.me-tax-row__line { margin: 0; font-size: 14px; line-height: 1.4; }
+.me-tax-row__next { margin: 4px 0 0; font-size: 13px; line-height: 1.4; color: var(--muted); }
+.me-tax-row__actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* Wide screens: the open example spans both plan columns and reads in two columns */
+@media (min-width: 760px) {
+  .plan-list > .tax-plan--example { grid-column: 1 / -1; }
+  .tax-example__cols { display: grid; grid-template-columns: 1fr 1fr; gap: 0 28px; align-items: start; }
+  .tax-example__col > h4:first-child { margin-top: 4px; }
+}

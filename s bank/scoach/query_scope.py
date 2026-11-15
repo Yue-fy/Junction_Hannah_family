@@ -496,8 +496,8 @@ def resolve_statistics(message, context):
             and not re.search(r'\b(?:how much|how many|total|average|did i|have i)\b', text)):
         return clarify(context, 'coaching_support',
                        'We can take this one step at a time. What feels most urgent: upcoming bills, day-to-day spending, or building a small buffer?',
-                       'Voimme edetä yksi askel kerrallaan. Mikä tuntuu tärkeimmältä: tulevat laskut, arjen menot vai pieni puskuri?',
-                       'Vi kan ta ett steg i taget. Vad känns mest angeläget: kommande räkningar, vardagsutgifter eller en liten buffert?')
+                       'Voimme edetä yksi askel kerrallaan. Mikä tuntuu tärkeimmältä: tulevat laskut, arjen menot vai pieni turvatyyny?',
+                       'Vi kan ta ett steg i taget. Vad känns mest angeläget: kommande räkningar, vardagsutgifter eller en liten säkerhetsmarginal?')
     threshold = re.search(r'\b(?:over|under|above|below|more than|less than|at least|at most|yli|alle|vähintään|enintään|enemmän kuin|vähemmän kuin|över|mer än|mindre än|minst|högst)\s*(?:[€$£]|eur\s*)?\d', text)
     if threshold or any(term in text for term in (
         'after refunds', 'net of refunds', 'excluding', 'except ', 'without ', 'not including',

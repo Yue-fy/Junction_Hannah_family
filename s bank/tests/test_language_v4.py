@@ -89,7 +89,7 @@ class ThingsINoticedTests(unittest.TestCase):
         self.assertEqual([s['id'] for s in en], [s['id'] for s in fi])
         self.assertEqual([s['value'] for s in en], [s['value'] for s in fi])
         salary = next(s for s in en if s['kind'] == 'salary')
-        self.assertEqual(salary['question'], 'Your salary arrives on different days each month and is about €2,365 after tax. Is that right?')
+        self.assertEqual(salary['question'], 'Your salary arrives on different days each month and is about €2,365 a month after tax (a typical month over the last 6 months). Is that right?')
         self.assertEqual(salary['evidence']['label'], 'Salary payments in the last 6 complete months')
 
     def test_confirmed_note_is_saved_in_the_customers_language(self):

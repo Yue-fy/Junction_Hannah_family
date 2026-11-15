@@ -4,14 +4,62 @@ from decimal import Decimal, DecimalException, ROUND_HALF_UP
 
 _NUMBER = re.compile(r'(?<![\w])[-+]?(?:(?:€|EUR)\s*)?(?:\d{1,3}(?:[ ,]\d{3})+(?:[.,]\d+)?|\d+(?:[.,]\d+)?)(?:[eE][+-]?\d+)?[A-Za-z]*(?:\s+(?:thousand|million|billion|tuhatta|tuhat|miljoonaa|miljoona|tusen|miljoner|miljon)\b)?', re.I)
 _UNIT = re.compile(r'^\s*(?:€|%|EUR\b|euro\w*|percent\w*|prosent\w*|procent\w*)', re.I)
-_MONTH = r'(?:january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec|tammik\w*|helmik\w*|maalisk\w*|huhtik\w*|toukok\w*|kesäk\w*|heinäk\w*|elok\w*|syysk\w*|lokak\w*|marrask\w*|jouluk\w*|januari|februari|mars|maj|juni|juli|augusti|oktober)'
+_MONTH = r'(?:january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec|tammik\w*|helmik\w*|maalisk\w*|huhtik\w*|toukok\w*|kesäk\w*|heinäk\w*|elok\w*|syysk\w*|lokak\w*|marrask\w*|jouluk\w*|januari|februari|mars|maj|juni|juli|augusti|oktober|okt)'
 _APPROX = re.compile(r'(?:about|around|roughly|almost|nearly|over|under|more than|less than|approximately|~|noin|lähes|melkein|yli|alle|ungefär|nästan|cirka|drygt|knappt|över|under)\s*(?:€|EUR\s*)?$', re.I)
 _MAGNITUDES = {'k': 1000, 'thousand': 1000, 'tuhat': 1000, 'tuhatta': 1000, 'tusen': 1000,
                'm': 1000000, 'million': 1000000, 'miljoona': 1000000, 'miljoonaa': 1000000, 'miljon': 1000000, 'miljoner': 1000000,
                'b': 1000000000, 'billion': 1000000000}
 _UNTRUSTED_TEXT = {'name', 'label', 'caption', 'title', 'basis', 'description', 'definition', 'error',
                    'proposal', 'params', 'action', 'suggestions', 'formula', 'assumptions', 'limitations',
-                   'rounding', 'category', 'mcc_code', 'merchant_id'}
+                   'rounding', 'category', 'mcc_code', 'merchant_id', 'category_names', 'answer_still_needed'}
+
+
+# Finnish/Nordic numeric dates: "15.10.", "15.10.2026" (a bare "15.10" is a decimal, not a date).
+_NUMERIC_DATE = re.compile(r'(?<![\w.,€])(\d{1,2})\.(\d{1,2})\.(?:(\d{4})(?!\d|[.,]\d))?(?!\d|,\d)')
+_ISO_DATE = re.compile(r'(\d{4})-(\d{2})-(\d{2})')
+
+
+def _clean(text):
+    return str(text).replace('\u00a0', ' ').replace('\u202f', ' ').replace('−', '-')
+
+
+def numeric_dates(text):
+    """Yield (match, day, month, year|None) for d.m. / d.m.yyyy dates that are real calendar dates.
+
+    A euro amount ("15.10 €", "€15.10.") or a percentage is never read as a date.
+    """
+    text = _clean(text)
+    for match in _NUMERIC_DATE.finditer(text):
+        day, month = int(match.group(1)), int(match.group(2))
+        year = int(match.group(3)) if match.group(3) else None
+        if not (1 <= day <= 31 and 1 <= month <= 12):
+            continue
+        if re.match(r'\s*(?:€|%|EUR\b|euro)', text[match.end():], re.I) or re.search(r'(?:€|\bEUR)\s*$', text[:match.start()], re.I):
+            continue
+        yield match, day, month, year
+
+
+def _known_dates(results, message, history, scope):
+    """(day, month, year) of every ISO date in tool results or scope, plus d.m. dates the customer wrote."""
+    known = set()
+
+    def visit(value):
+        if isinstance(value, dict):
+            for item in value.values():
+                visit(item)
+        elif isinstance(value, (list, tuple)):
+            for item in value:
+                visit(item)
+        elif isinstance(value, str):
+            for year, month, day in _ISO_DATE.findall(value):
+                known.add((int(day), int(month), int(year)))
+    visit(results)
+    visit(scope or {})
+    for text in [message] + [turn['text'] for turn in history]:
+        visit(str(text))
+        for _, day, month, year in numeric_dates(text):
+            known.add((day, month, year))
+    return known
 
 
 def numeric_tokens(text):
@@ -108,6 +156,18 @@ def _rounded_match(value, allowed):
 def unverified_numbers(text, results=(), message='', history=(), scope=None):
     allowed = allowed_numbers(results, message, history, scope)
     violations = []
+    # A numeric date ("15.10.") is verified like a date, not read as the decimal 15.10: it must be a
+    # date from a tool result or the customer's own words. Then it is blanked out of the number scan.
+    text = _clean(text)
+    dates = list(numeric_dates(text))
+    if dates:
+        known = _known_dates(results, message, history, scope)
+        for match, day, month, year in reversed(dates):
+            if not any(d == day and m == month and (year is None or y in (None, year)) for d, m, y in known):
+                token = match.group()
+                if token not in violations:
+                    violations.insert(0, token)
+            text = text[:match.start()] + ' ' * (len(match.group()) - 1) + '.' + text[match.end():]
     for (value, unit, is_day), approximate in approximate_tokens(text):
         if not value.is_finite() or abs(value) >= Decimal('1e100'):
             if 'unsupported numeric notation' not in violations:

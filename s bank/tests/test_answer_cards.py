@@ -78,13 +78,14 @@ assert.ok(!old.includes('data-catalogue-question'),'only the latest turn offers 
 
     def test_card_localizes_ui_labels_and_shows_what_the_customer_told_us(self):
         run_modules(self, r'''
-const fi=cards.renderCard({...CARD,profile_note:'olet perhevapaalla'},{locale:'fi',turnId:'1'});
+const fi=cards.renderCard({...CARD,profile_note:'Käytin kertomaasi: olet perhevapaalla.'},{locale:'fi',turnId:'1'});
 assert.ok(fi.includes('<option value="20" selected>20 %</option>'),'FI percent format');
-assert.ok(fi.includes('Käytän sitä, mitä kerroit: olet perhevapaalla'));
+// V5 fix (lane CO): the server's profile_note is a full sentence and is shown once, with no second prefix.
+assert.ok(fi.includes('>Käytin kertomaasi: olet perhevapaalla.</p>'));assert.ok(!fi.includes('Käytän sitä'));
 const sv=cards.renderCard({...CARD,using_profile:['du har två barn','lön den 15:e']},{locale:'sv'});
 assert.ok(sv.includes('Jag använder det du berättade: du har två barn · lön den 15:e'));
-const en=cards.renderCard({...CARD,profile_note:'you are between jobs'},{locale:'en'});
-assert.ok(en.includes('Using what you told me: you are between jobs'));
+const en=cards.renderCard({...CARD,profile_note:'Using what you told me: steady mode (lost your job).'},{locale:'en'});
+assert.equal((en.match(/Using what you told me/g)||[]).length,1,'the prefix appears once');
 assert.ok(!cards.renderCard(CARD,{locale:'en'}).includes('answer-card__profile'),'no profile line unless the server sends one');
 const amount=cards.renderCard({...CARD,pickers:[{name:'target',kind:'amount',value:200000},{name:'by',kind:'date',value:'2027-06-30'},{name:'month',kind:'month',value:'2026-09',options:['2026-08','2026-09']}]},{locale:'en',turnId:'2',monthLabel:m=>'M'+m});
 assert.ok(amount.includes('type="number"')&&amount.includes('value="2000"'),'amount picker shows euros');
@@ -98,9 +99,14 @@ assert.equal(cards.renderCard(null),'');assert.equal(cards.renderCard({lines:['x
 const bare=cards.renderCard({title:'Only a title',headline:{label:'',value_text:''},chart:{kind:'bars',data:'nonsense'},pickers:[{name:'x',kind:'weird'}],evidence:[{label:'no query'}],followups:[{id:'',text:'x'}]});
 assert.ok(bare.includes('Only a title'));
 for(const part of ['<figure','<select','data-card-evidence','data-catalogue-question','answer-card__headline'])assert.ok(!bare.includes(part),part);
-assert.ok(cards.chartHTML({kind:'progress',data:{current_cents:50000,target_cents:200000}}).includes('<svg'));
+assert.ok(cards.chartHTML({kind:'progress',data:{current_cents:50000,target_cents:200000}}).includes('class="goal-progress"'),'progress is the HTML goal bar (V5 lane GL)');
 assert.ok(cards.chartHTML({kind:'trend',data:{series:[{label:'Aug',value_cents:1},{label:'Sep',value_cents:2}]}}).includes('<svg'));
-assert.ok(cards.chartHTML({kind:'ring',data:[{label:'Groceries',category:'Groceries',value_cents:30000}]}).includes('<svg'));
+// V5 fix (lane CO): parts of a whole are one labelled bar with a legend; a single part (e.g. all held back, €0 free) shows no chart.
+assert.equal(cards.chartHTML({kind:'ring',data:[{label:'Held back',value_cents:263628},{label:'For daily life',value_cents:0}]}),'');
+const split=cards.chartHTML({kind:'ring',data:[{label:'Held back',value_cents:123296,value_text:'€1,232.96'},{label:'For daily life until payday',value_cents:57711,value_text:'€577.11'},{label:'Could be saved',value_cents:291351,value_text:'€2,913.51'}]});
+assert.ok(split.includes('card-split__bar')&&!split.includes('<svg'));
+for(const text of ['Held back','€1,232.96','For daily life until payday','€577.11','Could be saved','€2,913.51'])assert.ok(split.includes(text),text);
+assert.ok(cards.renderCard({...CARD,lines:['Bills and must-pays used']}).includes('must\u2011pays'),'short hyphenated words do not break');
 assert.equal(cards.chartHTML({kind:'progress',data:{current_cents:5}}),'');
 assert.deepEqual(cards.cardSummary(CARD).slice(0,2),['If you cut Restaurants','€45.14 a month, from €225.70 spent in September']);
 ''')
@@ -110,18 +116,19 @@ assert.deepEqual(cards.cardSummary(CARD).slice(0,2),['If you cut Restaurants','�
 const suggestions=[{id:'room.payday',text:'What can I safely spend until payday?'},{id:'room.buffer',text:'How big should my buffer be?'},{id:'me.life',text:'Tell the coach about a life change'},{id:'x',text:'Fourth'}];
 const turn={id:'4',message:'I lost my job',response:{source:'catalogue',fallback_reason:'model_unavailable',supportive:'I’m sorry, that is a lot to deal with.',suggestions,cards:[]}};
 const html=cards.catalogueTurnHTML(turn,{locale:'en',latest:true,retryLabel:'Try again with the AI coach'});
-assert.ok(html.includes('Quick answers mode – the AI coach isn’t available right now'));
+assert.ok(html.includes('Quick answers – here are the closest questions I can answer exactly.'));
 assert.ok(html.includes('I’m sorry, that is a lot to deal with.'));
 assert.equal((html.match(/data-catalogue-question=/g)||[]).length,3);
 assert.ok(html.includes('data-retry-agent="4">Try again with the AI coach ↻'));
 assert.ok(!cards.catalogueTurnHTML(turn,{locale:'en',latest:false,retryLabel:'Retry'}).includes('data-retry-agent'));
-assert.ok(cards.catalogueTurnHTML(turn,{locale:'fi',latest:true}).includes('Pikavastaukset käytössä'));
-assert.ok(cards.catalogueTurnHTML(turn,{locale:'sv',latest:true}).includes('Snabbsvar används'));
-assert.ok(cards.catalogueTurnHTML(turn,{locale:'fi',latest:true}).includes('Lähimmät kysymykset'));
+assert.ok(cards.catalogueTurnHTML(turn,{locale:'fi',latest:true}).includes('Pikavastaukset – tässä lähimmät kysymykset'));
+assert.ok(cards.catalogueTurnHTML(turn,{locale:'sv',latest:true}).includes('Snabbsvar – här är de närmaste frågorna'));
+assert.ok(!cards.catalogueTurnHTML({...turn,response:{...turn.response,fallback_reason:'not_configured'}},{locale:'en',latest:true,retryLabel:'Retry'}).includes('data-retry-agent'),'no retry when no AI is configured');
 for(const locale of ['en','fi','sv'])assert.ok(cards.introChipHTML(locale).includes('data-open-intro')&&cards.introChipHTML(locale).includes('data-dismiss-intro'));
 assert.ok(cards.introChipHTML('fi').includes('Kerro itsestäsi (1 min)'));
 const withCard=cards.catalogueTurnHTML({id:'5',message:'where did my money go',response:{source:'catalogue',suggestions:[],cards:[CARD]}},{locale:'en',latest:true});
-assert.ok(withCard.includes('Quick answers mode')&&withCard.includes('€45.14'));
+// V5 fix (lane CO): a confident match is answered directly: the card, no notice, no chips above it.
+assert.ok(!withCard.includes('quick-notice')&&!withCard.includes('Quick answers')&&withCard.includes('€45.14'));
 ''')
 
     def test_catalogue_normalizes_and_drives_the_topic_menu(self):
@@ -201,7 +208,7 @@ assert.equal(calls.filter(c=>c.path==='/api/agent'||c.path==='/api/coach').lengt
 const html=get('coach-response').innerHTML;
 assert.ok(html.includes('What if I cut a category?')&&html.includes('€45.14')&&html.includes('If you cut Restaurants'));
 assert.equal(app.state.conversation.at(-1).response.source,'catalogue_card');
-assert.ok(get('coach-empty').hidden);assert.ok(get('coach-mode').textContent.includes('Quick answers'),get('coach-mode').textContent);
+assert.ok(get('coach-empty').hidden);assert.equal(get('coach-mode').textContent,'Numbers come from your account. Nothing changes without your OK.','the footer never changes');
 // A picker re-asks the same question with the changed parameter and replaces the card in place.
 const turn=app.state.conversation.at(-1);calls.length=0;
 const picker=new Element();picker.dataset={cardPicker:'percent',cardKind:'percent',cardTurn:turn.id,cardIndex:'0'};picker.value='30';
@@ -228,7 +235,7 @@ agentReply={source:'catalogue',fallback_reason:'model_unavailable',supportive:'I
 await app.askCoach('I lost my job');
 assert.equal(calls.filter(c=>c.path==='/api/coach').length,0,'the old regex coach is not used');
 const html=get('coach-response').innerHTML;
-assert.ok(html.includes('Quick answers mode'));assert.ok(html.includes('I’m sorry. Let’s look at what is coming up first.'));
+assert.ok(html.includes('Quick answers – here are the closest'));assert.ok(html.includes('I’m sorry. Let’s look at what is coming up first.'));
 assert.ok(html.includes('data-catalogue-question="me.life"'));assert.ok(html.includes('data-retry-agent="'));
 assert.ok(!html.includes('Did this help?'));
 // Retrying with the AI replaces the quick answer with the AI's answer and its cards.
@@ -236,7 +243,7 @@ agentReply={source:'agent',answer:['Here is what you can spend.'],cards:[CARD],s
 const turn=app.state.conversation.at(-1);await click({retryAgent:turn.id});
 assert.equal(app.state.conversation.length,1);
 const after=get('coach-response').innerHTML;
-assert.ok(after.includes('Here is what you can spend.')&&after.includes('€45.14')&&!after.includes('Quick answers mode'));
+assert.ok(after.includes('Here is what you can spend.')&&after.includes('€45.14')&&!after.includes('quick-notice'));
 ''')
 
     def test_finnish_catalogue_and_fallback_when_catalogue_is_missing(self):
@@ -246,7 +253,7 @@ assert.equal(calls.find(c=>c.path==='/api/catalogue').query.locale,'fi');
 assert.ok(get('coach-intro-chip').innerHTML.includes('Kerro itsestäsi'));
 agentReply={source:'catalogue',fallback_reason:'model_unavailable',supportive:null,suggestions:[],card:null};
 await app.askCoach('mitä kuuluu');
-assert.ok(get('coach-response').innerHTML.includes('Pikavastaukset käytössä'));
+assert.ok(get('coach-response').innerHTML.includes('Valitse kysymys aiheista'),'no suggestions: one line pointing to the topics');
 // Without lane C's endpoints the built-in starters stay and a catalogue tap still gets an answer.
 catalogueUp=false;agentReply=null;const fresh=new Element();fresh.attributes={'data-new-conversation':''};fresh.dataset={};documentListeners.click({target:fresh});await settle();
 get('language').value='en';get('language').listeners.change();await settle();await openCoach();
@@ -254,6 +261,27 @@ assert.ok(get('coach-starters').innerHTML.includes('data-coach-question="agent.s
 assert.ok(!get('topic-menu-root').innerHTML.includes('data-catalogue-id'));
 calls.length=0;await click({catalogueQuestion:'money.month',catalogueText:'Where did my money go this month?'});
 assert.equal(calls.find(c=>c.path==='/api/agent')?.body.message,'Where did my money go this month?','falls back to the coach with the same text');
+''')
+
+    def test_typed_exact_question_is_answered_like_a_tap(self):
+        # V5 fix (lane CO): word-for-word catalogue text gets its card directly, with or without the AI coach.
+        self.node_app(self.PRELUDE + r'''
+await openCoach();calls.length=0;
+agentReply={source:'agent',answer:['AI answer'],cards:[],steps:[],evidence:[],actions:[],suggestions:[]};
+get('coach-input').value='  what if i cut a CATEGORY  ';
+get('coach-form').listeners.submit({preventDefault(){},submitter:get('coach-send')});await settle();
+assert.equal(calls.filter(c=>c.path==='/api/agent').length,0,'no AI call for an exact catalogue question');
+const answer=calls.find(c=>c.path==='/api/catalogue/answer');assert.ok(answer);assert.equal(answer.body.question_id,'spend.cut');
+const html=get('coach-response').innerHTML;assert.ok(html.includes('€45.14')&&!html.includes('quick-notice'));
+// Anything else still goes to the AI coach.
+calls.length=0;get('coach-input').value='what if i cut a category and more';get('coach-form').listeners.submit({preventDefault(){},submitter:get('coach-send')});await settle();
+assert.equal(calls.filter(c=>c.path==='/api/agent').length,1);
+''')
+
+    def test_intro_chip_only_while_the_profile_is_empty(self):
+        self.node_app(self.PRELUDE + r'''
+profileEmpty=false;await select('CUST00676');await openCoach();await settle();
+assert.equal(get('coach-intro-chip').innerHTML,'','no "Tell me about you" once the profile has facts');
 ''')
 
 

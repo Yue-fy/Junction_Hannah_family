@@ -4,12 +4,17 @@ import { comparisonChart, trendChart, runwayChart, barChart, goalChart, configur
 import { createI18n, localizeServerText } from './i18n.js';
 import { createExperienceStore, suggestedMemory, ux, buildJournal } from './experience.js';
 import { spendingCategories, forecastSummary, toolScope, milestoneFor } from './presentation.js';
+import { forecastEvents, forecastOutlook, forecastSentence, attachForecastChart, watchWidth } from './forecast-v5.js';
 import { coachNarrative } from './coach-narrative.js';
 import { agentTurnHTML } from './coach-chat.js';
 import { catalogueTurnHTML, cardsOf, cardSummary, cardText, introChipHTML, normalizeCatalogue, questionChips, isCard } from './answer-card.js';
 import { createMonthlyRecapCache, monthlyRecapPrompt, recapTiles } from './monthly-recap.js';
 import { initV3 } from './v3.js';
+import { goalCardHTML, goalsText } from './goals-v5.js';
 import { createHome } from './home-v4.js';
+import { emptyStateHTML, emptyText, spendingEmptyHTML } from './empty-states.js';
+import { readSession, writeSession } from './session.js';
+import { transactionSheet, assumptionsFormHTML, pluralKey } from './spending-v5.js';
 
 const state = createState();
 let api = createAPI(state.customerId);
@@ -25,12 +30,15 @@ const names={CUST00001:'Alex',CUST00676:'Robin',CUST05097:'Sam',CUST00756:'Jules
 const categoryName=category=>{const label=u('category.'+category);return label==='category.'+category?category:label;};
 const experienceStores=new Map();
 let localStore=null;try{localStore=globalThis.localStorage||null;}catch{}
+// V5 lane ME: a reload keeps the chosen customer and month (sessionStorage; web/session.js).
+let sessionStore=null,restoredSession=false;try{sessionStore=globalThis.sessionStorage||null;}catch{}
 function experience(){if(!experienceStores.has(state.customerId))experienceStores.set(state.customerId,createExperienceStore(localStore,state.customerId));return experienceStores.get(state.customerId);}
 const evidenceRegistry=new Map();let evidenceSequence=0;
 let memoryProposal=null, noteEditing=null, tourStep=0, coachSequence=0;
 let coachPending=null, coachTimer=null, agentProposal=null, actionSequence=0;
 const monthlyRecaps=createMonthlyRecapCache(),recapPrevious=new Map();
 let homeRecap=null,homeDataState='loading',v3=null,home=null;
+const profileFacts=new Map(); // customer id -> the money profile has facts (Coach intro chip)
 function sourceButton(refs=[],scope={}){
   if(!refs.length)return '';
   const key='source-'+(++evidenceSequence);
@@ -94,11 +102,11 @@ async function perform(button, action) {
   const operation=++actionSequence;
   const context=captureContext();
   state.busy=true;
-  const original=button?.textContent;
+  const original=button?.textContent,originalHTML=button?.innerHTML;
   if(button){button.dataset.loadingLabel=original;button.disabled=true;button.textContent=t('loading.action');}
   try { await action(context); }
   catch(error){if(isCurrent(context)&&!(error instanceof StaleResponse))explainError(error);}
-  finally {if(isCurrent(context)&&operation===actionSequence){state.busy=false;if(button){button.disabled=false;if(button.dataset.loadingLabel&&button.textContent===t('loading.action'))button.textContent=original;delete button.dataset.loadingLabel;}}}
+  finally {if(isCurrent(context)&&operation===actionSequence){state.busy=false;if(button){button.disabled=false;if(button.dataset.loadingLabel&&button.textContent===t('loading.action')){if(typeof originalHTML==='string')button.innerHTML=originalHTML;else button.textContent=original;}delete button.dataset.loadingLabel;}}}
 }
 function openDialog(id) {
   if(id==='coach-dialog'){closeDialogs();navigate('coach');$('coach-input').focus();return;}
@@ -140,7 +148,7 @@ function chatResetNotice(had,message){
 }
 function clearScopedViews({preserveLoading=false,chatNotice='',hadChat=state.conversation.length>0||Boolean(coachPending)}={}){
   chatResetNotice(hadChat,chatNotice);
-  clearCoachPending(true);agentProposal=null;v3?.reset();home?.reset();
+  clearCoachPending(true);agentProposal=null;v3?.reset();home?.reset();profileFacts.clear();
   homeRecap=null;homeDataState='loading';
   closeDialogs();clearFilter();clearHandoff();state.transactionEvidence=null;
   state.queryScope=null;state.conversation=[];memoryProposal=null;evidenceRegistry.clear();coachSequence++;
@@ -175,7 +183,7 @@ function navigate(view,{fromHistory=false}={}) {
   state.view=view;
   document.documentElement.setAttribute('data-current-view',view);
   for(const name of ['home','trends','coach','goals','journal','profile']) $(name+'-view').hidden=name!==view;
-  $('persona-panel').hidden=true;$('persona-button').setAttribute('aria-expanded','false');
+  if($('persona-panel').open)$('persona-panel').close();
   if(view==='journal')renderPersonalization();
   if(view==='goals')renderWishes();
   renderCoachContext();
@@ -240,7 +248,10 @@ function renderCoachContext(){
   text('coach-scope-button',`${names[state.customerId]} · ${period}`);
   $('coach-month').innerHTML=$('selected-month').innerHTML;$('coach-month').value=state.selectedMonth||'';
   $('coach-scope').innerHTML=`<strong>${esc(names[state.customerId]||'')} · ${esc(period)}</strong><p class="small-text">${esc(copy('One recorded account. Other accounts and household finances are not included.','Yksi kirjattu tili. Muut tilit ja kotitalouden talous eivät sisälly tietoihin.','Ett registrerat konto. Andra konton och hushållets ekonomi ingår inte.'))}</p>${state.overview?.latest_balance_date?`<p class="small-text">${esc(copy('Latest balance record','Viimeisin saldotieto','Senaste saldouppgift'))}: ${dateLabel(state.overview.latest_balance_date)}</p>`:''}`;
-  $('coach-empty').hidden=state.conversation.length>0||Boolean(coachPending);
+  const chatting=state.conversation.length>0||Boolean(coachPending);
+  $('coach-empty').hidden=chatting;
+  // One footer line that never changes with the answer source; short screens hide it once a chat has started.
+  text('coach-mode',cardText(i18n.locale,'footer'));$('coach-view').classList?.toggle?.('has-chat',chatting);
   renderIntroChip();
 }
 // The customer's own top two categories in a basket, so each basket is concrete.
@@ -262,8 +273,9 @@ function renderHomeSnapshot(){
 }
 function renderWishes(){
   const profile=experience().load(),wishes=profile.wishes||[];
+  for(const node of (globalThis.document?.querySelectorAll?.('[data-gl]')||[]))node.textContent=goalsText(i18n.locale,node.dataset.gl);
   $('wish-remember').checked=profile.consent;$('wish-remember').disabled=profile.consent;text('wish-storage',personalStatus());
-  $('wishes-list').innerHTML=wishes.length?wishes.map(wish=>`<article class="wish-card"><span class="eyebrow">${esc(copy('Exploring','Tutkitaan','Utforskar'))}</span><h2>${esc(wish.title)}</h2><p class="small-text">${esc(copy('No target or deadline set. Start whenever you are ready.','Ei tavoitesummaa tai määräaikaa. Aloita, kun olet valmis.','Inget belopp eller datum bestämt. Börja när du är redo.'))}</p>${Number.isSafeInteger(wish.contribution_cents)?`<p>${money(wish.contribution_cents)} / ${esc(t('common.perMonth'))} · ${esc(t('common.estimate'))}</p>`:''}<div class="personal-actions"><button class="text-button" type="button" data-wish-explore="${esc(wish.id)}">${esc(copy('Explore with coach','Tutki valmentajan kanssa','Utforska med coachen'))} ›</button><button class="text-button" type="button" data-wish-plan="${esc(wish.id)}">${esc(t('v2.goal.calculate'))}</button><button class="text-button" type="button" data-wish-delete="${esc(wish.id)}">${esc(copy('Remove','Poista','Ta bort'))}</button></div></article>`).join(''):`<div class="wish-empty"><span aria-hidden="true">✦</span><p>${esc(copy('Your possibilities can start small.','Mahdollisuutesi voivat alkaa pienestä.','Dina möjligheter kan börja smått.'))}</p></div>`;
+  $('wishes-list').innerHTML=wishes.length?wishes.map(wish=>`<article class="wish-card wish-card--saved"><span class="eyebrow">${esc(copy('Exploring','Tutkitaan','Utforskar'))}</span><h3>${esc(wish.title)}</h3><p class="small-text">${esc(copy('No target or deadline set. Start whenever you are ready.','Ei tavoitesummaa tai määräaikaa. Aloita, kun olet valmis.','Inget belopp eller datum bestämt. Börja när du är redo.'))}</p>${Number.isSafeInteger(wish.contribution_cents)?`<p>${money(wish.contribution_cents)} / ${esc(t('common.perMonth'))} · ${esc(t('common.estimate'))}</p>`:''}<div class="personal-actions"><button class="text-button" type="button" data-wish-explore="${esc(wish.id)}">${esc(copy('Explore with coach','Tutki valmentajan kanssa','Utforska med coachen'))} ›</button><button class="text-button" type="button" data-wish-plan="${esc(wish.id)}">${esc(t('v2.goal.calculate'))}</button><button class="text-button" type="button" data-wish-delete="${esc(wish.id)}">${esc(copy('Remove','Poista','Ta bort'))}</button></div></article>`).join(''):state.goals.length?'':emptyState({kind:'goal',title:emptyText(i18n.locale,'v5.em.goals.title'),body:emptyText(i18n.locale,'v5.em.goals.body'),action:{label:emptyText(i18n.locale,'v5.em.goals.action'),attrs:{'data-goal-template':'custom'}},id:'goals'});
   renderHomeSnapshot();
 }
 async function openDemoStory(kind){
@@ -315,26 +327,52 @@ function renderOverview() {
   renderSpending();renderPersonalization();renderHomeSnapshot();
 }
 
+// "63% of little leaks" when a basket is chosen: the share is of what the ring shows, not of all spending.
+function shareText(percent){const basket={regular:'regular',irregular:'irregular',leaks:'leaks'}[state.spendingGroup];return basket?t('v5.sp.share.'+basket,{percent}):u('spending.share',{percent});}
 function renderSpending(){
   if(state.categoryRowsAvailable===false){
-    $('spending-donut').innerHTML=`<p class="empty-state">${esc(state.overview?t('support.unavailable'):t('loading.account'))}</p>`;$('spending-donut').setAttribute('aria-busy',String(!state.overview));text('spending-total','—');$('spending-categories').innerHTML='';text('spending-selection','');return;
+    $('spending-donut').innerHTML=state.overview?emptyState({kind:'ring',title:emptyText(i18n.locale,'v5.em.unavailable.title'),body:emptyText(i18n.locale,'v5.em.unavailable.body'),id:'spending-unavailable'}):`<p class="empty-state">${esc(t('loading.account'))}</p>`;$('spending-donut').setAttribute('aria-busy',String(!state.overview));markSpendingEmpty(Boolean(state.overview));text('spending-total','—');$('spending-categories').innerHTML='';text('spending-selection','');return;
   }
   const categories=spendingCategories(state.categoryRows||[],state.spendingGroup).map(row=>({...row,label:categoryName(row.category)}));
   if(state.selectedCategory&&!categories.some(row=>row.category===state.selectedCategory))state.selectedCategory=null;
   const total=categories.reduce((sum,row)=>sum+row.total_cents,0),selected=categories.find(row=>row.category===state.selectedCategory);
-  $('spending-donut').innerHTML=spendingRing(categories,state.selectedCategory);
+  // V5 lane EM: an empty filter/month shows one designed empty state instead of the ring, its centre text and the list.
+  const isEmpty=!total;
+  markSpendingEmpty(isEmpty);
+  $('spending-donut').innerHTML=isEmpty?spendingEmptyHTML({group:state.spendingGroup,locale:i18n.locale,esc,monthLabel:monthLabel(state.selectedMonth),last:state.spendingGroup==='irregular'?lastSurprise():undefined}):spendingRing(categories,state.selectedCategory);
   $('spending-donut').setAttribute('aria-busy','false');
   text('spending-total',money(selected?.total_cents??total));
   const basketKey={regular:'regular',irregular:'irregular',leaks:'everyday'}[state.spendingGroup],basketGroup=Boolean(basketKey);
   text('spending-center-label',selected?selected.label:basketGroup?t('basket.'+basketKey):u(state.spendingGroup==='all'?'spending.total':'spending.'+state.spendingGroup));
   if($('spending-group-help')){$('spending-group-help').hidden=!basketGroup;text('spending-group-help',basketGroup?t('basket.'+basketKey+'.help'):'');}
   const visible=state.categoryExpanded||categories.findIndex(row=>row.category===state.selectedCategory)>=5?categories:categories.slice(0,5);
-  $('spending-categories').innerHTML=visible.map(row=>`<button type="button" class="category-row" data-spending-category="${esc(row.category)}" aria-pressed="${state.selectedCategory===row.category}"><span class="category-icon" style="--category-color:${categoryPalette[row.category]||'#668578'}">${categoryIcon(row.category)}</span><span class="category-copy"><strong>${esc(row.label)}</strong><small>${esc(u('spending.share',{percent:total?Math.round(row.total_cents*100/total):0}))}</small></span><span class="category-amount">${money(row.total_cents)}<span aria-hidden="true">›</span></span></button>`).join('')+(categories.length>5?`<button type="button" class="text-button category-expand" data-expand-categories>${esc(state.categoryExpanded?copy('Show less','Näytä vähemmän','Visa färre'):copy('Show all categories','Näytä kaikki luokat','Visa alla kategorier'))} ${state.categoryExpanded?'−':'+'}</button>`:'')||`<p class="empty-state">${esc(t('empty.transactions'))}</p>`;
-  $('spending-selection').innerHTML=selected?`<div><strong>${esc(selected.label)}</strong><span>${money(selected.total_cents)}</span></div><div class="personal-actions"><button type="button" class="text-button" data-category-transactions="${esc(selected.category)}">${esc(u('spending.rows',{count:selected.count}))} ›</button><button type="button" class="text-button" data-direct-question="${esc(copy(`How much did I spend on ${selected.category}?`,`Paljonko käytin rahaa luokassa ${selected.label}?`,`Hur mycket spenderade jag på ${selected.label}?`))}">${esc(copy('Ask about this category','Kysy tästä luokasta','Fråga om kategorin'))} ›</button><button type="button" class="text-button" data-direct-question="${esc(copy(`How much could I save if I reduced ${selected.category} by 10%?`,`Paljonko voisin säästää, jos vähentäisin luokan ${selected.label} menoja 10 %?`,`Hur mycket kan jag spara om jag minskar ${selected.label} med 10 %?`))}">${esc(copy('Try a 10% change','Kokeile 10 % muutosta','Prova en ändring på 10 %'))}</button></div>`:'';
+  $('spending-categories').innerHTML=visible.map(row=>`<button type="button" class="category-row" data-spending-category="${esc(row.category)}" aria-pressed="${state.selectedCategory===row.category}"><span class="category-icon" style="--category-color:${categoryPalette[row.category]||'#668578'}">${categoryIcon(row.category)}</span><span class="category-copy"><strong>${esc(row.label)}</strong><small>${esc(shareText(total?Math.round(row.total_cents*100/total):0))}</small></span><span class="category-amount">${money(row.total_cents)}<span aria-hidden="true">›</span></span></button>`).join('')+(categories.length>5?`<button type="button" class="text-button category-expand" data-expand-categories>${esc(state.categoryExpanded?copy('Show less','Näytä vähemmän','Visa färre'):copy('Show all categories','Näytä kaikki luokat','Visa alla kategorier'))} ${state.categoryExpanded?'−':'+'}</button>`:'');
+  $('spending-selection').innerHTML=selected?`<div><strong>${esc(selected.label)}</strong><span>${money(selected.total_cents)}</span></div><div class="personal-actions"><button type="button" class="text-button" data-category-transactions="${esc(selected.category)}">${esc(t(pluralKey('v5.sp.viewTx',selected.count),{count:selected.count}))} ›</button><button type="button" class="text-button" data-direct-question="${esc(copy(`How much did I spend on ${selected.category}?`,`Paljonko käytin rahaa luokassa ${selected.label}?`,`Hur mycket spenderade jag på ${selected.label}?`))}">${esc(copy('Ask about this category','Kysy tästä luokasta','Fråga om kategorin'))} ›</button><button type="button" class="text-button" data-direct-question="${esc(copy(`How much could I save if I reduced ${selected.category} by 10%?`,`Paljonko voisin säästää, jos vähentäisin luokan ${selected.label} menoja 10 %?`,`Hur mycket kan jag spara om jag minskar ${selected.label} med 10 %?`))}">${esc(copy('Try a 10% change','Kokeile 10 % muutosta','Prova en ändring på 10 %'))}</button></div>`:'';
   // The details box only appears once a slice or category is chosen.
   $('spending-selection').hidden=!selected;
   if($('spending-center-hint'))$('spending-center-hint').hidden=Boolean(selected);
   for(const button of document.querySelectorAll('[data-spending-group]'))button.setAttribute('aria-pressed',String(button.dataset.spendingGroup===state.spendingGroup));
+}
+
+const emptyState=options=>emptyStateHTML({esc,...options});
+function markSpendingEmpty(flag){const layout=$('spending-donut').closest?.('.spending-layout');if(layout?.classList?.toggle)layout.classList.toggle('is-empty',flag);}
+// The most recent surprise must-pay in the 12 months before the selected month, fetched only when that filter is empty.
+// undefined = not known (generic line), null = none in that year, else {what, amount, date}.
+const surpriseCache=new Map();
+function lastSurprise(){
+  const month=state.selectedMonth,key=state.customerId+'|'+month;
+  if(surpriseCache.has(key)){const value=surpriseCache.get(key);return value&&{what:value.merchant||categoryName(value.category),amount:money(value.amount_cents),date:dateLabel(value.date)};}
+  const first=state.observedStart?.slice(0,10);
+  if(!month||!first||first>=month+'-01')return undefined;
+  const context=captureContext(),start=shiftMonth(month,-12)+'-01';
+  surpriseCache.set(key,undefined);
+  request(context,'get','/api/transactions',{role:'flexible_essential',start:start<first?first:start,end:monthEnd(shiftMonth(month,-1))}).then(data=>{
+    const rows=(data?.transactions||[]).filter(row=>row.role==='flexible_essential'&&Number.isSafeInteger(row.amount_cents)&&row.amount_cents<0).sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+    const last=rows.at(-1);
+    surpriseCache.set(key,last?{merchant:last.merchant_name||'',category:last.category,amount_cents:-last.amount_cents,date:last.date}:null);
+    if(isCurrent(context)&&state.selectedMonth===month&&state.spendingGroup==='irregular')renderSpending();
+  }).catch(()=>surpriseCache.delete(key));
+  return undefined;
 }
 
 function selectSpending(category,source){
@@ -352,7 +390,7 @@ function renderPersonalization(){
   const goalTemplate=profile.focus==='flexibility'?'custom':profile.focus==='travel'?'trip':profile.focus;
   $('personalization-card').innerHTML=`<div><span class="eyebrow">${esc(u('personal.title'))}</span><h3 id="personalization-title">${esc(u('focus.'+profile.focus))}</h3><p>${esc(profile.onboarding_complete?personalStatus():u('personal.intro'))}</p></div><div class="personal-actions"><button type="button" class="text-button" data-open-notebook>${esc(u(profile.onboarding_complete?'personal.edit':'personal.setup'))} ›</button><button type="button" class="text-button" data-open-tour>${esc(u('tour.replay'))}</button><button type="button" class="text-button" data-goal-template="${esc(goalTemplate)}">${esc(t('goal.form.title'))} ›</button></div>`;
   const moments=buildJournal(state.overview,state.categoryRows||[],i18n.locale);
-  $('journal-timeline').innerHTML=moments.length?moments.map(moment=>`<article class="journal-moment"><span class="journal-dot" aria-hidden="true">${moment.kind==='income'?'↙':moment.kind==='housing'?'⌂':'✦'}</span><div><time datetime="${esc(moment.date)}">${dateLabel(moment.date)}</time><h3>${esc(moment.title)}</h3><p>${esc(categoryName(moment.category))} · ${money(Math.abs(moment.amount_cents))}</p>${moment.transaction_ref?`<button type="button" class="text-button" data-journal-transaction="${esc(moment.transaction_ref)}">${esc(u('journal.view'))} ›</button>`:''}</div></article>`).join(''):`<p class="empty-state">${esc(u('journal.empty'))}</p>`;
+  $('journal-timeline').innerHTML=moments.length?moments.map(moment=>`<article class="journal-moment"><span class="journal-dot" aria-hidden="true">${moment.kind==='income'?'↙':moment.kind==='housing'?'⌂':'✦'}</span><div><time datetime="${esc(moment.date)}">${dateLabel(moment.date)}</time><h3>${esc(moment.title)}</h3><p>${esc(categoryName(moment.category))} · ${money(Math.abs(moment.amount_cents))}</p>${moment.transaction_ref?`<button type="button" class="text-button" data-journal-transaction="${esc(moment.transaction_ref)}">${esc(u('journal.view'))} ›</button>`:''}</div></article>`).join(''):emptyState({kind:'document',title:emptyText(i18n.locale,'v5.em.journal.title'),body:u('journal.empty'),id:'journal'});
   $('notebook-content').innerHTML=`<p class="small-text">${esc(personalStatus())}</p>${profile.notes.length?profile.notes.map(note=>`<article class="notebook-note"><p>${esc(note.text)}</p><small>${esc(u(note.source==='confirmed_conversation'?'notebook.confirmed':'notebook.user'))}</small><div><button type="button" class="text-button" data-note-edit="${esc(note.id)}">${esc(u('notebook.edit'))}</button><button type="button" class="text-button" data-note-delete="${esc(note.id)}">${esc(u('notebook.delete'))}</button></div></article>`).join(''):`<p>${esc(u('notebook.empty'))}</p>`}<button type="button" class="secondary-button" data-open-notebook>${esc(u('notebook.add'))} +</button>`;
   const milestone=profile.milestones?milestoneFor(state.goals):null;
   $('goal-milestone').hidden=!milestone;
@@ -371,7 +409,7 @@ function renderPersonalization(){
 }
 
 function experienceDialog(id,title){
-  if(!$(id)&&document.body?.insertAdjacentHTML)document.body.insertAdjacentHTML('beforeend',`<dialog id="${id}" class="experience-dialog" aria-labelledby="${id}-title"><div class="sheet-header"><span class="wordmark">S-Coach</span><button type="button" class="close-button" data-close aria-label="${esc(u('personal.close'))}">×</button></div><div class="sheet-content"><h2 id="${id}-title">${esc(title)}</h2><div id="${id}-content"></div></div></dialog>`);
+  if(!$(id)&&document.body?.insertAdjacentHTML)document.body.insertAdjacentHTML('beforeend',`<dialog id="${id}" class="experience-dialog" aria-labelledby="${id}-title"><div class="sheet-header"><h2 id="${id}-title">${esc(title)}</h2><button type="button" class="close-button" data-close aria-label="${esc(u('personal.close'))}">×</button></div><div class="sheet-content"><div id="${id}-content"></div></div></dialog>`);
   if($(id+'-title'))text(id+'-title',title);
   return $(id);
 }
@@ -426,13 +464,23 @@ async function fetchRows(filters={},context=captureContext()) {
   const result=await request(context,'get','/api/transactions',{month:context.month,...filters});
   return result.transactions || result.rows || [];
 }
-function renderRows(rows,label=monthLabel(state.selectedMonth)) {
-  state.rows=rows;
-  text('transaction-summary',t('transactions.summary',{label,count:rows.length}));
-  $('transaction-list').innerHTML=rows.length?rows.map(row=>`<article class="transaction-row"><span class="category-icon" style="--category-color:${categoryPalette[row.category]||'#668578'}">${categoryIcon(row.category)}</span><div><h3>${esc(row.merchant_name||row.merchant||categoryName(row.category)||t('transactions.unknownMerchant'))}</h3><p>${dateLabel(row.date||row.timestamp)}</p>${row.transaction_ref===state.exclusion?`<span class="row-badge">${esc(t('story.userExclusion'))}</span>`:''}<button class="text-button" data-transaction="${esc(row.transaction_ref)}">${esc(t('transactions.open'))} ›</button></div><strong>${row.amount_cents>0?'+':''}${money(Math.abs(row.amount_cents))}</strong></article>`).join(''):`<p class="empty-state">${esc(t('empty.transactions'))}</p>`;
+// V5 fix (lane SP2): the sheet is titled with what was tapped and its period ("Groceries · September 2026"),
+// shows the count and total once, and lists compact rows that are tappable as a whole.
+function monthScope(month=state.selectedMonth){return {start:month+'-01',end:monthEnd(month)};}
+function renderRows(rows,scope=state.rowsScope||monthScope()) {
+  state.rows=rows;state.rowsScope=scope;
+  const sheet=transactionSheet(rows,{scope,t,money,categoryName,roleName:flowName,monthLabel,localeTag:i18n.localeTag,esc,icon:categoryIcon,color:category=>categoryPalette[category]||'#668578',
+    badgeFor:row=>row.transaction_ref===state.exclusion?`<span class="row-badge">${esc(t('story.userExclusion'))}</span>`:''});
+  text('transactions-title',sheet.title);
+  text('transaction-summary',rows.length?sheet.summary:'');
+  if($('transaction-footnote')){text('transaction-footnote',sheet.footnote);$('transaction-footnote').hidden=!sheet.footnote;}
+  $('transaction-list').innerHTML=rows.length?sheet.list:emptyState({kind:'list',title:emptyText(i18n.locale,'v5.em.transactions.title'),body:emptyText(i18n.locale,'v5.em.transactions.body'),id:'transactions'});
 }
 async function showTransactions(filters={category:'Restaurants'},context=captureContext(),definition=null) {
   assertCurrent(context);if(!filters.role)clearFilter();state.transactionEvidence=null;
+  const start=filters.start||(filters.month||context.month)+'-01',end=filters.end||monthEnd(filters.month||context.month);
+  const scope={category:filters.category,role:filters.role,start,end};
+  state.rowsScope=scope;text('transactions-title',transactionSheet([],{scope,t,money,categoryName,roleName:flowName,monthLabel,localeTag:i18n.localeTag}).title);text('transaction-summary','');
   openDialog('transactions-dialog');$('transaction-list').innerHTML=`<p class="empty-state" role="status">${esc(t('loading.rows'))}</p>`;
   let rows;
   try{
@@ -441,9 +489,8 @@ async function showTransactions(filters={category:'Restaurants'},context=capture
       const expected=new Set(definition.result.transaction_refs);rows=rows.filter(row=>expected.has(row.transaction_ref));
     }
   }catch(error){if(isCurrent(context))$('transaction-list').innerHTML=`<p class="empty-state">${esc(t('support.unavailable'))}</p>`;throw error;}
-  const start=filters.start||(filters.month||context.month)+'-01',end=filters.end||monthEnd(filters.month||context.month);
   state.transactionEvidence=filters.role&&!filters.start&&!filters.end?moneyMapEvidence(filters.role):{kind:'statistics',customerId:state.customerId,accountId:state.overview?.account_id,start,end,metric:definition?.metric||(filters.role==='income'?'inflow_total':'outflow_total'),statistics:definition?.result,filters:Object.fromEntries(Object.entries(filters).filter(([key])=>!['start','end','month'].includes(key))),rows,transaction_refs:rows.map(row=>row.transaction_ref)};
-  renderRows(rows,`${filters.role?flowName(filters.role)+' · ':filters.category?categoryName(filters.category)+' · ':''}${dateLabel(start)}–${dateLabel(end)}`);
+  renderRows(rows,scope);
 }
 async function markOneOff(context=captureContext()) {
   await ensureScenario(context);assertCurrent(context);
@@ -458,23 +505,34 @@ async function markOneOff(context=captureContext()) {
   renderScenario();
   notify(t('feedback.excluded'));
 }
+function renderForecastChart(width) {
+  // V5 lane FC: plain summary + event-marked chart drawn at the real column width.
+  const f=state.forecast,host=$('runway-chart'),cushionCents=state.safeToSpend?.reserve_floor_cents??null;
+  const events=forecastEvents(f),outlook=forecastOutlook(f,{events,cushionCents});
+  const drawWidth=width||host.clientWidth||330;host.dataset.fcDrawnWidth=String(drawWidth);
+  host.innerHTML=outlook?runwayChart(forecastRows(f),{interactive:true,width:drawWidth,events,cushionCents}):`<p class="empty-state">${esc(t('v5.fc.unavailable'))}</p>`;
+  attachForecastChart(host);watchWidth(host,renderForecastChart);
+  $('forecast-summary').innerHTML=outlook?`<p class="fc-summary fc-summary--${outlook.status}">${esc(forecastSentence(outlook,{t,localeTag:i18n.localeTag}))}</p>`:'';
+}
 function renderForecast() {
-  const f=state.forecast;$('runway-chart').innerHTML=runwayChart(forecastRows(f));
-  const summary=forecastSummary(f);
-  $('forecast-summary').innerHTML=summary?`<strong>${esc(u('forecast.summary',{amount:money(summary.end_cents)}))}</strong><span>${esc(u('forecast.lowest',{amount:money(summary.low_cents)}))} · ${dateLabel(summary.low_date)}</span>`:'';
-  $('forecast-assumptions').innerHTML=`<details class="forecast-method"><summary>${esc(t('evidence.formula'))}</summary><p>${esc(t('forecast.method'))}</p></details>${(f?.recurring_items||[]).map((item,i)=>`<fieldset class="assumption-inputs" data-assumption="${esc(item.id)}"><legend>${esc(flowName(item.role))}</legend><label for="assumption-enabled-${i}"><input id="assumption-enabled-${i}" type="checkbox" data-field="enabled" ${state.forecastAssumptions[item.id]?.enabled===false?'':'checked'}>${esc(t('forecast.include'))}</label><div class="form-grid"><div><label for="assumption-amount-${i}">${esc(t('forecast.amount'))}</label><input id="assumption-amount-${i}" data-field="amount" type="number" step="0.01" value="${Number(state.forecastAssumptions[item.id]?.amount_cents??item.amount_cents??0)/100}"></div><div><label for="assumption-day-${i}">${esc(t('forecast.day'))}</label><input id="assumption-day-${i}" data-field="day" type="number" min="1" max="31" value="${state.forecastAssumptions[item.id]?.median_day??item.median_day??1}"></div></div></fieldset>`).join('')}<button class="secondary-button" id="apply-preview">${esc(t('forecast.apply'))} ›</button><p>${esc(t('forecast.temporary'))}</p>`;
+  const f=state.forecast;renderForecastChart();
+  // V5 fix (lane SP2): named rows with positive amounts; the one "How is this worked out?" lives in the card above.
+  $('forecast-assumptions').innerHTML=assumptionsFormHTML(f?.recurring_items||[],{saved:state.forecastAssumptions,t,categoryName,esc,localeTag:i18n.localeTag});
 }
 function renderTrends() {
   const data=state.trends,rows=(data?.months||[]).filter(row=>row.available!==false&&row.total_cents!==null);
-  if(v3)v3.renderTrendChart(rows);else $('trend-chart').innerHTML=trendChart(rows);text('trend-description',rows.length?t('trends.description',{count:rows.length}):t('empty.trends'));
   $('trends-view').querySelector('.trend-facts')?.remove();
+  // V5 (lane TR): a line chart + one plain summary; only the calculation note stays, folded away.
+  if(v3){v3.renderTrendChart(rows,data);if(data)$('trend-description').insertAdjacentHTML('afterend',`<details class="trend-facts trend5-method"><summary>${esc(t('evidence.formula'))}</summary><p>${esc(u('spending.excludes'))}</p>${sourceButton(data.transaction_refs||[])}</details>`);return;}
+  $('trend-chart').innerHTML=trendChart(rows);text('trend-description',rows.length?t('trends.description',{count:rows.length}):'');
   if(!data)return;
   const annual=data.annual_comparison;
   const evidence=`<section class="trend-facts"><h3>${esc(t('trends.sameMonth'))}</h3><p>${esc(data.year_over_year_delta_cents===null||data.year_over_year_delta_cents===undefined?t('empty.trends'):t('trends.yoy',{amount:money(data.year_over_year_delta_cents)}))}</p><h3>${esc(t('trends.salary'))}</h3><p>${esc(t('trends.salaryMedians',{recent:money(data.recent_three_salary_median_cents),prior:money(data.prior_six_salary_median_cents)}))}</p>${annual?.available?`<details><summary>${esc(t('trends.annual'))}</summary>${comparisonChart({before:{...annual.previous,label:t('trends.priorYear')},after:{...annual.current,label:t('trends.latestYear')}})}<p>${dateLabel(annual.previous.start)}–${dateLabel(annual.previous.end)} / ${dateLabel(annual.current.start)}–${dateLabel(annual.current.end)}</p></details>`:`<p>${esc(t('trends.noAnnual'))}</p>`}<details><summary>${esc(t('evidence.formula'))}</summary><p>${esc(u('spending.excludes'))}</p>${sourceButton(data.transaction_refs||[])}</details></section>`;
   $('trend-chart').insertAdjacentHTML('afterend',evidence);
 }
 function renderGoals() {
-  $('goals-list').innerHTML=state.goals.length?state.goals.map(goal=>`<article class="goal-card"><span class="status-pill scenario-pill">${esc(t('common.estimate'))}</span><h2>${esc(goal.name)}</h2><p class="subtle">${esc(t('goal.by',{date:dateLabel(goal.target_date)}))}</p><p class="goal-amount">${money(goal.required_monthly_cents)} <span>${esc(t('goal.required'))}</span></p>${goalChart(goal.current_saved_cents??0,goal.target_cents)}<p class="small-text">${esc(t('goal.capacity',{amount:money(goal.conservative_monthly_contribution_cents)}))}</p><p class="small-text">${esc(t('goal.reserveDetail',{reserve:money(goal.reserve_floor_cents),upfront:money(goal.upfront_available_cents)}))}</p>${goal.modeled_scenario_contribution_cents>0?`<p class="small-text">${esc(t('goal.linked',{amount:money(goal.modeled_scenario_contribution_cents)}))}</p>`:''}${goal.monthly_gap_cents>0?`<p class="small-text">${esc(t('goal.gap',{amount:money(goal.monthly_gap_cents)}))}</p>`:''}<button class="text-button" data-goal-evidence="${esc(goal.goal_id||goal.id)}">${esc(t('goal.assumptions'))} ›</button>${v3?v3.goalActionsHTML(goal):''}</article>`).join(''):`<div class="goal-card"><span class="eyebrow">${esc(t('goals.eyebrow'))}</span><h2>${esc(t('goals.empty'))}</h2><p class="subtle">${esc(t('goals.subtitle'))}</p></div>`;
+  // V5 fix lane GL: goal cards come from goals-v5.js (whole euros, HTML progress bar, one "does it fit" line).
+  $('goals-list').innerHTML=state.goals.length?state.goals.map(goal=>goalCardHTML(goal,{locale:i18n.locale,t,dateLabel,monthLabel,actionsHTML:v3?v3.goalActionsHTML:null},goalChart)).join(''):'';
   renderPersonalization();renderWishes();home?.render();
 }
 function supportingEvidence(data,sourcesKey='evidence.calculationSources'){
@@ -494,10 +552,10 @@ function safeUntilPaydayHTML(safe){
 function renderSupport(){
   const safe=state.safeToSpend;
   if(safe&&safe.next_payday){$('safe-content').innerHTML=safeUntilPaydayHTML(safe);}
-  else $('safe-content').innerHTML=!safe?`<p class="empty-state">${esc(t('support.unavailable'))}</p>`:!safe.available?`<p class="empty-state">${esc(t(safe.needs_history?'support.needsHistory':'support.unavailable'))}</p>`:`<p class="support-period">${esc(t('safe.amount',{days:safe.horizon_days}))}</p><p class="support-amount">${money(safe.safe_to_spend_cents)}</p><p class="small-text">${esc(t('safe.horizon',{date:dateLabel(safe.horizon_end)}))}</p><dl class="support-values"><dt>${esc(t('safe.reserve'))}</dt><dd>${money(safe.reserve_floor_cents)}</dd><dt>${esc(t('safe.obligations'))}</dt><dd>${money(safe.scheduled_outflows_cents)}</dd><dt>${esc(t('safe.everydayAllowance'))}</dt><dd>${money(safe.historical_flexible_buffer_cents)}</dd></dl><p class="small-text">${esc(t('safe.demoReserve',{amount:money(safe.reserve_floor_cents)}))}</p>${supportingEvidence(safe)}`;
+  else $('safe-content').innerHTML=!safe?`<p class="empty-state">${esc(t('support.unavailable'))}</p>`:!safe.available?emptyState({kind:'coin',compact:true,title:emptyText(i18n.locale,safe.needs_history?'v5.em.history.title':'v5.em.unavailable.title'),body:t(safe.needs_history?'support.needsHistory':'support.unavailable'),id:'safe'}):`<p class="support-period">${esc(t('safe.amount',{days:safe.horizon_days}))}</p><p class="support-amount">${money(safe.safe_to_spend_cents)}</p><p class="small-text">${esc(t('safe.horizon',{date:dateLabel(safe.horizon_end)}))}</p><dl class="support-values"><dt>${esc(t('safe.reserve'))}</dt><dd>${money(safe.reserve_floor_cents)}</dd><dt>${esc(t('safe.obligations'))}</dt><dd>${money(safe.scheduled_outflows_cents)}</dd><dt>${esc(t('safe.everydayAllowance'))}</dt><dd>${money(safe.historical_flexible_buffer_cents)}</dd></dl><p class="small-text">${esc(t('safe.demoReserve',{amount:money(safe.reserve_floor_cents)}))}</p>${supportingEvidence(safe)}`;
   const investment=state.investments;
   home?.render({settled:true});
-  $('investment-content').innerHTML=!investment?`<p class="empty-state">${esc(t('support.unavailable'))}</p>`:`<p class="support-period">${monthLabel(investment.start_month||state.selectedMonth)} — ${monthLabel(investment.end_month||state.selectedMonth)}</p><dl class="support-values"><dt>${esc(t('investment.contributions'))}</dt><dd>${money(investment.total_contributions_cents)}</dd><dt>${esc(t('investment.withdrawals'))}</dt><dd>${money(investment.withdrawals_cents)}</dd><dt>${esc(t('investment.consistency'))}</dt><dd>${esc(t('investment.monthsCount',{count:investment.contribution_months,total:investment.period_months}))}</dd></dl>${investment.coverage_limited?`<p class="small-text">${esc(t('investment.coverageLimited',{count:investment.period_months}))}</p>`:''}${supportingEvidence(investment,'investment.sources')}`;
+  $('investment-content').innerHTML=!investment?`<p class="empty-state">${esc(t('support.unavailable'))}</p>`:!investment.total_contributions_cents&&!investment.withdrawals_cents?emptyState({kind:'coin',compact:true,eyebrow:`${monthLabel(investment.start_month||state.selectedMonth)} — ${monthLabel(investment.end_month||state.selectedMonth)}`,title:emptyText(i18n.locale,'v5.em.investment.title'),body:emptyText(i18n.locale,'v5.em.investment.body'),action:{label:emptyText(i18n.locale,'v5.em.investment.action'),attrs:{'data-direct-question':emptyText(i18n.locale,'v5.em.investment.action')}},id:'investment'}):`<p class="support-period">${monthLabel(investment.start_month||state.selectedMonth)} — ${monthLabel(investment.end_month||state.selectedMonth)}</p><dl class="support-values"><dt>${esc(t('investment.contributions'))}</dt><dd>${money(investment.total_contributions_cents)}</dd><dt>${esc(t('investment.withdrawals'))}</dt><dd>${money(investment.withdrawals_cents)}</dd><dt>${esc(t('investment.consistency'))}</dt><dd>${esc(t('investment.monthsCount',{count:investment.contribution_months,total:investment.period_months}))}</dd></dl>${investment.coverage_limited?`<p class="small-text">${esc(t('investment.coverageLimited',{count:investment.period_months}))}</p>`:''}${supportingEvidence(investment,'investment.sources')}`;
 }
 function renderVat(){
   const vat=state.vat;
@@ -764,6 +822,14 @@ function resizeCoachInput(){
   const input=$('coach-input');input.style.height='auto';input.style.height=Math.min(112,Math.max(48,input.scrollHeight))+'px';
 }
 function scrollCoach(){ $('coach-end').scrollIntoView({block:'end'}); }
+// V5 fix (lane CO): a new answer opens at the customer's question (top of the conversation view), not at the
+// follow-up chips at the bottom, so the headline and the first lines are what they see first.
+function scrollCoachToLatest(){
+  const scroll=$('coach-scroll'),turns=scroll?.querySelectorAll?.('#coach-response .coach-turn');
+  const turn=turns?.[turns.length-1];if(!turn?.getBoundingClientRect||!scroll.getBoundingClientRect){scrollCoach();return;}
+  const offset=turn.getBoundingClientRect().top-scroll.getBoundingClientRect().top-8;
+  if(scroll.scrollHeight>scroll.clientHeight)scroll.scrollTop+=offset;else turn.scrollIntoView?.({block:'start'});
+}
 function clearCoachPending(cancel=false){
   if(coachTimer!==null){clearInterval(coachTimer);coachTimer=null;}
   if(cancel&&coachPending){actionSequence++;state.busy=false;}
@@ -836,8 +902,7 @@ async function askCoach(message,context=captureContext(),wish=null){
     const proposal=declaredPreference;
     if(proposal){memoryProposal={...proposal,customerId:context.customerId,generation:context.generation};$('coach-response').insertAdjacentHTML('beforeend',`<section class="memory-proposal"><h3>${esc(u('notebook.remember'))}</h3><p>${esc(proposal.text)}</p>${!experience().load().consent?`<label class="check-row"><input id="remember-consent" type="checkbox">${esc(u('personal.consent'))}</label><p class="small-text">${esc(u('personal.session'))}</p>`:''}<button type="button" class="secondary-button" data-confirm-memory>${esc(u('notebook.confirm'))}</button><button type="button" class="text-button" data-dismiss-memory>${esc(u('notebook.dismiss'))}</button></section>`);}
     if(response.source!=='agent'&&!quickAnswers)$('coach-response').insertAdjacentHTML('beforeend',`<div class="response-feedback"><span>${esc(copy('Did this help?','Oliko tästä apua?','Var detta till hjälp?'))}</span><button type="button" class="text-button" data-response-feedback="yes">${esc(copy('Yes','Kyllä','Ja'))}</button><button type="button" class="text-button" data-response-feedback="no">${esc(copy('Help me refine it','Tarkenna kysymystä','Hjälp mig precisera'))}</button><span id="response-feedback-message" role="status"></span></div>`);
-    clearCoachPending();renderCoachContext();scrollCoach();
-    text('coach-mode',quickAnswers?cardText(i18n.locale,'mode'):t(response.source==='agent'?'agent.mode':response.source==='gemini'?'coach.aiMode':'coach.offlineMode'));
+    clearCoachPending();renderCoachContext();scrollCoachToLatest();
     $('coach-debug').hidden=!new URLSearchParams(globalThis.location?.search||'').has('debug');text('coach-debug-content',`${t('coach.debug.source')}: ${response.source||'—'} · ${t('coach.debug.fallback')}: ${response.fallback_reason||t('coach.debug.none')} · ${t('coach.debug.tool')}: ${response.tool_source||response.tool_kind||'—'}`);
   }catch(error){if(isCurrent(context)&&context.locale===i18n.locale&&sequence===coachSequence&&!(error instanceof StaleResponse)){clearCoachPending();renderCoachContext();text('coach-live-status',errorText(error)+' '+t('coach.fallback'));const retry=document.createElement('button');retry.className='text-button';retry.textContent=t('action.retry');retry.onclick=()=>perform(retry,next=>askCoach(message,next,wish));$('coach-live-status').append(retry);scrollCoach();}}
 }
@@ -861,14 +926,36 @@ function coachCatalogue(){
   }).catch(()=>{});
   return null;
 }
+// V5 fix (lane CO): typing a catalogue question word for word answers it like a tap (its exact card, no AI call and
+// no "quick answers" notice), with or without the AI coach. Case, spacing, quotes and the final ?/!/. are ignored.
+const foldQuestion=value=>String(value||'').normalize('NFKC').toLocaleLowerCase().replace(/[’‘`´]/g,"'").replace(/[?!.。…\s]+$/u,'').replace(/\s+/g,' ').trim();
+function exactCatalogueQuestion(message){
+  const data=catalogueState.data,wanted=foldQuestion(message);
+  if(!data||!wanted)return null;
+  for(const group of data.groups)for(const question of group.questions)if(foldQuestion(question.text)===wanted)return question;
+  return null;
+}
 function renderStarters(){
   const node=$('coach-starters');
   if(node){const data=catalogueState.data;node.innerHTML=data?questionChips(data.starters,{esc,className:'starter-chip'}):STARTER_KEYS.map(key=>`<button type="button" data-coach-question="${key}" data-i18n="${key}">${esc(t(key))}</button>`).join('');}
   renderIntroChip();
 }
+// V5 fix (lane CO): "Tell me about you" is only offered while the money profile is still empty.
+function profileHasFacts(){
+  const loaded=v3?.profileForPlanning?.();
+  if(loaded&&typeof loaded.empty==='boolean'){profileFacts.set(state.customerId,!loaded.empty);return !loaded.empty;}
+  const key=state.customerId;
+  if(!profileFacts.has(key)&&key){
+    profileFacts.set(key,false);const context=captureContext();
+    request(context,'get','/api/profile',{locale:context.locale}).then(data=>{
+      profileFacts.set(key,data?.profile?.empty===false);if(state.customerId===key)renderIntroChip();
+    }).catch(()=>{});
+  }
+  return profileFacts.get(key)===true;
+}
 function renderIntroChip(){
   const node=$('coach-intro-chip');if(!node)return;
-  const hidden=introDismissed.has(state.customerId)||storedValue(INTRO_CHIP_KEY+state.customerId)||storedValue(INTRO_DONE_KEY+state.customerId)==='done';
+  const hidden=introDismissed.has(state.customerId)||storedValue(INTRO_CHIP_KEY+state.customerId)||storedValue(INTRO_DONE_KEY+state.customerId)==='done'||profileHasFacts();
   node.innerHTML=hidden?'':introChipHTML(i18n.locale,esc);
 }
 function cardTurn(id){return state.conversation.find(turn=>turn.id===id&&isCurrent(turn.context)&&turn.context.locale===i18n.locale);}
@@ -889,8 +976,7 @@ async function askCatalogue(questionId,question,context=captureContext(),params=
   const summary=cardSummary(card);
   state.conversation.push({id:String(sequence),context,message:question,questionId,response:{source:'catalogue_card',cards:[card]},paragraphs:summary,content:summary.join(' ')});
   clearCoachEvidence(state.conversation.splice(0,Math.max(0,state.conversation.length-20)));
-  renderConversation();renderCoachContext();scrollCoach();
-  text('coach-mode',cardText(i18n.locale,'mode'));
+  renderConversation();renderCoachContext();scrollCoachToLatest();
 }
 // A picker on a card asks the same question again with one changed parameter; the card is replaced in place.
 async function refreshCard(turn,index,name,value,context=captureContext()){
@@ -954,12 +1040,13 @@ async function load(context=captureContext()){
   state.categoryRowsAvailable=categoryRows.status==='fulfilled';
   state.categoryRows=state.categoryRowsAvailable?(categoryRows.value.transactions||[]):[];
   state.comparison=comparison.status==='fulfilled'?normalizeComparison(comparison.value,context.month):null;
-  if(overview.status==='fulfilled'){state.overview=overview.value;homeDataState='ready';renderOverview();notify('');}else{homeDataState='unavailable';unavailableAccount(overview.reason);}
+  if(overview.status!=='fulfilled'&&restoredSession){restoredSession=false;writeSession(sessionStore,null);state.selectedMonth=null;return load(captureContext());}
+  if(overview.status==='fulfilled'){restoredSession=false;writeSession(sessionStore,{customerId:context.customerId,month:context.month});state.overview=overview.value;homeDataState='ready';renderOverview();notify('');}else{homeDataState='unavailable';unavailableAccount(overview.reason);}
   renderComparison();
   state.trends=trends.status==='fulfilled'?trends.value:null;renderTrends();
   state.forecast=forecast.status==='fulfilled'?forecast.value:null;state.forecastAssumptions={};renderForecast();
   state.goals=goals.status==='fulfilled'?(goals.value.goals||[]):[];renderGoals();
-  state.safeToSpend=safe.status==='fulfilled'?safe.value:null;state.investments=investments.status==='fulfilled'?investments.value:null;state.vat=vat.status==='fulfilled'?vat.value:null;renderSupport();renderVat();
+  state.safeToSpend=safe.status==='fulfilled'?safe.value:null;renderForecastChart();state.investments=investments.status==='fulfilled'?investments.value:null;state.vat=vat.status==='fulfilled'?vat.value:null;renderSupport();renderVat();
   const persisted=state.overview?.scenarios?.filter(item=>item.category==='Restaurants'&&(!item.start||item.start.slice(0,7)===context.month)).at(-1);
   state.scenario=persisted||null;state.exclusion=persisted?.excluded_transaction_refs?.[0]||null;renderScenario();
   renderSpending();renderPersonalization();
@@ -974,7 +1061,7 @@ function changePeriod(selectedMonth,trendMonths=state.trendMonths){
   Object.assign(state,createState(),keep);clearScopedViews({chatNotice:notice,hadChat});navigate(keep.view);load();
 }
 function applyLanguage(){
-  document.documentElement.lang=i18n.locale;setFormattingLocale(i18n.localeTag);configureCharts({locale:i18n.localeTag,translate:t});$('language').value=i18n.locale;
+  document.documentElement.lang=i18n.locale;setFormattingLocale(i18n.localeTag);configureCharts({locale:i18n.localeTag,translate:(key,values)=>key.startsWith('v5.em.')?emptyText(i18n.locale,key,values):t(key,values),emptyState:emptyStateHTML});$('language').value=i18n.locale;
   for(const node of document.querySelectorAll('[data-i18n]'))node.textContent=t(node.dataset.i18n);
   for(const node of document.querySelectorAll('[data-i18n-aria]'))node.setAttribute('aria-label',t(node.dataset.i18nAria));
   for(const node of document.querySelectorAll('[data-i18n-placeholder]'))node.setAttribute('placeholder',t(node.dataset.i18nPlaceholder));
@@ -986,7 +1073,7 @@ function applyLanguage(){
   const pending=state.pendingHandoff;
   if(pending){if(pending.createdGoalId)renderHandoffProgress(pending);else{text('goal-handoff',t('handoff.confirm',{amount:money(pending.contributionCents)}));text('goal-submit',t('handoff.submit',{amount:money(pending.contributionCents)})+' ›');}}
   else clearHandoff();
-  if(state.rows.length)renderRows(state.rows,state.transactionEvidence?.role?flowName(state.transactionEvidence.role):monthLabel(state.selectedMonth));
+  if(state.rows.length)renderRows(state.rows);
   if($('calculation-dialog').open&&state.calculationEvidence)$('calculation-content').innerHTML=calculationHTML(state.calculationEvidence);
   renderSpending();renderPersonalization();home?.render();
 }
@@ -996,7 +1083,11 @@ v3=initV3({state,$,esc,t,money,dateLabel,monthLabel,shiftMonth,monthEnd,request,
   refreshGoals:async context=>{await loadGoals(context);},
   refreshSupport:async context=>{try{const asOf=state.overview?.latest_balance_date||monthEnd(state.selectedMonth);const safe=await request(context,'get','/api/safe-to-spend',{as_of:asOf,horizon:'until_payday',reserve_floor_cents:50000});state.safeToSpend=safe;renderSupport();home?.onLoad(context);}catch{}}});
 home=createHome({state,$,request,captureContext,isCurrent,navigate,changePeriod,perform,notify,money,shiftMonth,categoryName,locale:()=>i18n.locale,localProfile:()=>experience().load(),v3:()=>v3,refreshGoals:context=>loadGoals(context),previousOverview:()=>state.selectedMonth?recapPrevious.get(state.customerId+'|'+shiftMonth(state.selectedMonth,-1))||null:null});
-$('persona-button').addEventListener('click',()=>{const panel=$('persona-panel');panel.hidden=!panel.hidden;$('persona-button').setAttribute('aria-expanded',String(!panel.hidden));if(!panel.hidden)$('persona').focus();});
+// V5 shell: the profile button and the one-line context chip open the same customer-and-month sheet.
+function openContextSheet(){const sheet=$('persona-panel');if(!sheet.open)sheet.showModal();$('persona-button').setAttribute('aria-expanded','true');$('context-chip')?.setAttribute('aria-expanded','true');}
+$('persona-button').addEventListener('click',openContextSheet);
+$('context-chip')?.addEventListener('click',openContextSheet);
+$('persona-panel').addEventListener('close',()=>{$('persona-button').setAttribute('aria-expanded','false');$('context-chip')?.setAttribute('aria-expanded','false');});
 $('persona').addEventListener('change',()=>{const hadChat=state.conversation.length>0;selectPersona(state,$('persona').value);api=createAPI(state.customerId);clearScopedViews({hadChat,chatNotice:t('chat.reset.persona',{name:names[state.customerId]||''})});navigate('home');load();});
 $('open-story').addEventListener('click',event=>perform(event.currentTarget,context=>askCoach(t('home.recap.question',{period:monthLabel(context.month)}),context)));
 $('show-transactions').addEventListener('click',event=>perform(event.currentTarget,context=>showTransactions({category:'Restaurants'},context)));
@@ -1017,7 +1108,7 @@ $('demo-button').addEventListener('click',()=>openDialog('demo-dialog'));
 for(const link of document.querySelectorAll('a.wordmark'))link.addEventListener('click',event=>{event.preventDefault();navigate('home');});
 $('goal-template').addEventListener('change',()=>{$('goal-name').value=$('goal-template').value==='custom'?'':t('goal.template.'+$('goal-template').value);});
 $('ask-coach').addEventListener('click',()=>openDialog('coach-dialog'));
-$('coach-form').addEventListener('submit',event=>{event.preventDefault();const message=$('coach-input').value.trim();if(message&&!coachPending){return perform(event.submitter,context=>{$('coach-input').value='';resizeCoachInput();return askCoach(message,context);});}});
+$('coach-form').addEventListener('submit',event=>{event.preventDefault();const message=$('coach-input').value.trim();if(message&&!coachPending){const exact=exactCatalogueQuestion(message);return perform(event.submitter,context=>{$('coach-input').value='';resizeCoachInput();return exact?askCatalogue(exact.id,message,context):askCoach(message,context);});}});
 $('coach-input').addEventListener('input',resizeCoachInput);
 $('coach-input').addEventListener('keydown',event=>{
   if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing){event.preventDefault();if(!$('coach-send').disabled&&$('coach-input').value.trim())$('coach-form').requestSubmit($('coach-send'));}
@@ -1055,7 +1146,12 @@ document.addEventListener('click',event=>{
   if(v3?.handleClick(event))return;
   if(home?.handleClick(event))return;
   const categoryTarget=event.target.closest('[data-spending-category]');
-  if(categoryTarget?.dataset?.spendingCategory){selectSpending(categoryTarget.dataset.spendingCategory,categoryTarget);return;}
+  if(categoryTarget?.dataset?.spendingCategory){
+    selectSpending(categoryTarget.dataset.spendingCategory,categoryTarget);
+    // V5 lane SP: a row in the category list opens its purchases straight away; ring slices only select.
+    if(categoryTarget.classList?.contains?.('category-row'))perform(null,context=>showTransactions({category:categoryTarget.dataset.spendingCategory,consumption_only:'true'},context));
+    return;
+  }
   const button=event.target.closest('button');if(!button)return;
   if(handleCardClick(button))return;
   if(button.dataset.coachTurnAction){
@@ -1088,14 +1184,14 @@ document.addEventListener('click',event=>{
   if(button.dataset.tourTry){experience().markOnboarded();closeDialogs();renderPersonalization();if(button.dataset.tourTry==='spending'){navigate('trends');state.spendingGroup='everyday';const category=spendingCategories(state.categoryRows,'everyday')[0]?.category;selectSpending(category);$('money-title').scrollIntoView({block:'start'});}else if(button.dataset.tourTry==='coach'){openDialog('coach-dialog');$('coach-input').focus();}else openNotebook();return;}
   if(button.dataset.tourStep!==undefined)return showTour(Number(button.dataset.tourStep));
   if(button.hasAttribute('data-tour-done')||button.hasAttribute('data-tour-skip')){experience().markOnboarded();closeDialogs();renderPersonalization();if(button.hasAttribute('data-tour-done')){navigate('trends');$('spending-donut').scrollIntoView({block:'center',behavior:'smooth'});}return;}
-  if(button.dataset.spendingGroup){state.spendingGroup=button.dataset.spendingGroup;state.selectedCategory=null;renderSpending();return;}
+  if(button.dataset.spendingGroup){const changed=state.spendingGroup!==button.dataset.spendingGroup;state.spendingGroup=button.dataset.spendingGroup;state.selectedCategory=null;renderSpending();if(changed)renderTrends();if(!button.closest('#history-details'))revealRing(document);return;}
   if(button.hasAttribute('data-expand-categories')){state.categoryExpanded=!state.categoryExpanded;renderSpending();return;}
   if(button.dataset.categoryTransactions)return perform(button,context=>showTransactions({category:button.dataset.categoryTransactions,consumption_only:'true'},context));
   if(button.dataset.evidenceRows)return perform(button,async context=>{
     const evidence=evidenceRegistry.get(button.dataset.evidenceRows);if(!evidence||evidence.customerId!==context.customerId||evidence.generation!==context.generation)return;
     const filters={start:evidence.start||state.observedStart,end:evidence.end||state.observedEnd};
     const all=await fetchRows(filters,context),allowed=new Set(evidence.refs),rows=all.filter(row=>allowed.has(row.transaction_ref));
-    assertCurrent(context);state.transactionEvidence={kind:'statistics',customerId:context.customerId,accountId:state.overview?.account_id,start:filters.start,end:filters.end,metric:evidence.metric,statistics:evidence.statistics,filters:evidence.filters||{},rows,transaction_refs:rows.map(row=>row.transaction_ref)};renderRows(rows,`${dateLabel(filters.start)}–${dateLabel(filters.end)}`);openDialog('transactions-dialog');
+    assertCurrent(context);state.transactionEvidence={kind:'statistics',customerId:context.customerId,accountId:state.overview?.account_id,start:filters.start,end:filters.end,metric:evidence.metric,statistics:evidence.statistics,filters:evidence.filters||{},rows,transaction_refs:rows.map(row=>row.transaction_ref)};renderRows(rows,{start:String(filters.start||'').slice(0,10),end:String(filters.end||'').slice(0,10)});openDialog('transactions-dialog');
   });
   if(button.dataset.journalTransaction){const row=(state.categoryRows||[]).find(item=>item.transaction_ref===button.dataset.journalTransaction);if(row)showCalculation({kind:'transaction',customerId:state.customerId,accountId:state.overview?.account_id,row});return;}
   if(button.dataset.noteEdit){noteEditing=button.dataset.noteEdit;openNotebook();return;}
@@ -1109,13 +1205,16 @@ document.addEventListener('click',event=>{
   }
   if(button.hasAttribute('data-dismiss-memory')){memoryProposal=null;button.closest('.memory-proposal')?.remove();return;}
   if(button.dataset.responseFeedback){text('response-feedback-message',button.dataset.responseFeedback==='yes'?copy('Good. You choose the next step.','Hyvä. Sinä päätät seuraavan askeleen.','Bra. Du väljer nästa steg.'):copy('Tell me the category, dates, or meaning you want to change.','Kerro, mitä luokkaa, päivämääriä tai määritelmää haluat muuttaa.','Berätta vilken kategori, vilka datum eller vilken definition du vill ändra.'));if(button.dataset.responseFeedback==='no')$('coach-input').focus();return;}
-  if(button.hasAttribute('data-new-conversation')){chatResetNotice(false);clearCoachPending(true);agentProposal=null;clearCoachEvidence();state.queryScope=null;state.conversation=[];memoryProposal=null;coachSequence++;text('coach-response','');$('coach-input').value='';resizeCoachInput();text('coach-mode',t('coach.verified'));renderCoachContext();$('coach-input').focus();return;}
+  if(button.hasAttribute('data-new-conversation')){chatResetNotice(false);clearCoachPending(true);agentProposal=null;clearCoachEvidence();state.queryScope=null;state.conversation=[];memoryProposal=null;coachSequence++;text('coach-response','');$('coach-input').value='';resizeCoachInput();renderCoachContext();$('coach-input').focus();return;}
   if(button.dataset.view)navigate(button.dataset.view);
   if(button.dataset.coachQuestion)return perform(button,context=>askCoach(t(button.dataset.coachQuestion),context));
-  if(button.dataset.coachGoalTemplate!==undefined){const target=button.dataset.coachGoalTemplate,concept={buffer:'an emergency buffer',home:'a home',vehicle:'a car',purchase:'a large purchase',custom:''}[target]||'';return perform(button,context=>askCoach(concept?copy(`I want to save for ${concept}.`,`Haluan säästää ${target==='buffer'?'puskuriin':target==='home'?'kotiin':target==='vehicle'?'autoon':'hankintaan'}.`,`Jag vill spara till ${target==='buffer'?'en buffert':target==='home'?'ett hem':target==='vehicle'?'en bil':'ett stort köp'}.`):copy('I want to save but I do not know how much','Haluan säästää, mutta en tiedä kuinka paljon','Jag vill spara men vet inte hur mycket'),context));}
-  if(button.dataset.goalTemplate!==undefined){closeDialogs();navigate('goals');const template=button.dataset.goalTemplate;$('goal-planner').open=true;$('goal-template').value=template;$('goal-name').value=template==='custom'?'':t('goal.template.'+template);$('goal-name').focus();return;}
+  if(button.dataset.coachGoalTemplate!==undefined){const target=button.dataset.coachGoalTemplate,concept={buffer:'an emergency buffer',home:'a home',vehicle:'a car',purchase:'a large purchase',custom:''}[target]||'';return perform(button,context=>askCoach(concept?copy(`I want to save for ${concept}.`,`Haluan säästää ${target==='buffer'?'turvatyynyyn':target==='home'?'kotiin':target==='vehicle'?'autoon':'hankintaan'}.`,`Jag vill spara till ${target==='buffer'?'en säkerhetsmarginal':target==='home'?'ett hem':target==='vehicle'?'en bil':'ett stort köp'}.`):copy('I want to save but I do not know how much','Haluan säästää, mutta en tiedä kuinka paljon','Jag vill spara men vet inte hur mycket'),context));}
+  if(button.dataset.goalTemplate!==undefined){closeDialogs();navigate('goals');const template=button.dataset.goalTemplate;$('goal-planner').open=true;$('goal-template').value=template;$('goal-name').value=template==='custom'?'':t('goal.template.'+template);
+    // V5 fix lane GL: a suggestion can carry its amount (data-goal-amount, cents), e.g. Home's "Make it a goal" with what could be saved.
+    const amount=Number(button.dataset.goalAmount);if(Number.isSafeInteger(amount)&&amount>0)$('goal-target').value=(amount/100).toFixed(2);
+    $('goal-planner').scrollIntoView?.({block:'start'});$('goal-name').focus({preventScroll:true});return;}
   if(button.hasAttribute('data-open-vat'))return perform(button,context=>askCoach(copy('How much VAT is inside my purchases?','Paljonko arvonlisäveroa ostoksissani on?','Hur mycket moms ingår i mina köp?'),context));
-  if(button.id==='apply-preview')return perform(button,async context=>{const assumptions={};for(const fieldset of document.querySelectorAll('[data-assumption]')){const amountInput=fieldset.querySelector('[data-field=amount]').value;const amount=eurosToCents(amountInput.replace(/^-/,''))*(amountInput.startsWith('-')?-1:1);const day=Number(fieldset.querySelector('[data-field=day]').value);if(!Number.isFinite(amount)||!Number.isInteger(day)||day<1||day>31)throw new Error(t('error.assumption'));assumptions[fieldset.dataset.assumption]={enabled:fieldset.querySelector('[data-field=enabled]').checked,amount_cents:amount,median_day:day};}state.forecast=await request(context,'get','/api/forecast',{as_of:state.forecast?.as_of||monthEnd(context.month),assumptions:JSON.stringify(assumptions)});state.forecastAssumptions=assumptions;renderForecast();notify(t('feedback.preview'));});
+  if(button.id==='apply-preview')return perform(button,async context=>{const assumptions={};for(const fieldset of document.querySelectorAll('[data-assumption]')){const amountInput=fieldset.querySelector('[data-field=amount]').value.trim().replace(/^[-−]/,'').replace(/[\s\u00a0€]/g,'').replace(',','.');const sign=Number(fieldset.dataset.sign)<0?-1:1;const amount=eurosToCents(amountInput)*sign;const day=Number(fieldset.querySelector('[data-field=day]').value);if(!Number.isFinite(amount)||!Number.isInteger(day)||day<1||day>31)throw new Error(t('error.assumption'));assumptions[fieldset.dataset.assumption]={enabled:fieldset.querySelector('[data-field=enabled]').checked,amount_cents:amount,median_day:day};}state.forecast=await request(context,'get','/api/forecast',{as_of:state.forecast?.as_of||monthEnd(context.month),assumptions:JSON.stringify(assumptions)});state.forecastAssumptions=assumptions;renderForecast();notify(t('feedback.preview'));});
   if(button.hasAttribute('data-close'))button.closest('dialog').close();
   if(button.dataset.action==='comparison')perform(button,showStory);
   if(button.dataset.action==='calculation')showCalculation(button.dataset.evidence==='money-map'?moneyMapEvidence(state.filter):button.dataset.evidence==='transactions'?state.transactionEvidence:restaurantEvidence());
@@ -1140,7 +1239,12 @@ document.addEventListener('change',event=>{
 });
 document.addEventListener('invalid',event=>event.target.setCustomValidity?.(t('error.validation')),true);
 document.addEventListener('input',event=>event.target.setCustomValidity?.(''));
+// Restore the customer and month before the first navigate, so selectPersona cannot reset the view afterwards.
+{const saved=readSession(sessionStore,Object.keys(names));if(saved){restoredSession=true;if(saved.customerId!==state.customerId){selectPersona(state,saved.customerId);api=createAPI(state.customerId);}$('persona').value=state.customerId;if(saved.month)state.selectedMonth=saved.month;}}
 globalThis.addEventListener?.('popstate',()=>{const view=viewFromHash(globalThis.location?.hash);if(view&&view!==state.view){closeDialogs();navigate(view,{fromHistory:true});}});
 {const initial=viewFromHash(globalThis.location?.hash);if(initial&&initial!=='home')navigate(initial,{fromHistory:true});else syncHash('home',true);}
+// V5 lane SP: Spending section order, one card system and the folded "More" (web/spending-v5.js).
+import { arrangeSpending, revealRing } from './spending-v5.js';
+arrangeSpending(document);
 applyLanguage();
 load();

@@ -310,19 +310,37 @@ class PersonalizationTests(Fixture):
         self.save('life_stage', 'between_jobs')
         self.save('life_event', {'type': 'job_loss', 'since': '2026-09-01'})
         steady = self.card('room.week')
-        self.assertTrue(steady['lines'][0].startswith('Your reserve comes first'))
+        self.assertTrue(steady['lines'][0].startswith('Your safety cushion comes first'))
         self.assertLessEqual(steady['headline']['value_cents'], normal['headline']['value_cents'])
         self.assertIn('steady mode (lost your job)', steady['profile_note'])
         self.assertIn('between jobs', steady['profile_note'])
-        self.assertTrue(self.card('room.week', 'fi')['lines'][0].startswith('Vararahasi on etusijalla'))
+        self.assertTrue(self.card('room.week', 'fi')['lines'][0].startswith('Turvatyynysi on etusijalla'))
         save_more = self.card('room.save_more')
         self.assertEqual(save_more['params_used']['percent'], 10)
-        self.assertTrue(save_more['lines'][0].startswith('Your buffer comes first'))
+        self.assertTrue(save_more['lines'][0].startswith('Your safety cushion comes first'))
         spender = self.card('spend.spender')
         self.assertFalse(any(line.startswith('Worth a look') for line in spender['lines']))
         buffer = self.card('goals.buffer')
         self.assertEqual(buffer['params_used']['months'], 6)
         self.assertEqual(self.card('me.life_change')['headline']['value_text'], 'Steady mode')
+
+    def test_steady_mode_cards_never_offer_saving(self):
+        # V5 fix (lane CO): no saving follow-up, no "could go to savings" line or bar part, one vocabulary.
+        saving = {'room.save_now', 'room.save_more', 'room.cut', 'goals.new'}
+        self.assertIn('room.save_now', [item['id'] for item in self.card('room.week')['followups']])
+        self.save('life_event', {'type': 'job_loss', 'since': '2026-09-01'})
+        for qid in ('room.week', 'room.payday', 'money.where', 'spend.spender', 'goals.progress'):
+            card = self.card(qid)
+            ids = [item['id'] for item in card['followups']]
+            self.assertFalse(saving & set(ids), (qid, ids))
+            self.assertEqual(len(ids), len(set(ids)))
+            self.assertNotIn(qid, ids)
+        week = self.card('room.week')
+        self.assertFalse(any('savings' in line for line in week['lines']))
+        self.assertFalse(any(row['label'] == 'Could be saved' for row in (week['chart'] or {}).get('data', [])))
+        self.assertEqual(week['profile_note'].count('Using what you told me'), 1)
+        self.assertIn('rauhallinen tahti', self.card('room.week', 'fi')['profile_note'])
+        self.assertIn('lugnt tempo', self.card('room.week', 'sv')['profile_note'])
 
     def test_what_do_you_know_lists_the_profile(self):
         self.assertEqual(self.card('me.known')['headline']['value_text'], '0')

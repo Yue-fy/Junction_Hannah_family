@@ -9,6 +9,7 @@ import json
 
 from . import analytics, cashflow, explore, forecast, goals, money_profile, scenarios, spender, statistics, tax
 from .agent_numbers import allowed_numbers
+from .labels import CATEGORY_LABELS, LOCALES, category_label
 from .ledger import account_scope, month_bounds, shift_month, transactions
 from .money import cents_to_euros, rounded
 
@@ -25,7 +26,7 @@ _SPECS = {
     'compare_periods': ('Compare consumption in two periods with a precomputed percentage change.', {**_DATES, 'comparison_start': _field(), 'comparison_end': _field(), 'category': _field()}, ['start', 'end', 'comparison_start', 'comparison_end']),
     'monthly_trend': ('Observed consumption trend, up to 24 months; missing history is null, never zero.', {'months': _field('INTEGER', minimum=1, maximum=24), 'category': _field(), 'end_month': _field()}, ['months']),
     'list_transactions': ('Read at most 20 consumption rows, with private identifiers removed.', {**_DATES, 'category': _field(), 'limit': _field('INTEGER', minimum=1, maximum=20), 'sort': _field(enum=['newest', 'oldest', 'largest'])}, ['start', 'end']),
-    'safe_to_spend': ('The one safe-to-spend answer: what the customer can spend this week and per day until next payday, after holding back every bill and loan due before payday, everyday costs (food, getting around), a surprise buffer, a small cushion and any saving target. Money beyond a comfortable pace is extra_cents (could be saved), never spendable. Not a guarantee.', {'reserve_floor_cents': _field('INTEGER', minimum=0)}, []),
+    'safe_to_spend': ('The one safe-to-spend answer: money for daily life (food, getting around and free choices) per day until next payday (per_day_cents), in total until payday (daily_life_cents) and this week (this_week_cents), after holding back every bill and loan due before payday, a surprise buffer, a small cushion and any saving target. Money beyond a comfortable pace is extra_cents (could be saved), never spendable. Not a guarantee.', {'reserve_floor_cents': _field('INTEGER', minimum=0)}, []),
     'safe_to_save': ('How much could be moved to savings now (extra_cents): free money until payday beyond a comfortable spending pace, after bills, everyday costs, a surprise buffer and a cushion. Same plan as safe_to_spend; spending room and savings never overlap. Not a guarantee.', {'reserve_floor_cents': _field('INTEGER', minimum=0)}, []),
     'forecast_30_days': ('Pattern-based scheduled payments and lowest/ending balances over the next 30 days.', {}, []),
     'what_if_reduce': ('Unsaved preview of reducing an eligible discretionary category, with monthly and annual amounts.', {'category': _field(), 'percent': _field('NUMBER', minimum=0, maximum=100), 'month': _field()}, ['category', 'percent']),
@@ -412,15 +413,22 @@ def dispatch(conn, customer_id, ctx, name, args):
         raw = forecast.spending_plan(conn, customer_id, as_of=ctx.reference_date,
                                      reserve_floor_cents=args.get('reserve_floor_cents'),
                                      profile=planning_profile(conn, customer_id, ctx.reference_date))
+        # ONE set of figures for the model: per day, daily life until payday (incl. food), this week, could be saved.
+        # The free-choice part (spendable) and free money are hidden: quoted alone they read as "total spending
+        # money" next to a per-day figure that includes food (live eval en03).
         keep = ('as_of', 'balance_cents', 'next_payday', 'days_to_payday', 'payday', 'held_back', 'held_back_cents',
-                'everyday_cents', 'buffer_cents', 'reserve_floor_cents', 'free_cents', 'shortfall_cents',
-                'spendable_until_payday_cents', 'per_day_cents', 'this_week_cents', 'this_week_days', 'extra_cents',
+                'everyday_cents', 'buffer_cents', 'reserve_floor_cents', 'shortfall_cents',
+                'daily_life_cents', 'per_day_cents', 'this_week_cents', 'this_week_days', 'extra_cents',
                 'safe_to_save_cents', 'planned_saving_cents', 'steady_mode', 'emergency_fund', 'protected_categories',
                 'assumptions', 'transaction_refs', 'chart', 'label', 'scenario', 'observed', 'fact_id')
         result = {key: raw[key] for key in keep}
+        # The comfortable-pace note names the free-choice part only; keep the sentence, drop that amount.
+        result['assumptions'] = [re.sub(r'\s*\([^()]*\d[^()]*until payday\)', '', text) for text in raw['assumptions']]
         result['payday'] = {k: v for k, v in raw['payday'].items() if k != 'salary_dates'}
         result['held_back'] = [{k: v for k, v in item.items() if k in ('kind', 'label', 'amount_cents', 'date')} for item in raw['held_back']]
-        result['rule'] = 'this_week + the rest of the spendable until payday + extra (could be saved) = free; never add extra on top of spending'
+        result['rule'] = ('daily_life is the one total until payday (everyday costs such as food and getting around, plus free '
+                          'choices); per_day = daily_life / days_to_payday; this_week = per_day x this_week_days; '
+                          'extra (could be saved) is separate and never added to spending')
         if name == 'safe_to_save':
             result['highlight'] = {'label': 'Could be saved now', 'value': '€' + cents_to_euros(raw['extra_cents']), 'caption': 'Beyond a comfortable pace until payday ' + raw['next_payday']}
         else:
@@ -537,7 +545,10 @@ def dispatch(conn, customer_id, ctx, name, args):
         action = {'kind': 'update_profile', 'label': 'Review profile update', 'params': ctx.sanitize({'entries': entries}, decorate=False)}
         _record_action(ctx, action)
         result = {'proposed': True, 'saved': False, 'requires_confirmation': True, 'entries': entries,
-                  'note': 'Nothing is saved until the customer taps Save on the draft card.'}
+                  'note': 'Nothing is saved until the customer taps Save on the draft card.',
+                  'answer_still_needed': ('This only prepares a card. Still answer the customer: one warm sentence, one '
+                                          'practical step from their data (for example safe_to_spend per day until payday '
+                                          'and the buffer kept aside), then mention the note to review.')}
         period = (ctx.reference_date, ctx.reference_date)
     elif name == 'tax_overview':
         as_of = args.get('as_of', ctx.reference_date)
@@ -616,5 +627,27 @@ def dispatch(conn, customer_id, ctx, name, args):
         # The model sees goal changes without the internal goal id.
         result = {'proposed': True, 'requires_confirmation': kind != 'open_view',
                   'action': {**action, 'params': visible} if visible is not None else action}
+    names = _category_names(result)
+    if names:
+        result['category_names'] = names
     return _finish(conn, customer_id, ctx, result, period, basis, query,
                    f"{args.get('category', 'Account history')} · {period[0]} to {period[1]}")
+
+
+def _category_names(result):
+    """{category key: {en, fi, sv}} for every known category in a result, so answers never show 'Lifestyle'."""
+    found = []
+
+    def visit(value, key=''):
+        if isinstance(value, dict):
+            for name, item in value.items():
+                visit(item, name)
+        elif isinstance(value, (list, tuple)):
+            for item in value:
+                visit(item, key)
+        elif isinstance(value, str) and key not in ('text', 'basis', 'label_text'):
+            # Exact category keys only (category, key, label fields...), never free text.
+            if value in CATEGORY_LABELS and value not in found:
+                found.append(value)
+    visit(result)
+    return {name: {locale: category_label(name, locale) for locale in LOCALES} for name in found}

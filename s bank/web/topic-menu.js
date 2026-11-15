@@ -52,7 +52,7 @@ const COPY = {
 
   'topic.learn': ['Learn', 'Opi', 'Lär dig'],
   'topic.learn.baskets': ['What are the three baskets?', 'Mitkä ovat kolme koria?', 'Vilka är de tre korgarna?'],
-  'topic.learn.emergency': ['What is an emergency fund?', 'Mikä on hätävara?', 'Vad är en nödbuffert?'],
+  'topic.learn.emergency': ['What is an emergency fund?', 'Mikä on hätävara?', 'Vad är en sparkudde?'],
   'topic.learn.taxCard': ['What is a tax card?', 'Mikä on verokortti?', 'Vad är ett skattekort?'],
 
   'topic.year': ['My year', 'Vuoteni', 'Mitt år'],

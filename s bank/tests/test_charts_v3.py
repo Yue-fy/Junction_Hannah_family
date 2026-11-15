@@ -102,18 +102,23 @@ assert.equal(module.chartDetailPanel({month:'m'}),'');
 """)
 
     def test_cashflow_chart_handles_negative_net_and_partial_periods(self):
+        # V5 fix (lane SP2): drawn at the real width with an HTML legend, y gridlines and a left-over strip.
         self.run_node('charts.js', r"""
-const rows=[{label:'2026-07',income_cents:300000,consumption_cents:250000,savings_transfers_cents:20000,net_cents:30000,complete:true},
- {label:'2026-08',income_cents:300000,consumption_cents:350000,savings_transfers_cents:20000,net_cents:-70000,complete:true},
+const rows=[{label:'2026-07',period:'2026-07',income_cents:300000,consumption_cents:250000,savings_transfers_cents:20000,net_cents:30000,complete:true},
+ {label:'2026-08',period:'2026-08',income_cents:300000,consumption_cents:350000,savings_transfers_cents:20000,net_cents:-70000,complete:true},
  {label:'<b>2026-09',income_cents:100000,consumption_cents:50000,savings_transfers_cents:0,net_cents:50000,complete:false}];
-const chart=module.cashflowChart(rows);
-assert.match(chart,/viewBox="0 0 330 180"/); assert.match(chart,/role="img"/);
-assert.match(chart,/class="cashflow-zero"/,'negative net needs a zero baseline');
+const chart=module.cashflowChart(rows,{width:360});
+assert.match(chart,/^<div class="cf5"><ul class="cf5-legend"/,'the legend is HTML above the chart, so it wraps');
+assert.match(chart,/width="360" height="\d+" viewBox="0 0 360 \d+"/,'drawn in real pixels'); assert.match(chart,/role="img"/);
+assert.ok((chart.match(/class="cf5-ylabel"/g)||[]).length>=3,'y gridline labels');
+assert.match(chart,/>€2k</); assert.match(chart,/>€4k</);
+assert.match(chart,/class="cashflow-zero/,'negative left-over needs a zero line');
 assert.match(chart,/<pattern id="cashflow-\d+-hatch"/); assert.match(chart,/fill="url\(#cashflow-\d+-hatch\)"/);
 assert.match(chart,/Partial period/); assert.match(chart,/>Partial</);
-assert.match(chart,/Money in/); assert.match(chart,/Money out/); assert.match(chart,/>Net</);
-assert.match(chart,/class="cashflow-net"/); assert.equal((chart.match(/cashflow-net-dot/g)||[]).length,3);
-assert.match(chart,/Net -€700.00/); assert.match(chart,/\(partial period\)/);
+assert.match(chart,/Money in/); assert.match(chart,/Money out/);
+assert.equal((chart.match(/class="cashflow-net cf5-left/g)||[]).length,3); assert.match(chart,/cf5-left is-negative/);
+assert.match(chart,/>Jul 26</); assert.match(chart,/>Aug</);
+assert.match(chart,/\(partial period\)/);
 assert.ok(!chart.includes('<b>')); assert.ok(!chart.includes('NaN'));
 assert.ok(!chart.includes('data-index'));
 const positive=module.cashflowChart([rows[0]]);
@@ -121,9 +126,23 @@ assert.ok(!positive.includes('cashflow-zero')); assert.ok(!positive.includes('Pa
 const live=module.cashflowChart(rows,{interactive:true,selectedIndex:2});
 assert.equal((live.match(/role="button"/g)||[]).length,3);
 assert.match(live,/data-index="2" aria-label="&lt;b&gt;2026-09: money in €1,000.00, money out €500.00, net €500.00 \(partial period\)" aria-pressed="true"/);
+assert.match(live,/class="cf5-left-value"[^>]*>€500</,'the selected column names its left-over amount');
+// The highlight band stays inside the plot: it never reaches the legend (HTML) or the month labels.
+const band=/class="cf5-band" x="[\d.]+" y="([\d.]+)" width="[\d.]+" height="([\d.]+)"/.exec(live);
+const labelY=Number(/class="cf5-xlabel[^"]*" x="[\d.]+" y="([\d.]+)"/.exec(live)[1]);
+assert.ok(Number(band[1])>=0 && Number(band[1])+Number(band[2])<labelY-10);
+// Narrow phones: every label stays inside the width; month names never crowd.
+const twelve=Array.from({length:12},(_,i)=>({period:`2026-${String(i+1).padStart(2,'0')}`,income_cents:250000,consumption_cents:200000,left_over_cents:50000,complete:true}));
+const narrow=module.cashflowChart(twelve,{width:280});
+assert.ok((narrow.match(/class="cf5-xlabel/g)||[]).length<=5);
+for(const m of narrow.matchAll(/class="cf5-xlabel[^"]*" x="([\d.]+)"/g))assert.ok(Number(m[1])>=0&&Number(m[1])<=280);
 const gap=module.cashflowChart([{label:'a',income_cents:1,consumption_cents:2},{label:'b',income_cents:'x',consumption_cents:2}]);
-assert.ok(!gap.includes('cashflow-net-dot')); assert.ok(!gap.includes('NaN'));
+assert.ok(!gap.includes('cf5-left')); assert.ok(!gap.includes('NaN'));
 assert.match(module.cashflowChart([]),/empty-state/);
+// Axis money: "€1k" in English, "1 000 €" in Finnish and Swedish (never "t." or "tn").
+assert.equal(module.axisEuro(150000),'€1.5k'); assert.equal(module.axisEuro(80000),'€800');
+module.configureCharts({locale:'fi-FI'}); assert.equal(module.axisEuro(100000).replace(/\s/g,' '),'1 000 €');
+module.configureCharts({locale:'sv-FI'}); assert.ok(!/tn|t\./.test(module.axisEuro(18000000)));
 """)
 
     def test_clamp_and_step_range_edges(self):

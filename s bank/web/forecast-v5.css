@@ -1,0 +1,73 @@
+/* V5 lane FC — "Your balance over the next 30 days". Mobile first; the chart is drawn at the column's real width. */
+.fc-card { --fc-line: #0b6b3f; --fc-observed: #163e30; --fc-band: #d9ead6; --fc-grid: #e9efe9; --fc-axis: #6a7f72;
+  --fc-out: #8a6a3d; --fc-watch: #a65f00; --fc-alert: #b3261e; position: relative; }
+.fc-card .fc-title { font-size: 20px; line-height: 1.25; letter-spacing: -.3px; margin: 0; color: var(--ink); }
+.fc-summary-slot { min-height: 1px; }
+.fc-summary { position: relative; margin: 8px 0 14px; padding-left: 18px; font-size: 15px; line-height: 1.45; color: var(--ink); max-width: 60ch; }
+.fc-summary::before { content: ""; position: absolute; left: 0; top: .42em; width: 9px; height: 9px; border-radius: 50%; background: var(--fc-line); box-shadow: 0 0 0 3px #dcefe3; }
+.fc-summary--cushion::before { background: var(--fc-watch); box-shadow: 0 0 0 3px #fbe9cf; }
+.fc-summary--negative::before { background: var(--fc-alert); box-shadow: 0 0 0 3px #f8dcd9; }
+
+.fc-host { position: relative; width: 100%; min-width: 0; max-width: none !important; }
+.fc-chart { position: relative; width: 100%; }
+.fc-svg { display: block; max-width: 100%; height: auto; overflow: visible; touch-action: pan-y; -webkit-tap-highlight-color: transparent; cursor: crosshair; border-radius: 8px; }
+.fc-svg:focus { outline: none; }
+.fc-svg:focus-visible { outline: 2px solid var(--green); outline-offset: 4px; }
+.fc-grid { stroke: var(--fc-grid); stroke-width: 1; }
+.fc-grid--zero { stroke: #b9c6bc; }
+.fc-base { stroke: #d4ddd5; stroke-width: 1; }
+.fc-axis { font-size: 11px; fill: var(--fc-axis); font-variant-numeric: tabular-nums; paint-order: stroke; stroke: #fff; stroke-width: 3px; stroke-linejoin: round; }
+.fc-axis--cushion { fill: var(--fc-watch); }
+.fc-cushion { stroke: var(--fc-watch); stroke-width: 1; stroke-dasharray: 2 3; opacity: .8; }
+.fc-band { fill: var(--fc-band); opacity: .85; }
+.fc-today { stroke: #cdd8cf; stroke-width: 1; stroke-dasharray: 1 3; }
+.fc-line { fill: none; stroke-width: 2.25; stroke-linecap: round; stroke-linejoin: round; }
+.fc-line--observed { stroke: var(--fc-observed); }
+.fc-line--expected { stroke: var(--fc-line); }
+.fc-event { stroke: #fff; stroke-width: 2; }
+.fc-event--in { fill: var(--fc-line); }
+.fc-event--out { fill: var(--fc-out); }
+.fc-tick { stroke: #b9c6bc; stroke-width: 1; }
+.fc-lane-name { font-size: 11.5px; font-weight: 650; fill: var(--ink); }
+.fc-lane-name--out { fill: #5d4727; }
+.fc-lane-date { font-size: 11px; fill: var(--fc-axis); }
+.fc-low { fill: #fff; stroke-width: 2.5; stroke: var(--fc-observed); }
+.fc-low--watch { stroke: var(--fc-watch); }
+.fc-low--alert { stroke: var(--fc-alert); }
+.fc-low-label, .fc-end-label { font-size: 12px; font-weight: 650; fill: var(--ink); paint-order: stroke; stroke: #fff; stroke-width: 4px; stroke-linejoin: round; font-variant-numeric: tabular-nums; }
+.fc-end-label { font-weight: 600; fill: #2e5443; }
+.fc-cursor line { stroke: #7f9486; stroke-width: 1; }
+.fc-cursor circle { fill: #fff; stroke: var(--fc-observed); stroke-width: 2.5; }
+
+/* Day readout. Phones/tablets: a fixed row above the chart (never covers the line; shows a hint when idle).
+   Mouse screens: a small card beside the crosshair. */
+.fc-chart { display: flex; flex-direction: column; }
+.fc-tip { order: -1; position: static; display: grid; grid-template-columns: 1fr auto; align-items: baseline; column-gap: 12px; min-height: 50px;
+  margin: 0 0 8px; padding: 7px 12px; background: var(--wash, #eef6ef); border-radius: 12px; font-size: 12.5px; line-height: 1.35; color: var(--muted); }
+.fc-tip.is-idle { grid-template-columns: 1fr; align-items: center; }
+.fc-tip-hint { font-size: 13px; color: var(--muted); }
+.fc-tip-hint::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 8px; border-radius: 50%; border: 1.5px solid var(--fc-line); vertical-align: 1px; }
+.fc-tip-date { grid-column: 1; grid-row: 1; font-size: 12.5px; }
+.fc-tip-value { grid-column: 2; grid-row: 1 / span 2; align-self: center; font-size: 19px; font-weight: 700; color: var(--ink); letter-spacing: -.2px; font-variant-numeric: tabular-nums; }
+.fc-tip-range { grid-column: 1; grid-row: 2; font-size: 12px; }
+.fc-tip-event { grid-column: 1 / -1; color: var(--ink); font-weight: 600; font-size: 12.5px; }
+@media (hover: hover) and (pointer: fine) {
+  .fc-tip { order: 0; position: absolute; z-index: 3; display: grid; grid-template-columns: 1fr; gap: 1px; min-height: 0; min-width: 128px; max-width: 200px; margin: 0;
+    padding: 8px 11px 9px; background: #fff; border: 1px solid #dbe4dc; box-shadow: 0 6px 20px #12321f1f; pointer-events: none; }
+  .fc-tip.is-idle { display: none; }
+  .fc-tip-date, .fc-tip-value, .fc-tip-range, .fc-tip-event { grid-column: 1; grid-row: auto; }
+  .fc-tip-value { font-size: 17px; }
+  .fc-tip-event { margin-top: 3px; padding-top: 4px; border-top: 1px solid #edf2ed; }
+}
+
+.fc-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 10px 0 0; font-size: 13px; color: var(--muted); }
+.fc-key { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+.fc-key::before { content: ""; display: inline-block; width: 18px; height: 0; border-top: 2.25px solid var(--fc-observed); }
+.fc-key--expected::before { border-top: 2.25px dashed var(--fc-line); }
+.fc-key--band::before { height: 10px; border: 0; border-radius: 3px; background: var(--fc-band); }
+.fc-card .fc-explainer { margin-top: 14px; }
+
+@media (min-width: 700px) {
+  .fc-card .fc-title { font-size: 22px; }
+  .fc-summary { font-size: 16px; }
+}

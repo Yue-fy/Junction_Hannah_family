@@ -19,7 +19,7 @@ class AgentChatTests(unittest.TestCase):
 await app.askCoach('How much on restaurants?');
 assert.equal(calls.filter(call=>call.method==='POST').at(-1).path,'/api/agent');
 assert.equal(app.state.conversation[0].response.source,'agent');
-assert.match(get('coach-mode').textContent,/AI coach/);
+assert.equal(get('coach-mode').textContent,'Numbers come from your account. Nothing changes without your OK.');
 assert.match(get('coach-response').innerHTML,/<strong>€225.70<\/strong>/);
 const suggestion=new Element();suggestion.dataset.agentSuggestion=app.state.conversation[0].id;suggestion.dataset.index='0';
 await documentListeners.click({target:suggestion});

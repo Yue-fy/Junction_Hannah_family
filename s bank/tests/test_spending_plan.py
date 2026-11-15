@@ -174,26 +174,31 @@ class ProfileInputTests(unittest.TestCase):
         self.assertIn(('tax', 4000), [(h['kind'], h['amount_cents']) for h in p['held_back']])
 
     def test_plan_set_asides_from_switched_on_plans(self):
+        # V5 fix: a mortgage plan paid as a housing payment REPLACES the €800 housing bill (never both),
+        # on the plan's own payment day (the 5th); the tax plan is held back once per pay cycle.
         mortgage = {'kind': 'loan', 'plan': 'mortgage', 'label': 'Mortgage payment', 'amount_cents': 65000, 'day_of_month': 5,
                     'until': '2040-06', 'dedupe_hint': {'transaction_type': 'housing_payment', 'amount_cents': 65000}}
         tax = {'kind': 'tax', 'plan': 'tax', 'label': 'Money for back taxes', 'amount_cents': 8000, 'day_of_month': None,
                'until': '2027-03', 'dedupe_hint': None}
         p = self.plan(plan_set_asides=[mortgage, tax], plan_set_asides_monthly_total_cents=73000)
         loans = [h for h in p['held_back'] if h['kind'] == 'loan']
-        self.assertEqual([(h['label'], h['amount_cents']) for h in loans], [('Mortgage payment', 65000)])
+        self.assertEqual([(h['label'], h['amount_cents'], h['date']) for h in loans], [('Mortgage payment', 65000, '2026-10-05')])
         self.assertEqual(loans[0]['labels']['fi'], 'Asuntolainan erä')
+        self.assertFalse([h for h in p['held_back'] if h['key'] == 'rent'])
         self.assertIn(('tax', 8000, 'Money for back taxes'), [(h['kind'], h['amount_cents'], h['label']) for h in p['held_back']])
-        self.assertEqual(p['free_cents'], self.plain['free_cents'] - 73000)
-        self.assertEqual(p['committed_cents'], self.plain['committed_cents'] + 73000)
+        self.assertEqual(p['free_cents'], self.plain['free_cents'] + 80000 - 65000 - 8000)
+        self.assertEqual(p['committed_cents'], self.plain['committed_cents'] - 80000 + 73000)
 
     def test_mortgage_plan_already_paid_as_rent_is_not_held_twice(self):
-        # The fixture pays €800 housing every month; a mortgage plan of the same payment is that money.
+        # The fixture pays €800 housing every month; a mortgage plan paid as that housing payment is that money.
         mortgage = {'kind': 'loan', 'plan': 'mortgage', 'label': 'Mortgage payment', 'amount_cents': 80500, 'day_of_month': 10,
                     'until': None, 'dedupe_hint': {'transaction_type': 'housing_payment', 'amount_cents': 80500}}
         p = self.plan(plan_set_asides=[mortgage])
-        self.assertEqual(p['free_cents'], self.plain['free_cents'])
+        self.assertEqual(p['free_cents'], self.plain['free_cents'] - 500)
         self.assertEqual([s['plan'] for s in p['skipped_declared_items']], ['mortgage'])
-        self.assertFalse([h for h in p['held_back'] if h['kind'] == 'loan'])
+        self.assertTrue(p['skipped_declared_items'][0]['replaced_by_plan'])
+        self.assertEqual([(h['key'], h['amount_cents'], h['date']) for h in p['held_back'] if h['kind'] in ('bill', 'loan')],
+                         [('mortgage', 80500, '2026-10-10')])
 
     def test_finished_plan_is_not_held_back(self):
         tax = {'kind': 'tax', 'plan': 'tax', 'label': 'Money for back taxes', 'amount_cents': 8000, 'until': '2026-05', 'dedupe_hint': None}

@@ -82,9 +82,11 @@ assert.deepEqual(r.entries, [
   {key:'income_stability', value:'varies', source:'you_told_me'},
   {key:'saving_rate_target_pct', value:15, source:'you_told_me'},
   {key:'regular_investing', value:{active:true, monthly_cents:5000}, source:'you_told_me'},
-  {key:'debts', value:[{type:'mortgage', monthly_payment_cents:90000}, {type:'student_loan', monthly_payment_cents:8000}], source:'you_told_me'},
+  // V5 lane ME: one entry per loan / coming-up item, the shape the server validates.
+  {key:'debts', value:{type:'mortgage', monthly_payment_cents:90000}, source:'you_told_me'},
+  {key:'debts', value:{type:'student_loan', monthly_payment_cents:8000}, source:'you_told_me'},
   {key:'risk_attitude', value:'cautious', source:'you_told_me'},
-  {key:'upcoming', value:[{what:'Moving', month:'2027-03', amount_cents:200000}], source:'you_told_me'},
+  {key:'upcoming', value:{what:'Moving', month:'2027-03', amount_cents:200000}, source:'you_told_me'},
 ]);
 ''')
 
@@ -123,7 +125,9 @@ assert.deepEqual(s.answers.upcoming, [{what:'Wedding', month:'2027-06'}]);
 s = p.reduceOnboarding(s, {type:'skip'});
 assert.equal(s.step, 8, 'skip is a no-op on the summary');
 const r = p.onboardingResult(s);
-assert.deepEqual(r.entries.map(e => e.key), ['regular_investing','debts','upcoming']);
+// "No loans" (debts: []) has nothing the server can store, so it is not posted.
+assert.deepEqual(r.entries.map(e => e.key), ['regular_investing','upcoming']);
+assert.deepEqual(r.entries[1].value, {what:'Wedding', month:'2027-06'});
 assert.deepEqual(r.acceptedSuggestions, []);
 // suggestions set later drop stale decisions
 let t = p.createOnboardingState({suggestions:[{id:'a'}]});
@@ -299,7 +303,11 @@ assert.equal(d('coaching_style', 'direct', 'fi'), 'Suora');
 assert.equal(d('protected_categories', ['Travel', 'Restaurants']), 'Travel, Restaurants');
 assert.equal(d('protected_categories', []), 'None');
 assert.equal(d('upcoming', [{what:'Wedding', month:'2027-06', amount_cents:500000}]), 'Wedding, M:2027-06, about EUR5000.00');
-assert.equal(d('life_event', {type:'job_loss', since:'2026-11-01', note:'Company closed'}), 'Lost my job since D:2026-11-01 — Company closed');
+assert.equal(d('life_event', {type:'job_loss', since:'2026-11-01', note:'Company closed'}), 'Lost my job since M:2026-11 — Company closed');
+assert.equal(d('life_event', {type:'job_loss', since:'2026-08-01', ended:'2026-09-30'}), 'Lost my job since M:2026-08, ended D:2026-09-30');
+// the server stores one loan / coming-up item per entry (an object)
+assert.equal(d('debts', {type:'car_loan', monthly_payment_cents:25000}), 'Car loan EUR250.00 a month');
+assert.equal(d('upcoming', {what:'Bike', month:'2027-03', amount_cents:85049}), 'Bike, M:2027-03, about EUR850.00');
 assert.equal(d('life_event', {type:'moving', since:'2026-09'}, 'sv'), 'Flytt (sedan M:2026-09)');
 assert.equal(d('note', 'Save for a bike'), 'Save for a bike');
 assert.equal(d('tax', {tax_year:2026, base_rate_bp:2150, gross_monthly_cents:360000, decision_result:'back_tax', decision_amount_cents:42000}), 'Tax year 2026: Tax card 21.5%, gross EUR3600.00 a month, back taxes EUR420.00');
@@ -315,10 +323,10 @@ assert.ok(p.describeEntry({key:'regular_investing', value:{active:true, monthly_
 const samples = {
   life_stage: 'self_employed', household: {adults:2, children:1}, income_stability: 'steady',
   saving_rate_target_pct: 12.5, emergency_fund_target_months: 3, regular_investing: {active:true, monthly_cents:15050},
-  debts: [{type:'mortgage', monthly_payment_cents:90000, remaining_cents:12000000}, {type:'student_loan', monthly_payment_cents:8000}],
+  debts: {type:'mortgage', monthly_payment_cents:90000, remaining_cents:12000000},
   risk_attitude: 'adventurous', coaching_style: 'gentle', protected_categories: ['Travel', 'Restaurants'],
-  upcoming: [{what:'Wedding', month:'2027-06', amount_cents:500000}, {what:'New bike', month:'2027-01'}],
-  life_event: {type:'income_drop', since:'2026-10-15', note:'Fewer shifts'},
+  upcoming: {what:'Wedding', month:'2027-06', amount_cents:500000},
+  life_event: {type:'income_drop', since:'2026-10', note:'Fewer shifts'},
   note: 'Mum’s birthday trip is important', tax: {tax_year:2026, base_rate_bp:2150, additional_rate_bp:4300, income_limit_cents:4000000, gross_monthly_cents:360000, assessment_end_month:7, decision_result:'refund', decision_amount_cents:31000},
   year_review: {year:2025, closing:'A calm year', facts:{saved_cents:100}},
 };
@@ -340,12 +348,22 @@ for (const [key, value] of Object.entries(samples)) {
 assert.throws(() => p.draftSpecForEntry('salary_iban'));
 // amount fields carry cents; typed text is parsed
 assert.equal(p.draftSpecForEntry({id:'x', key:'regular_investing', value:{active:true, monthly_cents:15050}}).fields[1].value, 15050);
-assert.deepEqual(p.draftValueToEntry('debts', {type_0:'car_loan', monthly_0:'1 200,50', remaining_0:'', type_1:'', monthly_1:'', remaining_1:''}).value, [{type:'car_loan', monthly_payment_cents:120050}]);
-assert.deepEqual(p.draftValueToEntry('debts', {type_0:'car_loan', monthly_0:''}).errors, {monthly_0:'error.needAmount'});
+assert.deepEqual(p.draftValueToEntry('debts', {type:'car_loan', monthly:'1 200,50', remaining:''}).value, {type:'car_loan', monthly_payment_cents:120050});
+assert.deepEqual(p.draftValueToEntry('debts', {type:'car_loan', monthly:''}).errors, {monthly:'error.needAmount'});
+// no dev indexes in labels; Coming up asks for a month and keeps to the server's 80 characters
+for (const key of ['debts', 'upcoming']) for (const l of ['en', 'fi', 'sv']) for (const f of p.draftSpecForEntry(key, l).fields) assert.ok(!/\(\d|\{n\}/.test(f.label), key + ' ' + f.label);
+assert.ok(p.draftSpecForEntry('upcoming').fields.find(f => f.name === 'month').required);
+assert.equal(p.draftValueToEntry('upcoming', {what:'x'.repeat(81), month:'2027-01'}).errors.what, 'error.tooLong');
+assert.equal(p.draftSpecForEntry('life_event').fields.find(f => f.name === 'since').type, 'month');
+assert.deepEqual(p.draftSpecForEntry({id:'e', key:'life_event', value:{type:'job_loss', since:'2026-09-01'}}).fields[1].value, '2026-09');
+// editing keeps "ended" (steady mode off)
+assert.deepEqual(p.draftValueToEntry('life_event', {type:'job_loss', since:'2026-09', note:''}, {type:'job_loss', since:'2026-09-01', ended:'2026-09-30'}).value, {type:'job_loss', since:'2026-09', ended:'2026-09-30'});
+// split list values into one entry each; "No loans" saves nothing
+assert.deepEqual(p.splitProfileEntries([{key:'debts', value:[{type:'other', monthly_payment_cents:1}, {type:'car_loan', monthly_payment_cents:2}]}, {key:'debts', value:[]}, {key:'note', value:'x'}]).map(e => e.value), [{type:'other', monthly_payment_cents:1}, {type:'car_loan', monthly_payment_cents:2}, 'x']);
 assert.deepEqual(p.draftValueToEntry('saving_rate_target_pct', {value:'95'}).errors, {value:'error.badRange'});
 assert.equal(p.draftValueToEntry('note', {value:'x'.repeat(501)}).errors.value, 'error.tooLong');
 assert.equal(p.draftValueToEntry('note', {value:'  '}).value, null);
-assert.equal(p.draftValueToEntry('upcoming', {what_0:'Car', month_0:''}).errors.month_0, 'error.needMonth');
+assert.equal(p.draftValueToEntry('upcoming', {what:'Car', month:''}).errors.month, 'error.needMonth');
 assert.equal(p.draftValueToEntry('tax', {decision_result:'refund', decision_amount:''}).errors.decision_amount, 'error.needAmount');
 assert.deepEqual(p.draftValueToEntry('tax', {base_rate:'21,5'}, {decision_due_dates:['2026-08-01']}).value, {base_rate_bp:2150, decision_due_dates:['2026-08-01']});
 assert.equal(p.draftValueToEntry('life_stage', {value:'pirate'}).errors.value, 'error.needChoice');

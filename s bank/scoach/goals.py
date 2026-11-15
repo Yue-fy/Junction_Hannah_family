@@ -67,13 +67,105 @@ def goal_plan(conn,customer_id,goal_id,as_of=None):
     active=links[-1] if links else None
     modeled=min(active['modeled_monthly_contribution_cents'],remaining) if active else 0
     gap=max(monthly_after_now-capacity,0) if monthly_after_now is not None else None
+    fit=goal_fit(required,capacity,capacity_available,_other_goals_monthly(conn,customer_id,goal_id,reference),
+                 remaining,reference,upfront,monthly_after_now)
     return {**goal,**account_scope(conn,customer_id),'as_of':reference.isoformat(),'remaining_cents':remaining,'months_remaining':months,'required_monthly_cents':required,
             'conservative_monthly_contribution_cents':capacity,'typical_monthly_left_over_cents':capacity,'capacity_available':capacity_available,
             'upfront_available_cents':upfront,'could_save_now_cents':plan['extra_cents'],'required_monthly_after_now_cents':monthly_after_now,
-            'monthly_gap_cents':gap,'reserve_floor_cents':goal['reserve_floor_cents'],
+            'monthly_gap_cents':gap,'fit':fit,'reserve_floor_cents':goal['reserve_floor_cents'],
             'spending_plan':{'as_of':plan['as_of'],'next_payday':plan['next_payday'],'free_cents':plan['free_cents'],'spendable_until_payday_cents':plan['spendable_until_payday_cents'],'extra_cents':plan['extra_cents'],'fact_id':plan['fact_id']},
             'cashflow_months':cashflows,'modeled_scenario_contribution_cents':modeled,'linked_scenarios':links,'active_scenario_id':active['id'] if active else None,'inactive_linked_scenario_ids':[s['id'] for s in links[:-1]],'scenario_contribution_cap_cents':remaining,'label':'Planning scenario — not promised savings','observed':False,'transaction_refs':[ref for m in cashflows for ref in m['transaction_refs']],'fact_id':fact_id('goal',goal_id,reference.isoformat(),capacity,upfront,modeled),
             'assumptions':['Monthly left-over is the median of six complete months after spending and regular saving transfers','What could go to the goal now is the spending plan\'s money that could be saved, after bills, everyday costs and a cushion until payday','Several goals share the same money that could be saved; it is not split automatically','Modeled adjustment is separate from existing contribution capacity']}
+
+
+def _other_goals_monthly(conn,customer_id,goal_id,reference):
+    """What the customer's OTHER unfinished goals need each month (sum of their required monthly)."""
+    total=0
+    for target_cents,saved,target_date in conn.execute('SELECT target_cents,current_saved_cents,target_date FROM goals WHERE customer_id=? AND id<>?',(customer_id,goal_id)):
+        remaining=max(target_cents-(saved or 0),0)
+        months=_months_remaining(reference,date.fromisoformat(target_date))
+        if remaining and months>0: total+=(remaining+months-1)//months
+    return total
+
+
+_FIT_TEXT={
+    'over':('{need} a month is more than the about {left} you usually have left each month. Try a later date ({date}) or about {left} a month.',
+            '{need} kuukaudessa on enemmän kuin noin {left}, joka sinulle yleensä jää kuukaudessa. Kokeile myöhäisempää päivää ({date}) tai noin {left} kuukaudessa.',
+            '{need} i månaden är mer än de ungefär {left} du brukar ha kvar varje månad. Prova ett senare datum ({date}) eller ungefär {left} i månaden.'),
+    'over_no_date':('{need} a month is more than the about {left} you usually have left each month.',
+                    '{need} kuukaudessa on enemmän kuin noin {left}, joka sinulle yleensä jää kuukaudessa.',
+                    '{need} i månaden är mer än de ungefär {left} du brukar ha kvar varje månad.'),
+    'shared_over':('Together with your other goals ({others} a month) this needs {total} a month, more than the about {left} you usually have left.',
+                   'Yhdessä muiden tavoitteidesi ({others} kuukaudessa) kanssa tarvitset {total} kuukaudessa, enemmän kuin noin {left}, joka sinulle yleensä jää.',
+                   'Tillsammans med dina andra mål ({others} i månaden) behövs {total} i månaden, mer än de ungefär {left} du brukar ha kvar.'),
+    'others':(' Your other goals need {others} a month too.',' Muut tavoitteesi tarvitsevat lisäksi {others} kuukaudessa.',' Dina andra mål behöver dessutom {others} i månaden.'),
+    'upfront':(' If you move {upfront} now, about {after} a month is enough.',
+               ' Jos siirrät nyt {upfront}, noin {after} kuukaudessa riittää.',
+               ' Om du flyttar {upfront} nu räcker ungefär {after} i månaden.'),
+}
+
+
+_MONTHS={'en':('Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'),
+         'fi':('tammikuu','helmikuu','maaliskuu','huhtikuu','toukokuu','kesäkuu','heinäkuu','elokuu','syyskuu','lokakuu','marraskuu','joulukuu'),
+         'sv':('jan.','feb.','mars','apr.','maj','juni','juli','aug.','sep.','okt.','nov.','dec.')}
+
+
+def _month_end_after(reference,months):
+    import calendar
+    total=reference.year*12+reference.month-1+months
+    year,month=divmod(total,12)
+    return date(year,month+1,calendar.monthrange(year,month+1)[1])
+
+
+def goal_fit(need_cents,left_cents,capacity_available,others_cents,remaining_cents,reference,upfront_cents=0,after_now_cents=None):
+    """Does a goal's monthly need fit what is usually left each month? (pure; integer cents)
+
+    Returns {status: 'fits'|'over'|'shared_over'|'unknown', monthly_need_cents,
+    usually_left_cents, other_goals_monthly_cents, total_monthly_cents, gap_cents (need +
+    other goals - usually left, >= 0), suggested_monthly_cents (what is usually left),
+    suggested_target_date (ISO month end when the goal fits what is usually left, or None),
+    upfront_cents and monthly_after_upfront_cents (the "move money now" route, when it
+    helps), texts {en, fi, sv}|None (a warning only when status is over or shared_over)}.
+    Whole euros in the texts.
+    """
+    from .money import format_euro
+    total=(need_cents or 0)+others_cents
+    out={'status':'unknown','monthly_need_cents':need_cents,'usually_left_cents':left_cents if capacity_available else None,
+         'other_goals_monthly_cents':others_cents,'total_monthly_cents':total,'gap_cents':None,
+         'suggested_monthly_cents':None,'suggested_target_date':None,'upfront_cents':0,'monthly_after_upfront_cents':None,'texts':None}
+    if not capacity_available or need_cents is None:
+        return out
+    out['gap_cents']=max(total-left_cents,0)
+    if (need_cents or 0)<=left_cents and total<=left_cents:
+        out['status']='fits'; return out
+    out['status']='over' if need_cents>left_cents else 'shared_over'
+    out['suggested_monthly_cents']=left_cents
+    room=left_cents-others_cents if out['status']=='shared_over' else left_cents
+    if room>0 and remaining_cents:
+        out['suggested_target_date']=_month_end_after(reference,-(-remaining_cents//room)).isoformat()
+    helps=upfront_cents>0 and after_now_cents is not None and after_now_cents<need_cents
+    if helps:
+        out['upfront_cents']=upfront_cents; out['monthly_after_upfront_cents']=after_now_cents
+    out['texts']={}
+    for index,locale in enumerate(('en','fi','sv')):
+        money=lambda cents: format_euro(cents,locale,0)
+        when=out['suggested_target_date']
+        date_text=None
+        if when:
+            day=date.fromisoformat(when)
+            date_text='%s %d'%(_MONTHS[locale][day.month-1],day.year)
+        if out['status']=='shared_over':
+            text=_FIT_TEXT['shared_over'][index].format(others=money(others_cents),total=money(total),left=money(left_cents))
+        elif date_text:
+            text=_FIT_TEXT['over'][index].format(need=money(need_cents),left=money(left_cents),date=date_text)
+        else:
+            text=_FIT_TEXT['over_no_date'][index].format(need=money(need_cents),left=money(left_cents))
+        if out['status']=='over' and others_cents:
+            text+=_FIT_TEXT['others'][index].format(others=money(others_cents))
+        if helps:
+            text+=_FIT_TEXT['upfront'][index].format(upfront=money(upfront_cents),after=money(after_now_cents))
+        out['texts'][locale]=text
+    return out
 
 
 def _spending_plan(conn,customer_id,as_of):

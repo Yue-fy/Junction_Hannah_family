@@ -4,10 +4,12 @@
 import { renderDraftCard, attachDraftCard, updateDraftPreview } from './draft-card.js';
 import { renderTopicButton, renderTopicSheet, attachTopicMenu } from './topic-menu.js';
 import { renderProfilePage, attachProfilePage, renderAddMenu, pm, draftSpecForEntry, draftValueToEntry, describeEntry,
-  createOnboardingState, attachOnboarding } from './money-profile.js';
+  createOnboardingState, attachOnboarding, splitProfileEntries, suggestionChoices, visibleSuggestions } from './money-profile.js';
 import { renderStory, attachStory, renderYearBanner } from './year-review.js';
-import { trendChart, attachChartSelection, chartDetailPanel, cashflowChart } from './charts.js';
+import { trendChart, attachChartSelection, cashflowChart } from './charts.js';
+import { mountTrendChart, trendSummary, salarySentence } from './trend-v5.js';
 import { initPlans } from './plans.js';
+import { meTaxRowHTML, revealTaxCard } from './plans-tax.js';
 
 const ONBOARDING_KEY = 'scoach.v3.onboarding.';
 const BANNER_KEY = 'scoach.v3.yearBannerDismissed.';
@@ -17,16 +19,18 @@ export function initV3(deps) {
     perform, navigate, changePeriod, askCoach, showTransactions, openDialog, closeDialogs, explainError, refreshGoals,
     locale, storage} = deps;
   const v3 = {};
-  let profileData = null, profilePending = null, trendSelected = null, cashflowGranularity = 'month', cashflowData = null,
+  let profileData = null, profilePending = null, trendCategories = new Map(), cashflowGranularity = 'month', cashflowData = null,
     cashflowSelected = null, onboardingState = null, onboardingHandle = null, topicHandle = null, yearOptions = null,
-    taxOverview = null;
+    taxOverview = null, profileNotice = null;
 
   // A translate function with a fallback, for components that pass one.
   const tr = (key, values = {}, fallback = key) => {
     const value = t(key, values);
     return value === key ? String(fallback).replace(/\{(\w+)\}/g, (_, name) => values?.[name] ?? '{' + name + '}') : value;
   };
-  const helpers = () => ({money, dateLabel, monthLabel});
+  // Me shows summaries: whole euros stay whole ("€250 a month"), typed cents are kept ("€250.50").
+  const profileMoney = cents => Number.isSafeInteger(cents) && cents % 100 === 0 ? money(cents).replace(/[.,]00(?=\D*$)/, '') : money(cents);
+  const helpers = () => ({money: profileMoney, dateLabel, monthLabel});
   const stored = key => { try { return storage?.getItem(key); } catch { return null; } };
   const store = (key, value) => { try { storage?.setItem(key, value); } catch { /* storage is optional */ } };
   const current = context => isCurrent(context) && context.locale === locale();
@@ -186,9 +190,34 @@ export function initV3(deps) {
     await loadProfile(context, true);
     if (state.view === 'profile') renderProfile(context);
     deps.refreshSupport?.(context);
+    // Goal cards show what is left after held-back plans; a profile change (e.g. Forget everything) moves that.
+    deps.refreshGoals?.(context)?.catch?.(() => {});
   }
-  function confirmDanger(title, intro, action) {
-    openDraft({id: 'danger', kind: 'profile', danger: true, title, intro, fields: [], saveLabel: t('v3.delete')}, {onSave: action});
+  function confirmDanger(title, intro, action, saveLabel = t('v3.delete')) {
+    openDraft({id: 'danger', kind: 'profile', danger: true, title, intro, fields: [], saveLabel}, {onSave: action});
+  }
+  // A plain "are you sure?" sheet with one action and Not now (no second confirmation step).
+  function confirmAction(title, intro, saveLabel, action) {
+    openDraft({id: 'confirm', kind: 'profile', title, intro, fields: [], saveLabel}, {onSave: action});
+  }
+  // Steady mode is turned off by marking its life event as ended (it stays on the profile), so it can be undone.
+  const endOfStory = () => referenceDate() || new Date().toISOString().slice(0, 10);
+  function steadyOff(entry, context) {
+    const ui = pm(locale(), 'event.' + entry.value.type);
+    const since = String(entry.value.since || '');
+    const ended = endOfStory() < since ? since : endOfStory();
+    confirmAction(pm(locale(), 'steady.offTitle'), pm(locale(), 'steady.offIntro', {event: ui}), pm(locale(), 'steady.offConfirm'), async () => {
+      await request(context, 'post', '/api/profile/entries/update', {entry_id: entry.id, value: {...entry.value, ended}, confirmed: true});
+      profileNotice = {customerId: context.customerId, text: pm(locale(), 'steady.offDone'), undo: {entryId: entry.id, value: entry.value}};
+      await afterProfileChange(context);
+    });
+  }
+  async function steadyOn(entry, context) {
+    const value = {...entry.value};
+    delete value.ended;
+    await request(context, 'post', '/api/profile/entries/update', {entry_id: entry.id, value, confirmed: true});
+    profileNotice = {customerId: context.customerId, text: pm(locale(), 'steady.onDone')};
+    await afterProfileChange(context);
   }
   async function renderProfile(context = captureContext()) {
     const node = $('profile-content');
@@ -202,9 +231,11 @@ export function initV3(deps) {
     const local = deps.localProfile?.();
     const migrate = data.profile?.empty && local && (local.notes?.length || local.onboarding_complete)
       ? `<section class="white-card"><p>${esc(t('v3.profile.migrate'))}</p><button type="button" class="secondary-button" data-v3-migrate>${esc(t('v3.profile.migrateAction'))}</button></section>` : '';
-    node.innerHTML = migrate + renderProfilePage(data.profile, data.suggestions, locale(), helpers());
+    const notice = profileNotice && profileNotice.customerId === context.customerId ? {text: profileNotice.text, undo: Boolean(profileNotice.undo)} : null;
+    node.innerHTML = migrate + renderProfilePage(data.profile, data.suggestions, locale(), {...helpers(), notice});
     node.setAttribute('aria-busy', 'false');
     attachProfilePage(node, {onAction: action => handleProfileAction(action, context)});
+    fillMeTaxRow(node, data, context);
   }
   function handleProfileAction(action, context) {
     if (!isCurrent(context)) return;
@@ -214,16 +245,37 @@ export function initV3(deps) {
       case 'edit': if (entry?.key?.startsWith('plan_')) loadProfile(context).then(() => openPlan(entry.key.slice(5))); else if (entry) profileEntryDraft(entry); break;
       case 'delete': if (entry) confirmDanger(t('v3.profile.deleteTitle'), describeEntry({...entry, value: toUiValue(entry.key, entry.value)}, locale(), helpers()),
         async () => { await request(context, 'post', '/api/profile/entries/delete', {entry_id: entry.id, confirmed: true}); await afterProfileChange(context); }); break;
-      case 'mode_off': if (action.id) post('/api/profile/entries/update', {entry_id: action.id, active: false}); break;
+      case 'mode_off': {
+        const reason = action.id ? entryById(action.id) : null;
+        if (reason) steadyOff(reason, context);
+        break;
+      }
+      case 'mode_on': if (entry) perform(null, next => steadyOn(entry, next)); break;
+      case 'undo': {
+        const undo = profileNotice?.customerId === context.customerId ? profileNotice.undo : null;
+        if (undo) perform(null, async next => {
+          await request(next, 'post', '/api/profile/entries/update', {entry_id: undo.entryId, value: undo.value, confirmed: true});
+          profileNotice = {customerId: next.customerId, text: pm(locale(), 'steady.onDone')};
+          await afterProfileChange(next);
+        });
+        break;
+      }
       case 'suggestion_keep': post('/api/profile/suggestions/confirm', {suggestion_id: action.id, locale: locale()}); break;
+      case 'suggestion_alt': {
+        const suggestion = visibleSuggestions(profileData?.profile, profileData?.suggestions).find(item => item.id === action.id);
+        const choice = suggestion ? suggestionChoices(suggestion, locale(), helpers())[action.index] : null;
+        if (choice) post('/api/profile/suggestions/confirm', {suggestion_id: action.id, key: choice.key, value: choice.value, locale: locale()});
+        break;
+      }
       case 'suggestion_dismiss': post('/api/profile/suggestions/dismiss', {suggestion_id: action.id}); break;
       case 'add': openPanel(renderAddMenu(locale()), {title: pm(locale(), 'actions.addTitle'), onAction: next => handleProfileAction(next, context)}); break;
       case 'add_key': profileEntryDraft(action.key); break;
       case 'open_tax': openTax(context); break;
+      case 'open_tax_plan': navigate('goals'); revealTaxCard(); break;
       case 'open_review': if (entry?.value?.year) openYearReview(entry.value.year); break;
       case 'onboarding': store(ONBOARDING_KEY + state.customerId, ''); navigate('coach'); startOnboarding(captureContext(), true); break;
-      case 'forget': confirmDanger(t('v3.profile.forgetTitle'), t('v3.profile.forgetIntro'),
-        async () => { await request(context, 'post', '/api/profile/forget', {confirmed: true}); await afterProfileChange(context); }); break;
+      case 'forget': confirmDanger(pm(locale(), 'forget.title'), pm(locale(), 'forget.intro'),
+        async () => { await request(context, 'post', '/api/profile/forget', {confirmed: true}); profileNotice = null; await afterProfileChange(context); }, pm(locale(), 'forget.confirm')); break;
       default: break;
     }
   }
@@ -281,16 +333,65 @@ export function initV3(deps) {
   v3.renderTopics = () => renderTopics();
 
   // ---------- Spending: month range, selectable bars, cash flow, VAT tile ----------
-  v3.renderTrendChart = rows => {
+  // V5 (lane TR): monthly spending as a line chart; hover, tap or focus a month for its tooltip.
+  v3.renderTrendChart = (rows, data = null) => {
     const end = state.selectedMonth, months = Number(state.trendMonths) || 12;
     const min = state.observedStart?.slice(0, 7), max = state.observedEnd?.slice(0, 7);
     if (end && min && max) renderSpendingPeriod($('trend-range-control'), {end, months, min, max});
-    if (trendSelected !== null && trendSelected >= rows.length) trendSelected = null;
-    $('trend-chart').innerHTML = trendChart(rows, {interactive: rows.length > 0, selectedIndex: trendSelected});
-    if (trendSelected === null || trendSelected === undefined) scrollToLatest($('trend-chart'));
-    attachChartSelection($('trend-chart'), index => { trendSelected = index; v3.renderTrendChart(rows); showTrendDetail(rows, index); });
-    if (trendSelected === null) $('trend-detail').innerHTML = '';
+    const context = captureContext();
+    // V5 fix (lane SP2): the trend follows the basket chosen above the ring (same months, that basket only).
+    const role = BASKET_ROLES[state.spendingGroup] || null;
+    const scope = $('trend-scope');
+    if (scope) {
+      scope.hidden = !role;
+      scope.innerHTML = role ? `<span>${esc(t('v5.sp.trendScope', {basket: t(BASKET_KEYS[state.spendingGroup])}))}</span> <button type="button" class="text-button" data-spending-group="all">${esc(t('v5.sp.trendShowAll'))}</button>` : '';
+    }
+    let shown = rows;
+    if (role && rows.length) {
+      const key = basketKey(context.customerId, role, rows);
+      const cached = basketTrends.get(key);
+      if (cached === undefined) {
+        basketTrends.set(key, null);
+        loadBasketTrend(rows, role, key, context).then(() => { if (current(context) && BASKET_ROLES[state.spendingGroup] === role) v3.renderTrendChart(rows, data); });
+      }
+      if (!cached) return; // keeps the chart in place until that basket's months arrive (redrawn by the loader)
+      shown = cached;
+    }
+    mountTrendChart($('trend-chart'), shown, {esc, t, money, monthLabel,
+      categoriesFor: month => {
+        const rows = trendCategories.get(state.customerId + '|' + (role || '') + '|' + month);
+        return rows ? rows.map(row => ({label: deps.categoryName(row.key), total_cents: row.total_cents})) : rows;
+      },
+      loadCategories: list => loadTrendCategories(list, context, role)});
+    const summary = trendSummary(shown, {t, monthLabel}).text || t('empty.trends');
+    const salary = salarySentence(data?.recent_three_salary_median_cents, {t});
+    const node = $('trend-description');
+    if (node) node.textContent = salary ? summary + ' ' + salary : summary;
   };
+  // Biggest two categories per month (and basket) for the tooltip, fetched once per customer, basket and month.
+  async function loadTrendCategories(list, context, role = null) {
+    const prefix = context.customerId + '|' + (role || '') + '|';
+    const missing = list.filter(month => /^\d{4}-\d{2}$/.test(month) && !trendCategories.has(prefix + month));
+    await Promise.all(missing.map(async month => {
+      try {
+        const data = await request(context, 'get', '/api/explore', {start: month + '-01', end: monthEnd(month), group_by: 'category', top: 2, ...(role ? {role} : {})});
+        if (current(context)) trendCategories.set(prefix + month, (data.rows || []).map(item => ({key: item.key, total_cents: item.value_cents})));
+      } catch { if (current(context)) trendCategories.set(prefix + month, null); }
+    }));
+  }
+  const BASKET_ROLES = {regular: 'fixed_obligation', irregular: 'flexible_essential', leaks: 'discretionary'};
+  const BASKET_KEYS = {regular: 'basket.regular', irregular: 'basket.irregular', leaks: 'basket.everyday'};
+  const basketTrends = new Map();
+  const basketKey = (customerId, role, rows) => [customerId, role, rows[0]?.month, rows.at(-1)?.month, rows.length].join('|');
+  // One basket's spending per month over the same months as the all-spending trend (months without any are 0).
+  async function loadBasketTrend(rows, role, key, context) {
+    const first = rows[0]?.month, last = rows.at(-1)?.month;
+    try {
+      const data = await request(context, 'get', '/api/explore', {start: first + '-01', end: monthEnd(last), group_by: 'month', role, top: 31});
+      const totals = new Map((data.rows || []).map(item => [item.key, Number(item.value_cents) || 0]));
+      if (current(context)) basketTrends.set(key, rows.map(row => ({month: row.month, total_cents: totals.get(row.month) || 0})));
+    } catch { if (current(context)) basketTrends.set(key, rows); }
+  }
   // Spending's only period control: ‹ month › for the whole tab, and 3/6/12 months for the charts over time.
   function renderSpendingPeriod(control, {end, months, min, max}) {
     if (!control) return;
@@ -298,31 +399,21 @@ export function initV3(deps) {
     for (let month = max; month >= min; month = shiftMonth(month, -1)) options.push(`<option value="${esc(month)}"${month === end ? ' selected' : ''}>${esc(monthLabel(month))}</option>`);
     control.innerHTML = `<div class="spending-period"><div class="period-stepper"><button type="button" data-period-step="-1" aria-label="${esc(t('month.previous'))}"${end <= min ? ' disabled' : ''}>‹</button>`
       + `<label class="visually-hidden" for="spending-month">${esc(t('period.month.label'))}</label><select id="spending-month">${options.join('')}</select>`
-      + `<button type="button" data-period-step="1" aria-label="${esc(t('month.next'))}"${end >= max ? ' disabled' : ''}>›</button></div>`
-      + `<div class="period-segments" role="group" aria-label="${esc(t('range.label'))}">${[3, 6, 12].map(count => `<button type="button" data-period-months="${count}" aria-pressed="${count === months}">${esc(t('spending.period.' + count))}</button>`).join('')}</div></div>`;
+      + `<button type="button" data-period-step="1" aria-label="${esc(t('month.next'))}"${end >= max ? ' disabled' : ''}>›</button></div></div>`;
+    // V5 fix (lane SP2): 3/6/12 months only changes the charts over time, so it sits in the trend card.
+    const segments = `<div class="period-segments" role="group" aria-label="${esc(t('v5.sp.trendRange'))}">${[3, 6, 12].map(count => `<button type="button" data-period-months="${count}" aria-pressed="${count === months}">${esc(t('spending.period.' + count))}</button>`).join('')}</div>`;
+    const host = $('trend-months');
+    if (host) { host.innerHTML = segments; host.onclick = control.onclick = null; } else control.insertAdjacentHTML('beforeend', segments);
     control.onchange = event => { if (event.target?.id === 'spending-month' && event.target.value !== state.selectedMonth) changePeriod(event.target.value); };
-    control.onclick = event => {
+    const onPeriod = event => {
       const button = event.target?.closest?.('[data-period-step],[data-period-months]');
       if (!button || button.disabled) return;
       if (button.dataset.periodStep) { const next = shiftMonth(state.selectedMonth, Number(button.dataset.periodStep)); if (next >= min && next <= max) changePeriod(next); }
       else if (Number(button.dataset.periodMonths) !== Number(state.trendMonths)) changePeriod(state.selectedMonth, Number(button.dataset.periodMonths));
     };
+    control.onclick = onPeriod;
+    if (host) host.onclick = onPeriod;
   }
-  async function showTrendDetail(rows, index, context = captureContext()) {
-    const row = rows[index];
-    if (!row) return;
-    const month = row.month || row.period;
-    const render = categories => {
-      $('trend-detail').innerHTML = chartDetailPanel({month, label: monthLabel(month), total_cents: row.total_cents,
-        previous_total_cents: rows[index - 1]?.total_cents, categories}, {money, t: tr});
-    };
-    render(undefined);
-    try {
-      const data = await request(context, 'get', '/api/explore', {start: month + '-01', end: monthEnd(month), group_by: 'category', top: 3});
-      if (current(context) && trendSelected === index) render((data.rows || []).map(item => ({label: deps.categoryName(item.key), total_cents: item.value_cents})));
-    } catch { /* the panel already shows the total */ }
-  }
-
   async function loadCashflow(context = captureContext()) {
     const node = $('cashflow-chart');
     if (!node || !state.observedStart || !state.selectedMonth) return;
@@ -342,27 +433,42 @@ export function initV3(deps) {
   function renderCashflow() {
     const node = $('cashflow-chart');
     const periods = cashflowData?.periods || [];
-    const rows = periods.map(row => ({label: cashflowGranularity === 'year' ? String(row.period) : shortMonth(row.period),
+    const rows = periods.map(row => ({label: cashflowGranularity === 'year' ? String(row.period) : shortMonth(row.period), period: String(row.period),
       income_cents: row.income_cents, consumption_cents: row.consumption_cents, savings_transfers_cents: row.savings_transfers_cents,
-      net_cents: row.net_cents, complete: row.complete}));
-    node.innerHTML = cashflowChart(rows, {interactive: rows.length > 0, selectedIndex: cashflowSelected});
+      left_over_cents: row.left_over_cents, net_cents: row.net_cents, complete: row.complete}));
+    // V5 lane SP2: drawn at the column's real width (like the trend chart), redrawn when the width changes
+    // (the chart sits in a fold, so its first real width is known only once the fold opens).
+    const width = Math.round(node.clientWidth || 0);
+    node.dataset.cfWidth = String(width);
+    node.innerHTML = cashflowChart(rows, {interactive: rows.length > 0, selectedIndex: cashflowSelected, width: width || 330});
     node.setAttribute('aria-busy', 'false');
-    attachChartSelection(node, index => { cashflowSelected = index; renderCashflow(); });
-    if (cashflowSelected === null) scrollToLatest(node);
+    attachChartSelection(node, index => { cashflowSelected = cashflowSelected === index ? null : index; renderCashflow(); });
+    watchCashflowWidth(node);
     const row = periods[cashflowSelected];
-    $('cashflow-detail').innerHTML = row ? `<section class="chart-detail"><h3>${esc(cashflowGranularity === 'year' ? String(row.period) : monthLabel(row.period))}${row.complete ? '' : ' · ' + esc(t('v3.cashflow.partial'))}</h3><dl class="support-values"><dt>${esc(t('v3.recap.income'))}</dt><dd>${money(row.income_cents)}</dd><dt>${esc(t('v3.recap.spent'))}</dt><dd>${money(row.consumption_cents)}</dd>${Number.isSafeInteger(row.left_over_cents) ? `<dt>${esc(t('v3.cashflow.leftOver'))}</dt><dd>${money(row.left_over_cents)}</dd>` : ''}${row.saving_rate_percent !== null && row.saving_rate_percent !== undefined ? `<dt>${esc(t('v3.cashflow.rate'))}</dt><dd>${esc(cashflowPercent(row.saving_rate_percent))}</dd>` : ''}<dt>${esc(t('v3.recap.saved'))}</dt><dd>${money(row.savings_transfers_cents)}</dd><dt>${esc(t('v3.cashflow.net'))}</dt><dd>${money(row.net_cents)}</dd></dl><button type="button" class="text-button" data-direct-question="${esc(t('v3.cashflow.ask', {period: cashflowGranularity === 'year' ? String(row.period) : monthLabel(row.period)}))}">${esc(t('v3.cashflow.askLabel'))} ›</button></section>` : '';
+    $('cashflow-detail').innerHTML = row ? `<section class="chart-detail"><h3>${esc(cashflowGranularity === 'year' ? String(row.period) : monthLabel(row.period))}${row.complete ? '' : ' · ' + esc(t('v3.cashflow.partial'))}</h3><dl class="support-values"><dt>${esc(t('v3.recap.income'))}</dt><dd>${money(row.income_cents)}</dd><dt>${esc(t('v3.recap.spent'))}</dt><dd>${money(row.consumption_cents)}</dd>${Number.isSafeInteger(row.left_over_cents) ? `<dt>${esc(t('v3.cashflow.leftOver'))}</dt><dd>${signed(row.left_over_cents)}</dd>` : ''}${row.saving_rate_percent !== null && row.saving_rate_percent !== undefined ? `<dt>${esc(t('v3.cashflow.rate'))}</dt><dd>${esc(cashflowPercent(row.saving_rate_percent))}</dd>` : ''}<dt>${esc(t('v3.recap.saved'))}</dt><dd>${money(row.savings_transfers_cents)}</dd><dt>${esc(t('v3.cashflow.net'))}</dt><dd>${signed(row.net_cents)}</dd></dl><button type="button" class="text-button" data-direct-question="${esc(t('v3.cashflow.ask', {period: cashflowGranularity === 'year' ? String(row.period) : monthLabel(row.period)}))}">${esc(t('v3.cashflow.askLabel'))} ›</button></section>` : '';
     const change = cashflowData?.comparisons?.saving_rate_change;
     $('cashflow-summary').textContent = change && change.from_percent !== null && change.to_percent !== null && change.from_period !== change.to_period
       ? t(change.direction === 'same' ? 'v3.cashflow.rateSame' : 'v3.cashflow.rateChange', {from: cashflowPercent(change.from_percent), to: cashflowPercent(change.to_percent), start: periodLabel(change.from_period), end: periodLabel(change.to_period)}) : '';
     for (const button of document.querySelectorAll('[data-cashflow-granularity]')) button.setAttribute('aria-pressed', String(button.dataset.cashflowGranularity === cashflowGranularity));
   }
+  // Typographic minus, no gap: "−€134.00" / "−134,00 €".
+  const signed = cents => String(money(cents)).replace(/^[-\u2212]\s?/, '\u2212');
   // '9.6' -> '9.6%' (en) or '9,6 %' (fi/sv).
   function cashflowPercent(value) {
     const lang = globalThis.document?.documentElement?.lang || 'en';
-    return lang.startsWith('en') ? String(value) + '%' : String(value).replace('.', ',').replace('-', '−') + '\u00a0%';
+    return lang.startsWith('en') ? String(value).replace('-', '−') + '%' : String(value).replace('.', ',').replace('-', '−') + '\u00a0%';
   }
-  // Long ranges scroll sideways; start at the newest period.
-  function scrollToLatest(node) { try { if (node && node.scrollWidth > node.clientWidth) node.scrollLeft = node.scrollWidth; } catch { /* fake DOM */ } }
+  let cashflowObserver = null;
+  function watchCashflowWidth(node) {
+    if (cashflowObserver || typeof globalThis.ResizeObserver !== 'function' || !node) return;
+    let frame = null;
+    cashflowObserver = new globalThis.ResizeObserver(() => {
+      const width = Math.round(node.clientWidth || 0);
+      if (!width || String(width) === node.dataset.cfWidth || frame || !cashflowData) return;
+      frame = (globalThis.requestAnimationFrame || (fn => setTimeout(fn, 16)))(() => { frame = null; renderCashflow(); });
+    });
+    cashflowObserver.observe(node);
+  }
   function shortMonth(value) {
     const match = /^(\d{4})-(\d{2})$/.exec(String(value));
     if (!match) return String(value);
@@ -384,6 +490,17 @@ export function initV3(deps) {
   }
 
   // ---------- Taxes ----------
+  // Me shows one compact tax row (V5 lane TX); add the plan's monthly amount or the next official tax date once known.
+  async function fillMeTaxRow(node, data, context) {
+    const slot = node.querySelector?.('[data-me-tax-slot]');
+    if (!slot) return;
+    try {
+      const plan = await request(context, 'get', '/api/plans/tax', referenceDate() ? {as_of: referenceDate()} : {});
+      if (!current(context)) return;
+      const entry = (data.profile?.entries || []).find(item => item.key === 'plan_tax' && item.active !== false) || null;
+      slot.innerHTML = meTaxRowHTML(entry, plan, {locale: locale(), money, dateLabel});
+    } catch { /* the row already says what the plan does */ }
+  }
   async function openTax(context = captureContext()) {
     openPanel(`<p class="empty-state" role="status">${esc(t('loading.account'))}</p>`, {title: t('v3.tax.title')});
     let data;
@@ -478,7 +595,7 @@ export function initV3(deps) {
       case 'update_goal': { const goal = findGoal(params); if (!goal) return false; editGoalDraft(goal, params.fields || {}, provenance); return true; }
       case 'delete_goal': { const goal = findGoal(params); if (!goal) return false; deleteGoalDraft(goal, provenance); return true; }
       case 'update_profile': {
-        const entries = Array.isArray(params.entries) ? params.entries : [];
+        const entries = splitProfileEntries(Array.isArray(params.entries) ? params.entries : []);
         if (!entries.length) return false;
         const context = captureContext();
         const specs = entries.map((entry, index) => ({...draftSpecForEntry({key: entry.key, value: toUiValue(entry.key, entry.value)}, locale()),
@@ -501,6 +618,7 @@ export function initV3(deps) {
 
   // ---------- Lifecycle hooks ----------
   v3.onNavigate = view => {
+    if (view !== 'profile') profileNotice = null; // a Me status line never follows you to another page
     if (view === 'profile') renderProfile();
     if (view === 'coach') renderTopics();
     if (view === 'goals') { loadProfile().catch(() => null); plans.render(); }
@@ -512,7 +630,7 @@ export function initV3(deps) {
     if (state.view === 'goals') plans.render(context);
   };
   v3.reset = () => {
-    profileData = null; profilePending = null; trendSelected = null; cashflowData = null; cashflowSelected = null; taxOverview = null;
+    profileData = null; profilePending = null; profileNotice = null; trendCategories.clear(); cashflowData = null; cashflowSelected = null; taxOverview = null;
     onboardingHandle?.detach?.(); onboardingHandle = null; plans.reset();
     for (const id of ['trend-detail', 'cashflow-detail', 'vat-tile', 'year-banner', 'home-tax-chip', 'onboarding-root']) if ($(id)) $(id).innerHTML = '';
   };

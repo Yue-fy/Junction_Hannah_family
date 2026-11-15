@@ -502,6 +502,9 @@ export function renderDraftCard(spec, locale = 'en') {
       + '</div>';
   }).join('');
   const preview = s.preview ? String(s.preview) : '';
+  // A plain confirmation (no fields) has nothing to change or review: no "Change" button and no
+  // "Nothing is saved until…" hint, which reads oddly next to Delete.
+  const hasFields = fields.length > 0;
   const confirm = s.danger
     ? '<div class="draft-card__confirm" data-draft-confirm hidden role="group" aria-labelledby="' + base + '-confirm-title">'
       + '<p class="draft-card__confirm-title" id="' + base + '-confirm-title"><strong>' + escapeHtml(message(lang, 'draft.danger.title')) + '</strong></p>'
@@ -518,11 +521,11 @@ export function renderDraftCard(spec, locale = 'en') {
     + (s.intro ? '<p class="draft-card__intro">' + escapeHtml(s.intro) + '</p>' : '')
     + '<div class="draft-card__fields">' + rows + '</div>'
     + '<p class="draft-card__preview" data-draft-preview aria-live="polite"' + (preview ? '' : ' hidden') + '>' + escapeHtml(preview) + '</p>'
-    + '<p class="draft-card__hint">' + escapeHtml(message(lang, 'draft.reviewHint', {save: saveLabel})) + '</p>'
+    + (hasFields && !s.danger ? '<p class="draft-card__hint">' + escapeHtml(message(lang, 'draft.reviewHint', {save: saveLabel})) + '</p>' : '')
     + '<p class="draft-card__status" data-draft-status role="status" aria-live="polite" hidden></p>'
     + '<div class="draft-card__actions" data-draft-actions>'
     + '<button type="submit" class="draft-btn ' + (s.danger ? 'draft-btn--danger' : 'draft-btn--primary') + '" data-draft-save>' + escapeHtml(saveLabel) + '</button>'
-    + '<button type="button" class="draft-btn draft-btn--secondary" data-draft-change' + (editing ? ' hidden' : '') + '>' + escapeHtml(message(lang, 'draft.change')) + '</button>'
+    + (hasFields ? '<button type="button" class="draft-btn draft-btn--secondary" data-draft-change' + (editing ? ' hidden' : '') + '>' + escapeHtml(message(lang, 'draft.change')) + '</button>' : '')
     + '<button type="button" class="draft-btn draft-btn--quiet" data-draft-dismiss>' + escapeHtml(message(lang, 'draft.notNow')) + '</button>'
     + '</div>' + confirm + '</form></section>';
 }

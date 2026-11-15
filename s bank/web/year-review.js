@@ -1,5 +1,5 @@
 /**
- * Year in review story viewer (WP-L, F2). Dependency-free ES module, no fetch, no global state.
+ * Year in review story viewer (WP-L, F2). ES module (only imports empty-states.js), no fetch, no global state.
  *
  * Input contract (from scoach/year_review.py `year_review`):
  *   review = {year, complete, available, cards:[{id, kind, facts:{...}, caption_template}], captions?, closing_message?}
@@ -19,6 +19,7 @@
  *   archetype                archetype_label | archetype, previous_archetype_label?
  *   closing                  year
  */
+import { emptyStateHTML, emptyText } from './empty-states.js';
 
 const LOCALES = ['en', 'fi', 'sv'];
 const INTL = {en: 'en-GB', fi: 'fi-FI', sv: 'sv-SE'};
@@ -59,7 +60,7 @@ const COPY = {
   'eyebrow.archetype': ['Your spending style', 'Kulutustyylisi', 'Din utgiftsstil'],
   'eyebrow.closing': ['That was {year}', 'Tällainen oli {year}', 'Så var {year}'],
 
-  'label.intro': ['in money', 'rahan silmin', 'i pengar'],
+  'label.intro': ['in money', 'lukuina', 'i siffror'],
   'label.money_in_out': ['came in', 'tuli tilillesi', 'kom in'],
   'label.saved': ['moved to savings', 'siirsit säästöön', 'flyttat till sparande'],
   'label.baskets': ['went to your three baskets', 'meni kolmeen koriisi', 'gick till dina tre korgar'],
@@ -355,7 +356,7 @@ export function renderStory(review, options = {}) {
   const year = data.year ?? '';
   const closeBtn = `<button type="button" class="yr-close" data-story-close aria-label="${esc(yr(locale, 'ui.close'))}"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" fill="none"/></svg></button>`;
   if (data.available === false || !cards.length) {
-    return `<div class="yr-story" role="dialog" aria-modal="true" aria-labelledby="yr-headline" data-story-root data-count="0" tabindex="-1"><div class="yr-frame"><div class="yr-top">${closeBtn}</div><section class="yr-card yr-kind-intro" data-kind="unavailable"><div class="yr-content"><p class="yr-eyebrow">${esc(yr(locale, 'ui.dialog'))}</p><h2 class="yr-headline" id="yr-headline"><span class="yr-label">${esc(yr(locale, 'ui.unavailable', {year}))}</span></h2></div></section></div></div>`;
+    return `<div class="yr-story" role="dialog" aria-modal="true" aria-labelledby="yr-headline" data-story-root data-count="0" tabindex="-1"><div class="yr-frame"><div class="yr-top">${closeBtn}</div><section class="yr-card yr-kind-intro" data-kind="unavailable"><div class="yr-content"><p class="yr-eyebrow">${esc(yr(locale, 'ui.dialog'))}</p><h2 class="yr-headline" id="yr-headline"><span class="yr-label">${esc(yr(locale, 'ui.unavailable', {year}))}</span></h2>${emptyStateHTML({kind: 'document', body: emptyText(locale, 'v5.em.year.body'), action: {label: emptyText(locale, 'v5.em.year.action'), attrs: {'data-story-close': true}}, esc, id: 'year'})}</div></section></div></div>`;
   }
   const total = cards.length;
   const index = Math.min(Math.max(Number.isInteger(options.index) ? options.index : 0, 0), total - 1);
@@ -555,7 +556,8 @@ export function attachStory(root, options = {}) {
   root.addEventListener('pointerup', onUp);
   root.addEventListener('pointercancel', onCancel);
   root.addEventListener('contextmenu', onContext);
-  controller.start();
+  // V5 lane EM: a year with no cards still paints its (designed) empty card instead of an invisible, blocking overlay.
+  if (count) controller.start(); else paint(0);
   return function detach() {
     controller.destroy();
     win.clearTimeout(holdTimer);

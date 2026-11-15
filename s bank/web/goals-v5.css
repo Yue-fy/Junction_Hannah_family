@@ -1,0 +1,61 @@
+/* V5 fix lane GL: Goals page. Order: the customer's own goals and wishes, then "Add a goal or a wish",
+   then "Plans (optional)". Goals and wishes share one grid that fills the column at every width
+   (one card = full width; two or more = columns where they fit). Mobile first. */
+
+#goals-view .goals-mine, #goals-view .goals-add { min-width: 0; }
+.goals-section-title { margin: 4px 0 12px; font-size: 20px; line-height: 1.3; letter-spacing: -.2px; }
+
+.goals-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 16px; align-items: start; min-width: 0; }
+#goals-view .goals-grid > #goals-list, #goals-view .goals-grid > #wishes-list { display: contents; }
+.goals-grid .goal-card, .goals-grid .wish-card { margin: 0; min-width: 0; }
+.goals-grid #wishes-list > .empty-state, .goals-grid #wishes-list > .es { grid-column: 1 / -1; }
+/* styles.css splits the old workspace and goal list in two at >=1000px; the new page keeps one flow. */
+@media (min-width: 1000px) {
+  #goals-view .goal-workspace { grid-template-columns: minmax(0, 1fr); }
+}
+#goals-view .goals-add > .goal-workspace + #goal-planner { margin-top: 16px; }
+
+/* Goal card: white like the plan cards, header row, then amount + bar beside the "does it fit" line when wide. */
+.goal-card--v5 { container-type: inline-size; padding: 20px 20px 8px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--white); box-shadow: var(--shadow); }
+.goal-card__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.goal-card__titles { min-width: 0; }
+.goal-card--v5 h3 { margin: 0; font-size: 21px; line-height: 1.3; letter-spacing: -.3px; overflow-wrap: anywhere; }
+.goal-card__date { margin: 4px 0 0; color: var(--muted); font-size: 14px; }
+.goal-card__head .status-pill { flex: none; margin-top: 2px; }
+.goal-card--v5 .goal-amount { margin: 14px 0 0; font-size: 28px; font-weight: 700; letter-spacing: -.6px; color: var(--deep-green); }
+.goal-card--v5 .goal-amount span { font-size: 15px; font-weight: 500; letter-spacing: 0; color: var(--muted); }
+.goal-card__main, .goal-card__side { min-width: 0; }
+.goal-card__side { margin-top: 12px; }
+.goal-card__note { margin: 10px 0 0; color: var(--muted); font-size: 14px; line-height: 1.45; }
+.goal-card__how { min-height: 44px; margin-top: 4px; padding: 0; }
+
+/* "Does it fit?" one line: calm when it fits, amber (not red) when it does not. */
+.goal-fit { display: flex; gap: 10px; align-items: flex-start; margin: 0; padding: 10px 12px; border-radius: 14px; font-size: 14px; line-height: 1.45; background: var(--wash); color: var(--ink); }
+.goal-fit__icon { flex: none; display: grid; place-items: center; width: 20px; height: 20px; margin-top: 1px; border-radius: 50%; background: var(--green); color: var(--white); font-size: 12px; font-weight: 800; line-height: 1; }
+.goal-fit--info .goal-fit__icon { background: #4f7a63; font-style: italic; font-family: Georgia, serif; }
+.goal-fit--warn { background: #fff4e2; color: #5a3b06; border: 1px solid #f0d9ac; }
+.goal-fit--warn .goal-fit__icon { background: #c9771f; }
+
+/* Progress bar (charts.js goalChart, HTML): text stays 13px at every card width. */
+.goal-progress { margin: 12px 0 2px; }
+.goal-progress__track { height: 10px; border-radius: 999px; background: #dfe9dc; overflow: hidden; }
+.goal-progress__fill { display: block; height: 100%; min-width: 0; border-radius: inherit; background: var(--green); }
+.goal-progress__labels { display: flex; justify-content: space-between; gap: 12px; margin-top: 6px; font-size: 13px; line-height: 1.35; color: var(--muted); }
+
+/* Edit on the left, Delete separated on the right (it confirms before deleting). */
+.goal-card--v5 .goal-actions { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: 8px 0 0; padding-top: 4px; border-top: 1px solid var(--line); }
+.goal-card--v5 .goal-actions .text-button { min-height: 44px; min-width: 44px; padding: 0 4px; }
+.goal-card--v5 .goal-actions .goal-delete { color: #9b3b2e; }
+
+@container (min-width: 600px) {
+  .goal-card__body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 0 28px; align-items: start; }
+  .goal-card__side { margin-top: 14px; }
+}
+
+/* Saved wishes sit in the same grid as goals. */
+.wish-card--saved h3 { margin: 8px 0 6px; font-size: 21px; line-height: 1.3; letter-spacing: -.3px; }
+.wish-card--saved .personal-actions .text-button { min-height: 44px; }
+
+/* The wish form's main button: centred label; auto width once there is room. */
+#wish-form .primary-button { justify-content: center; text-align: center; }
+@media (min-width: 600px) { #wish-form .primary-button { width: auto; min-width: 220px; padding-left: 28px; padding-right: 28px; } }

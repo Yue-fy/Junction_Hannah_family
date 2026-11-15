@@ -1,7 +1,9 @@
 """Customer-facing labels and number formats shared by server-side text (EN / FI / SV).
 
-Category names follow the web app's own labels (web/experience.js 'category.*'), so a
-category reads the same on every screen. Money is integer cents.
+CATEGORY_LABELS is the ONE category name table on the server: forecast (payday plan),
+catalogue (coach cards), spender and agent tools all read it, and it matches the web
+app's own labels (web/experience.js 'category.*'), so a category reads the same on
+every screen. Money is integer cents.
 """
 from decimal import ROUND_HALF_UP, Decimal
 
@@ -12,7 +14,7 @@ CATEGORY_LABELS = {
     'Utilities': ('Bills', 'Laskut', 'Räkningar'),
     'Groceries': ('Groceries', 'Ruokaostokset', 'Matinköp'),
     'Transportation': ('Transport', 'Liikenne', 'Transport'),
-    'Restaurants': ('Eating out', 'Ravintolat', 'Restaurang'),
+    'Restaurants': ('Eating out', 'Ravintolat', 'Restauranger'),
     'Health': ('Health', 'Terveys', 'Hälsa'),
     'Home & Tech': ('Home & tech', 'Koti ja tekniikka', 'Hem och teknik'),
     'Lifestyle': ('Shopping', 'Ostokset', 'Shopping'),
@@ -23,6 +25,12 @@ CATEGORY_LABELS = {
     'Invest Deposit': ('Investments', 'Sijoitukset', 'Investeringar'),
     'Invest Withdraw': ('From investments', 'Nostot sijoituksista', 'Uttag från investeringar'),
 }
+
+
+def category_labels(category):
+    """{en, fi, sv} names for a category; unknown categories keep their own name in every locale."""
+    labels = CATEGORY_LABELS.get(category) or (category, category, category)
+    return dict(zip(LOCALES, labels))
 
 
 def locale_or_en(locale):

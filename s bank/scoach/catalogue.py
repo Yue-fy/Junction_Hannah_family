@@ -25,6 +25,7 @@ from decimal import Decimal, ROUND_HALF_UP
 
 from . import money_profile
 from .agent_tools import ToolContext, dispatch
+from .labels import category_labels
 from .ledger import month_bounds, shift_month
 
 LOCALES = ('en', 'fi', 'sv')
@@ -116,18 +117,11 @@ _WEEKDAYS_PLURAL = {
     'sv': ('måndagar', 'tisdagar', 'onsdagar', 'torsdagar', 'fredagar', 'lördagar', 'söndagar'),
 }
 
-CATEGORY_LABELS = {
-    'Housing': _t('Housing', 'Asuminen', 'Boende'),
-    'Utilities': _t('Bills', 'Laskut', 'Räkningar'),
-    'Groceries': _t('Groceries', 'Ruokaostokset', 'Matinköp'),
-    'Transportation': _t('Transport', 'Liikenne', 'Transport'),
-    'Restaurants': _t('Eating out', 'Ravintolat', 'Restaurang'),
-    'Health': _t('Health', 'Terveys', 'Hälsa'),
-    'Home & Tech': _t('Home & tech', 'Koti ja tekniikka', 'Hem och teknik'),
-    'Lifestyle': _t('Shopping', 'Ostokset', 'Shopping'),
-    'Entertainment': _t('Entertainment', 'Viihde', 'Nöjen'),
-    'Travel': _t('Travel', 'Matkailu', 'Resor'),
-}
+# One category table for the whole server (scoach/labels.py), so coach cards, the payday
+# plan and Spending use the same names.
+CATEGORY_LABELS = {name: category_labels(name) for name in
+                   ('Housing', 'Utilities', 'Groceries', 'Transportation', 'Restaurants', 'Health',
+                    'Home & Tech', 'Lifestyle', 'Entertainment', 'Travel')}
 SPENDING_CATEGORIES = ('Housing', 'Utilities', 'Groceries', 'Transportation', 'Restaurants', 'Health',
                        'Home & Tech', 'Lifestyle', 'Entertainment', 'Travel')
 CUTTABLE = ('Restaurants', 'Entertainment', 'Lifestyle', 'Travel')
@@ -271,14 +265,14 @@ class Personal:
             return _LIFE_STAGES[self.life_stage][locale]
         if key == 'steady' and self.steady:
             event = _EVENTS.get(self.steady_type or 'other', _EVENTS['other'])[locale]
-            return _t('steady mode (%s)', 'vakaa tila (%s)', 'stabilt läge (%s)')[locale] % event
+            return _t('steady mode (%s)', 'rauhallinen tahti (%s)', 'lugnt tempo (%s)')[locale] % event
         if key == 'events':
             events = [value for value in self.events if not (self.steady and value['type'] == self.steady_type)]
             return ', '.join(_EVENTS[value['type']][locale] for value in events[:2]) or None
         if key == 'saving_target' and self.saving_target:
             return _t('saving target %s of income', 'säästötavoite %s tuloista', 'sparmål %s av inkomsten')[locale] % percent(self.saving_target, locale)
         if key == 'buffer_months' and self.buffer_months:
-            return _t('buffer goal %s months', 'puskuritavoite %s kk', 'buffertmål %s månader')[locale] % _number(self.buffer_months, locale)
+            return _t('buffer goal %s months', 'hätävaratavoite %s kk', 'mål för sparkudden %s månader')[locale] % _number(self.buffer_months, locale)
         if key == 'protected' and self.protected:
             names = join([category_label(item, locale) for item in self.protected], locale)
             return _t('no cuts to %s', 'ei leikkauksia: %s', 'inga nedskärningar i %s')[locale] % names
@@ -448,7 +442,13 @@ def _card(env, qid, title, label, value_text, value_cents=None, *, lines=(), cha
     profile_note = env.personal.line() if personal else None
     # The "Using what you told me" sentence lives only in profile_note (the card shows it once, separately).
     followups = []
-    for item in question.followups:
+    items = list(question.followups)
+    if env.personal.steady:
+        # V5 fix (lane CO): steady mode never offers a saving suggestion; calmer questions take their place.
+        items = [item for item in items if (item if isinstance(item, str) else item[0]) not in _STEADY_HIDDEN]
+        taken = {qid} | {item if isinstance(item, str) else item[0] for item in items}
+        items += [fid for fid in _STEADY_FOLLOWUPS if fid not in taken][:max(0, 3 - len(items))]
+    for item in items:
         fid, fparams = (item, None) if isinstance(item, str) else item
         entry = {'id': fid, 'text': QUESTIONS[fid].text[env.locale]}
         if fparams:
@@ -461,6 +461,11 @@ def _card(env, qid, title, label, value_text, value_cents=None, *, lines=(), cha
         'followups': followups[:3], 'pickers': list(pickers), 'params_used': dict(params or {}),
         'actions': list(actions), 'profile_note': profile_note,
     }
+
+
+# Saving suggestions that steady mode never offers as a next question, and the calm questions offered instead.
+_STEADY_HIDDEN = frozenset({'room.save_now', 'room.save_more', 'room.cut', 'goals.new'})
+_STEADY_FOLLOWUPS = ('bills.upcoming', 'room.payday', 'goals.buffer', 'money.where')
 
 
 def _tidy(text):
@@ -562,7 +567,7 @@ def _money_where(env, params):
     return _card(env, 'money.where',
                  env.tr(_t('Where your money went in {0}', 'Mihin rahasi menivät {0}', 'Vart pengarna tog vägen i {0}'),
                         env.month_label(month, 'in')),
-                 env.tr(_t('Spent in {0}', 'Kulutus {0}', 'Utgifter i {0}'), env.month_label(month, 'in')),
+                 env.tr(_t('Spent in {0}', 'Menot {0}', 'Utgifter i {0}'), env.month_label(month, 'in')),
                  env.money(spent), spent, lines=lines, chart=chart,
                  caveat=env.tr(_t('Savings transfers and income are kept separate from spending.',
                                   'Säästösiirrot ja tulot on erotettu kulutuksesta.',
@@ -745,9 +750,9 @@ def _render_fact(fact, locale):
         return fact.get('text')
 
 
-@_question('spend.spender', 'spending', _t('What kind of spender am I?', 'Millainen rahankäyttäjä olen?', 'Vilken typ av spenderare är jag?'),
+@_question('spend.spender', 'spending', _t('What kind of spender am I?', 'Millainen rahankäyttäjä olen?', 'Hurdan är jag med pengar?'),
            followups=('spend.leaks', 'room.save_more', 'spend.weekday'),
-           keywords=('what kind spender am i type style careful habits', 'millainen kuluttaja rahankäyttäjä olen tyyli', 'vilken typ spenderare är jag stil'),
+           keywords=('what kind spender am i type style careful habits', 'millainen kuluttaja rahankäyttäjä olen tyyli', 'vilken typ spenderare är jag stil hurdan med pengar'),
            tools=('spender_profile',))
 def _spend_spender(env, params):
     from .spender import ARCHETYPE_LABELS
@@ -767,8 +772,8 @@ def _spend_spender(env, params):
     if env.personal.steady:
         env.personal.use('steady')
         lines.append(env.tr(_t('For now the focus is on Must-pays and your buffer, not on cutting back.',
-                               'Nyt painopiste on pakollisissa menoissa ja puskurissa, ei menojen karsimisessa.',
-                               'Just nu ligger fokus på fasta måsten och bufferten, inte på att dra ner.')))
+                               'Nyt painopiste on pakollisissa menoissa ja turvatyynyssä, ei menojen karsimisessa.',
+                               'Just nu ligger fokus på fasta måsten och säkerhetsmarginalen, inte på att dra ner.')))
     elif result.get('watch'):
         watch = result['watch']
         if watch.get('category') and env.personal.is_protected(watch['category']):
@@ -910,8 +915,18 @@ def _held(plan, kinds):
 
 
 def _held_label(env, item):
+    """A held-back item's name in the card's language.
+
+    The spending plan gives every item ``labels`` {en, fi, sv} (e.g. Rent / Vuokra /
+    Hyra, Mortgage payment / Asuntolainan erä); those are used first so no English
+    label leaks into a Finnish or Swedish answer. Older plan shapes fall back to
+    the kind or the category name.
+    """
+    labels = item.get('labels')
+    if isinstance(labels, dict) and labels.get(env.locale):
+        return labels[env.locale]
     if item['kind'] == 'reserve':
-        return env.tr(_t('reserve', 'puskuri', 'buffert'))
+        return env.tr(_t('safety cushion', 'turvatyyny', 'säkerhetsmarginal'))
     if item['kind'] == 'goal':
         return env.tr(_t('saving target', 'säästötavoite', 'sparmål'))
     if item['kind'] == 'loan':
@@ -919,12 +934,13 @@ def _held_label(env, item):
     if item['kind'] == 'tax':
         return env.tr(_t('tax set-aside', 'verovaraus', 'skatteavsättning'))
     if item['kind'] == 'buffer':
-        return env.tr(_t('surprise buffer', 'yllätyspuskuri', 'buffert för överraskningar'))
+        return env.tr(_t('surprise buffer', 'yllätyspuskuri', 'buffert för oväntat'))
     return _bill_label(env, item['label'])
 
 
-_BILL_LABELS = {'Utilities': _t('Utilities', 'Sähkö, vesi ym.', 'El, vatten m.m.'), 'utilities_payment': _t('Utilities', 'Sähkö, vesi ym.', 'El, vatten m.m.'),
-                'housing_payment': _t('Housing', 'Asuminen', 'Boende')}
+_BILL_LABELS = {'Utilities': _t('Home bills', 'Kodin laskut', 'Hemräkningar'), 'utilities_payment': _t('Home bills', 'Kodin laskut', 'Hemräkningar'),
+                'housing_payment': _t('Rent', 'Vuokra', 'Hyra'), 'Rent': _t('Rent', 'Vuokra', 'Hyra'),
+                'Mortgage payment': _t('Mortgage payment', 'Asuntolainan erä', 'Bolånebetalning')}
 
 
 def _bill_label(env, label):
@@ -936,7 +952,7 @@ def _plan_evidence(env, plan):
     start = max(env.scope['observed_start'], shift_month(reference[:7], -5) + '-01')
     env.add_evidence(env.tr(_t('Bills and must-pays used', 'Laskut ja pakolliset menot', 'Räkningar och fasta måsten')),
                      {'start': start, 'end': reference, 'role': 'fixed_obligation'})
-    env.add_evidence(env.tr(_t('Recent spending', 'Viimeaikainen kulutus', 'Senaste utgifter')),
+    env.add_evidence(env.tr(_t('Recent spending', 'Viimeaikaiset menot', 'Senaste utgifter')),
                      {'start': max(env.scope['observed_start'], (date.fromisoformat(reference) - timedelta(days=89)).isoformat()),
                       'end': reference, 'consumption_only': 'true'})
 
@@ -971,8 +987,8 @@ def _room_week(env, params):
     goals_held = sum(item['amount_cents'] for item in _held(plan, ('goal',)))
     lines = []
     if env.personal.steady:
-        lines.append(env.tr(_t('Your reserve comes first: {0} stays untouched.', 'Vararahasi on etusijalla: {0} jätetään koskematta.',
-                               'Din buffert kommer först: {0} lämnas orörd.'), env.money(reserve)))
+        lines.append(env.tr(_t('Your safety cushion comes first: {0} stays untouched.', 'Turvatyynysi on etusijalla: {0} jätetään koskematta.',
+                               'Din säkerhetsmarginal kommer först: {0} lämnas orörd.'), env.money(reserve)))
     lines.append(env.tr(_t('This week ({0} days): about {1}. Until payday ({2} days): {3}.',
                            'Tällä viikolla ({0} päivää) noin {1}. Palkkapäivään ({2} päivää) yhteensä {3}.',
                            'Den här veckan ({0} dagar): ungefär {1}. Fram till lönedagen ({2} dagar): {3}.'),
@@ -985,24 +1001,32 @@ def _room_week(env, params):
                          'Redan avsatt: räkningar före lönedagen {0} ({1})'), held, names)
     else:
         text = env.tr(_t('No bills are expected before payday', 'Ennen palkkapäivää ei odoteta laskuja', 'Inga räkningar väntas före lönedagen'))
+    surprise = sum(item['amount_cents'] for item in _held(plan, ('buffer',)))
     if not env.personal.steady:
-        text += env.tr(_t(', plus a {0} reserve', ', lisäksi puskuri {0}', ', plus en buffert på {0}'), env.money(reserve))
+        text += env.tr(_t(', plus a {0} safety cushion', ', lisäksi turvatyyny {0}', ', plus en säkerhetsmarginal på {0}'), env.money(reserve))
+    if surprise:
+        text += env.tr(_t(' and a {0} surprise buffer', ' ja yllätyspuskuri {0}', ' och en buffert för oväntat på {0}'), env.money(surprise))
     if goals_held:
         text += env.tr(_t(' and your saving target {0}', ' ja säästötavoitteesi {0}', ' och ditt sparmål {0}'), env.money(goals_held))
     lines.append(text + '.')
-    if plan.get('extra_cents'):
+    if plan.get('extra_cents') and not env.personal.steady:
         lines.append(env.tr(_t('{0} is more than you usually need before payday; it could go to savings.',
                                '{0} on enemmän kuin yleensä tarvitset ennen palkkapäivää; sen voisi siirtää säästöön.',
                                '{0} är mer än du brukar behöva före lönedagen; det kan gå till sparande.'), env.money(plan['extra_cents'])))
     if plan.get('shortfall_cents'):
-        lines.append(env.tr(_t('Bills and the reserve are {0} more than your balance right now.', 'Laskut ja puskuri ovat yhteensä {0} enemmän kuin saldosi nyt.',
-                               'Räkningar och buffert är {0} mer än ditt saldo just nu.'), env.money(plan['shortfall_cents'])))
+        texts = (plan.get('shortfall_breakdown') or {}).get('texts')
+        lines.append(texts[env.locale] if texts else env.tr(_t('Bills and the safety cushion are {0} more than your balance right now.',
+                                                               'Laskut ja turvatyyny ovat yhteensä {0} enemmän kuin saldosi nyt.',
+                                                               'Räkningar och säkerhetsmarginal är {0} mer än ditt saldo just nu.'), env.money(plan['shortfall_cents'])))
     _plan_personal(env, plan)
     held_total = sum(item['amount_cents'] for item in plan['held_back'])
-    chart = {'kind': 'ring', 'data': _bars(env, [(env.tr(_t('Held back', 'Sivussa', 'Avsatt')), held_total),
-                                                 (env.tr(_t('Free until payday', 'Vapaana palkkapäivään', 'Fritt till lönedagen')), spendable)]
-                                             + ([(env.tr(_t('Could be saved', 'Voisi säästää', 'Kan sparas')), plan['extra_cents'])] if plan.get('extra_cents') else []))}
-    return _card(env, 'room.week', env.tr(_t('What you can spend until payday', 'Käyttövarasi palkkapäivään asti', 'Vad du kan spendera fram till lönedagen')),
+    # V5 fix (lane CO): the same three parts and names as the Home payday bar; the app draws them as one labelled bar
+    # and shows no chart when only one part is above €0. Steady mode shows no "could be saved" part.
+    extra = plan.get('extra_cents') if not env.personal.steady else 0
+    chart = {'kind': 'ring', 'data': _bars(env, [(env.tr(_t('Held back', 'Varattu', 'Avsatt')), held_total),
+                                                 (env.tr(_t('For daily life until payday', 'Arkeen palkkapäivään asti', 'Till vardagen fram till lönedagen')), spendable)]
+                                             + ([(env.tr(_t('Could be saved', 'Voisi säästää', 'Kan sparas')), extra)] if extra else []))}
+    return _card(env, 'room.week', env.tr(_t('What you can spend until payday', 'Käyttövarasi', 'Att använda fram till lönedagen')),
                  env.tr(_t('a day until payday on {0}', 'päivässä palkkapäivään {0} asti', 'om dagen fram till lönedagen {0}'), env.date(plan['next_payday'])),
                  env.money(per_day), per_day, lines=lines, chart=chart, caveat=env.tr(_ESTIMATE),
                  params={'as_of': plan['as_of'], 'next_payday': plan['next_payday']})
@@ -1034,9 +1058,9 @@ def _room_payday(env, params):
              env.tr(_t('Next payday: {0}, in {1} days.', 'Seuraava palkkapäivä: {0}, {1} päivän päästä.', 'Nästa lönedag: {0}, om {1} dagar.'),
                     env.date(plan['next_payday']), plan['days_to_payday'])]
     if env.personal.steady:
-        lines.insert(0, env.tr(_t('Your reserve of {0} is kept aside first, so this is a careful picture.',
-                                  'Vararahasi {0} on ensin sivussa, joten tämä on varovainen arvio.',
-                                  'Din buffert på {0} hålls undan först, så det här är en försiktig bild.'), env.money(plan.get('reserve_floor_cents', 0))))
+        lines.insert(0, env.tr(_t('Your safety cushion of {0} is kept aside first, so this is a careful picture.',
+                                  'Turvatyynysi {0} on ensin sivussa, joten arvio on maltillinen.',
+                                  'Din säkerhetsmarginal på {0} hålls undan först, så det här är en återhållsam bild.'), env.money(plan.get('reserve_floor_cents', 0))))
         lines = lines[:1] + lines[1:3]
     _plan_personal(env, plan)
     chart = {'kind': 'trend', 'data': [{'label': env.date(point['date'], False).strip(), 'value_cents': point['balance_cents'],
@@ -1057,9 +1081,9 @@ def _room_save_now(env, params):
     can_save = max(plan.get('can_save_cents') or 0, 0)
     bills = sum(item['amount_cents'] for item in _held(plan, ('bill', 'loan', 'tax')))
     reserve = sum(item['amount_cents'] for item in _held(plan, ('reserve',)))
-    lines = [env.tr(_t('That still leaves bills before payday ({0}), your reserve ({1}) and usual spending until {2} covered.',
-                       'Silloinkin laskut ennen palkkapäivää ({0}), puskurisi ({1}) ja tavallinen kulutus {2} asti on katettu.',
-                       'Då är räkningar före lönedagen ({0}), din buffert ({1}) och vanliga utgifter fram till {2} fortfarande täckta.'),
+    lines = [env.tr(_t('That still leaves bills before payday ({0}), your safety cushion ({1}) and usual spending until {2} covered.',
+                       'Silloinkin laskut ennen palkkapäivää ({0}), turvatyynysi ({1}) ja tavalliset menot {2} asti on katettu.',
+                       'Då är räkningar före lönedagen ({0}), din säkerhetsmarginal ({1}) och vanliga utgifter fram till {2} fortfarande täckta.'),
                     env.money(bills), env.money(reserve), env.date(plan['next_payday']))]
     goal = sum(item['amount_cents'] for item in _held(plan, ('goal',)))
     if goal:
@@ -1067,8 +1091,8 @@ def _room_save_now(env, params):
                                'Ditt sparmål ({0}) är redan avsatt utöver detta.'), env.money(goal)))
     if env.personal.steady:
         lines.insert(0, env.tr(_t('No pressure right now: keeping this as a buffer in your account is a fine choice too.',
-                                  'Ei paineita: tämän voi hyvin pitää myös puskurina tililläsi.',
-                                  'Ingen press just nu: att behålla det som buffert på kontot är också ett bra val.')))
+                                  'Ei paineita: rahan voi hyvin myös jättää tilillesi.',
+                                  'Ingen press just nu: att låta pengarna ligga kvar på kontot är också ett bra val.')))
     elif not can_save:
         lines.append(env.tr(_t('There is no clear room to save before payday this time. Even a small amount after payday helps.',
                                'Tällä kertaa ennen palkkapäivää ei jää selvää säästövaraa. Pienikin summa palkkapäivän jälkeen auttaa.',
@@ -1111,9 +1135,9 @@ def _room_save_more(env, params):
     monthly = 0
     if env.personal.steady:
         env.personal.use('steady')
-        lines.append(env.tr(_t('Your buffer comes first, so start small: one easy change is enough.',
-                               'Puskuri on nyt tärkein, joten aloita pienestä: yksi helppo muutos riittää.',
-                               'Bufferten kommer först, så börja smått: en enkel ändring räcker.')))
+        lines.append(env.tr(_t('Your safety cushion comes first, so start small: one easy change is enough.',
+                               'Turvatyyny on nyt tärkein, joten aloita pienestä: yksi helppo muutos riittää.',
+                               'Säkerhetsmarginalen kommer först, så börja smått: en enkel ändring räcker.')))
     if category:
         row = next((item for item in rows if item['label'] == category), None)
         base = row['value_cents'] // months if row else 0
@@ -1313,8 +1337,8 @@ def _goals_new(env, params):
                                    'Se on enemmän kuin nyt säästettävissä oleva {0}; myöhempi päivämäärä pienentää kuukausisummaa.',
                                    'Det är mer än de {0} som går att spara nu; ett senare datum gör månadsbeloppet mindre.'), env.money(can_save)))
     if env.personal.steady:
-        lines.append(env.tr(_t('While things are uncertain, a small buffer first is a good idea.', 'Kun tilanne on epävarma, pieni puskuri ensin on hyvä ajatus.',
-                               'När läget är osäkert är det klokt att bygga en liten buffert först.')))
+        lines.append(env.tr(_t('While things are uncertain, a small buffer first is a good idea.', 'Kun tilanne on epävarma, kannattaa ensin koota pieni turvatyyny.',
+                               'När läget är osäkert är det klokt att först bygga upp en liten säkerhetsmarginal.')))
     actions = [{'kind': 'create_goal', 'label': env.tr(_t('Review goal', 'Tarkista tavoite', 'Granska målet')), 'params': dict(result['proposal'])}]
     return _card(env, 'goals.new', env.tr(_t('Saving for {0}', 'Säästötavoite: {0}', 'Sparmål: {0}'), name),
                  env.tr(_t('a month until {0}', 'kuukaudessa {0} asti', 'i månaden fram till {0}'), env.date(target)), env.money(monthly), monthly,
@@ -1325,9 +1349,9 @@ def _goals_new(env, params):
                  params={'name': name, 'amount_cents': amount, 'target_date': target})
 
 
-@_question('goals.buffer', 'goals', _t('How big should my emergency buffer be?', 'Kuinka suuri puskurin pitäisi olla?', 'Hur stor borde min buffert vara?'),
+@_question('goals.buffer', 'goals', _t('How big should my emergency buffer be?', 'Kuinka suuri hätävaran pitäisi olla?', 'Hur stor borde min sparkudde vara?'),
            followups=('room.save_now', 'goals.new', 'bills.recurring'),
-           keywords=('emergency fund buffer cushion rainy day how big', 'hätävara puskuri kuinka suuri', 'buffert nödbuffert hur stor'),
+           keywords=('emergency fund buffer cushion rainy day how big', 'hätävara puskuri kuinka suuri', 'buffert nödbuffert sparkudde hur stor'),
            tools=('irregular_buffer', 'spender_profile'))
 def _goals_buffer(env, params):
     buffer = env.call('irregular_buffer', {}, env.tr(_t('Surprise must-pays', 'Yllättävät pakolliset menot', 'Oväntade måsten')))
@@ -1350,8 +1374,8 @@ def _goals_buffer(env, params):
     if env.personal.steady:
         lines.append(env.tr(_t('While things are uncertain, building this comes before other goals.', 'Kun tilanne on epävarma, tämä kannattaa koota ennen muita tavoitteita.',
                                'När läget är osäkert går det här före andra mål.')))
-    return _card(env, 'goals.buffer', env.tr(_t('Your emergency buffer', 'Hätävarasi', 'Din buffert')),
-                 env.tr(_t('A buffer of about', 'Hätävaraksi noin', 'En buffert på ungefär')), env.money(target) if target is not None else '—', target,
+    return _card(env, 'goals.buffer', env.tr(_t('Your emergency buffer', 'Hätävarasi', 'Din sparkudde')),
+                 env.tr(_t('A buffer of about', 'Hätävaraksi noin', 'En sparkudde på ungefär')), env.money(target) if target is not None else '—', target,
                  lines=lines,
                  caveat=env.tr(_t('A common guide is 3–6 months of essential costs; the right size depends on your situation.',
                                   'Yleinen nyrkkisääntö on 3–6 kuukauden välttämättömät menot; sopiva koko riippuu tilanteestasi.',
@@ -1491,18 +1515,18 @@ def _me_life_change(env, params):
                        'Jos elämässäsi tapahtuu jotain isoa, kuten työn menetys, vauva tai muutto, voit kertoa siitä kohdassa Minä.',
                        'Om något stort händer, som ett förlorat jobb, en bebis eller en flytt, kan du berätta det under Jag.')),
              env.tr(_t('Then I hold back more for Must-pays and your buffer, and suggest smaller steps.',
-                       'Silloin varaan enemmän pakollisiin menoihin ja puskuriin ja ehdotan pienempiä askelia.',
-                       'Då avsätter jag mer för fasta måsten och bufferten och föreslår mindre steg.')),
+                       'Silloin varaan enemmän pakollisiin menoihin ja turvatyynyyn ja ehdotan pienempiä askelia.',
+                       'Då avsätter jag mer för fasta måsten och säkerhetsmarginalen och föreslår mindre steg.')),
              env.tr(_t('Nothing is saved until you confirm it, and you can end it any time.', 'Mitään ei tallenneta ennen kuin vahvistat, ja voit lopettaa sen milloin vain.',
                        'Inget sparas förrän du bekräftar, och du kan avsluta det när som helst.'))]
     actions = [{'kind': 'open_profile', 'label': env.tr(_t('Tell the coach about you', 'Kerro itsestäsi valmentajalle', 'Berätta om dig för coachen')), 'params': {}}]
     return _card(env, 'me.life_change', env.tr(_t('Tell me about a life change', 'Kerro elämänmuutoksesta', 'Berätta om en livsförändring')),
                  env.tr(_t('Coaching right now', 'Valmennus nyt', 'Coachning just nu')),
-                 env.tr(_t('Steady mode', 'Vakaa tila', 'Stabilt läge') if steady else _t('Normal', 'Tavallinen', 'Normal')), None,
+                 env.tr(_t('Steady mode', 'Rauhallinen tahti', 'Lugnt tempo') if steady else _t('Normal', 'Tavallinen', 'Normal')), None,
                  lines=lines, actions=actions)
 
 
-@_question('me.peers', 'me', _t('How do I compare with others my age?', 'Miten vertaudun ikäisiini?', 'Hur står jag mig mot andra i min ålder?'),
+@_question('me.peers', 'me', _t('How do I compare with others my age?', 'Miten pärjään ikäisiini verrattuna?', 'Hur står jag mig mot andra i min ålder?'),
            pickers=('category',), followups=('money.category', 'room.save_more', 'spend.spender'),
            keywords=('compare others my age people peers average normal typical', 'vertaa ikäisiini muihin keskimäärin', 'jämför andra min ålder snitt'),
            tools=('compare_to_peers',))
@@ -1549,7 +1573,7 @@ def _extra_year(env, params):
     if type(year) is not int or not 2000 <= year <= 2100:
         raise ValueError('year must be a calendar year')
     result = env.call('year_review', {'year': year}, env.tr(_t('Your {0}', 'Vuotesi {0}', 'Ditt år {0}'), year))
-    title = env.tr(_t('Your {0} in money', 'Vuotesi {0} rahassa', 'Ditt år {0} i pengar'), year)
+    title = env.tr(_t('Your {0} in money', 'Rahavuotesi {0}', 'Ditt år {0} i pengar'), year)
     if not result.get('available'):
         return _card(env, 'extra.year', title, env.tr(_t('Not enough history', 'Liian vähän historiaa', 'För lite historik')), '—',
                      lines=[env.tr(_t('There is not enough account history for this year yet.', 'Tältä vuodelta ei ole vielä tarpeeksi tilihistoriaa.',
@@ -1663,11 +1687,11 @@ def _extra_baskets(env, params):
     total = sum(baskets.values())
     lines = ['%s %s: %s.' % (env.tr(BASKETS[role]), env.money(baskets.get(role, 0)), env.tr(BASKET_HELP[role])) for role in BASKETS]
     lines.append(env.tr(_t('Knowing the basket tells you how to plan: hold Must-pays back, keep a buffer for surprises, and choose your Little leaks.',
-                           'Kun tiedät korin, tiedät miten suunnitella: varaa pakolliset menot, pidä puskuri yllätyksille ja valitse pikkumenosi itse.',
-                           'När du vet korgen vet du hur du planerar: avsätt fasta måsten, ha en buffert för överraskningar och välj dina småutgifter.')))
+                           'Kun tiedät korin, tiedät miten suunnitella: varaa pakolliset menot, pidä yllätyspuskuri yllättäviä menoja varten ja valitse pikkumenosi itse.',
+                           'När du vet korgen vet du hur du planerar: avsätt fasta måsten, ha en buffert för oväntat och välj dina småutgifter.')))
     chart = {'kind': 'ring', 'data': _bars(env, [(env.tr(BASKETS[role]), baskets.get(role, 0)) for role in BASKETS])}
     return _card(env, 'extra.baskets', env.tr(_t('Your three baskets in {0}', 'Kolme koriasi {0}', 'Dina tre korgar i {0}'), env.month_label(month, 'in')),
-                 env.tr(_t('Spending in {0}', 'Kulutus {0}', 'Utgifter i {0}'), env.month_label(month, 'in')), env.money(total), total,
+                 env.tr(_t('Spending in {0}', 'Menot {0}', 'Utgifter i {0}'), env.month_label(month, 'in')), env.money(total), total,
                  lines=lines, chart=chart, pickers=[_month_picker(env, month)], params={'month': month}, personal=False)
 
 
@@ -1697,15 +1721,21 @@ def _extra_taxcard(env, params):
 
 # --------------------------------------------------------------------------- public API
 
-def catalogue(locale):
-    """GET /api/catalogue payload: groups with questions in display order, plus 6 starter ids."""
+STEADY_STARTERS = ('money.where', 'room.week', 'bills.upcoming', 'goals.buffer', 'me.known', 'extra.baskets')
+
+
+def catalogue(locale, steady=False):
+    """GET /api/catalogue payload: groups with questions in display order, plus 6 starter ids.
+
+    In steady mode the starters never invite saving or cutting back (calmer questions instead).
+    """
     if locale not in LOCALES:
         raise ValueError('locale must be en, fi, or sv')
     groups = []
     for gid, title in GROUPS:
         questions = [{'id': q.id, 'text': q.text[locale]} for q in QUESTIONS.values() if q.group == gid]
         groups.append({'id': gid, 'title': title[locale], 'questions': questions})
-    return {'groups': groups, 'starters': list(STARTERS)}
+    return {'groups': groups, 'starters': list(STEADY_STARTERS if steady else STARTERS)}
 
 
 def _unavailable(env, qid, error):

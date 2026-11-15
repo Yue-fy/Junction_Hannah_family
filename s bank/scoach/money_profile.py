@@ -86,9 +86,9 @@ SUGGESTION_TEXT = {
                       'sv': 'kommer på olika dagar varje månad'},
     'salary_usual': {'en': 'usually arrives around the {day} of the month', 'fi': 'tulee yleensä kuun {day} päivän tienoilla',
                      'sv': 'brukar komma runt den {day} i månaden'},
-    'salary_question': {'en': 'Your salary {when} and is about {amount} after tax. Is that right?',
-                        'fi': 'Palkkasi {when}, ja se on verojen jälkeen noin {amount}. Pitääkö tämä paikkansa?',
-                        'sv': 'Din lön {when} och är ungefär {amount} efter skatt. Stämmer det?'},
+    'salary_question': {'en': 'Your salary {when} and is about {amount} a month after tax (a typical month over the last {months} months). Is that right?',
+                        'fi': 'Palkkasi {when}, ja se on verojen jälkeen noin {amount} kuukaudessa (tavallinen kuukausi viimeisten {months} kuukauden ajalta). Pitääkö tämä paikkansa?',
+                        'sv': 'Din lön {when} och är ungefär {amount} i månaden efter skatt (en vanlig månad under de senaste {months} månaderna). Stämmer det?'},
     'salary_note': {'en': 'My salary {when} and is about {amount} a month after tax.',
                     'fi': 'Palkkani {when}, ja se on verojen jälkeen noin {amount} kuukaudessa.',
                     'sv': 'Min lön {when} och är ungefär {amount} i månaden efter skatt.'},
@@ -839,6 +839,25 @@ def _window(conn, customer_id, as_of):
     return transactions(conn, customer_id, start, month_bounds(month)[1]), month
 
 
+def typical_salary(conn, customer_id, as_of=None):
+    """The customer's typical monthly salary after tax: ONE definition for Me and the tax form.
+
+    Median of the monthly salary totals over the last six complete months (the same
+    window as "Things I noticed"). Returns {amount_cents, months, basis:
+    'median_month_last_complete_months', transaction_refs} or None without salary.
+    (The Spending trend shows a different figure on purpose: the median of the last
+    three months, named "lately".)
+    """
+    scope = account_scope(conn, customer_id)
+    reference = date.fromisoformat(as_of) if as_of else date.fromisoformat(scope['observed_end'])
+    rows, _ = _window(conn, customer_id, min(reference, date.fromisoformat(scope['observed_end'])))
+    salary = _recurring(rows, lambda r: r['transaction_type'] == 'salary' and r['amount_cents'] > 0)
+    if not salary:
+        return None
+    return {'amount_cents': salary['amount_cents'], 'months': salary['months'],
+            'basis': 'median_month_last_complete_months', 'transaction_refs': salary['transaction_refs']}
+
+
 def profile_suggestions(conn, customer_id, as_of=None, locale='en'):
     """Candidate profile entries noticed in the transactions; never saved here.
 
@@ -880,7 +899,7 @@ def profile_suggestions(conn, customer_id, as_of=None, locale='en'):
         value = {'kind': 'salary', 'usual_day': salary['day'], 'typical_monthly_cents': salary['amount_cents'], 'months_seen': salary['months'], 'day_varies': varies}
         text = _say(loc, 'salary_note', when=when, amount=money(salary['amount_cents']))
         out.append({'id': _sid(customer_id, 'salary'), 'kind': 'salary', 'key': 'observation', 'value': value,
-                    'question': _say(loc, 'salary_question', when=when, amount=money(salary['amount_cents'])),
+                    'question': _say(loc, 'salary_question', when=when, amount=money(salary['amount_cents']), months=salary['months']),
                     'evidence': {'label': _say(loc, 'salary_evidence', months=salary['months']), 'transaction_refs': salary['transaction_refs']},
                     'save_as': {'key': 'note', 'value': text}, 'alternatives': []})
         steady = salary['months'] >= 6 and salary['amount_mad_cents'] * 10 <= salary['amount_cents']

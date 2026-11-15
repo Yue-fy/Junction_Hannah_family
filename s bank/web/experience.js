@@ -252,8 +252,8 @@ const COPY = {
   'personal.forget':['Forget my preferences and notes','Poista toiveeni ja muistiinpanoni','Glöm mina önskemål och anteckningar'],
   'personal.clearFailed':['Cleared for this visit. Your browser could not remove saved data. Clear this site’s data in your browser settings before sharing this device.','Poistettu tämän vierailun ajaksi. Selain ei voinut poistaa tallennettuja tietoja. Tyhjennä sivuston tiedot selaimen asetuksista ennen laitteen jakamista.','Rensat för detta besök. Webbläsaren kunde inte ta bort sparad data. Rensa webbplatsens data i webbläsarinställningarna innan du delar enheten.'],
   'personal.forgotten':['Preferences and notes cleared from this browser.','Toiveet ja muistiinpanot poistettu tästä selaimesta.','Önskemål och anteckningar har rensats från webbläsaren.'],
-  'focus.buffer':['An emergency cushion','Taloudellinen puskuri','En ekonomisk buffert'],
-  'focus.travel':['A trip to look forward to','Matka, jota odottaa','En resa att se fram emot'],
+  'focus.buffer':['An emergency cushion','Turvatyyny','En säkerhetsmarginal'],
+  'focus.travel':['A trip to look forward to','Unelmien matka','En drömresa'],
   'focus.home':['A place of my own','Oma koti','Ett eget hem'],
   'focus.vehicle':['Getting around','Liikkuminen','Att ta sig fram'],
   'focus.flexibility':['More everyday freedom','Enemmän vapautta arkeen','Mer frihet i vardagen'],
@@ -315,7 +315,7 @@ const COPY = {
   'spending.home':['Home & essentials','Koti ja välttämättömät menot','Hem och nödvändigheter'],
   'spending.leisure':['Life & leisure','Elämä ja vapaa-aika','Liv och fritid'],
   'spending.tap':['Choose a slice or category','Valitse lohko tai luokka','Välj en del eller kategori'],
-  'spending.rows':['View {count} transactions','Näytä {count} tapahtumaa','Visa {count} transaktioner'],
+  'spending.rows':['View {count} transactions','Näytä {count} {count|tapahtuma|tapahtumaa}','Visa {count} {count|transaktion|transaktioner}'],
   'spending.share':['{percent}% of spending','{percent} % menoista','{percent} % av utgifterna'],
   'spending.excludes':['Income and savings transfers are shown separately.','Tulot ja säästösiirrot näytetään erikseen.','Inkomster och sparöverföringar visas separat.'],
   'spending.baskets':['Another way to understand your spending','Toinen tapa ymmärtää menojasi','Ett annat sätt att förstå dina utgifter'],
@@ -327,7 +327,7 @@ const COPY = {
   'category.Utilities':['Bills','Laskut','Räkningar'],
   'category.Groceries':['Groceries','Ruokaostokset','Matinköp'],
   'category.Transportation':['Transport','Liikenne','Transport'],
-  'category.Restaurants':['Eating out','Ravintolat','Restaurang'],
+  'category.Restaurants':['Eating out','Ravintolat','Restauranger'],
   'category.Health':['Health','Terveys','Hälsa'],
   'category.Home & Tech':['Home & tech','Koti ja tekniikka','Hem och teknik'],
   'category.Lifestyle':['Shopping','Ostokset','Shopping'],
@@ -373,5 +373,6 @@ export const UX_MESSAGES=EXPERIENCE_MESSAGES;
 export function ux(locale,key,values={}) {
   const normalized=String(locale||'en').toLowerCase().slice(0,2);
   const text=EXPERIENCE_MESSAGES[normalized]?.[key]||EXPERIENCE_MESSAGES.en[key]||key;
-  return text.replace(/\{(\w+)\}/g,(_,name)=>values[name]===undefined?'{'+name+'}':String(values[name]));
+  // {count|one|other} picks the singular after exactly 1 (FI tapahtuma/tapahtumaa, SV transaktion/transaktioner).
+  return text.replace(/\{(\w+)\|([^|{}]*)\|([^{}]*)\}/g,(_,name,one,other)=>Number(values[name])===1?one:other).replace(/\{(\w+)\}/g,(_,name)=>values[name]===undefined?'{'+name+'}':String(values[name]));
 }

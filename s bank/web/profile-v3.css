@@ -127,3 +127,7 @@
   .onboarding-dot, .onboarding-option, .profile-button { transition: none; }
   .onboarding-dot.is-current { transform: none; }
 }
+
+/* V5 fix wave (lane ME): the status line after turning steady mode off/on is neutral, not a warning. */
+.profile-banner.profile-notice { background: var(--white); border: 1px solid var(--line); display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; }
+.profile-banner.profile-notice p { margin: 0; }

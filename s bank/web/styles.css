@@ -271,6 +271,8 @@ dialog::backdrop { background: #102d2270; backdrop-filter: blur(7px); }
 .goal-card .goal-amount span { font-size: 14px; color: var(--muted); letter-spacing: 0; }
 .goal-card svg { margin: 16px 0; }
 .goal-card .small-text { margin-top: 8px; }
+/* V5 fix (lane NB): the goal does not fit what is usually left each month (GET /api/goals fit.texts). */
+.goal-card .goal-fit-warning { margin-top: 12px; padding: 10px 12px; border-radius: 14px; background: #ffe5c2; color: #5b3500; font-size: 14px; line-height: 1.4; font-weight: 600; }
 .goal-milestone:empty { display: none; }
 .goal-milestone, .milestone-card { padding: 22px; background: #e8f2d2; border: 1px solid #d4e2b4; border-radius: 22px; margin-bottom: 20px; }
 .milestone-card strong { display: block; font-size: 20px; margin-bottom: 8px; }
@@ -886,3 +888,124 @@ html[data-current-view="trends"] .app-context .period-control,#trend-period,#map
 /* V4 (lane F): the skip link is invisible until it has keyboard focus */
 .skip-link:not(:focus){clip-path:inset(50%);width:1px;height:1px;overflow:hidden;padding:0}
 .coach-context-heading{margin:18px 0 4px;font-size:15px;font-weight:650}
+
+/* ==========================================================================
+   V5 shell (lane NV): one app frame on every screen size.
+   - The tab bar is fixed to the bottom everywhere (it used to jump to the top at >=1000px).
+   - Five equal tabs, labels on one line, safe-area aware, never covering page content.
+   - A compact header (logo, language, profile) and a one-line context chip.
+   - Content sits in a centred column; Home keeps its own wider desktop grid.
+   Selectors start with "html .phone-shell" so they also win over the older coach-view rules above.
+   ========================================================================== */
+:root { --dock-height: 64px; --dock-clearance: calc(var(--dock-height) + env(safe-area-inset-bottom, 0px)); --frame-wide: 1120px; --frame-column: 720px; }
+html .phone-shell { max-width: none; }
+#main-content:focus { outline: none; }
+main, [tabindex], section[id], h1[id], h2[id] { scroll-margin-top: 24px; }
+
+/* Header: the same 56px row on every page. */
+html .phone-shell .app-header { position: relative; top: auto; z-index: 2; min-height: 56px; display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0; padding: calc(6px + env(safe-area-inset-top, 0px)) max(var(--page-gutter), calc((100% - var(--frame-wide)) / 2)) 6px; background: var(--paper); backdrop-filter: none; border-bottom: 1px solid var(--line); }
+html .phone-shell .wordmark { font-size: 19px; gap: 7px; letter-spacing: -.6px; min-width: 0; }
+html .phone-shell .brand-icon { width: 28px; height: 28px; min-width: 28px; }
+html .phone-shell .header-controls { display: flex; align-items: center; gap: 8px; min-width: 0; }
+html .phone-shell .language-control { display: block; margin: 0; }
+html .phone-shell .language-control label { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+html .phone-shell .language-control select { display: block; width: auto; max-width: 118px; height: 44px; min-height: 44px; margin: 0; padding: 0 8px 0 10px; border-radius: 12px; font-size: 16px; }
+html .phone-shell .avatar { width: 44px; min-width: 44px; height: 44px; min-height: 44px; margin: 0; padding: 11px; }
+html .phone-shell #demo-button { display: none; }
+
+/* One-line context chip (demo customer and month); it opens the customer-and-month sheet. */
+html .phone-shell .app-context { display: flex; align-items: center; justify-content: flex-start; min-height: 0; margin: 10px auto 16px; padding: 0; border: 0; gap: 0; }
+html[data-current-view="coach"] .phone-shell .app-context { display: none; }
+.context-chip { display: inline-flex; align-items: center; gap: 8px; max-width: 100%; min-width: 0; min-height: 40px; margin: 0; padding: 6px 10px 6px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--white); color: var(--muted); font-size: 13px; font-weight: 600; line-height: 1.2; text-align: left; }
+.context-chip:hover { border-color: #c9dccb; color: var(--deep-green); }
+.context-chip__dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: #9fcf6a; }
+.context-chip .context-caption { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin: 0; font-size: inherit; color: inherit; }
+.context-chip__chevron { flex: none; width: 16px; height: 16px; }
+
+/* The customer-and-month sheet uses the shared dialog style (bottom sheet on phones, centred on wider screens). */
+html .phone-shell dialog.persona-panel { margin-left: auto; margin-right: auto; padding: 0; border: 1px solid #d9e2d7; background: var(--paper); }
+html[data-current-view] .phone-shell dialog.persona-panel { position: fixed; top: auto; left: 0; right: 0; max-height: 93dvh; overflow-y: auto; z-index: auto; }
+.context-sheet__content>.period-control>label:first-child, .context-sheet__content>.period-control+label { margin-top: 0; }
+.context-sheet__content>.period-control { display: block; max-width: none; margin-bottom: 18px; }
+.context-sheet__content>.period-control>label { display: block; margin: 0 0 8px; color: var(--ink); font-size: 14px; font-weight: 600; }
+.context-sheet__content select { width: 100%; max-width: 460px; }
+.context-sheet__content p { font-size: 14px; color: var(--muted); margin-top: 10px; }
+.context-sheet__content .personal-actions { justify-content: flex-start; margin-top: 10px; }
+html[data-current-view="trends"] .context-sheet__content>.period-control { display: none; }
+@media (min-width: 600px) { html[data-current-view] .phone-shell dialog.persona-panel { top: 5vh; bottom: auto; max-height: 90dvh; } }
+
+/* Bottom tab bar: fixed, full-width surface, five equal tabs centred in the column. */
+html .phone-shell .bottom-dock { position: fixed; top: auto; bottom: 0; left: 0; right: 0; transform: none; width: auto; height: auto; display: block; margin: 0; padding: 4px max(6px, env(safe-area-inset-right, 0px)) calc(4px + env(safe-area-inset-bottom, 0px)) max(6px, env(safe-area-inset-left, 0px)); background: #fffffff7; backdrop-filter: blur(18px); border: 0; border-top: 1px solid var(--line); box-shadow: 0 -6px 20px #19392a0a; z-index: 30; }
+html .phone-shell .bottom-dock #ask-coach { display: none; }
+html .phone-shell .bottom-dock nav { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 2px; max-width: 560px; margin: 0 auto; padding: 0; flex-wrap: nowrap; }
+html .phone-shell .bottom-dock nav button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-width: 0; min-height: 56px; height: 56px; margin: 0; padding: 4px 2px; border: 0; border-radius: 12px; background: none; color: var(--muted); font-size: 12px; font-weight: 500; }
+html .phone-shell .bottom-dock nav button>.nav-icon { display: inline-flex; align-items: center; justify-content: center; min-width: 48px; min-height: 28px; padding: 3px 12px; border-radius: 999px; background: none; transition: background-color .15s ease; }
+html .phone-shell .bottom-dock nav button>span:not([aria-hidden]) { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; line-height: 1.25; }
+html .phone-shell .bottom-dock nav button:hover { color: var(--deep-green); }
+html .phone-shell .bottom-dock nav button[aria-current=page] { color: var(--deep-green); font-weight: 700; background: none; }
+html .phone-shell .bottom-dock nav button[aria-current=page]>.nav-icon { background: #dcebd5; }
+html .phone-shell .bottom-dock nav button:focus-visible { outline-offset: -2px; }
+
+/* Page content always clears the bar (plus the iPhone home indicator). */
+html .phone-shell main, html .phone-shell #main-content { padding-bottom: calc(var(--dock-clearance) + 28px); }
+html[data-current-view="coach"] .phone-shell #main-content { padding-bottom: var(--dock-clearance); }
+html[data-current-view="coach"] .phone-shell .app-header { min-height: 56px; }
+
+/* Responsive frame: single-column pages sit in a centred column; Home keeps its wider grid on desktop. */
+html .phone-shell #trends-view, html .phone-shell #goals-view, html .phone-shell #profile-view, html .phone-shell #journal-view, html .phone-shell .app-context, html .phone-shell #status-message { width: 100%; max-width: var(--frame-column); margin-left: auto; margin-right: auto; }
+html .phone-shell #home-view { width: 100%; max-width: var(--frame-wide); margin-left: auto; margin-right: auto; }
+html .phone-shell main { min-width: 0; }
+@media (min-width: 600px) {
+  html .phone-shell .wordmark { font-size: 21px; }
+}
+@media (min-width: 1000px) {
+  :root { --dock-height: 64px; }
+  body { padding: 0; background: var(--paper); }
+  html .phone-shell #demo-button { display: block; min-height: 44px; margin: 0 6px 0 0; }
+  html .phone-shell main, html .phone-shell #main-content { padding-bottom: calc(var(--dock-clearance) + 40px); }
+  html[data-current-view="coach"] .phone-shell #main-content { padding-bottom: var(--dock-clearance); }
+  html[data-current-view="coach"] .phone-shell #demo-button { display: none; }
+  #home-view, #trends-view, #goals-view, #journal-view { scroll-margin-top: 24px; }
+}
+@media (max-width: 359px) {
+  html .phone-shell .wordmark { font-size: 18px; gap: 6px; }
+  html .phone-shell .brand-icon { width: 26px; height: 26px; min-width: 26px; }
+  html .phone-shell .language-control select { max-width: 104px; padding: 0 4px 0 8px; }
+  html .phone-shell .bottom-dock { padding-left: max(2px, env(safe-area-inset-left, 0px)); padding-right: max(2px, env(safe-area-inset-right, 0px)); }
+  html .phone-shell .bottom-dock nav { gap: 0; }
+  html .phone-shell .bottom-dock nav button>.nav-icon { min-width: 44px; padding: 3px 10px; }
+  html .phone-shell .bottom-dock nav button>span:not([aria-hidden]) { font-size: 11px; }
+}
+/* End V5 shell */
+
+/* ==========================================================================
+   V5 design system (lane DS): tokens.
+   The rules that use them live in web/design-v5.css, which index.html links LAST so it can settle the
+   older per-module button, dialog and width rules without editing every module file.
+   - Buttons: one shape (pill), three kinds: primary (filled), secondary (outlined, tinted), text link.
+     Labels are centred. Every target is at least 44px. At most one primary per card.
+   - Dialogs: one pattern. Bottom sheet on phones (<600px), centred 560px dialog from 600px.
+     Title in the sticky header, actions sticky at the bottom.
+   - Widths: a 720px reading column below 1000px; from 1000px Home, Spending, Goals and Me use the
+     1120px frame (the same as the header) with a 2-column grid where it helps; Coach stays a column.
+   ========================================================================== */
+:root {
+  --ds-tap: 44px;
+  --ds-btn-height: 48px;
+  --ds-btn-radius: 999px;
+  --ds-btn-font: 15px;
+  --ds-btn-pad: 12px 22px;
+  --ds-btn-min-width: 220px;
+  --ds-secondary-line: #94c0a2;
+  --ds-secondary-bg: #fff;
+  --ds-secondary-hover: #e9f5ec;
+  --ds-danger: #a2321f;
+  --ds-link: var(--green);
+  --ds-dialog-width: 560px;
+  --ds-dialog-radius: 24px;
+  --ds-sheet-pad: 20px;
+  --frame-column: 720px;
+  --frame-wide: 1120px;
+  --frame-page: var(--frame-column);
+}
+/* End V5 design system tokens */

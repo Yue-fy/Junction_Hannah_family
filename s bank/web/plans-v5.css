@@ -1,0 +1,143 @@
+/* V5 lane MG: mortgage plan example and rich result (plans-mortgage.js). Mobile first. */
+.plan-card--example { border-color: #c9dccf; }
+.mg-badge { display: inline-block; margin: 6px 0 8px; padding: 4px 12px; border-radius: 999px; background: var(--peach); color: #7a3b00; font-size: 13px; font-weight: 700; letter-spacing: .01em; }
+.mg-intro { margin: 0 0 10px; color: var(--muted); font-size: 14px; line-height: 1.45; }
+.mg-status { margin: 12px 0; color: var(--muted); font-size: 14px; }
+.mg-label { margin: 12px 0 0; color: var(--muted); font-size: 13px; font-weight: 600; }
+.mg-label + .plan-amount { margin-top: 0; }
+.mg-facts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 12px 0 4px; }
+.mg-facts > div { background: var(--wash); border-radius: 14px; padding: 10px 12px; min-width: 0; }
+.mg-facts dt { color: var(--muted); font-size: 12px; line-height: 1.3; }
+.mg-facts dd { margin: 2px 0 0; font-size: 16px; font-weight: 700; color: var(--ink); overflow-wrap: anywhere; }
+.mg-summary { margin: 12px 0 4px; font-size: 15px; line-height: 1.5; }
+.mg-block { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); }
+.mg-block > h4 { margin: 0 0 8px; }
+.mg-hint { margin: 6px 0 0; color: var(--muted); font-size: 12px; }
+.mg-sentence { margin: 10px 0 0; font-size: 14px; line-height: 1.45; }
+
+/* Balance chart: SVG lines stretched to the plot; text and dots are HTML so they never distort. */
+.mg-chart { margin: 0; outline: none; touch-action: pan-y; cursor: crosshair; }
+.mg-chart:focus-visible { box-shadow: 0 0 0 3px #b8dcc6; border-radius: 10px; }
+.mg-plot { position: relative; height: 168px; }
+.mg-plot svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.mg-grid { stroke: var(--line); stroke-width: 1; stroke-dasharray: 2 3; vector-effect: non-scaling-stroke; }
+.mg-base { stroke: #c9d6cc; stroke-width: 1; vector-effect: non-scaling-stroke; }
+.mg-area { fill: #e4f4ea; }
+.mg-line { fill: none; stroke: #006b3c; stroke-width: 2; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.mg-line-extra { fill: none; stroke: var(--mg-extra); stroke-width: 2; stroke-dasharray: 6 4; vector-effect: non-scaling-stroke; }
+.mg-ylab { position: absolute; right: 0; transform: translateY(-120%); color: var(--muted); font-size: 11.5px; background: var(--white); padding: 0 0 0 4px; transition: opacity .15s; }
+.mg-chart.is-active .mg-ylab { opacity: .2; }
+.mg-vgrid { stroke: var(--line); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.mg-pt { position: absolute; width: 10px; height: 10px; border-radius: 50%; background: #006b3c; border: 2px solid var(--white); transform: translate(-50%, -50%); box-sizing: border-box; pointer-events: none; }
+.mg-pt-extra { background: var(--mg-extra); }
+.mg-pt-hover { width: 12px; height: 12px; }
+.mg-pt[hidden], .mg-cross[hidden] { display: none; }
+.mg-cross { position: absolute; top: 4%; bottom: 4%; width: 1px; background: #8aa596; pointer-events: none; }
+.mg-xaxis { position: relative; height: 16px; margin-top: 4px; color: var(--muted); font-size: 11.5px; line-height: 16px; font-variant-numeric: tabular-nums; }
+.mg-xtick { position: absolute; top: 0; transform: translateX(-50%); white-space: nowrap; }
+.mg-xtick--start { left: 0; transform: none; }
+.mg-xtick--end { right: 0; transform: none; }
+.mg-chart { position: relative; }
+/* Touch (default): the read-out sits under the axis, as a light card; idle it is the hint line. */
+.mg-tip { display: grid; gap: 1px; align-content: center; min-height: 58px; box-sizing: border-box; margin-top: 8px; padding: 8px 11px 9px; border: 1px solid #dbe4dc; border-radius: 12px; background: var(--white); color: var(--muted); font-size: 12.5px; line-height: 1.35; pointer-events: none; }
+.mg-tip-hint { font-size: 12px; color: var(--muted); }
+.mg-tip strong { font-size: 16px; color: var(--ink); font-variant-numeric: tabular-nums; }
+.mg-tip-extra { margin-top: 3px; padding-top: 4px; border-top: 1px solid #edf2ed; color: var(--ink); font-weight: 600; }
+/* Mouse: it floats at the top of the plot beside the crosshair (plans-mortgage.js flips it away from the point). */
+@media (hover: hover) and (pointer: fine) {
+  .mg-tip.is-idle { min-height: 0; padding: 0; border: 0; background: none; box-shadow: none; margin-top: 6px; }
+  .mg-tip:not(.is-idle) { position: absolute; top: 0; z-index: 2; min-width: 128px; max-width: 220px; margin: 0; box-shadow: 0 6px 20px #12321f1f; }
+}
+.mg-legend { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 6px; font-size: 12px; color: var(--muted); }
+.mg-legend span, .mg-split-values span { display: inline-flex; align-items: center; gap: 6px; }
+.mg-key { display: inline-block; width: 14px; height: 3px; border-radius: 2px; background: #006b3c; flex: none; }
+.mg-key-extra { background: repeating-linear-gradient(90deg, var(--mg-extra) 0 5px, transparent 5px 8px); }
+.mg-split-values .mg-key { width: 10px; height: 10px; border-radius: 3px; }
+.mg-key-interest { background: #d9822b; }
+
+/* Principal vs interest */
+.mg-split-row { margin: 10px 0 0; }
+.mg-split-head { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; font-weight: 650; }
+.mg-split-head span:last-child { color: var(--muted); font-weight: 500; }
+.mg-split-bar { display: flex; gap: 2px; height: 14px; margin: 6px 0 4px; }
+.mg-split-bar span { display: block; min-width: 3px; height: 100%; }
+.mg-seg-principal { background: #006b3c; border-radius: 4px 0 0 4px; }
+.mg-seg-interest { background: #d9822b; border-radius: 0 4px 4px 0; }
+.mg-split-values { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 12px; font-size: 12px; color: var(--muted); }
+
+/* What-ifs */
+.mg-options { display: grid; gap: 8px; }
+.mg-option { display: grid; grid-template-columns: 1fr; gap: 2px 12px; align-items: baseline; width: 100%; min-height: 56px; padding: 10px 14px; border: 1px solid #c4dacb; border-radius: 14px; background: var(--white); color: var(--ink); text-align: left; font: inherit; cursor: pointer; }
+.mg-option-amount { color: var(--green); font-weight: 700; font-size: 14px; white-space: nowrap; }
+.mg-option-result { font-size: 14px; font-weight: 600; }
+.mg-option-when { font-size: 12px; color: var(--muted); }
+.mg-option[aria-pressed="true"] { border-color: var(--mg-extra); background: #f2f7ea; box-shadow: inset 4px 0 0 var(--mg-extra); }
+.mg-extra-note { margin: 10px 0 0; padding: 10px 12px; border-radius: 14px; background: #f2f7ea; font-size: 14px; line-height: 1.45; }
+.mg-see-chart { min-height: 32px; padding: 0; font-size: 14px; }
+.mg-option:focus-visible { outline: 3px solid #b8dcc6; outline-offset: 2px; }
+.mg-rates { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.mg-rate { background: var(--wash); border-radius: 14px; padding: 10px 12px; min-width: 0; }
+.mg-rate p { margin: 0; }
+.mg-rate-label { font-size: 12px; color: var(--muted); line-height: 1.3; }
+.mg-rate-value { margin-top: 4px !important; font-size: 15px; font-weight: 700; }
+.mg-rate-change { font-size: 12px; color: var(--muted); }
+.mg-rate-value span { font-size: 12px; font-weight: 500; color: var(--muted); white-space: nowrap; }
+
+/* Year table */
+.mg-years { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 4px; }
+.mg-years summary { min-height: 44px; display: flex; align-items: center; justify-content: space-between; gap: 12px; list-style: none; color: var(--green); font-weight: 650; font-size: 14px; cursor: pointer; }
+.mg-years summary::-webkit-details-marker { display: none; }
+.mg-years summary::after { content: ""; width: 8px; height: 8px; margin-right: 4px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(45deg) translateY(-2px); transition: transform .15s; }
+.mg-years[open] summary::after { transform: rotate(-135deg) translateY(-2px); }
+/* Scroll shadows tell that the table scrolls (white covers at the ends, shadows only while there is more). */
+.mg-table-wrap { max-height: 300px; overflow: auto;
+  background: linear-gradient(var(--white) 30%, #fff0) center top, linear-gradient(#fff0, var(--white) 70%) center bottom,
+    radial-gradient(farthest-side at 50% 0, #163e3024, #0000) center top, radial-gradient(farthest-side at 50% 100%, #163e3024, #0000) center bottom;
+  background-repeat: no-repeat; background-size: 100% 36px, 100% 36px, 100% 12px, 100% 12px; background-attachment: local, local, scroll, scroll; }
+.mg-years table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+.mg-years th, .mg-years td { padding: 6px 4px; border-bottom: 1px solid var(--line); text-align: right; }
+.mg-years th:first-child { text-align: left; }
+.mg-years thead th { position: sticky; top: 0; background: var(--white); color: var(--muted); font-weight: 600; font-size: 12px; }
+
+.plan-badge { margin: 4px 0 8px; align-self: flex-start; }
+
+/* V5 fix lane GL: one card pattern for both plans (plans-mortgage.js planHead/offActions/exampleActions).
+   Equal-height off cards with their actions pinned to the bottom; "Turn on" is a compact centred outlined button
+   (not a full-width box that looks like a text field); "See an example ›" is the same link on both cards. */
+.plan-card { --mg-extra: #5b8c2a; }
+.plan-off-actions { margin-top: auto; padding-top: 8px; align-items: center; gap: 4px 20px; }
+.plan-actions .plan-turn-on { display: inline-flex; align-items: center; justify-content: center; width: auto; min-width: 132px; min-height: 44px; margin: 4px 0 10px; padding: 0 22px; border: 1.5px solid var(--green); border-radius: 999px; background: var(--white); color: var(--green); font-size: 15px; font-weight: 650; text-align: center; }
+.plan-actions .plan-turn-on:hover, .plan-actions .plan-turn-on:focus-visible { background: var(--wash); }
+.plan-see-example { min-height: 44px; margin: 4px 0 10px; }
+.plan-example-actions { display: grid; gap: 4px; margin: 12px 0 8px; }
+.plan-example-actions .primary-button { justify-content: center; text-align: center; }
+.plan-example-actions .text-button { justify-self: center; min-height: 44px; }
+/* One plan open wide (an example or a saved mortgage plan): every plan card takes the full row. */
+.plan-list.plan-list--wide { grid-template-columns: minmax(0, 1fr); }
+.plan-list > .plan-card--wide { grid-column: 1 / -1; }
+
+/* Wider cards (container queries, so this follows the card width whatever the page layout is). */
+.plan-card--example, .plan-card--on[data-plan="mortgage"] { container-type: inline-size; }
+/* Narrow cards: the year table drops "Paid" (it is interest + what pays off the loan) so the rest stays readable. */
+@container (max-width: 400px) {
+  .mg-years .mg-col-paid { display: none; }
+}
+@container (min-width: 560px) {
+  .mg-facts { grid-template-columns: repeat(4, 1fr); }
+  .mg-options { grid-template-columns: repeat(3, 1fr); }
+  .mg-plot { height: 200px; }
+  .plan-example-actions { grid-template-columns: auto auto; justify-content: start; align-items: center; gap: 20px; }
+  .plan-example-actions .primary-button { width: auto; min-width: 260px; }
+}
+@container (min-width: 900px) {
+  .mg-result { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 0 32px; align-items: start; }
+  .mg-result > .mg-col + .mg-col > .mg-block:first-child { margin-top: 12px; border-top: 0; padding-top: 0; }
+  .mg-facts { grid-template-columns: 1fr 1fr; }
+  .mg-options { grid-template-columns: 1fr; }
+  .mg-option { grid-template-columns: auto 1fr; }
+  .mg-option-amount { grid-row: span 2; align-self: center; }
+  .mg-plot { height: 230px; }
+}
+/* Tablet/desktop: an open example or a saved mortgage plan spans the plan grid. */
+
+.plan-chevron { margin-left: 4px; }

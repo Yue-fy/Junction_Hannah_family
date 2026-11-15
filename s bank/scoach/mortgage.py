@@ -30,6 +30,15 @@ PAYMENT_DIFF_NOTE_BP = 300
 DEFAULT_BUFFER_MONTHS = 1
 DETECTION_MONTHS = 6
 CHECK_WITH_BANK = 'Estimate from the numbers you entered. Your loan statement and your bank have the exact figures.'
+# The "pay a little extra" what-ifs shown side by side in the rich result (€50 / €100 / €200 a month).
+EXTRA_STEPS_CENTS = (5_000, 10_000, 20_000)
+# A realistic Finnish home loan for the read-only example (V5 lane MG): €180,000 left,
+# annuity, 12-month Euribor 2.30 % + bank margin 0.60 %, 22 years left.
+EXAMPLE_PLAN = {'principal_cents': 18_000_000, 'loan_type': 'annuity', 'reference_rate': 'euribor_12m',
+                'reference_rate_bp': 230, 'margin_bp': 60, 'remaining_months': 264}
+# When the account shows a likely loan payment, the example loan is sized so its annuity
+# payment is about that amount (rounded down to whole thousands of euros), within these bounds.
+EXAMPLE_PRINCIPAL_BOUNDS_CENTS = (2_000_000, 60_000_000)
 
 
 def _d(value):
@@ -136,10 +145,16 @@ def _clean(plan):
             'payment_day': plan.get('payment_day'), 'next_rate_check': plan.get('next_rate_check')}
 
 
-def _run(clean, rate_bp, extra_cents=0):
-    """Simulate with the plan's own term: years left when given, otherwise the typed payment."""
-    if clean['loan_type'] == 'annuity' and clean['remaining_months'] is None:
-        return simulate(clean['principal_cents'], rate_bp, 'annuity', payment_cents=clean['monthly_payment_cents'], extra_cents=extra_cents)
+def _run(clean, rate_bp, extra_cents=0, payment_cents=None):
+    """Simulate the plan with ONE payment: the one the customer is shown and that is held back.
+
+    Annuity: a typed monthly payment wins (the payoff date is solved from it, even when
+    years left were also given); otherwise the annuity payment for the years left.
+    ``payment_cents`` overrides the payment (rate what-ifs). Equal principal: the years left.
+    """
+    if clean['loan_type'] == 'annuity' and (payment_cents is not None or clean['monthly_payment_cents'] is not None):
+        payment = payment_cents if payment_cents is not None else clean['monthly_payment_cents']
+        return simulate(clean['principal_cents'], rate_bp, 'annuity', payment_cents=payment, extra_cents=extra_cents)
     if clean['loan_type'] == 'annuity':
         payment = annuity_payment(clean['principal_cents'], rate_bp, clean['remaining_months'])
         return simulate(clean['principal_cents'], rate_bp, 'annuity', payment_cents=payment, extra_cents=extra_cents)
@@ -161,7 +176,77 @@ def _yearly(rows, first_month):
     return list(years.values())
 
 
-def projection(plan, as_of, *, extra_cents=0, rate_delta_bp=0, buffer=None, steady=False):
+def principal_for_payment(payment_cents, rate_bp, months):
+    """The loan an annuity of ``payment_cents`` a month repays in ``months`` (cents, rounded down)."""
+    if payment_cents <= 0 or months < 1:
+        return 0
+    with localcontext() as context:
+        context.prec = 40
+        r = _monthly_rate(rate_bp)
+        if r == 0:
+            return payment_cents * months
+        value = _d(payment_cents) * (1 - (1 + r) ** -months) / r
+        return int(value.to_integral_value(rounding='ROUND_FLOOR'))
+
+
+def example_plan(prefill=None):
+    """Inputs for the read-only example: the generic Finnish loan, or one sized to the detected payment.
+
+    Returns (plan, basis) where basis is 'generic' or 'detected_payment'. A payment the
+    customer saved in the money profile, or one seen as a housing/loan payment, sizes the
+    example loan so the example payment is close to what they already pay each month.
+    """
+    plan = dict(EXAMPLE_PLAN)
+    payment = (prefill or {}).get('monthly_payment_cents') if (prefill or {}).get('found') else None
+    if type(payment) is int and payment > 0:
+        principal = principal_for_payment(payment, plan['reference_rate_bp'] + plan['margin_bp'], plan['remaining_months'])
+        principal = principal // 100_000 * 100_000
+        low, high = EXAMPLE_PRINCIPAL_BOUNDS_CENTS
+        if low <= principal <= high:
+            plan['principal_cents'] = principal
+            if (prefill or {}).get('payment_day'):
+                plan['payment_day'] = prefill['payment_day']
+            return plan, 'detected_payment'
+    return plan, 'generic'
+
+
+def _curve(principal_cents, rows, first_month):
+    """Loan balance at the start and after every 12 payments (and at the end): chart points."""
+    points = [{'n': 0, 'month': shift_month(first_month, -1), 'balance_cents': principal_cents}]
+    for row in rows:
+        if row['n'] % 12 == 0 or row['n'] == len(rows):
+            points.append({'n': row['n'], 'month': _month_after(first_month, row['n'] - 1), 'balance_cents': row['balance_cents']})
+    return points
+
+
+def _split(rows):
+    """Interest vs principal over the first and the last 12 payments (or fewer when the loan is short)."""
+    def total(part):
+        return {'payments': len(part), 'interest_cents': sum(r['interest_cents'] for r in part),
+                'principal_cents': sum(r['principal_cents'] for r in part), 'paid_cents': sum(r['payment_cents'] for r in part)}
+    if not rows:
+        return None
+    return {'first_year': total(rows[:12]), 'last_year': total(rows[-12:]) if len(rows) > 12 else None}
+
+
+def _detail(clean, base, first_month, steady):
+    """Rich-result extras for the UI: balance curve, principal/interest split, years left and the extra-payment what-ifs."""
+    years, months = divmod(base['months'], 12)
+    options = []
+    if not steady:
+        for step in EXTRA_STEPS_CENTS:
+            run = _run(clean, clean['rate_bp'], step)
+            options.append({'extra_cents': step, 'months_left': run['months'], 'months_saved': base['months'] - run['months'],
+                            'interest_saved_cents': base['total_interest_cents'] - run['total_interest_cents'],
+                            'total_interest_cents': run['total_interest_cents'],
+                            'payoff_month': _month_after(first_month, run['months'] - 1),
+                            'balance_curve': _curve(clean['principal_cents'], run['rows'], first_month)})
+    return {'years_left': {'years': years, 'months': months},
+            'balance_curve': _curve(clean['principal_cents'], base['rows'], first_month),
+            'split': _split(base['rows']), 'extra_options': options}
+
+
+def projection(plan, as_of, *, extra_cents=0, rate_delta_bp=0, buffer=None, steady=False, detail=False):
     """Repayment projection for a saved (or draft) mortgage plan.
 
     Args:
@@ -174,8 +259,17 @@ def projection(plan, as_of, *, extra_cents=0, rate_delta_bp=0, buffer=None, stea
         buffer: optional {'balance_cents', 'monthly_spending_cents', 'target_months'}
             from buffer_check, used for the gentle note before extra payments.
         steady: True in steady coaching mode: extra payments are never suggested.
-    Returns dict with monthly_payment_cents (what to hold back each payday),
-    calculated_payment_cents, payoff_month, months_left, total_interest_cents,
+        detail: True adds the rich result for the UI: years_left {years, months},
+            balance_curve [{n, month, balance_cents}] (start + every 12 payments),
+            split {first_year, last_year: {payments, interest_cents, principal_cents,
+            paid_cents}|None}, extra_options [{extra_cents (EUR 50/100/200), months_left,
+            months_saved, interest_saved_cents, total_interest_cents, payoff_month,
+            balance_curve}] (empty in steady mode).
+    Returns dict with monthly_payment_cents (the ONE payment of the card: held back each
+    payday and the base of every total, the payoff date, the yearly split and the rate
+    what-ifs), calculated_payment_cents (what the years left alone would need; differs only
+    to explain a typed payment, see notes 'payment_differs'), term_basis ('payment' when a
+    typed annuity payment sets the payoff date, else 'years'), entered_months, payoff_month, months_left, total_interest_cents,
     rate_bp, next_rate_check, yearly [...], what_if {extra_cents, months_saved,
     interest_saved_cents, payoff_month} or None, rate_change {up, down, ...},
     selected_rate {...} when rate_delta_bp != 0, extra_advice {suggest: bool,
@@ -189,8 +283,16 @@ def projection(plan, as_of, *, extra_cents=0, rate_delta_bp=0, buffer=None, stea
     day = date.fromisoformat(as_of)
     first_month = shift_month(day.strftime('%Y-%m'), 1)
     base = _run(clean, clean['rate_bp'])
-    calculated = base['regular_payment_cents'] if clean['loan_type'] == 'annuity' else base['first_payment_cents']
-    held = clean['monthly_payment_cents'] if clean['monthly_payment_cents'] is not None else calculated
+    typed = clean['monthly_payment_cents']
+    if clean['loan_type'] == 'annuity' and clean['remaining_months'] is not None:
+        # What the years left alone would need; shown only to explain a typed payment that differs.
+        calculated = annuity_payment(clean['principal_cents'], clean['rate_bp'], clean['remaining_months'])
+    else:
+        calculated = base['regular_payment_cents'] if clean['loan_type'] == 'annuity' else base['first_payment_cents']
+    # The ONE payment of the card: held back on payday, and the base of the totals, the payoff
+    # date, the yearly split and the rate what-ifs (V5 fix: never mix typed and calculated).
+    held = typed if typed is not None else (base['regular_payment_cents'] if clean['loan_type'] == 'annuity' else base['first_payment_cents'])
+    term_basis = 'payment' if clean['loan_type'] == 'annuity' and typed is not None else 'years'
     notes = []
     if clean['monthly_payment_cents'] is not None and clean['remaining_months'] is not None and calculated:
         diff = abs(clean['monthly_payment_cents'] - calculated) * 10_000
@@ -203,12 +305,23 @@ def projection(plan, as_of, *, extra_cents=0, rate_delta_bp=0, buffer=None, stea
 
     def scenario(delta):
         rate = max(clean['rate_bp'] + delta, 0)
-        run = _run(clean, rate)
-        pay = run['regular_payment_cents'] if clean['loan_type'] == 'annuity' else run['first_payment_cents']
-        if clean['loan_type'] == 'annuity' and clean['remaining_months'] is None:
-            # Payment fixed by the customer: a rate change changes the term instead.
-            pay = clean['monthly_payment_cents']
-        return {'rate_bp': rate, 'monthly_payment_cents': pay, 'payment_change_cents': pay - calculated,
+        if clean['loan_type'] == 'annuity' and typed is not None and clean['remaining_months'] is not None:
+            # A Finnish annuity keeps its term when the reference rate is checked: the payment
+            # shown moves by what the same loan and term need at the new rate.
+            months = base['months']
+            change = (annuity_payment(clean['principal_cents'], rate, months)
+                      - annuity_payment(clean['principal_cents'], clean['rate_bp'], months))
+            pay = held + change
+            run = _run(clean, rate, payment_cents=pay)
+        elif clean['loan_type'] == 'annuity' and typed is not None:
+            # Payment fixed by the customer and no term: a rate change changes the term instead.
+            run = _run(clean, rate)
+            pay = held
+        else:
+            run = _run(clean, rate)
+            pay = held + ((run['regular_payment_cents'] if clean['loan_type'] == 'annuity' else run['first_payment_cents'])
+                          - (base['regular_payment_cents'] if clean['loan_type'] == 'annuity' else base['first_payment_cents']))
+        return {'rate_bp': rate, 'monthly_payment_cents': pay, 'payment_change_cents': pay - held,
                 'months_left': run['months'], 'total_interest_cents': run['total_interest_cents'],
                 'interest_change_cents': run['total_interest_cents'] - base['total_interest_cents']}
 
@@ -242,6 +355,8 @@ def projection(plan, as_of, *, extra_cents=0, rate_delta_bp=0, buffer=None, stea
         'rate_bp': clean['rate_bp'],
         'monthly_payment_cents': held,
         'calculated_payment_cents': calculated,
+        'term_basis': term_basis,
+        'entered_months': clean['remaining_months'],
         'first_payment_month': first_month,
         'months_left': base['months'],
         'payoff_month': _month_after(first_month, base['months'] - 1),
@@ -260,6 +375,8 @@ def projection(plan, as_of, *, extra_cents=0, rate_delta_bp=0, buffer=None, stea
         'observed': False,
         'footer': CHECK_WITH_BANK,
     }
+    if detail:
+        result.update(_detail(clean, base, first_month, steady))
     result['fact_id'] = fact_id('mortgage-projection', sorted(result['inputs'].items(), key=lambda i: i[0]), as_of, extra_cents, rate_delta_bp)
     return result
 

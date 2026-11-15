@@ -294,7 +294,7 @@ documentListeners.click({target:category});
 assert.equal(app.state.selectedCategory,'Housing');
 assert.equal(get('spending-total').textContent,'€100.00');
 assert.equal(get('spending-center-label').textContent,'Housing');
-assert.match(get('spending-selection').innerHTML,/View 1 transactions/);
+assert.match(get('spending-selection').innerHTML,/View 1 transaction\b(?!s)/);
 assert.match(get('spending-selection').innerHTML,/data-category-transactions="Housing"/);
 assert.ok(get('spending-donut').innerHTML.includes('aria-pressed="true" data-spending-category="Housing"'));
 ''')

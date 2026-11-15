@@ -5,20 +5,22 @@
 // server; this module only adds a few UI labels. It formats money only where the contract gives cents without text
 // (chart rows, an amount picker's input) and never computes amounts.
 import { barChart, trendChart, spendingRing, goalChart } from './charts.js';
+import { emptyStateHTML, emptyText } from './empty-states.js';
 
 const LOCALES = ['en', 'fi', 'sv'];
 const COPY = {
-  quickMode: ['Quick answers mode – the AI coach isn’t available right now, so I can’t read typed questions.',
-    'Pikavastaukset käytössä – tekoälyvalmentaja ei ole juuri nyt käytettävissä, joten en ymmärrä vapaasti kirjoitettuja kysymyksiä.',
-    'Snabbsvar används – AI-coachen är inte tillgänglig just nu, så jag kan inte läsa skrivna frågor.'],
-  closest: ['Closest questions I can answer exactly:', 'Lähimmät kysymykset, joihin osaan vastata tarkasti:', 'Närmaste frågor som jag kan svara exakt på:'],
+  // V5 fix (lane CO): one calm grey line, shown only when no exact answer card could be given.
+  quickMode: ['Quick answers – here are the closest questions I can answer exactly.',
+    'Pikavastaukset – tässä lähimmät kysymykset, joihin osaan vastata tarkasti.',
+    'Snabbsvar – här är de närmaste frågorna som jag kan svara exakt på.'],
   noSuggestions: ['Pick a question from Browse topics, or try the AI coach again.', 'Valitse kysymys aiheista tai kokeile tekoälyvalmentajaa uudelleen.', 'Välj en fråga bland ämnena eller försök med AI-coachen igen.'],
   usingProfile: ['Using what you told me: {text}', 'Käytän sitä, mitä kerroit: {text}', 'Jag använder det du berättade: {text}'],
   introChip: ['Tell me about you (1 min)', 'Kerro itsestäsi (1 min)', 'Berätta om dig (1 min)'],
   introHide: ['Hide this suggestion', 'Piilota tämä ehdotus', 'Dölj förslaget'],
   followups: ['Next questions', 'Seuraavat kysymykset', 'Nästa frågor'],
   evidence: ['See the transactions', 'Katso tapahtumat', 'Visa transaktionerna'],
-  mode: ['Quick answers · Numbers come from your account', 'Pikavastaukset · Luvut tulevat tililtäsi', 'Snabbsvar · Siffrorna kommer från ditt konto'],
+  // The composer footer never changes with the answer source (V5 fix, lane CO).
+  footer: ['Numbers come from your account. Nothing changes without your OK.', 'Luvut tulevat tililtäsi. Mitään ei muuteta ilman lupaasi.', 'Siffrorna kommer från ditt konto. Inget ändras utan ditt ok.'],
   updating: ['Updating…', 'Päivitetään…', 'Uppdaterar…'],
   cardError: ['I couldn’t update this answer. Please try again.', 'En saanut päivitettyä vastausta. Yritä uudelleen.', 'Jag kunde inte uppdatera svaret. Försök igen.'],
   'picker.category': ['Category', 'Luokka', 'Kategori'],
@@ -41,6 +43,8 @@ const euroFormatter = locale => { const format = new Intl.NumberFormat(TAGS[lang
 const defaultEsc = value => String(value ?? '').replace(/[&<>"']/g, x => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[x]));
 const str = value => typeof value === 'string' ? value : (typeof value === 'number' && Number.isFinite(value) ? String(value) : '');
 const cents = value => Number.isSafeInteger(value) ? value : null;
+// Short hyphenated words ("must-pays") never break at the hyphen on narrow screens (U+2011 non-breaking hyphen).
+const keepHyphen = text => text.replace(/(?<![\p{L}\d-])(\p{L}{1,6})-(\p{L}{1,6})(?![\p{L}\d-])/gu, '$1\u2011$2');
 
 /** True when the value looks like a card the renderer can show (headline or title required). */
 export function isCard(card) {
@@ -81,8 +85,25 @@ export function chartHTML(chart, charts = {barChart, trendChart, spendingRing, g
   if (!rows.length) return '';
   if (kind === 'bars') return compactBars(rows.slice(0, 5), esc, euroFormatter(locale));
   if (kind === 'trend') return rows.length > 1 ? charts.trendChart(rows.map(row => ({label: row.label, value_cents: row.value_cents}))) : '';
-  if (kind === 'ring') return charts.spendingRing(rows.filter(row => row.value_cents > 0).map(row => ({category: row.category || row.label, label: row.label, total_cents: row.value_cents})));
+  if (kind === 'ring') return splitBar(rows, esc, euroFormatter(locale));
   return '';
+}
+
+// V5 fix (lane CO): a 'ring' (parts of one whole, e.g. held back / daily life / could be saved) is drawn as one
+// labelled horizontal bar with a legend: every part is named with its amount. With fewer than two parts above €0
+// the bar would be a single colour that says nothing, so the card shows no chart (the headline and lines explain).
+const SPLIT_COLOURS = ['#04432b', '#5fae86', '#f6cf86', '#c9ec7a', '#9fb5a5'];
+function splitBar(rows, esc, format) {
+  const parts = rows.filter(row => row.value_cents > 0).slice(0, SPLIT_COLOURS.length);
+  if (parts.length < 2) return '';
+  const total = parts.reduce((sum, row) => sum + row.value_cents, 0);
+  const colour = index => SPLIT_COLOURS[index % SPLIT_COLOURS.length];
+  const text = row => row.value_text || format(row.value_cents);
+  const description = parts.map(row => `${row.label}: ${text(row)}`).join(', ');
+  return `<div class="card-split" role="img" aria-label="${esc(description)}">`
+    + `<div class="card-split__bar" aria-hidden="true">${parts.map((row, i) => `<span style="flex-grow:${(row.value_cents / total * 1000).toFixed(0)};background:${colour(i)}"></span>`).join('')}</div>`
+    + `<ul class="card-split__legend" aria-hidden="true">${parts.map((row, i) => `<li><i style="background:${colour(i)}"></i><span class="card-split__label">${esc(row.label)}</span><span class="card-split__value">${esc(text(row))}</span></li>`).join('')}</ul>`
+    + `</div>`;
 }
 
 // Bars inside a card are a compact list (label, server-formatted value, thin bar) so a card stays one screen tall.
@@ -127,6 +148,22 @@ function pickerHTML(picker, index, {locale, esc, turnId, cardIndex, monthLabel})
   return `<span class="answer-card__picker">${label}<select ${attrs}>${options}</select></span>`;
 }
 
+// Questions where €0 means "nothing recorded" (a calm empty state), not a warning such as "€0 safe to spend".
+const ZERO_IS_EMPTY = new Set(['money.where', 'money.category', 'spend.leaks', 'spend.biggest', 'spend.recent', 'extra.vat']);
+const chartHasValues = chart => rowsOf(chart?.data).some(row => row.value_cents !== 0)
+  || (chart?.kind === 'progress' && Boolean(chart.data));
+/**
+ * 'unavailable' when the server could not answer, 'zero' when a spending question found nothing; otherwise null.
+ * An all-zero chart counts as no chart (nothing to draw).
+ */
+export function emptyCardKind(card) {
+  if (!isCard(card)) return null;
+  const headline = card.headline && typeof card.headline === 'object' ? card.headline : {};
+  if (str(headline.value_text) === '—') return 'unavailable';
+  if (headline.value_cents === 0 && ZERO_IS_EMPTY.has(str(card.question_id)) && !(card.chart && chartHasValues(card.chart))) return 'zero';
+  return null;
+}
+
 /**
  * Render one answer card.
  * @param {object} card the server card (see contract above)
@@ -137,23 +174,32 @@ export function renderCard(card, options = {}) {
   if (!isCard(card)) return '';
   const {locale = 'en', esc = defaultEsc, turnId = '', index = 0, monthLabel = null, latest = true, busy = false, error = false} = options;
   const plain = value => esc(str(value));
+  const shown = value => esc(keepHyphen(str(value)));
   const headline = card.headline && typeof card.headline === 'object' ? card.headline : {};
   const pickers = (Array.isArray(card.pickers) ? card.pickers : []).map((picker, i) => pickerHTML(picker, i, {locale, esc, turnId, cardIndex: index, monthLabel})).filter(Boolean).join('');
   const lines = (Array.isArray(card.lines) ? card.lines : []).map(str).filter(Boolean).slice(0, 4);
-  const profile = [card.profile_note, card.using_profile, card.personalization].map(value => Array.isArray(value) ? value.map(str).filter(Boolean).join(' · ') : str(value)).find(Boolean);
-  const chart = chartHTML(card.chart, options.charts, esc, locale);
+  // The server's profile_note is already a full localized sentence ("Using what you told me: …"), so it is shown as
+  // sent. Only a bare list of facts (using_profile / personalization) gets this module's prefix: never both.
+  const facts = [card.using_profile, card.personalization].map(value => Array.isArray(value) ? value.map(str).filter(Boolean).join(' · ') : str(value)).find(Boolean);
+  const profile = str(card.profile_note) || (facts ? cardText(locale, 'usingProfile', {text: facts}) : '');
+  const emptyKind = emptyCardKind(card);
+  const chart = emptyKind ? '' : chartHTML(card.chart, options.charts, esc, locale);
+  // V5 lane EM: no data → one designed empty state in place of the headline, lines and chart; pickers and next questions stay.
+  const empty = !emptyKind ? '' : emptyKind === 'unavailable'
+    ? emptyStateHTML({kind: 'chart', compact: true, title: str(headline.label), body: lines.join(' ') || emptyText(locale, 'v5.em.card.unavailable.body'), esc, id: 'card-unavailable'})
+    : emptyStateHTML({kind: 'calm', compact: true, eyebrow: [str(headline.label), str(headline.value_text)].filter(Boolean).join(' · '), title: lines[0] || str(headline.label), body: lines.slice(1).join(' '), esc, id: 'card-zero'});
   const evidence = (Array.isArray(card.evidence) ? card.evidence : []).map((item, i) => item && item.query && typeof item.query === 'object'
-    ? `<button type="button" class="answer-card__link" data-card-evidence="${esc(turnId)}" data-card-index="${index}" data-index="${i}">${plain(item.label) || esc(cardText(locale, 'evidence'))} <span aria-hidden="true">›</span></button>` : '').filter(Boolean).slice(0, 2).join('');
+    ? `<button type="button" class="answer-card__link" data-card-evidence="${esc(turnId)}" data-card-index="${index}" data-index="${i}">${shown(item.label) || esc(cardText(locale, 'evidence'))} <span aria-hidden="true">›</span></button>` : '').filter(Boolean).slice(0, 2).join('');
   const followups = latest ? (Array.isArray(card.followups) ? card.followups : []).filter(item => str(item?.id) && str(item?.text)).slice(0, 3)
-    .map(item => `<button type="button" class="answer-chip" data-catalogue-question="${esc(item.id)}" data-catalogue-text="${plain(item.text)}">${plain(item.text)}</button>`).join('') : '';
+    .map(item => `<button type="button" class="answer-chip" data-catalogue-question="${esc(item.id)}" data-catalogue-text="${plain(item.text)}">${shown(item.text)}</button>`).join('') : '';
   const value = str(headline.value_text);
   return `<article class="answer-card${busy ? ' is-busy' : ''}" data-card-question="${plain(card.question_id)}" aria-busy="${busy}">`
-    + `<h3 class="answer-card__title">${plain(card.title)}</h3>`
+    + `<h3 class="answer-card__title">${shown(card.title)}</h3>`
     + (pickers ? `<div class="answer-card__pickers">${pickers}</div>` : '')
-    + (value || str(headline.label) ? `<p class="answer-card__headline">${value ? `<strong class="answer-card__value">${esc(value)}</strong>` : ''}${str(headline.label) ? `<span class="answer-card__label">${plain(headline.label)}</span>` : ''}</p>` : '')
-    + (lines.length ? `<ul class="answer-card__lines">${lines.map(line => `<li>${esc(line)}</li>`).join('')}</ul>` : '')
+    + (empty || (value || str(headline.label) ? `<p class="answer-card__headline">${value ? `<strong class="answer-card__value">${esc(value)}</strong>` : ''}${str(headline.label) ? `<span class="answer-card__label">${shown(headline.label)}</span>` : ''}</p>` : ''))
+    + (lines.length && !empty ? `<ul class="answer-card__lines">${lines.map(line => `<li>${esc(keepHyphen(line))}</li>`).join('')}</ul>` : '')
     + (chart ? `<figure class="answer-card__chart">${chart}</figure>` : '')
-    + (profile ? `<p class="answer-card__profile">${esc(cardText(locale, 'usingProfile', {text: profile}))}</p>` : '')
+    + (profile ? `<p class="answer-card__profile">${esc(profile)}</p>` : '')
     + (str(card.caveat) ? `<p class="answer-card__caveat">${plain(card.caveat)}</p>` : '')
     + (busy ? `<p class="answer-card__status" role="status">${esc(cardText(locale, 'updating'))}</p>` : error ? `<p class="answer-card__status answer-card__status--error" role="status">${esc(cardText(locale, 'cardError'))}</p>` : '')
     + (evidence ? `<div class="answer-card__evidence">${evidence}</div>` : '')
@@ -177,16 +223,20 @@ export function catalogueTurnHTML(turn, {locale = 'en', esc = defaultEsc, latest
     busy: cardState[index] === 'busy', error: cardState[index] === 'error'})).join('');
   let notice = '';
   if (response.source === 'catalogue') {
-    const suggestions = latest ? questionChips(response.suggestions, {esc, max: 3}) : '';
+    // V5 fix (lane CO): a typed question that matched one catalogue question exactly or confidently gets its card and
+    // nothing else, as if it had been tapped. Only when there is no card does one grey line introduce the closest
+    // questions. A warm line comes first when the customer sounds worried.
+    const suggestions = latest && !cards ? questionChips(response.suggestions, {esc, max: 3}) : '';
     const supportive = str(response.supportive);
-    // A warm line first when the customer sounds worried, then the honest mode notice.
-    notice = `<section class="quick-notice" role="note">`
-      + (supportive ? `<p class="quick-notice__supportive">${esc(supportive)}</p>` : '')
-      + `<p class="quick-notice__mode">${esc(cardText(locale, 'quickMode'))}</p>`
-      + (suggestions ? `<p class="quick-notice__lead">${esc(cardText(locale, 'closest'))}</p><div class="answer-chips">${suggestions}</div>`
-        : cards ? '' : `<p class="quick-notice__lead">${esc(cardText(locale, 'noSuggestions'))}</p>`)
-      + (latest && retryLabel ? `<button type="button" class="text-button coach-retry" data-retry-agent="${esc(turn.id)}">${esc(retryLabel)} ↻</button>` : '')
-      + `</section>`;
+    const retry = latest && retryLabel && !cards && response.fallback_reason && response.fallback_reason !== 'not_configured';
+    if (supportive || !cards) {
+      notice = `<section class="quick-notice" role="note">`
+        + (supportive ? `<p class="quick-notice__supportive">${esc(supportive)}</p>` : '')
+        + (cards ? '' : `<p class="quick-notice__mode">${esc(cardText(locale, suggestions ? 'quickMode' : 'noSuggestions'))}</p>`)
+        + (suggestions ? `<div class="answer-chips">${suggestions}</div>` : '')
+        + (retry ? `<button type="button" class="text-button coach-retry" data-retry-agent="${esc(turn.id)}">${esc(retryLabel)} ↻</button>` : '')
+        + `</section>`;
+    }
   }
   return `<article class="coach-turn card-turn"><p class="coach-turn-user">${esc(str(turn?.message))}</p><div class="coach-turn-cards">${notice}${cards}</div></article>`;
 }

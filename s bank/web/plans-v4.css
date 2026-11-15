@@ -3,8 +3,8 @@
 .plans-v4 > h2 { margin: 0 0 4px; font-size: 20px; }
 .plans-v4 > .subtle { margin: 0 0 12px; }
 .plan-list { display: grid; gap: 12px; }
-@media (min-width: 760px) { .plan-list { grid-template-columns: 1fr 1fr; align-items: start; } }
-.plan-card { background: var(--white); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px 18px 8px; box-shadow: var(--shadow); }
+@media (min-width: 760px) { .plan-list { grid-template-columns: 1fr 1fr; align-items: stretch; } }
+.plan-card { display: flex; flex-direction: column; min-width: 0; background: var(--white); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px 18px 8px; box-shadow: var(--shadow); }
 .plan-card h3 { margin: 0 0 6px; font-size: 17px; }
 .plan-card h4 { margin: 14px 0 6px; font-size: 14px; font-weight: 650; }
 .plan-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }

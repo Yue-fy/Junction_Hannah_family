@@ -292,8 +292,10 @@ class ProfileChangesTheNumbers(PersonalizationFixture):
             direct = forecast.safe_until_payday(conn, CID, as_of=AS_OF, profile=planning_profile(conn, CID, AS_OF))
         finally:
             conn.close()
-        for key in ('planned_saving_cents', 'per_day_cents', 'this_week_cents', 'free_cents'):
+        # The AI tool shows daily_life/extra instead of free_cents (hidden from the model since the live V4 eval).
+        for key in ('planned_saving_cents', 'per_day_cents', 'this_week_cents', 'daily_life_cents', 'extra_cents'):
             self.assertEqual(tool[key], api[key], key)
+        for key in ('planned_saving_cents', 'per_day_cents', 'this_week_cents', 'free_cents'):
             self.assertEqual(direct[key], api[key], key)
         offline = self.post('/api/coach', {'message': 'What is safe for me to spend this week?'})
         self.assertEqual(offline['tool_kind'], 'safe_to_spend')
@@ -465,7 +467,9 @@ assert.ok(html.includes('data-profile-section="noticed"'));
 assert.ok(html.includes(p.escapeHtml(t('noticed.title'))));
 assert.ok(html.includes(p.escapeHtml(t('noticed.help'))));
 for (const item of data.suggestions) {
-  assert.ok(html.includes('data-suggestion-keep="' + item.id + '"'), 'keep ' + item.kind);
+  // V5 lane ME: a suggestion with real alternatives (rent / mortgage) offers those answers instead of a bare Keep.
+  const keep = p.suggestionChoices(item, locale).length ? 'data-suggestion-alt="' : 'data-suggestion-keep="';
+  assert.ok(html.includes(keep + item.id + '"'), 'keep ' + item.kind);
   assert.ok(html.includes('data-suggestion-dismiss="' + item.id + '"'), 'not this ' + item.kind);
 }
 ''', locale)
