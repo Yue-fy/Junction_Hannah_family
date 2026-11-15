@@ -154,6 +154,20 @@ class CustomerQueryTests(unittest.TestCase):
                 self.assertNotEqual(result['clarification_code'], 'exploratory_goal')
                 self.assertNotIn('tool_result', result)
 
+    def test_upcoming_questions_preview_the_next_thirty_days(self):
+        for locale, question in (
+            ('en', "What's coming up in the next 30 days?"),
+            ('en', 'What bills are coming up?'),
+            ('fi', 'Mitä on tulossa?'),
+            ('sv', 'Vilka kommande räkningar har jag?'),
+            ('sv', 'Vad händer de nästa 30 dagar?'),
+        ):
+            with self.subTest(locale=locale, question=question):
+                result = self.ask(question, locale)
+                self.assertEqual(result['intent'], 'preview_cashflow')
+                self.assertFalse(result['needs_clarification'])
+                self.assertEqual(result['parameters']['days'], 30)
+
     def test_cashflow_month_or_unknown_window_does_not_use_selected_month_forecast(self):
         for locale, question in (
             ('en', 'Show cash flow in August 2026'),

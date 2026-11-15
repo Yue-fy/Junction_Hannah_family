@@ -837,3 +837,4 @@ html[data-current-view="coach"] .persona-panel { position: absolute; top: 56px; 
 .tax-card h2{margin:4px 0 8px}
 .tax-flow{font-size:18px}
 #profile-view{padding-bottom:24px}
+.coach-retry{display:block;margin-top:8px}

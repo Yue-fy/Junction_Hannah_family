@@ -789,7 +789,8 @@ async function askCoach(message,context=captureContext(),wish=null){
       const retainedAction=index<state.conversation.length-1&&configureCoachAction(turn,turnAction)?`<button type="button" class="text-button coach-turn-action" data-coach-turn-action="${turn.id}">${esc(turnAction.textContent)}</button>`:'';
       const options=turn.response.clarification_options?.length?`<div class="clarification-options">${turn.response.clarification_options.map(option=>`<button type="button" data-direct-question="${esc(option)}">${esc(option)}</button>`).join('')}</div>`:'';
       const offline=turn.response.agent_fallback?`<span class="offline-tag" title="${esc(turn.response.agent_fallback)}">${esc(t('v3.offlineAnswer'))}</span>`:'';
-      return `<article class="coach-turn"><p class="coach-turn-user">${esc(turn.message)}</p><div class="coach-turn-answer" data-coaching-style="${coachingStyle}">${offline}${explanation}${support}${retainedAction}${options}</div></article>`;
+      const retry=turn.response.agent_fallback&&index===state.conversation.length-1?`<button type="button" class="text-button coach-retry" data-retry-agent="${turn.id}">${esc(t('v3.retryAgent'))} ↻</button>`:'';
+      return `<article class="coach-turn"><p class="coach-turn-user">${esc(turn.message)}</p><div class="coach-turn-answer" data-coaching-style="${coachingStyle}">${offline}${explanation}${retry}${support}${retainedAction}${options}</div></article>`;
     }).join('');
     const scope=response.query_scope;
     if(scope)$('coach-response').insertAdjacentHTML('beforeend',`<p class="query-scope-caption">${esc(copy('Using','Käytössä','Använder'))}: ${dateLabel(scope.start)}–${dateLabel(scope.end)} · ${esc(scope.filters?.category?categoryName(scope.filters.category):scope.concept||u('spending.all'))}</p>`);
@@ -950,6 +951,8 @@ document.addEventListener('click',event=>{
   if(button.dataset.agentEvidence){const turn=agentTurn(button.dataset.agentEvidence),item=turn?.response.evidence?.[Number(button.dataset.index)];if(item?.query)return perform(button,context=>showTransactions(item.query,context));return;}
   if(button.dataset.agentAction){const turn=agentTurn(button.dataset.agentAction);if(turn)reviewAgentAction(turn,Number(button.dataset.index));return;}
   if(button.dataset.agentSuggestion){const turn=agentTurn(button.dataset.agentSuggestion),message=turn?.response.suggestions?.[Number(button.dataset.index)];if(turn===state.conversation.at(-1)&&typeof message==='string')return perform(button,context=>askCoach(message,context));return;}
+  // Re-ask the latest offline answer with the AI coach; the new answer replaces it.
+  if(button.dataset.retryAgent){const turn=state.conversation.at(-1);if(!turn||turn.id!==button.dataset.retryAgent||coachPending)return;const message=turn.message;state.conversation.pop();clearCoachEvidence([turn]);return perform(button,context=>askCoach(message,context));}
   if(button.dataset.directQuestion)return perform(button,context=>{openDialog('coach-dialog');return askCoach(button.dataset.directQuestion,context);});
   if(button.dataset.personalPlan)return perform(button,context=>{openDialog('coach-dialog');const category=categoryName(button.dataset.personalPlan);return askCoach(copy(`How much could I save if I reduced ${category} spending by 20%?`,`Kuinka paljon voisin säästää, jos vähennän ${category} 20 %?`,`Hur mycket kan jag spara om jag minskar ${category} med 20 %?`),context);});
   if(button.hasAttribute('data-open-notebook')){noteEditing=null;openNotebook();return;}

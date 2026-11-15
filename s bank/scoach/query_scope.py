@@ -293,8 +293,14 @@ def _tool_request_tail(message, phrases):
 
 
 def resolve_cashflow_parameters(message, context):
-    """A forecast starts on an exact reference date; it is not a month total."""
-    tail = _tool_request_tail(message, (
+    """A forecast starts on an exact reference date; it is not a month total.
+
+    Without an explicit ISO date ("what's coming up?"), it starts at the selected month's reference day.
+    """
+    upcoming = re.search(r"\b(?:what(?:'s| is) coming up|coming up|upcoming|next 30 days|bills due|due soon)\b"
+                         r"|tulossa|seuraavan? 30 päivä|tulevat laskut|på gång|kommande|nästa 30 dagar", message.casefold())
+    named_period = re.search(r"\d{4}|\b(?:last|previous|next (?!30 days)\w+ (?:days|weeks|months))\b", message.casefold())
+    tail = None if upcoming and not named_period else _tool_request_tail(message, (
         r'(?:(?:show(?: me)?|preview|explain) )?(?:my )?(?:cash ?flow|runway)(?: forecast)?',
         r'how does (?:my )?cash ?flow look',
         r'(?:what might next month look like|how does next month look)',

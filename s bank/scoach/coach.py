@@ -252,6 +252,10 @@ def _deterministic(message, context):
         intent = 'home_financing_history'
     elif any(word in text for word in ['safe to spend', 'spend this week', 'can i spend', 'turvallista käyttää', 'voin käyttää', 'tällä viikolla', 'säkert att spendera', 'kan jag spendera', 'tryggt för mig att spendera', 'den här veckan']):
         intent = 'safe_to_spend'
+    elif any(word in text for word in ['coming up', 'upcoming', 'next 30 days', 'next few weeks', 'bills due', 'due soon',
+                                       'tulossa', 'seuraavan 30 päivän', 'seuraavat 30 päivää', 'tulevat laskut',
+                                       'på gång', 'kommande', 'nästa 30 dagar', 'kommande räkningar']):
+        intent = 'preview_cashflow'
     elif any(word in text for word in ['invest', 'contribution', 'portfolio', 'sijoit', 'placering']):
         intent = 'investment_cashflow'
     elif _statistics_category(text) and has_reduction_verb(text):

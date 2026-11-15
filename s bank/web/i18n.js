@@ -1694,6 +1694,7 @@ for (const [key, values] of Object.entries(RECAP_MESSAGES)) { EN['home.recap.'+k
 // V3 strings (docs/COACH_V3_PLAN.md). Keys are exposed as 'v3.<key>'.
 const V3_MESSAGES = {
   offlineAnswer:['Quick answer (offline)','Pikavastaus (offline)','Snabbsvar (offline)'],
+  retryAgent:['Try again with the AI coach','Yritä uudelleen tekoälyvalmentajalla','Försök igen med AI-coachen'],
   basketExamples:['This month: {items}','Tässä kuussa: {items}','Den här månaden: {items}'],
   'safe.week':['You can spend this week','Voit käyttää tällä viikolla','Du kan spendera den här veckan'],
   'safe.perDay':['About {amount} a day until payday on {date} ({days} days).','Noin {amount} päivässä palkkapäivään {date} asti ({days} päivää).','Ungefär {amount} om dagen fram till lönedagen {date} ({days} dagar).'],
