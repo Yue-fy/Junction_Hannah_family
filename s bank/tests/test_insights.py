@@ -44,31 +44,26 @@ class InsightTests(unittest.TestCase):
         add_row(self.conn, 'closing', '2026-09-30', 'Restaurants', -1_000, 100_000, 'purchase')
         self.conn.commit()
 
+        # V4: days is accepted for compatibility but there is one answer, the plan until payday.
         result = safe_to_spend(self.conn, 'C', '2026-09-30', days=7, reserve_floor_cents=20_000)
 
         self.assertEqual(result['reference_date'], '2026-09-30')
-        self.assertEqual(result['horizon_end'], '2026-10-07')
+        self.assertEqual(result['horizon_end'], '2026-10-15')
+        self.assertEqual(result['next_payday'], '2026-10-15')
         self.assertEqual(result['starting_balance_cents'], 100_000)
         self.assertEqual(result['scheduled_outflows_cents'], 50_000)
-        self.assertEqual(result['scheduled_income_excluded_cents'], 0)
-        self.assertEqual(
-            result['safe_to_spend_cents'],
-            max(
-                0,
-                result['starting_balance_cents']
-                - result['reserve_floor_cents']
-                - result['scheduled_outflows_cents']
-                - result['historical_flexible_buffer_cents'],
-            ),
-        )
-        self.assertEqual(result['label'], 'Estimated safe-to-spend — not a guarantee')
+        self.assertEqual(result['everyday_cents'], 5_000)  # groceries: €100 a usual month x 15/30
+        self.assertEqual(result['free_cents'], max(0, 100_000 - result['held_back_cents'] - result['everyday_cents']))
+        self.assertEqual(result['spendable_until_payday_cents'] + result['extra_cents'], result['free_cents'])
+        self.assertEqual(result['safe_to_spend_cents'], result['per_day_cents'] * 7)
+        self.assertEqual(result, safe_to_spend(self.conn, 'C', '2026-09-30', reserve_floor_cents=20_000))
         self.assertTrue(result['available'])
         self.assertEqual(result['reserve_floor_source'], 'explicit_request')
         self.assertTrue(result['scenario'])
         self.assertFalse(result['observed'])
         self.assertTrue(result['starting_transaction_ref'])
         self.assertTrue(result['comparison_transaction_refs'])
-        self.assertTrue(all(item['amount_cents'] < 0 for item in result['scheduled_outflows']))
+        self.assertTrue(all(item['amount_cents'] > 0 for item in result['held_back']))
         self.assertNotIn('confidence', result)
 
         stricter = safe_to_spend(self.conn, 'C', '2026-09-30', days=7, reserve_floor_cents=200_000)
@@ -87,12 +82,12 @@ class InsightTests(unittest.TestCase):
         self.assertFalse(result['available'])
         self.assertTrue(result['needs_history'])
         self.assertIsNone(result['safe_to_spend_cents'])
-        self.assertIsNone(result['historical_flexible_buffer_cents'])
+        self.assertEqual(result['everyday_cents'], 0)
+        self.assertEqual(result['extra_cents'], 0)
         self.assertEqual(result['reserve_floor_cents'], 50_000)
         self.assertEqual(result['reserve_floor_source'], 'demo_default')
-        self.assertEqual(result['history_required_days'], 30)
-        self.assertEqual(result['observed_history_days'], 1)
-        self.assertEqual(result['complete_historical_window_count'], 0)
+        self.assertEqual(result['basis']['history_days'], 1)
+        self.assertEqual(result['basis']['window_count'], 0)
         self.assertIn('history', result['unavailable_reason'].lower())
         self.assertNotEqual(result.get('safe_to_spend_cents'), result['starting_balance_cents'])
 

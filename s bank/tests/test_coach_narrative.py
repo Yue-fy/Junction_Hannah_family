@@ -145,13 +145,14 @@ assert.ok(!answer.join(' ').includes('€0.00'));assert.match(answer[0],/receive
 """)
 
     def test_safe_estimate_keeps_historical_clock_reserve_and_limits_visible(self):
+        # V4: one spending plan until payday; no "next 7 days" wording and no demo wording.
         self.check(r"""
-let answer=narrate({tool_kind:'safe_to_spend',tool_result:{available:true,reference_date:'2026-09-30',horizon_days:7,horizon_end:'2026-10-07',
- safe_to_spend_cents:328831,reserve_floor_cents:50000,reserve_floor_source:'demo_default',scheduled_outflows_cents:52838,historical_flexible_buffer_cents:40689}});
+let answer=narrate({tool_kind:'safe_to_spend',tool_result:{available:true,reference_date:'2026-09-30',horizon_days:7,horizon_end:'2026-10-15',next_payday:'2026-10-15',
+ safe_to_spend_cents:12397,per_day_cents:1771,free_cents:317917,extra_cents:291351,reserve_floor_cents:50000,reserve_floor_source:'demo_default'}});
 valid(answer);
-for(const value of ['€3,288.31','2026-09-30','2026-10-07'])assert.ok(answer[0].includes(value));
-assert.match(answer[0],/estimate/i);assert.ok(answer.join(' ').includes('€500.00'));
-assert.match(answer.join(' '),/demo/i);assert.match(answer.join(' '),/goal/i);assert.match(answer.join(' '),/tax/i);
+for(const value of ['€123.97','€17.71','2026-10-15','€3,179.17'])assert.ok(answer[0].includes(value));
+assert.ok(answer.join(' ').includes('€2,913.51'));assert.match(answer.join(' '),/could be saved/i);
+assert.match(answer.join(' '),/estimate/i);assert.doesNotMatch(answer.join(' '),/demo|next 7 days/i);
 answer=narrate({tool_kind:'safe_to_spend',tool_result:{available:false,safe_to_spend_cents:null}});
 valid(answer);assert.match(answer.join(' '),/history|records/i);assert.ok(!answer.join(' ').includes('€0.00'));
 """)
@@ -174,21 +175,19 @@ valid(missing);assert.ok(!missing.join(' ').includes('€0.00'));
     def test_zero_allowance_does_not_claim_reserve_or_expected_costs_are_funded(self):
         self.check(r"""
 const response={tool_kind:'safe_to_spend',tool_result:{available:true,
- reference_date:'2026-09-30',horizon_days:7,horizon_end:'2026-10-07',
- starting_balance_cents:31214,safe_to_spend_cents:0,reserve_floor_cents:50000,
- reserve_floor_source:'demo_default',scheduled_outflows_cents:10000,historical_flexible_buffer_cents:10000}};
-for(const [locale,noRoom,method] of [
- ['en',/no estimated room for (?:extra|additional) spending/i,/calculation deducts/i],
- ['fi',/ei .*arvioitua.*(?:lisäkulutus|ylimääräis)/i,/laskelma vähentää/i],
- ['sv',/inget uppskattat utrymme för (?:extra|ytterligare) utgifter/i,/beräkningen drar av/i],
+ reference_date:'2026-09-30',next_payday:'2026-10-15',horizon_end:'2026-10-15',
+ starting_balance_cents:31214,safe_to_spend_cents:0,per_day_cents:0,free_cents:0,extra_cents:0,reserve_floor_cents:50000}};
+for(const [locale,noRoom] of [
+ ['en',/no room for extra spending/i],
+ ['fi',/ylimääräiseen kulutukseen ei ole varaa/i],
+ ['sv',/inget utrymme för extra utgifter/i],
 ]){
  const answer=narrate(response,{locale});valid(answer);
- assert.match(answer[0],noRoom);assert.match(answer.join(' '),method);
- assert.doesNotMatch(answer.join(' '),/leaves room for|jättää tilaa|lämnar utrymme/i);
- assert.ok(answer[0].includes('2026-09-30'));assert.ok(answer[0].includes('2026-10-07'));
- assert.ok(answer.join(' ').includes('€500.00'));
- const positive=narrate({...response,tool_result:{...response.tool_result,safe_to_spend_cents:10000,starting_balance_cents:80000}},{locale});
- assert.match(positive.join(' '),method);assert.doesNotMatch(positive.join(' '),noRoom);
+ assert.match(answer[0],noRoom);
+ assert.doesNotMatch(answer.join(' '),/leaves room for|jättää tilaa|lämnar utrymme|could be saved|voisi säästää|kan sparas/i);
+ assert.ok(answer[0].includes('2026-10-15'));
+ const positive=narrate({...response,tool_result:{...response.tool_result,safe_to_spend_cents:10000,per_day_cents:1428,free_cents:20000}},{locale});
+ assert.doesNotMatch(positive.join(' '),noRoom);assert.ok(positive[0].includes('€100.00'));
 }
 """)
 

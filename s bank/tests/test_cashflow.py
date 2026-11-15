@@ -1,3 +1,4 @@
+from decimal import Decimal, ROUND_HALF_UP
 import unittest
 
 from tests.core_helper import demo_connection
@@ -54,7 +55,11 @@ class FixtureTests(unittest.TestCase):
         self.assertEqual(march["savings_withdrawals_cents"], 5_000)
         self.assertEqual(march["savings_transfers_cents"], 15_000)
         self.assertEqual(march["net_cents"], 214_000 - 100_000 - 15_000)
-        self.assertEqual(march["saving_rate_percent"], "7.0")
+        # V4: saving rate = left over after spending / income (was transfers / income, the constant-9.6 % bug).
+        self.assertEqual(march["left_over_cents"], 214_000 - 100_000)
+        self.assertEqual(march["saving_rate_percent"], "53.3")       # 114000 / 214000
+        self.assertEqual(march["moved_to_savings_cents"], 15_000)
+        self.assertEqual(march["moved_to_savings_percent"], "7.0")  # 15000 / 214000
         self.assertTrue(march["complete"])
         self.assertEqual(result["chart"]["kind"], "cashflow")
         self.assertEqual([s["key"] for s in result["chart"]["series"]], ["income", "consumption", "net"])
@@ -97,10 +102,12 @@ class FixtureTests(unittest.TestCase):
         self.assertEqual(comparisons["best_net_period"]["period"], "2025-03")
         self.assertEqual(comparisons["worst_net_period"]["period"], "2024-12")
         change = comparisons["saving_rate_change"]
-        self.assertEqual(change["from_percent"], "10.0")  # 20000 / 201000 = 9.95, half up
-        self.assertEqual(change["to_percent"], "9.3")     # 20000 / 214000
-        self.assertEqual(change["change_points"], "-0.7")
-        self.assertEqual(change["direction"], "down")
+        first, last = comparisons["first_complete"], comparisons["last_complete"]
+        self.assertEqual(change["from_percent"], first["saving_rate_percent"])
+        self.assertEqual(change["to_percent"], last["saving_rate_percent"])
+        self.assertEqual(Decimal(change["from_percent"]), (Decimal(first["left_over_cents"]) * 100 / Decimal(first["income_cents"])).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP))
+        self.assertEqual(first["moved_to_savings_percent"], "10.0")  # 20000 / 201000 = 9.95, half up
+        self.assertEqual(last["moved_to_savings_percent"], "9.3")    # 20000 / 214000
         self.assertEqual(comparisons["income_change_cents"], 13_000)
         self.assertEqual(comparisons["net_change_cents"], 13_000)
 

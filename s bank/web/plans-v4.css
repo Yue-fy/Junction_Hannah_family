@@ -1,0 +1,28 @@
+/* Optional plans (mortgage, tax) in the Goals tab. Calm cards, one number each. */
+.plans-v4 { margin: 0 0 24px; }
+.plans-v4 > h2 { margin: 0 0 4px; font-size: 20px; }
+.plans-v4 > .subtle { margin: 0 0 12px; }
+.plan-list { display: grid; gap: 12px; }
+@media (min-width: 760px) { .plan-list { grid-template-columns: 1fr 1fr; align-items: start; } }
+.plan-card { background: var(--white); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px 18px 8px; box-shadow: var(--shadow); }
+.plan-card h3 { margin: 0 0 6px; font-size: 17px; }
+.plan-card h4 { margin: 14px 0 6px; font-size: 14px; font-weight: 650; }
+.plan-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.plan-pill { font-size: 12px; font-weight: 650; color: var(--green); background: var(--mint); border-radius: 999px; padding: 3px 10px; }
+.plan-benefit { margin: 0 0 8px; color: var(--muted); font-size: 15px; line-height: 1.45; }
+.plan-detected { margin: 8px 0; padding: 10px 12px; background: var(--wash); border-radius: 14px; font-size: 14px; line-height: 1.4; }
+.plan-amount { margin: 10px 0 0; font-size: 28px; font-weight: 700; color: var(--deep-green); }
+.plan-amount span { font-size: 15px; font-weight: 500; color: var(--muted); }
+.plan-sub { margin: 2px 0 10px; color: var(--muted); font-size: 14px; }
+.plan-rows { margin: 8px 0; display: grid; gap: 0; }
+.plan-row { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-top: 1px solid var(--line); font-size: 14px; }
+.plan-row dt { color: var(--muted); }
+.plan-row dd { margin: 0; text-align: right; font-weight: 600; }
+.plan-note { margin: 8px 0; font-size: 14px; line-height: 1.45; }
+.plan-whatif { margin-top: 6px; }
+.plan-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.plan-chip { min-height: 40px; padding: 6px 14px; border-radius: 999px; border: 1px solid #c4dacb; background: var(--white); color: var(--green); font-size: 14px; font-weight: 600; }
+.plan-chip[aria-pressed="true"] { background: var(--green); border-color: var(--green); color: var(--white); }
+.plan-result { margin: 8px 0 0; padding: 10px 12px; background: var(--wash); border-radius: 14px; font-size: 14px; line-height: 1.4; }
+.plan-actions { display: flex; flex-wrap: wrap; gap: 4px 18px; margin-top: 4px; }
+.plan-actions .secondary-button { margin: 4px 0 10px; }

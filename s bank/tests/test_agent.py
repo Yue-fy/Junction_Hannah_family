@@ -66,20 +66,46 @@ class AgentLoopTests(AgentFixture):
         self.assertEqual(result['source'], 'agent')
         self.assertIn('error', fake.requests[1]['contents'][-1]['parts'][0]['functionResponse']['response'])
 
-    def test_unverified_answer_gets_one_correction_then_deterministic_fallback(self):
+    def test_unverified_answer_gets_one_correction_then_catalogue_fallback(self):
+        # V4: the fallback is the question catalogue (quick answers), not the legacy regex coach.
         fake = ScriptedTransport(answer('You spent €999.99.'), answer('You spent €888.88.'))
         result = self.run_agent(fake)
-        self.assertEqual(result['source'], 'deterministic')
+        self.assertEqual(result['source'], 'catalogue')
         self.assertEqual(result['fallback_reason'], 'unverified_numbers')
-        self.assertIn('999.99', fake.requests[1]['contents'][-1]['parts'][0]['text'])
+        # V4: the check is a silent system note; the rejected draft is not shown back as if the customer complained.
+        self.assertIn('999.99', fake.requests[1]['system'])
+        self.assertIn('Do not apologise', fake.requests[1]['system'])
+        self.assertNotIn('999.99', json.dumps(fake.requests[1]['contents']))
+        self.assertEqual(fake.requests[1]['contents'], fake.requests[0]['contents'])
         self.assertEqual(len(fake.requests), 2)
-        self.assertIn('legacy', result)
+        self.assertNotIn('legacy', result)
+        self.assertNotIn('999.99', json.dumps(result))
+        self.assertTrue(result['suggestions'])
+
+    def test_retry_answer_never_opens_with_an_apology(self):
+        fake = ScriptedTransport(answer('You spent €999.99.'), call('spending_total', start='2026-09-01', end='2026-09-30', category='Restaurants'),
+                                 answer("My apologies for the mix-up. You spent €225.70 on restaurants."))
+        result = self.run_agent(fake)
+        self.assertEqual(result['source'], 'agent')
+        self.assertEqual(result['answer'], ['You spent €225.70 on restaurants.'])
+        fake = ScriptedTransport(call('spending_total', start='2026-09-01', end='2026-09-30', category='Restaurants'),
+                                 answer("You're right — I misstated that comparison. You spent €225.70."))
+        self.assertEqual(self.run_agent(fake)['answer'], ['You spent €225.70.'])
+
+    def test_strip_apology_keeps_real_content(self):
+        from scoach.agent import strip_apology
+        self.assertEqual(strip_apology('Sorry, here it is: €5.'), 'Here it is: €5.')
+        self.assertEqual(strip_apology('Pahoittelut sekaannuksesta. Voit käyttää 10 €.'), 'Voit käyttää 10 €.')
+        self.assertEqual(strip_apology('Förlåt! Du kan spendera 10 €.'), 'Du kan spendera 10 €.')
+        self.assertEqual(strip_apology('You spent €5. Sorry to say it rose.'), 'You spent €5. Sorry to say it rose.')
+        self.assertEqual(strip_apology('Sorry.'), 'Sorry.')
 
     def test_correction_may_call_a_tool_before_answering(self):
         fake = ScriptedTransport(answer('€999.99.'), call('spending_total', start='2026-09-01', end='2026-09-30', category='Restaurants'), answer('€225.70.'))
         self.assertEqual(self.run_agent(fake)['source'], 'agent')
 
-    def test_no_key_legacy_equals_the_existing_coach_payload(self):
+    def test_no_key_falls_back_to_catalogue_and_coach_route_still_works(self):
+        # V4: /api/agent no longer routes through the regex coach; /api/coach keeps working.
         body = {'customer_id': self.customer, 'month': '2026-09', 'locale': 'en', 'message': 'How much did I spend on restaurants?'}
         app = Application(self.database)
         with patch.dict(os.environ, {}, clear=True):
@@ -87,9 +113,12 @@ class AgentLoopTests(AgentFixture):
             old_status, old = app.handle('POST', '/api/coach', body)
         self.assertEqual(status, 200)
         self.assertEqual(old_status, 200)
-        self.assertEqual(response['data']['source'], 'deterministic')
+        self.assertEqual(response['data']['source'], 'catalogue')
         self.assertEqual(response['data']['fallback_reason'], 'not_configured')
-        self.assertEqual(response['data']['legacy'], old['data'])
+        self.assertNotIn('legacy', response['data'])
+        self.assertEqual(response['data']['suggestions'][0]['id'], 'money.category')
+        self.assertEqual(response['data']['suggestions'][0]['params'], {'category': 'Restaurants'})
+        self.assertEqual(old['data']['source'], 'deterministic')
 
     def test_errors_deadline_and_exhausted_steps_fall_back_without_waiting(self):
         for error, reason in ((RuntimeError('Do not expose secrets'), 'unavailable'), (TimeoutError(), 'timeout')):

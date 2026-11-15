@@ -2,7 +2,7 @@
 from datetime import date
 from .analytics import money_map, latest_complete_month
 from .ledger import account_scope, month_bounds, shift_month, fact_id, transactions
-from .money import percentile_cents
+from .money import median_cents
 from .state import mutate, new_id, now
 from .scenarios import _scenario, scenario_result
 
@@ -53,13 +53,34 @@ def goal_plan(conn,customer_id,goal_id,as_of=None):
     periods=[shift_month(month,i) for i in range(-5,1)]
     cashflows=[money_map(conn,customer_id,period) for period in periods if scope['observed_start'][:7]<=period<=scope['observed_end'][:7]]
     capacity_available=len(cashflows)==6
-    capacity=max(percentile_cents([m['free_cashflow_cents'] for m in cashflows],.25),0) if capacity_available else 0
+    # Typical (median) monthly left-over after consumption and committed saving transfers.
+    capacity=max(median_cents([m['free_cashflow_cents'] for m in cashflows]),0) if capacity_available else 0
     latest_balance=transactions(conn,customer_id,end=reference.isoformat())[-1]['balance_after_cents']
+    plan=_spending_plan(conn,customer_id,reference.isoformat())
+    # What could go to the goal now is the spending plan's "could be saved" amount, the same
+    # number Spending and Coach show, never the whole balance above a reserve.
+    upfront=min(plan['extra_cents'],max(latest_balance-goal['reserve_floor_cents'],0))
+    after_now=max(remaining-upfront,0)
+    monthly_after_now=(after_now+months-1)//months if months else (0 if not after_now else None)
     links=[scenario_result(conn,customer_id,r[0]) for r in conn.execute('SELECT id FROM scenarios WHERE goal_id=? AND customer_id=? ORDER BY created_at,id',(goal_id,customer_id))]
     # One active scenario per goal. Legacy multiple links use the latest, never a sum.
     active=links[-1] if links else None
     modeled=min(active['modeled_monthly_contribution_cents'],remaining) if active else 0
-    return {**goal,**account_scope(conn,customer_id),'as_of':reference.isoformat(),'remaining_cents':remaining,'months_remaining':months,'required_monthly_cents':required,'conservative_monthly_contribution_cents':capacity,'capacity_available':capacity_available,'monthly_gap_cents':max(required-capacity,0) if required is not None else None,'reserve_floor_cents':goal['reserve_floor_cents'],'upfront_available_cents':max(latest_balance-goal['reserve_floor_cents'],0),'cashflow_months':cashflows,'modeled_scenario_contribution_cents':modeled,'linked_scenarios':links,'active_scenario_id':active['id'] if active else None,'inactive_linked_scenario_ids':[s['id'] for s in links[:-1]],'scenario_contribution_cap_cents':remaining,'label':'Planning scenario — not promised savings','observed':False,'transaction_refs':[ref for m in cashflows for ref in m['transaction_refs']],'fact_id':fact_id('goal',goal_id,reference.isoformat(),capacity,modeled),'assumptions':['Six complete months; nearest-rank P25 free cash flow','Committed saving transfers reduce monthly capacity','Protected reserve reduces upfront availability; upfront is not assigned automatically','Modeled adjustment is separate from existing contribution capacity']}
+    gap=max(monthly_after_now-capacity,0) if monthly_after_now is not None else None
+    return {**goal,**account_scope(conn,customer_id),'as_of':reference.isoformat(),'remaining_cents':remaining,'months_remaining':months,'required_monthly_cents':required,
+            'conservative_monthly_contribution_cents':capacity,'typical_monthly_left_over_cents':capacity,'capacity_available':capacity_available,
+            'upfront_available_cents':upfront,'could_save_now_cents':plan['extra_cents'],'required_monthly_after_now_cents':monthly_after_now,
+            'monthly_gap_cents':gap,'reserve_floor_cents':goal['reserve_floor_cents'],
+            'spending_plan':{'as_of':plan['as_of'],'next_payday':plan['next_payday'],'free_cents':plan['free_cents'],'spendable_until_payday_cents':plan['spendable_until_payday_cents'],'extra_cents':plan['extra_cents'],'fact_id':plan['fact_id']},
+            'cashflow_months':cashflows,'modeled_scenario_contribution_cents':modeled,'linked_scenarios':links,'active_scenario_id':active['id'] if active else None,'inactive_linked_scenario_ids':[s['id'] for s in links[:-1]],'scenario_contribution_cap_cents':remaining,'label':'Planning scenario — not promised savings','observed':False,'transaction_refs':[ref for m in cashflows for ref in m['transaction_refs']],'fact_id':fact_id('goal',goal_id,reference.isoformat(),capacity,upfront,modeled),
+            'assumptions':['Monthly left-over is the median of six complete months after spending and regular saving transfers','What could go to the goal now is the spending plan\'s money that could be saved, after bills, everyday costs and a cushion until payday','Several goals share the same money that could be saved; it is not split automatically','Modeled adjustment is separate from existing contribution capacity']}
+
+
+def _spending_plan(conn,customer_id,as_of):
+    from .forecast import spending_plan
+    from . import money_profile
+    profile=money_profile.get_profile(conn,customer_id,as_of)
+    return spending_plan(conn,customer_id,as_of=as_of,profile=None if profile['empty'] else money_profile.planning_inputs(profile,as_of))
 
 
 def link_scenario_to_goal(conn,customer_id,goal_id,scenario_id,as_of=None,provenance='user'):

@@ -1,0 +1,89 @@
+/* V4 answer cards (web/answer-card.js): one card for catalogue answers and AI answers. Phone first (390px). */
+.coach-turn-cards { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.agent-turn .coach-turn-cards { margin-top: 10px; }
+
+.answer-card {
+  min-width: 0; padding: 16px 16px 12px; border: 1px solid #e0e7dd; border-radius: 20px;
+  background: var(--white, #fff); box-shadow: 0 1px 2px #19392a0d, 0 8px 24px #19392a08;
+  transition: opacity .15s ease;
+}
+.answer-card.is-busy { opacity: .55; }
+.answer-card__title { margin: 0; font-size: 14px; line-height: 1.35; font-weight: 600; color: var(--muted, #586e62); letter-spacing: 0; }
+
+.answer-card__pickers { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.answer-card__picker { position: relative; display: inline-flex; align-items: center; gap: 4px; max-width: 100%; }
+.answer-card__picker select,
+.answer-card__picker input {
+  min-height: 36px; max-width: 100%; margin: 0; border: 1px solid #cfe0cf; border-radius: 999px;
+  background-color: var(--mint, #e4f4ea); color: var(--deep-green, #06442f); font-size: 14px; font-weight: 600;
+}
+.answer-card__picker select {
+  appearance: none; -webkit-appearance: none; padding: 6px 30px 6px 12px; text-overflow: ellipsis;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%2306442f' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 11px center; background-size: 11px 8px;
+}
+.answer-card__picker--input { padding-left: 12px; border-radius: 999px; background: var(--mint, #e4f4ea); color: var(--deep-green, #06442f); font-weight: 600; font-size: 14px; }
+.answer-card__picker--input input { width: 7.5em; padding: 6px 10px; border: 0; background: transparent; }
+
+.answer-card__headline { display: flex; flex-direction: column; gap: 2px; margin: 10px 0 0; }
+.answer-card__value {
+  font-size: 34px; line-height: 1.1; font-weight: 700; letter-spacing: -1px; color: var(--ink, #163e30);
+  font-variant-numeric: tabular-nums; overflow-wrap: anywhere;
+}
+.answer-card__label { font-size: 14px; line-height: 1.4; color: var(--muted, #586e62); }
+
+.answer-card__lines { list-style: none; margin: 12px 0 0; padding: 0; }
+.answer-card__lines li {
+  position: relative; padding: 8px 0 8px 16px; border-top: 1px solid var(--line, #e1e9e1);
+  font-size: 14.5px; line-height: 1.45; color: var(--ink, #163e30); font-variant-numeric: tabular-nums;
+}
+.answer-card__lines li::before { content: ""; position: absolute; left: 2px; top: 16px; width: 6px; height: 6px; border-radius: 50%; background: #9fc3a9; }
+
+.answer-card__chart { margin: 10px 0 0; padding: 12px 0 0; border-top: 1px solid var(--line, #e1e9e1); }
+.answer-card__chart svg { display: block; width: 100%; height: auto; max-height: 260px; }
+.answer-card__chart .spending-ring { max-width: 180px; margin: 0 auto; }
+
+.answer-card__profile {
+  margin: 12px 0 0; padding: 8px 10px; border-radius: 12px; background: var(--wash, #eef6ef);
+  font-size: 13px; line-height: 1.4; color: var(--deep-green, #06442f);
+}
+.answer-card__profile::before { content: "✦ "; color: var(--green, #006b3c); }
+.answer-card__caveat { margin: 10px 0 0; font-size: 12.5px; line-height: 1.4; color: var(--muted, #586e62); }
+.answer-card__status { margin: 8px 0 0; font-size: 13px; color: var(--muted, #586e62); }
+.answer-card__status--error { color: #9a3b1b; }
+
+.answer-card__evidence { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 6px; border-top: 1px solid var(--line, #e1e9e1); }
+.answer-card__link {
+  min-height: 44px; padding: 0; border: 0; background: none; color: var(--green, #006b3c);
+  font-size: 14px; font-weight: 600; text-align: left;
+}
+.answer-card__link span { font-size: 18px; line-height: 1; }
+
+.answer-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 2px 0 0; }
+.answer-chip {
+  min-height: 40px; max-width: 100%; padding: 8px 14px; border: 1px solid #ccdcca; border-radius: 20px;
+  background: #f5f9f1; color: var(--green, #006b3c); font-size: 14px; line-height: 1.3; text-align: left; overflow-wrap: anywhere;
+}
+.answer-chip:hover { background: #eaf3e5; border-color: #b8cfb8; }
+
+.quick-notice { padding: 14px; border: 1px solid #f0dfc8; border-radius: 18px; background: #fffaf3; }
+.quick-notice__mode { font-size: 13.5px; line-height: 1.45; color: #6a4b25; }
+.quick-notice__supportive { margin-bottom: 10px; font-size: 15px; line-height: 1.5; color: var(--ink, #163e30); }
+.quick-notice__lead { margin: 12px 0 8px; font-size: 13px; font-weight: 600; color: var(--muted, #586e62); }
+.quick-notice .answer-chips { margin-bottom: 4px; }
+.quick-notice .coach-retry { margin-top: 6px; }
+
+.intro-chip { display: inline-flex; align-items: center; gap: 2px; margin-top: 14px; border: 1px dashed #b8cfb8; border-radius: 999px; background: var(--white, #fff); }
+.intro-chip button { min-height: 40px; border: 0; background: none; color: var(--green, #006b3c); font-size: 14px; font-weight: 600; }
+.intro-chip__open { padding: 6px 4px 6px 14px; }
+.intro-chip__hide { min-width: 40px; padding: 0 12px 0 6px; color: var(--muted, #586e62) !important; font-size: 18px !important; }
+
+#coach-view .card-turn .coach-turn-user { margin-bottom: 10px; }
+
+.card-bars { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.card-bars li { display: grid; grid-template-columns: minmax(0,1fr) auto; column-gap: 12px; row-gap: 5px; align-items: baseline; font-size: 14px; }
+.card-bars__label { min-width: 0; color: var(--ink, #163e30); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card-bars__value { font-weight: 650; color: var(--ink, #163e30); font-variant-numeric: tabular-nums; }
+.card-bars__track { grid-column: 1 / -1; height: 6px; border-radius: 3px; background: #e8efe3; overflow: hidden; }
+.card-bars__track span { display: block; height: 100%; border-radius: 3px; background: var(--green, #006b3c); }
+.answer-card .visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }

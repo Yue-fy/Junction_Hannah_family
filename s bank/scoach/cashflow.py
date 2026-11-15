@@ -14,10 +14,15 @@ Definitions (all integer cents, from ``ledger.transactions`` so user rules apply
 * ``savings_transfers_cents`` = contributions − withdrawals (net money moved
   to saving).  When every transfer has its usual sign this equals
   −``money_map`` transfer_net_cents.
-* ``net_cents`` = income − consumption − savings_transfers: money left on the
-  account from the period's activity (positive) or drawn from the balance.
-* ``saving_rate_percent`` = savings_transfers ÷ income × 100, rounded half up
-  to one decimal, as text; None when income is zero or negative.
+* ``left_over_cents`` = income − consumption: what was left after spending
+  (this is what was saved, whether it stayed on the account or moved).
+* ``moved_to_savings_cents`` = savings_transfers_cents (same number, plain name).
+* ``net_cents`` = income − consumption − savings_transfers: what stayed on the
+  account from the period's activity (positive) or was drawn from the balance.
+* ``saving_rate_percent`` = left_over ÷ income × 100 (V4: was transfers ÷ income,
+  which showed a constant 9.6 % even in months with a deficit), rounded half up
+  to one decimal, as text; may be negative; None when income is zero or negative.
+* ``moved_to_savings_percent`` = savings_transfers ÷ income × 100, same format.
 """
 
 import calendar
@@ -31,7 +36,8 @@ MAX_YEARS = 5
 GRANULARITIES = ('month', 'year')
 _CONSUMPTION = ('purchase', 'utilities_payment', 'housing_payment')
 _FIELDS = ('income_cents', 'salary_cents', 'other_income_cents', 'consumption_cents',
-           'savings_contributions_cents', 'savings_withdrawals_cents', 'savings_transfers_cents', 'net_cents')
+           'savings_contributions_cents', 'savings_withdrawals_cents', 'savings_transfers_cents',
+           'left_over_cents', 'moved_to_savings_cents', 'net_cents')
 
 
 def _rate(savings, income):
@@ -94,6 +100,7 @@ def _sums(rows):
     return {'income_cents': income, 'salary_cents': salary, 'other_income_cents': other,
             'consumption_cents': consumption, 'savings_contributions_cents': contributions,
             'savings_withdrawals_cents': withdrawals, 'savings_transfers_cents': savings,
+            'left_over_cents': income - consumption, 'moved_to_savings_cents': savings,
             'net_cents': income - consumption - savings}
 
 
@@ -155,12 +162,14 @@ def cashflow_series(conn, customer_id, start_month, end_month, granularity='mont
             'period': key, 'label': _label(key, granularity),
             'start': month_bounds(members[0])[0], 'end': month_bounds(members[-1])[1],
             'months': len(members), 'complete': complete, **sums,
-            'saving_rate_percent': _rate(sums['savings_transfers_cents'], sums['income_cents']),
+            'saving_rate_percent': _rate(sums['left_over_cents'], sums['income_cents']),
+            'moved_to_savings_percent': _rate(sums['savings_transfers_cents'], sums['income_cents']),
             'transaction_count': len(selected), 'transaction_refs': refs,
             'fact_id': fact_id('cashflow-period', customer_id, key, members, refs),
         })
     totals = {field: sum(p[field] for p in periods) for field in _FIELDS}
-    totals['saving_rate_percent'] = _rate(totals['savings_transfers_cents'], totals['income_cents'])
+    totals['saving_rate_percent'] = _rate(totals['left_over_cents'], totals['income_cents'])
+    totals['moved_to_savings_percent'] = _rate(totals['savings_transfers_cents'], totals['income_cents'])
     totals['complete_periods'] = sum(p['complete'] for p in periods)
     totals['partial_periods'] = sum(not p['complete'] for p in periods)
     refs = [r['transaction_ref'] for r in rows]
@@ -174,8 +183,11 @@ def cashflow_series(conn, customer_id, start_month, end_month, granularity='mont
             'income_cents': 'Salary plus other income deposits',
             'consumption_cents': 'Gross purchases, utility and housing payments (refunds not netted)',
             'savings_transfers_cents': 'Investment deposits and salary sweeps out, minus investment withdrawals in',
-            'net_cents': 'Income minus consumption minus savings transfers',
-            'saving_rate_percent': 'Savings transfers divided by income, one decimal',
+            'left_over_cents': 'Income minus spending: what was left over (saved), wherever it went',
+            'moved_to_savings_cents': 'Part of what was left over that was moved to savings or investments (net of withdrawals)',
+            'net_cents': 'What stayed in the account: income minus spending minus money moved to savings',
+            'saving_rate_percent': 'Share of income left over after spending, one decimal; can be negative',
+            'moved_to_savings_percent': 'Share of income moved to savings or investments, one decimal',
         },
         'periods': periods,
         'totals': totals,
@@ -201,7 +213,8 @@ def cashflow_series(conn, customer_id, start_month, end_month, granularity='mont
 
 def _brief(period):
     return {key: period[key] for key in ('period', 'label', 'complete', 'income_cents', 'consumption_cents',
-                                         'savings_transfers_cents', 'net_cents', 'saving_rate_percent')}
+                                         'savings_transfers_cents', 'left_over_cents', 'moved_to_savings_cents', 'net_cents',
+                                         'saving_rate_percent', 'moved_to_savings_percent')}
 
 
 def cashflow_summary(conn, customer_id, start_month, end_month, granularity='month'):

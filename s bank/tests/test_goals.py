@@ -12,7 +12,9 @@ class GoalTests(unittest.TestCase):
         g=create_goal(self.c,'CUST00001','My trip',10000,'2027-01-30',current_saved_cents=1,reserve_floor_cents=99999999,as_of='2026-09-30')
         self.assertEqual(g['required_monthly_cents'],2500); self.assertEqual(g['remaining_cents'],9999)
         self.assertEqual(g['upfront_available_cents'],0); self.assertEqual(len(g['cashflow_months']),6)
-        self.assertEqual(g['conservative_monthly_contribution_cents'],max(percentile_cents([m['free_cashflow_cents'] for m in g['cashflow_months']],.25),0))
+        # V4: typical (median) monthly left-over, consistent with the spending plan (was P25, which showed €0).
+        from scoach.money import median_cents
+        self.assertEqual(g['conservative_monthly_contribution_cents'],max(median_cents([m['free_cashflow_cents'] for m in g['cashflow_months']]),0))
         s=create_scenario(self.c,'CUST00001','2026-09-01','2026-09-30')
         linked=link_scenario_to_goal(self.c,'CUST00001',g['id'],s['id'],as_of='2026-09-30')
         self.assertEqual(linked['modeled_scenario_contribution_cents'],4514); self.assertFalse(linked['observed'])
@@ -28,7 +30,10 @@ class GoalTests(unittest.TestCase):
         for i,(day,balance) in enumerate([('2026-08-31',10000),('2026-09-30',90000)]):
             c.execute('INSERT INTO transactions VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)',(str(i),'C','A',day,'31X26:12:00:00','Salary',10000,balance,'salary',None,None,i,'h','{}'))
         c.commit(); g=create_goal(c,'C','Buffer',20000,'2027-01-01',reserve_floor_cents=5000,as_of='2026-08-31')
-        self.assertEqual(g['upfront_available_cents'],5000)
+        # V4: what could go to a goal now is the spending plan's "could be saved" (none with one day of history),
+        # computed on the goal's reference day, never from a later balance.
+        self.assertEqual(g['spending_plan']['as_of'],'2026-08-31')
+        self.assertEqual(g['upfront_available_cents'],0)
         self.assertFalse(g['capacity_available']); self.assertEqual(g['conservative_monthly_contribution_cents'],0)
         c.close()
 

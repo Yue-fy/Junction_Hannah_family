@@ -274,6 +274,42 @@ export function formatDateDisplay(value, locale) {
   return typeof value === 'string' ? value : '';
 }
 
+/**
+ * Text shown in a date input, in the customer's own format: fi '31.3.2027', sv '2027-03-31', en '31/03/2027'.
+ * @param {string} value ISO date
+ * @param {string} locale
+ * @returns {string} the input unchanged when it is not a valid ISO date.
+ */
+export function formatDateInput(value, locale) {
+  if (!realDate(value)) return typeof value === 'string' ? value : '';
+  const lang = normLocale(locale);
+  const [y, m, d] = value.split('-');
+  if (lang === 'fi') return Number(d) + '.' + Number(m) + '.' + y;
+  if (lang === 'sv') return value;
+  return d + '/' + m + '/' + y;
+}
+
+/** Placeholder for a date input: fi 'pp.kk.vvvv', sv 'åååå-mm-dd', en 'dd/mm/yyyy'. */
+export function datePlaceholder(locale) {
+  return {fi: 'pp.kk.vvvv', sv: 'åååå-mm-dd', en: 'dd/mm/yyyy'}[normLocale(locale)];
+}
+
+/**
+ * Parse a date typed as d.m.yyyy, d/m/yyyy or yyyy-mm-dd (any locale) into an ISO date.
+ * @param {string} text
+ * @returns {string|null} ISO 'YYYY-MM-DD', or null when it is not a real date.
+ */
+export function parseDateInput(text) {
+  const raw = String(text ?? '').trim();
+  let y, m, d;
+  let match = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(raw);
+  if (match) [, y, m, d] = match;
+  else if ((match = /^(\d{1,2})[./\s-](\d{1,2})[./\s-](\d{4})$/.exec(raw))) [, d, m, y] = match;
+  else return null;
+  const iso = y + '-' + String(m).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+  return realDate(iso) ? iso : null;
+}
+
 function optionList(field) {
   return (Array.isArray(field.options) ? field.options : []).map(option => (
     option && typeof option === 'object'
@@ -319,7 +355,7 @@ export function validateField(field, raw, locale = 'en') {
     value = parseNumber(typeof raw === 'number' ? raw : String(raw));
     if (value === null) return fail('number');
   } else if (type === 'date' || type === 'month') {
-    value = String(raw).trim();
+    value = type === 'date' ? (parseDateInput(raw) || String(raw).trim()) : String(raw).trim();
     if (type === 'date' ? !realDate(value) : !realMonth(value)) return fail(type);
     if (field.min !== undefined && field.min !== null && value < String(field.min)) return fail('minDate', {min: boundText(field, String(field.min), locale)});
     if (field.max !== undefined && field.max !== null && value > String(field.max)) return fail('maxDate', {max: boundText(field, String(field.max), locale)});
@@ -373,6 +409,7 @@ function inputValue(field, locale) {
   if (value === null || value === undefined) return '';
   if (type === 'amount' && Number.isSafeInteger(value)) return formatAmountInput(value, locale);
   if ((type === 'percent' || type === 'number') && typeof value === 'number') return formatPlainNumber(value, locale);
+  if (type === 'date') return formatDateInput(String(value), locale);
   return String(value);
 }
 
@@ -411,7 +448,11 @@ function renderInput(field, id, describedBy, locale) {
   const value = ' value="' + escapeHtml(inputValue(field, locale)) + '"';
   if (type === 'date' || type === 'month') {
     const bounds = (field.min ? ' min="' + escapeHtml(field.min) + '"' : '') + (field.max ? ' max="' + escapeHtml(field.max) + '"' : '');
-    const pattern = type === 'month' ? ' pattern="\\d{4}-\\d{2}" placeholder="YYYY-MM"' : '';
+    if (type === 'date') {
+      return '<input class="draft-field__input" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" placeholder="'
+        + escapeHtml(datePlaceholder(locale)) + '" data-draft-date ' + common + value + '>';
+    }
+    const pattern = ' pattern="\\d{4}-\\d{2}" placeholder="YYYY-MM"';
     return '<input class="draft-field__input" type="' + type + '" ' + common + value + bounds + pattern + '>';
   }
   if (type === 'amount' || type === 'percent' || type === 'number') {
@@ -448,7 +489,10 @@ export function renderDraftCard(spec, locale = 'en') {
     const helpId = field.help ? fid + '-help' : '';
     const errId = fid + '-error';
     const describedBy = [helpId, errId].filter(Boolean).join(' ');
-    const optional = field.required ? '' : ' <span class="draft-field__optional">(' + escapeHtml(message(lang, 'draft.optional')) + ')</span>';
+    // Some labels already say "(optional)"; never print it twice.
+    const optionalWord = message(lang, 'draft.optional');
+    const saysOptional = String(field.label || '').toLowerCase().includes('(' + optionalWord.toLowerCase() + ')');
+    const optional = field.required || saysOptional ? '' : ' <span class="draft-field__optional">(' + escapeHtml(optionalWord) + ')</span>';
     return '<div class="draft-field draft-field--' + fieldType(field) + '" data-draft-field="' + escapeHtml(field.name) + '">'
       + '<label class="draft-field__label" for="' + fid + '">' + escapeHtml(field.label || field.name) + optional + '</label>'
       + '<p class="draft-field__value" data-draft-view="' + escapeHtml(field.name) + '"' + (editing ? ' hidden' : '') + '>' + escapeHtml(displayValue(field, field.value, lang)) + '</p>'

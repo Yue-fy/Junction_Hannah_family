@@ -3,7 +3,8 @@
  *
  * A "Browse topics" pill beside the composer opens a sheet of topic groups with ready
  * starter questions. Tapping a question hands its text (in the current locale) to the
- * caller, who sends it through the normal agent path. Free typing is never blocked.
+ * caller. With a server catalogue (V4) each question also carries its catalogue id, so the caller can show an
+ * exact answer card; the built-in list stays as the fallback. Free typing is never blocked.
  *
  * Pure and dependency-free: no fetch, no storage, no global state.
  */
@@ -141,6 +142,7 @@ export function renderTopicButton(locale = 'en') {
  * @param {string} [locale]
  * @param {object} [options]
  * @param {string} [options.openTopic] id of the group expanded initially (default: the first group).
+ * @param {object} [options.catalogue] GET /api/catalogue data; when valid it replaces the built-in questions.
  * @param {boolean} [options.open=false] render visible instead of hidden.
  * @returns {string} markup rooted at <div class="topic-sheet" id="coach-topic-sheet" data-topic-sheet>.
  *   Each question is <button data-topic-question="<text in that locale>">. Wire with attachTopicMenu.
@@ -148,8 +150,18 @@ export function renderTopicButton(locale = 'en') {
 export function renderTopicSheet(locale = 'en', options = {}) {
   const lang = normLocale(locale);
   const opts = options && typeof options === 'object' ? options : {};
-  const openTopic = TOPICS.some(topic => topic.id === opts.openTopic) ? opts.openTopic : TOPICS[0].id;
-  const groups = TOPICS.map(topic => {
+  // A server catalogue (GET /api/catalogue: {groups:[{id, title, questions:[{id, text}]}]}) replaces the
+  // built-in list; its questions carry data-catalogue-id so the caller can ask for an exact answer card.
+  const catalogue = catalogueGroups(opts.catalogue);
+  const openTopic = (catalogue || TOPICS).some(topic => topic.id === opts.openTopic) ? opts.openTopic : (catalogue || TOPICS)[0].id;
+  const groups = catalogue ? catalogue.map(group => {
+    const questions = group.questions.map(question => '<li><button type="button" class="topic-question" data-topic-question="' + escapeHtml(question.text) + '" data-catalogue-id="' + escapeHtml(question.id) + '" data-topic-focusable>'
+      + escapeHtml(question.text) + '</button></li>').join('');
+    return '<details class="topic-group" data-topic="' + escapeHtml(group.id) + '"' + (group.id === openTopic ? ' open' : '') + '>'
+      + '<summary class="topic-group__summary" data-topic-focusable><span class="topic-group__title">' + escapeHtml(group.title) + '</span>'
+      + '<span class="topic-group__count">' + escapeHtml(message(lang, group.questions.length === 1 ? 'topic.countOne' : 'topic.count', {count: group.questions.length})) + '</span></summary>'
+      + '<ul class="topic-group__questions">' + questions + '</ul></details>';
+  }).join('') : TOPICS.map(topic => {
     const questions = topic.questions.map(question => {
       const text = message(lang, question.key);
       return '<li><button type="button" class="topic-question" data-topic-question="' + escapeHtml(text) + '" data-topic-question-id="' + escapeHtml(question.id) + '" data-topic-focusable>'
@@ -173,6 +185,14 @@ export function renderTopicSheet(locale = 'en', options = {}) {
     + '</section></div>';
 }
 
+function catalogueGroups(catalogue) {
+  const groups = (catalogue && Array.isArray(catalogue.groups) ? catalogue.groups : []).map(group => ({
+    id: String(group?.id || ''), title: String(group?.title || ''),
+    questions: (Array.isArray(group?.questions) ? group.questions : []).filter(q => q && q.id && q.text).map(q => ({id: String(q.id), text: String(q.text)})),
+  })).filter(group => group.id && group.title && group.questions.length);
+  return groups.length ? groups : null;
+}
+
 /**
  * Map a click target to a topic-menu action (pure routing helper).
  * @param {Element|null} target
@@ -181,7 +201,10 @@ export function renderTopicSheet(locale = 'en', options = {}) {
 export function topicAction(target) {
   if (!target || typeof target.closest !== 'function') return null;
   const question = target.closest('[data-topic-question]');
-  if (question) return {action: 'ask', text: question.getAttribute('data-topic-question') || ''};
+  if (question) {
+    const id = question.getAttribute('data-catalogue-id');
+    return id ? {action: 'ask', text: question.getAttribute('data-topic-question') || '', id} : {action: 'ask', text: question.getAttribute('data-topic-question') || ''};
+  }
   if (target.closest('[data-topic-open]')) return {action: 'open'};
   if (target.closest('[data-topic-close]')) return {action: 'close'};
   return null;
@@ -207,7 +230,8 @@ export function topicKeyAction(event) {
  * focus to the element that opened it.
  * @param {Element} root a container holding [data-topic-open] and [data-topic-sheet] (e.g. the Coach page).
  * @param {object} [callbacks]
- * @param {function(string):void} [callbacks.onAsk] receives the question text in the rendered locale.
+ * @param {function(string, ?string):void} [callbacks.onAsk] receives the question text in the rendered locale and,
+ *   for a server catalogue question, its catalogue id.
  * @param {function(string):void} [callbacks.onClose] receives the reason: 'ask' | 'close' | 'escape' | 'api'.
  * @returns {function():void|null} detach function with extra properties open() and close(); null if no sheet.
  */
@@ -260,7 +284,7 @@ export function attachTopicMenu(root, callbacks = {}) {
       if (event.preventDefault) event.preventDefault();
       const handler = state.callbacks.onAsk;
       close('ask');
-      if (typeof handler === 'function' && routed.text) handler(routed.text);
+      if (typeof handler === 'function' && routed.text) handler(routed.text, routed.id || null);
     }
   };
   const onKeydown = event => {

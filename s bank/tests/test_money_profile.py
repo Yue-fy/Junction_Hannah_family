@@ -59,8 +59,13 @@ class ValidationTests(unittest.TestCase):
                 'gross_monthly_cents': 350000, 'gross_ytd_cents': 3150000, 'assessment_end_month': '2027-06',
                 'decision_result': 'refund', 'decision_amount_cents': 35000, 'decision_due_dates': ['2027-08-03'],
                 'already_set_aside_cents': 0},
+        'plan_mortgage': {'principal_cents': 18000000, 'loan_type': 'annuity', 'reference_rate': 'euribor_12m',
+                          'reference_rate_bp': 225, 'margin_bp': 60, 'remaining_months': 240},
+        'plan_tax': {'on': True, 'expected_back_tax_cents': 60000},
     }
     INVALID = {
+        'plan_mortgage': [{'principal_cents': 1, 'loan_type': 'annuity'}, {'principal_cents': 18000000, 'loan_type': 'annuity', 'reference_rate': 'euribor_12m', 'reference_rate_bp': 225, 'margin_bp': 60}],
+        'plan_tax': [{'on': False}, {}],
         'life_stage': ['retiree', 3],
         'household': [{'adults': 0, 'children': 0}, {'adults': 2}, {'adults': 2, 'children': 1, 'pets': 1}, {'adults': True, 'children': 0}],
         'income_stability': ['stable'],
@@ -306,7 +311,9 @@ class ModeSummaryTests(unittest.TestCase):
     def test_planning_inputs_shape(self):
         empty = mp.planning_inputs(mp.get_profile(self.c, CID))
         self.assertEqual(empty, {'saving_rate_target_pct': None, 'emergency_fund_target_months': None, 'debts': [],
-                                 'debts_monthly_total_cents': 0, 'regular_investing': None, 'risk_attitude': None, 'coaching_mode': 'normal'})
+                                 'debts_monthly_total_cents': 0, 'regular_investing': None, 'risk_attitude': None, 'coaching_mode': 'normal',
+                                 'plan_set_asides': [], 'plan_set_asides_monthly_total_cents': 0,
+                                 'protected_categories': []})
         mp.save_entry(self.c, CID, 'saving_rate_target_pct', 12.5, 'you_told_me')
         mp.save_entry(self.c, CID, 'debts', {'type': 'car_loan', 'monthly_payment_cents': 25000, 'remaining_cents': 800000}, 'you_told_me')
         mp.save_entry(self.c, CID, 'debts', {'type': 'other', 'monthly_payment_cents': 5000}, 'you_told_me')
@@ -318,6 +325,8 @@ class ModeSummaryTests(unittest.TestCase):
         self.assertEqual(inputs['debts'][0], {'type': 'car_loan', 'monthly_payment_cents': 25000, 'remaining_cents': 800000})
         self.assertEqual(inputs['regular_investing'], {'active': True, 'monthly_cents': 10000})
         self.assertEqual(inputs['coaching_mode'], 'steady')
+        mp.save_entry(self.c, CID, 'protected_categories', ['Restaurants'], 'you_told_me')
+        self.assertEqual(mp.planning_inputs(mp.get_profile(self.c, CID, '2026-09-30'))['protected_categories'], ['Restaurants'])
         json.dumps(inputs)
 
 

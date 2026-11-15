@@ -253,7 +253,7 @@ const steady = p.renderProfilePage({entries, mode:'steady'}, [], 'en', H);
 assert.ok(steady.includes('data-profile-mode-off="ev1"') && steady.includes('because you told me you lost your job'));
 assert.ok(!steady.includes('data-profile-section="noticed"'));
 const steadyNoEvent = p.renderProfilePage({entries:[E('a','note','x')], mode:'steady'}, [], 'sv', H);
-assert.ok(steadyNoEvent.includes('data-profile-mode-off=""') && steadyNoEvent.includes('Stadigt läge är på tills'));
+assert.ok(steadyNoEvent.includes('data-profile-mode-off=""') && steadyNoEvent.includes('Vi tar det lite lugnare tills'));
 const empty = p.renderProfilePage({entries:[], mode:'normal'}, [], 'fi', H);
 assert.ok(empty.includes('data-profile-empty') && empty.includes('data-profile-onboarding') && empty.includes('data-profile-add') && empty.includes('Valmentajasi ei vielä tunne sinua'));
 assert.ok(!empty.includes('data-profile-edit'));
@@ -300,7 +300,7 @@ assert.equal(d('protected_categories', ['Travel', 'Restaurants']), 'Travel, Rest
 assert.equal(d('protected_categories', []), 'None');
 assert.equal(d('upcoming', [{what:'Wedding', month:'2027-06', amount_cents:500000}]), 'Wedding, M:2027-06, about EUR5000.00');
 assert.equal(d('life_event', {type:'job_loss', since:'2026-11-01', note:'Company closed'}), 'Lost my job since D:2026-11-01 — Company closed');
-assert.equal(d('life_event', {type:'moving', since:'2026-09'}, 'sv'), 'Flytt sedan M:2026-09');
+assert.equal(d('life_event', {type:'moving', since:'2026-09'}, 'sv'), 'Flytt (sedan M:2026-09)');
 assert.equal(d('note', 'Save for a bike'), 'Save for a bike');
 assert.equal(d('tax', {tax_year:2026, base_rate_bp:2150, gross_monthly_cents:360000, decision_result:'back_tax', decision_amount_cents:42000}), 'Tax year 2026: Tax card 21.5%, gross EUR3600.00 a month, back taxes EUR420.00');
 assert.equal(d('tax', {}), 'Tax details saved');

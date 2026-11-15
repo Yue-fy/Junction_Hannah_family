@@ -222,10 +222,12 @@ class V3APITests(unittest.TestCase):
         answer_data = self.post('/api/coach', {'message': 'What is safe for me to spend this week?', 'month': '2026-09'})
         self.assertEqual(answer_data['tool_kind'], 'safe_to_spend')
         self.assertEqual(answer_data['tool_result']['safe_to_spend_cents'], result['this_week_cents'])
-        # Profile saving target reduces the amount.
+        # Profile saving target is held back: less is free (Alex has room, so it comes out of what could be saved).
         self.write('/api/profile/entries', {'key': 'saving_rate_target_pct', 'value': 20})
         with_target = self.post('/api/coach', {'message': 'What is safe for me to spend this week?', 'month': '2026-09'})
-        self.assertLess(with_target['tool_result']['safe_to_spend_cents'], result['this_week_cents'])
+        self.assertLess(with_target['tool_result']['free_cents'], result['free_cents'])
+        self.assertLess(with_target['tool_result']['extra_cents'], result['extra_cents'])
+        self.assertLessEqual(with_target['tool_result']['safe_to_spend_cents'], result['this_week_cents'])
 
 
 if __name__ == '__main__':

@@ -319,6 +319,79 @@ _INT_FIELDS = (
     "decision_amount_cents",
     "already_set_aside_cents",
 )
+# ---------------------------------------------------------------- customer text in EN / FI / SV
+# Every sentence the tax card shows exists in three languages; money uses the
+# locale's format (EN '€1,234.56', FI/SV '1 234,56 €').
+_TAX_TEXT = {
+    "Your pre-completed tax return is coming": ("Esitäytetty veroilmoituksesi on tulossa", "Din förifyllda skattedeklaration är på väg"),
+    "Time to check your tax return": ("Aika tarkistaa veroilmoitus", "Dags att granska skattedeklarationen"),
+    "Waiting for your tax decision": ("Odotetaan veropäätöstäsi", "Väntar på ditt skattebeslut"),
+    "Tax refund expected": ("Veronpalautus tulossa", "Skatteåterbäring väntas"),
+    "Back taxes to pay": ("Jäännösveroa maksettavana", "Kvarskatt att betala"),
+    "End of the tax year": ("Verovuoden loppu", "Skatteårets slut"),
+    "Your tax refund of %s arrived on %s.": ("Veronpalautuksesi %s saapui %s.", "Din skatteåterbäring på %s kom %s."),
+    "Your tax decision shows a refund of %s.": ("Veropäätöksesi mukaan saat palautusta %s.", "Enligt ditt skattebeslut får du tillbaka %s."),
+    "It should arrive in your account on or around %s.": ("Sen pitäisi tulla tilillesi noin %s.", "Den bör komma till ditt konto omkring %s."),
+    "Your refund date is on your tax decision in MyTax.": ("Palautuspäivä näkyy veropäätöksessäsi OmaVerossa.", "Återbäringsdagen står i ditt skattebeslut i MinSkatt."),
+    "Check that your bank account number in MyTax is up to date.": ("Tarkista, että tilinumerosi on ajan tasalla OmaVerossa.", "Kontrollera att ditt kontonummer i MinSkatt är aktuellt."),
+    "Your tax decision shows back taxes of %s.": ("Veropäätöksesi mukaan maksettavaa jäännösveroa on %s.", "Enligt ditt skattebeslut ska du betala %s i kvarskatt."),
+    "Due date: %s.": ("Eräpäivä: %s.", "Förfallodag: %s."),
+    "Due dates: %s.": ("Eräpäivät: %s.", "Förfallodagar: %s."),
+    "Your due dates and payment reference are on your tax decision in MyTax.": ("Eräpäivät ja viitenumero ovat veropäätöksessäsi OmaVerossa.", "Förfallodagar och referensnummer står i ditt skattebeslut i MinSkatt."),
+    "Set money aside before each due date. The payment details are in MyTax.": ("Varaa rahaa ennen jokaista eräpäivää. Maksutiedot ovat OmaVerossa.", "Lägg undan pengar före varje förfallodag. Betalningsuppgifterna finns i MinSkatt."),
+    "Your pre-completed tax return arrives in MyTax in spring.": ("Esitäytetty veroilmoitus tulee OmaVeroon keväällä.", "Den förifyllda skattedeklarationen kommer till MinSkatt på våren."),
+    "Keep receipts for anything you may need to add or correct.": ("Säilytä kuitit kaikesta, mitä saatat joutua lisäämään tai korjaamaan.", "Spara kvitton på sådant som du kan behöva lägga till eller rätta."),
+    "Check your pre-completed tax return in MyTax.": ("Tarkista esitäytetty veroilmoituksesi OmaVerossa.", "Granska din förifyllda skattedeklaration i MinSkatt."),
+    "Your own due date is shown on your return. Correct or add details by then; if everything is right, you do not need to do anything.": ("Oma määräpäiväsi näkyy veroilmoituksessa. Korjaa tai lisää tiedot siihen mennessä; jos kaikki on oikein, sinun ei tarvitse tehdä mitään.", "Din egen sista dag står på deklarationen. Rätta eller komplettera senast då; om allt stämmer behöver du inte göra något."),
+    "Your tax decision will show whether you get a refund or pay back taxes.": ("Veropäätöksestä näet, saatko palautusta vai maksatko jäännösveroa.", "Skattebeslutet visar om du får återbäring eller ska betala kvarskatt."),
+    "When it arrives in MyTax, you can enter the result here so I can plan for it.": ("Kun päätös tulee OmaVeroon, voit kirjata tuloksen tähän, niin otan sen mukaan suunnitelmaan.", "När beslutet kommer till MinSkatt kan du fylla i resultatet här så att jag kan planera för det."),
+    "Nothing more to do in this year's tax cycle.": ("Tämän vuoden verokierrossa ei ole enää tehtävää.", "Inget mer att göra i årets skatteomgång."),
+    "If your income changes a lot, you can change your tax card in MyTax.": ("Jos tulosi muuttuvat paljon, voit muuttaa verokorttiasi OmaVerossa.", "Om din inkomst ändras mycket kan du ändra ditt skattekort i MinSkatt."),
+    "Gross ≈ %s → withheld ≈ %s → received %s": ("Brutto ≈ %s → ennakonpidätys ≈ %s → tilille %s", "Brutto ≈ %s → förskottsinnehållning ≈ %s → till kontot %s"),
+    "Your received salary differs from gross minus withholding. Pension and unemployment insurance contributions and other payroll deductions are not included in this estimate.": ("Tilillesi tullut palkka poikkeaa bruttopalkasta ennakonpidätyksen jälkeen. Eläke- ja työttömyysvakuutusmaksuja tai muita palkasta tehtäviä vähennyksiä ei ole otettu tähän arvioon.", "Lönen som kom in skiljer sig från bruttolönen minus förskottsinnehållning. Pensions- och arbetslöshetsförsäkringsavgifter och andra avdrag från lönen ingår inte i uppskattningen."),
+    "No salary credits were found in the account for this tax year yet.": ("Tililtä ei vielä löytynyt tämän verovuoden palkkoja.", "Inga löneinsättningar hittades på kontot för det här skatteåret än."),
+    "Estimate from what you entered. Your tax decision in MyTax is the official source.": ("Arvio antamiesi tietojen perusteella. Virallinen tieto on veropäätöksesi OmaVerossa.", "Uppskattning utifrån det du fyllt i. Ditt skattebeslut i MinSkatt är den officiella källan."),
+    "Check MyTax for your exact dates.": ("Tarkista tarkat päivämäärät OmaVerosta.", "Kontrollera de exakta datumen i MinSkatt."),
+    "Your account shows salary after tax, so I need your gross salary from a payslip and your tax-card rate.": ("Tililläsi näkyy palkka verojen jälkeen, joten tarvitsen bruttopalkkasi palkkakuitista ja verokorttisi prosentin.", "Ditt konto visar lönen efter skatt, så jag behöver din bruttolön från lönebeskedet och skattesatsen på ditt skattekort."),
+}
+_TAX_LOCALES = ("en", "fi", "sv")
+
+
+def _date_local(iso, locale):
+    day = date.fromisoformat(iso)
+    if locale == "fi":
+        return "%d.%d.%d" % (day.day, day.month, day.year)
+    if locale == "sv":
+        return "%d %s %d" % (day.day, ("jan", "feb", "mars", "apr", "maj", "juni", "juli", "aug", "sep", "okt", "nov", "dec")[day.month - 1], day.year)
+    return iso
+
+
+class _Text:
+    """A sentence with typed values, rendered per locale. Values: ('euro', cents), ('date', iso), ('dates', [iso])."""
+
+    def __init__(self, template, *values):
+        self.template, self.values = template, values
+
+    def render(self, locale):
+        from .money import format_euro
+        template = self.template if locale == "en" else _TAX_TEXT[self.template][_TAX_LOCALES.index(locale) - 1]
+        out = []
+        for kind, value in self.values:
+            if kind == "euro":
+                out.append(format_euro(value, locale))
+            elif kind == "date":
+                out.append(_date_local(value, locale))
+            else:
+                out.append(", ".join(_date_local(v, locale) for v in value))
+        return template % tuple(out) if out else template
+
+
+def tax_texts(text):
+    """{en, fi, sv} for one customer sentence (an English key of _TAX_TEXT or a _Text)."""
+    item = text if isinstance(text, _Text) else _Text(text)
+    return {locale: item.render(locale) for locale in _TAX_LOCALES}
+
+
 _DECISION_RESULTS = {"refund", "back_tax", "none"}
 _AI_HIDDEN_KEYS = {"base_rate_bp", "additional_rate_bp"}
 
@@ -458,6 +531,7 @@ def withholding_estimate(conn, customer_id, as_of, tax):
         return {
             "available": False,
             "reason": MISSING_WITHHOLDING_REASON,
+            "reason_texts": tax_texts(" ".join(MISSING_WITHHOLDING_REASON.split())),
             "missing": missing,
             "tax_year": year,
             "footer": TAX_FOOTER,
@@ -504,9 +578,8 @@ def withholding_estimate(conn, customer_id, as_of, tax):
         )
     if salary_months == 0:
         notes.append("No salary credits were found in the account for this tax year yet.")
-    flow_text = "Gross ≈ %s → withheld ≈ %s → received %s" % (
-        _euro(gross_ytd), _euro(withheld_ytd), _euro(observed_net)
-    )
+    flow = _Text("Gross ≈ %s → withheld ≈ %s → received %s", ("euro", gross_ytd), ("euro", withheld_ytd), ("euro", observed_net))
+    flow_text = flow.render("en")
     result = {
         "available": True,
         "tax_year": year,
@@ -529,6 +602,7 @@ def withholding_estimate(conn, customer_id, as_of, tax):
             "withheld_cents": withheld_ytd,
             "received_cents": observed_net,
             "text": flow_text,
+            "texts": tax_texts(flow),
         },
         "inputs": {
             "base_rate_bp": tax["base_rate_bp"],
@@ -538,6 +612,7 @@ def withholding_estimate(conn, customer_id, as_of, tax):
             "gross_ytd_cents": tax["gross_ytd_cents"],
         },
         "notes": notes,
+        "note_texts": {locale: [tax_texts(note)[locale] for note in notes] for locale in _TAX_LOCALES},
         "assumptions": assumptions,
         "basis": "Salary credits in the account this tax year, and the gross salary and tax-card rates you entered",
         "transaction_refs": [row["transaction_ref"] for row in rows],
@@ -634,13 +709,13 @@ def tax_cycle_status(conn, customer_id, as_of, tax, calendar=None):
         if refund_seen["seen"]:
             if date.fromisoformat(refund_seen["match"]["date"]) + grace >= day:
                 stage = "refund_expected"
-                tasks = ["Your tax refund of %s arrived on %s." % (_euro(refund_seen["match"]["amount_cents"]), refund_seen["match"]["date"])]
+                tasks = [_Text("Your tax refund of %s arrived on %s.", ("euro", refund_seen["match"]["amount_cents"]), ("date", refund_seen["match"]["date"]))]
         elif expected is None or date.fromisoformat(expected) + grace >= day:
             stage = "refund_expected"
             next_date, next_label, date_source = expected, "Expected refund date", source
-            tasks = ["Your tax decision shows a refund of %s." % _euro(amount)]
+            tasks = [_Text("Your tax decision shows a refund of %s.", ("euro", amount))]
             if expected:
-                tasks.append("It should arrive in your account on or around %s." % expected)
+                tasks.append(_Text("It should arrive in your account on or around %s.", ("date", expected)))
             else:
                 tasks.append("Your refund date is on your tax decision in MyTax.")
             tasks.append("Check that your bank account number in MyTax is up to date.")
@@ -652,9 +727,9 @@ def tax_cycle_status(conn, customer_id, as_of, tax, calendar=None):
             upcoming = [value for value in dates if date.fromisoformat(value) >= day]
             next_date = upcoming[0] if upcoming else None
             next_label = "Next back-tax due date"
-            tasks = ["Your tax decision shows back taxes of %s." % _euro(amount)]
+            tasks = [_Text("Your tax decision shows back taxes of %s.", ("euro", amount))]
             if dates:
-                tasks.append("Due date%s: %s." % ("s" if len(dates) > 1 else "", ", ".join(dates)))
+                tasks.append(_Text("Due dates: %s." if len(dates) > 1 else "Due date: %s.", ("dates", dates)))
             else:
                 tasks.append("Your due dates and payment reference are on your tax decision in MyTax.")
             tasks.append("Set money aside before each due date. The payment details are in MyTax.")
@@ -712,17 +787,20 @@ def tax_cycle_status(conn, customer_id, as_of, tax, calendar=None):
     return {
         "stage": stage,
         "stage_label": _STAGE_LABELS[stage],
+        "stage_label_texts": tax_texts(_STAGE_LABELS[stage]),
         "as_of": day.isoformat(),
         "next_date": next_date,
         "next_date_label": next_label if next_date else None,
         "days_until": days_until,
         "date_source": date_source,
         "calendar_verified": verified,
-        "tasks": tasks,
+        "tasks": [task.render("en") if isinstance(task, _Text) else task for task in tasks],
+        "task_texts": {locale: [tax_texts(task)[locale] for task in tasks] for locale in _TAX_LOCALES},
         "decision_result": result_kind,
         "decision_amount_cents": amount,
         "refund_seen": refund_seen,
         "check_mytax_note": check_note,
+        "check_mytax_note_texts": tax_texts(check_note) if check_note else None,
         "sources": [item["url"] for item in calendar.get("sources", [])] if calendar else [],
         "not_tax_advice": True,
         "footer": TAX_FOOTER,
@@ -1015,6 +1093,7 @@ def tax_overview(conn, customer_id, as_of, tax, month=None, calendar=None):
         "refund": tax_refund_seen(conn, customer_id, clean, calendar=calendar),
         "vat_card": vat_card,
         "footer": TAX_FOOTER,
+        "footer_texts": tax_texts(TAX_FOOTER),
         "not_tax_advice": True,
     }
     ai_view = _without_rates(overview)

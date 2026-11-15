@@ -79,7 +79,7 @@ class ArchetypeTests(unittest.TestCase):
             ledger.add(weekdays(month)[0], 'Restaurants', -1000)
         p = ledger.profile()
         self.assertEqual(p['archetype'], 'weekend_spender')
-        self.assertGreaterEqual(Decimal(p['figures']['little_leaks']['weekend_share_percent']), spender.WEEKEND_SHARE_MIN)
+        self.assertGreaterEqual(Decimal(p['figures']['free_choices']['weekend_share_percent']), spender.WEEKEND_SHARE_MIN)
         self.assertEqual(p['figures']['top_little_leaks_categories'][0]['category'], 'Entertainment')
 
     def test_small_and_often(self):
@@ -103,9 +103,13 @@ class ArchetypeTests(unittest.TestCase):
             ledger.add(days[2], 'Restaurants', -1000)
         p = ledger.profile()
         self.assertEqual(p['archetype'], 'big_ticket_occasional')
-        self.assertEqual(p['figures']['little_leaks']['big_ticket_share_percent'], '90.9')
-        top = p['figures']['top_little_leaks_categories'][0]
+        # V4: Little leaks are purchases under €40; the €200 trips are Bigger choices, never "little leaks".
+        self.assertEqual(p['figures']['bigger_choices']['share_of_free_choices_percent'], '90.9')
+        self.assertEqual(p['figures']['little_leaks']['purchase_count'], 6)
+        self.assertNotIn('Travel', [c['category'] for c in p['figures']['top_little_leaks_categories']])
+        top = p['figures']['top_bigger_choices_categories'][0]
         self.assertEqual((top['category'], top['annualised_cents']), ('Travel', 240000))
+        self.assertIn('90.9%', p['explanation']['en']); self.assertRegex(p['explanation']['fi'], r'90,9\s%')
 
     def _steady_leaks(self, ledger):
         for month in MONTHS:
@@ -140,7 +144,7 @@ class ArchetypeTests(unittest.TestCase):
         shares = [Decimal(b['share_percent']) for b in p['figures']['baskets'].values()]
         self.assertLessEqual(abs(sum(shares) - 100), Decimal('0.2'))
         self.assertTrue(2 <= len(p['why']) <= 3)
-        for item in p['why'] + [p['strength'], p['watch']]:
+        for item in p['why'] + [p['watch']] + ([p['strength']] if p['strength'] else []):
             self.assertIn('fact', item)
             self.assertIsInstance(item['text'], str)
             if 'percent' in item:
@@ -177,6 +181,36 @@ class ArchetypeTests(unittest.TestCase):
             self.assertIn(ARCHETYPE_LABELS['payday_sprinter'][locale], text)
             self.assertIn('100', text)
         self.assertIn('Payday Sprinter', offline_summary(p, 'xx'))
+
+
+class FreeChoiceSplitTests(unittest.TestCase):
+    def test_little_leaks_are_under_the_threshold_and_bigger_choices_the_rest(self):
+        ledger = Ledger()
+        for month in MONTHS:
+            days = weekdays(month)
+            for day in days[:6]:
+                ledger.add(day, 'Restaurants', -1500)
+            ledger.add(days[7], 'Travel', -45000)
+            ledger.add(days[8], 'Lifestyle', -4000)   # exactly €40 is a Bigger choice
+        p = ledger.profile()
+        little, bigger, free = (p['figures'][k] for k in ('little_leaks', 'bigger_choices', 'free_choices'))
+        self.assertEqual(little['threshold_cents'], spender.LITTLE_LEAK_MAX_CENTS)
+        self.assertEqual(little['purchase_count'], 18)
+        self.assertEqual(bigger['purchase_count'], 6)
+        self.assertEqual(little['total_cents'] + bigger['total_cents'], free['total_cents'])
+        self.assertEqual(free['total_cents'], p['figures']['baskets']['discretionary']['amount_cents'])
+        self.assertLess(little['largest']['amount_cents'], spender.LITTLE_LEAK_MAX_CENTS)
+        for locale in ('en', 'fi', 'sv'):
+            self.assertTrue(p['explanation'][locale])
+            self.assertLessEqual(len([t for t in p['explanation'][locale].replace(',', '.').split() if any(ch.isdigit() for ch in t)]), 2)
+
+    def test_must_pays_share_is_never_a_strength(self):
+        ledger = Ledger()
+        for month in MONTHS:
+            ledger.add(month + '-05', 'Restaurants', -1000)
+            ledger.add(month + '-18', 'Restaurants', -9000)
+        p = ledger.profile()
+        self.assertTrue(p['strength'] is None or p['strength']['fact'] != 'must_pays_share')
 
 
 class BufferTests(unittest.TestCase):

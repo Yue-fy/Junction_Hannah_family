@@ -126,9 +126,16 @@ def _inside_vat(gross_cents, rate_basis_points):
     return int(value.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
 
-def _rate_label(rate_basis_points):
+def _rate_label(rate_basis_points, locale="en"):
+    """'10%', '13.5%', '25.5%' (en) or '10 %', '13,5 %' (fi/sv); never scientific notation like '1E+1%'."""
+    from .money import format_percent
     rate = Decimal(rate_basis_points) / 100
-    return f"{rate.normalize()}%"
+    return format_percent(rate, locale, 0 if rate == rate.to_integral_value() else 1)
+
+
+def rate_label_texts(rate_basis_points):
+    """{en, fi, sv} display of a VAT rate in basis points."""
+    return {locale: _rate_label(rate_basis_points, locale) for locale in ("en", "fi", "sv")}
 
 
 def _select_band(mcc, category, category_key):
@@ -208,6 +215,7 @@ def estimate_transaction_vat(row):
         "estimated_vat_cents": vat,
         "rate_basis_points": rate,
         "rate_display": None if rate is None else _rate_label(rate),
+        "rate_display_texts": None if rate is None else rate_label_texts(rate),
         "rate_band": band,
         "rate_source": source,
         "mapping_quality": mapping_quality,

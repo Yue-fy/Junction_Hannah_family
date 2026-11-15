@@ -51,15 +51,19 @@ class SafeUntilPaydayTests(unittest.TestCase):
         self.assertEqual(r['starting_balance_cents'], balance)
         self.assertEqual(r['committed_cents'], 80000)
         self.assertEqual([i['date'] for i in r['committed_items']], ['2026-10-10'])
-        free = balance - 50000 - 80000
-        self.assertEqual(r['free_cents'], free); self.assertEqual(r['per_day_cents'], free // 25)
-        self.assertEqual(r['this_week_cents'], (free // 25) * 7)
-        # The old 7-day function does not see the rent on day 10.
-        self.assertEqual(safe_to_spend(c, 'C', as_of='2026-09-30')['scheduled_outflows_cents'], 0)
+        # V4: everyday costs (groceries) are held back too, so free = balance - rent - cushion - everyday.
+        free = balance - 50000 - 80000 - r['everyday_cents']
+        self.assertGreater(r['everyday_cents'], 0)
+        self.assertEqual(r['free_cents'], free)
+        self.assertEqual(r['spendable_until_payday_cents'] + r['extra_cents'], free)
+        self.assertEqual(r['per_day_cents'], r['daily_life_cents'] // 25)
+        self.assertEqual(r['this_week_cents'], r['per_day_cents'] * 7)
+        # The legacy name returns the same plan (the seven-day path is gone).
+        self.assertEqual(safe_to_spend(c, 'C', as_of='2026-09-30')['scheduled_outflows_cents'], 80000)
         self.assertEqual(r['chart']['kind'], 'runway')
         self.assertEqual(r['chart']['series'][-1]['label'], '2026-10-25')
         self.assertEqual(len(r['chart']['series']), 25)
-        self.assertTrue(r['fact_id'].startswith('safe-until-payday:'))
+        self.assertTrue(r['fact_id'].startswith('spending-plan:'))
         self.assertIn(r['starting_transaction_ref'], r['transaction_refs'])
         self.assertEqual({x['key'] for x in r['components']} >= {'balance', 'reserve', 'committed', 'planned_saving', 'free', 'per_day', 'this_week', 'safe_to_save'}, True)
         c.close()
@@ -82,7 +86,7 @@ class SafeUntilPaydayTests(unittest.TestCase):
         r = safe_until_payday(c, 'C', as_of='2026-09-30')
         self.assertEqual(r['payday_source'], 'fallback_30_days'); self.assertEqual(r['days_until_payday'], 30)
         self.assertEqual(r['next_payday'], '2026-10-30')
-        self.assertTrue(any('30-day' in a for a in r['assumptions']))
+        self.assertTrue(any('30 days ahead' in a for a in r['assumptions']))
         self.assertEqual(r['committed_cents'], 80000)
         c.close()
 
@@ -90,9 +94,11 @@ class SafeUntilPaydayTests(unittest.TestCase):
         c, _ = build(base())
         plain = safe_until_payday(c, 'C', as_of='2026-09-30')
         saving = safe_until_payday(c, 'C', as_of='2026-09-30', profile={'saving_rate_target_pct': 10})
+        self.assertIn(('goal', 30000), [(h['kind'], h['amount_cents']) for h in saving['held_back']])
         self.assertEqual(saving['planned_saving_cents'], 30000)
         self.assertEqual(saving['free_cents'], plain['free_cents'] - 30000)
-        self.assertLess(saving['per_day_cents'], plain['per_day_cents'])
+        self.assertLessEqual(saving['per_day_cents'], plain['per_day_cents'])
+        self.assertEqual(saving['extra_cents'], plain['extra_cents'] - 30000)
         self.assertEqual(plain['planned_saving_cents'], 0)
         with self.assertRaises(ValueError):
             safe_until_payday(c, 'C', as_of='2026-09-30', profile={'saving_rate_target_pct': 120})
@@ -135,14 +141,18 @@ class SafeUntilPaydayTests(unittest.TestCase):
     def test_safe_to_save_never_negative_and_shortfall_reported(self):
         c, balance = build(base(), start_balance=-1200000)
         r = safe_until_payday(c, 'C', as_of='2026-09-30')
-        self.assertLess(r['free_cents'], 0)
-        self.assertEqual(r['shortfall_cents'], -r['free_cents'])
+        # free is floored at zero; the gap is reported separately.
+        self.assertEqual(r['free_cents'], 0)
+        self.assertEqual(r['shortfall_cents'], r['held_back_cents'] + r['everyday_cents'] - r['starting_balance_cents'])
+        self.assertGreater(r['shortfall_cents'], 0)
         self.assertEqual(r['per_day_cents'], 0); self.assertEqual(r['this_week_cents'], 0)
         self.assertEqual(r['safe_to_save_cents'], 0); self.assertEqual(r['spendable_cents'], 0)
         c.close()
         c, balance = build(base(), start_balance=2000000)
         r = safe_until_payday(c, 'C', as_of='2026-09-30')
-        self.assertEqual(r['safe_to_save_cents'], max(0, r['free_cents'] - r['everyday_buffer_cents']))
+        # Plenty of money: spending is capped at a comfortable pace, the rest could be saved, never both.
+        self.assertEqual(r['safe_to_save_cents'], r['free_cents'] - r['spendable_until_payday_cents'])
+        self.assertEqual(r['spendable_until_payday_cents'], r['cap_cents'])
         self.assertGreater(r['safe_to_save_cents'], 0)
         c.close()
 
@@ -165,8 +175,8 @@ class SafeUntilPaydayTests(unittest.TestCase):
                 old = safe_to_spend(c, 'CUST00001', as_of='2026-09-30')
                 new = safe_until_payday(c, 'CUST00001', as_of='2026-09-30')
                 self.assertEqual(new['payday_source'], 'detected')
-                self.assertGreater(new['days_until_payday'], 7)
-                self.assertLess(new['this_week_cents'], old['safe_to_spend_cents'])
+                self.assertEqual(new['next_payday'], '2026-10-15')
+                self.assertEqual(new['this_week_cents'], old['safe_to_spend_cents'])
                 self.assertGreaterEqual(new['safe_to_save_cents'], 0)
             finally:
                 c.close()

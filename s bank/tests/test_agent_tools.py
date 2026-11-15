@@ -65,20 +65,19 @@ class AgentToolsTests(AgentFixture):
         self.assertEqual(set(result['transactions'][0]), {'date', 'weekday', 'category', 'transaction_type', 'amount_cents', 'amount', 'merchant_id', 'mcc_code'})
 
     def test_forecast_safe_recurring_and_payday_match_existing_engines(self):
+        # V4: one spending plan until payday. A legacy seven-day request gets the same numbers.
         safe = self.tool('safe_to_spend', horizon='week', days=7, reserve_floor_cents=50000)
-        raw = forecast.safe_to_spend(self.conn, self.customer, '2026-09-28', 7, 50000)
-        self.assertEqual(safe['safe_to_spend_cents'], raw['safe_to_spend_cents'])
-        # The default horizon holds back every bill until payday and reports a weekly and daily amount.
+        raw = forecast.spending_plan(self.conn, self.customer, '2026-09-28', reserve_floor_cents=50000)
+        self.assertEqual(safe['this_week_cents'], raw['this_week_cents'])
         payday = self.tool('safe_to_spend')
         raw_payday = forecast.safe_until_payday(self.conn, self.customer, '2026-09-28')
         self.assertEqual(payday['this_week_cents'], raw_payday['this_week_cents'])
         self.assertEqual(payday['per_day_cents'], raw_payday['per_day_cents'])
+        self.assertEqual(safe['this_week_cents'], payday['this_week_cents'])
         save = self.tool('safe_to_save')
-        self.assertEqual(save['safe_to_save_cents'], raw_payday['safe_to_save_cents'])
-        # An explicit day count keeps the older seven-day horizon; it cannot combine with until_payday.
-        self.assertIn('safe_to_spend_cents', self.tool('safe_to_spend', days=7))
-        with self.assertRaises(ValueError):
-            self.tool('safe_to_spend', horizon='until_payday', days=7)
+        self.assertEqual(save['safe_to_save_cents'], raw_payday['extra_cents'])
+        # Spending room and what could be saved are two parts of the same free money.
+        self.assertEqual(save['spendable_until_payday_cents'] + save['extra_cents'], save['free_cents'])
         preview = self.tool('forecast_30_days')
         raw_preview = forecast.preview_30_days(self.conn, self.customer, '2026-09-28')
         self.assertEqual(preview['ending_balance_cents'], raw_preview['projected'][-1]['balance_cents'])
@@ -139,8 +138,12 @@ class AgentToolsTests(AgentFixture):
         from scoach.agent_tools import ToolContext
         self.ctx = ToolContext(self.conn, self.customer, '2026-08')
         self.assertEqual(self.ctx.reference_date, '2026-08-28')
+        # A legacy seven-day request gets the same until-payday plan (V4: one answer).
         result = self.tool('safe_to_spend', days=7)
-        self.assertEqual(result['horizon_end'], '2026-09-04')
+        self.assertEqual(result['as_of'], '2026-08-28')
+        self.assertGreater(result['next_payday'], '2026-08-28')
+        again = self.tool('safe_to_spend')
+        self.assertEqual({k: v for k, v in result.items() if k != 'evidence_id'}, {k: v for k, v in again.items() if k != 'evidence_id'})
 
     def test_redaction_preserves_ordinary_words_and_short_id_substrings(self):
         from scoach.agent_tools import redact
@@ -163,7 +166,7 @@ class AgentToolsTests(AgentFixture):
             ('list_transactions', {'start': '2026-09-01', 'end': '2026-09-30', 'limit': 21}),
             ('monthly_trend', {'months': True}),
             ('monthly_trend', {'months': 25}),
-            ('safe_to_spend', {'days': 31}),
+            ('safe_to_spend', {'reserve_floor_cents': -1}),
             ('what_if_reduce', {'category': 'Restaurants', 'percent': float('nan')}),
             ('goal_plan', {'name': 'Goal', 'target_cents': 500, 'target_date': '2026-09-29'}),
             ('propose_action', {'kind': 'create_goal', 'params': {'confirmed': True}}),

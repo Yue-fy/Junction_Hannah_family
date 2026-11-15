@@ -8,7 +8,7 @@
  * Facts read per card kind (missing optional facts simply hide the line that needs them):
  *   intro                    year, purchase_count?
  *   money_in_out             money_in_cents, money_out_cents, net_cents?
- *   saved                    saved_cents, saving_rate_percent?, previous_saved_cents?
+ *   saved                    saved_cents, saving_rate_percent?, previous_saved_cents?, left_over_cents?, stayed_in_account_cents?
  *   top_category             category | category_label, amount_cents, share_percent?
  *   baskets                  must_pays_cents, surprise_must_pays_cents, little_leaks_cents, matching *_percent?
  *                            (fixed_obligation_cents / flexible_essential_cents / discretionary_cents also accepted)
@@ -88,6 +88,8 @@ const COPY = {
   'support.money_in_out': ['Left over: {net}.', 'Jäi yli: {net}.', 'Över blev: {net}.'],
   'support.money_in_out.negative': ['Money out was {net} more than money in.', 'Menoja oli {net} enemmän kuin tuloja.', 'Utgifterna var {net} större än inkomsterna.'],
   'support.saved': ['Previous year: {previous}.', 'Edellisenä vuonna: {previous}.', 'Föregående år: {previous}.'],
+  'support.saved.split': ['Of the {left} left over, {saved} went to savings and {stayed} stayed in your account.', 'Yli jääneestä {left} summasta {saved} meni säästöön ja {stayed} jäi tilillesi.', 'Av de {left} som blev över gick {saved} till sparande och {stayed} blev kvar på kontot.'],
+  'support.saved.over': ['{saved} went to savings, more than the {left} left over; the difference came from your balance.', 'Säästöön meni {saved}, enemmän kuin yli jäi ({left}); erotus otettiin tililtäsi.', '{saved} gick till sparande, mer än de {left} som blev över; skillnaden togs från kontot.'],
   'support.top_category': ['{amount} in total.', 'Yhteensä {amount}.', 'Totalt {amount}.'],
   'support.little_leaks': ['That is about {rent_months} months of your own rent.', 'Se vastaa noin {rent_months} kuukauden vuokraasi.', 'Det motsvarar ungefär {rent_months} månader av din egen hyra.'],
   'support.peak_month': ['Calmest month: {calm_month}, {calm_amount}.', 'Rauhallisin kuukausi: {calm_month}, {calm_amount}.', 'Lugnaste månaden: {calm_month}, {calm_amount}.'],
@@ -219,7 +221,11 @@ function cardModel(card, review, locale, f, aiCaption) {
       model.label = yr(locale, 'label.saved');
       values = {...values, saved: f.money(saved), rate: f.percent(pick(facts, 'saving_rate_percent', 'savings_rate_percent'))};
       captionKeys = ['caption.saved', 'caption.saved.short'];
-      model.support = fill(locale, 'support.saved', {previous: f.money(pick(facts, 'previous_saved_cents', 'previous_year_saved_cents'))});
+      // "Left over" (money in minus spending) already contains what was moved to savings: show the split, not a second total.
+      const left = pick(facts, 'left_over_cents'), stayed = pick(facts, 'stayed_in_account_cents');
+      model.support = isCents(left) && isCents(stayed) && isCents(saved)
+        ? fill(locale, stayed < 0 ? 'support.saved.over' : 'support.saved.split', {left: f.money(left), saved: f.money(saved), stayed: f.money(stayed)})
+        : fill(locale, 'support.saved', {previous: f.money(pick(facts, 'previous_saved_cents', 'previous_year_saved_cents'))});
       break;
     }
     case 'top_category': {
@@ -462,7 +468,8 @@ export function attachStory(root, options = {}) {
   const countUp = () => {
     if (frame !== null) { caf(frame); frame = null; }
     const node = root.querySelector('[data-count-cents]');
-    if (!node || reduced || typeof options.money !== 'function' || typeof raf !== 'function') return;
+    // V4: no count-up. A half-counted headline next to the exact caption read as two different numbers.
+    if (!node || reduced || !options.countUp || typeof options.money !== 'function' || typeof raf !== 'function') return;
     const target = Number(node.getAttribute('data-count-cents'));
     const finalText = node.textContent;
     if (!Number.isSafeInteger(target) || target === 0) return;

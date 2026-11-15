@@ -5,6 +5,8 @@ The viewer was written before the data module and reads its own fact names per c
 into exactly those names. It does no new arithmetic except ``net_cents`` (money in minus
 money out, the same subtraction the viewer would do itself).
 """
+from .labels import category_label
+from .year_review import mcc_label
 
 _SUPPORTED = ('intro', 'money_in_out', 'saved', 'top_category', 'baskets', 'little_leaks',
               'peak_month', 'busiest_day', 'favourite_weekday_or_mcc', 'archetype', 'closing')
@@ -32,7 +34,7 @@ def card_facts(kind, review, card_facts_in, locale='en'):
         kind: card kind from year_review cards.
         review: the whole year_review dict (available True).
         card_facts_in: that card's own ``facts`` from year_review (used for merged fields).
-        locale: 'en' | 'fi' | 'sv', for the archetype display name only.
+        locale: 'en' | 'fi' | 'sv', for the archetype, category and purchase-type names.
     Returns: dict of facts (None values omitted). Amounts are integer cents,
         shares/rates one-decimal percentage strings.
     """
@@ -44,11 +46,15 @@ def card_facts(kind, review, card_facts_in, locale='en'):
                          'net_cents': r['money_in_cents'] - r['money_out_cents']})
     if kind == 'saved':
         previous = r.get('previous_year') or {}
+        left_over = r['money_in_cents'] - r['money_out_cents']
+        # "Left over" already contains what was moved to savings; the card shows the split.
+        # A previous year is only compared when both years are complete.
         return _compact({'saved_cents': r['saved_cents'], 'saving_rate_percent': r.get('saving_rate_percent'),
-                         'previous_saved_cents': previous.get('saved_cents')})
+                         'left_over_cents': left_over, 'stayed_in_account_cents': left_over - r['saved_cents'],
+                         'previous_saved_cents': previous.get('saved_cents') if previous.get('comparable') else None})
     if kind == 'top_category':
         top = r.get('top_category') or {}
-        return _compact({'category': top.get('category'), 'category_label': top.get('category'),
+        return _compact({'category': top.get('category'), 'category_label': category_label(top.get('category'), locale) if top.get('category') else None,
                          'amount_cents': top.get('cents'), 'share_percent': top.get('share_percent')})
     if kind == 'baskets':
         names = {'fixed_obligation': 'must_pays', 'flexible_essential': 'surprise_must_pays', 'discretionary': 'little_leaks'}
@@ -79,7 +85,8 @@ def card_facts(kind, review, card_facts_in, locale='en'):
         weekday, mcc = r.get('favourite_weekday') or {}, r.get('most_frequent_mcc') or {}
         # weekday is the Monday=0 index so the viewer localizes it; no English weekday_label is sent.
         return _compact({'weekday': weekday.get('weekday_index'), 'weekday_count': weekday.get('count'),
-                         'mcc_label': mcc.get('label'), 'mcc_count': mcc.get('count')})
+                         'mcc_label': mcc_label(mcc['mcc_code'], locale) if mcc.get('mcc_code') else mcc.get('label'),
+                         'mcc_count': mcc.get('count')})
     if kind == 'archetype':
         return _compact({'archetype_label': _archetype_label(r.get('archetype'), locale),
                          'previous_archetype_label': _archetype_label(r.get('archetype_previous'), locale)})
@@ -178,13 +185,21 @@ def compact_year(review, locale='en'):
     names = {'fixed_obligation': 'Must-pays', 'flexible_essential': 'Surprise must-pays', 'discretionary': 'Little leaks'}
     previous = review.get('previous_year')
     if previous:
-        previous = {key: previous.get(key) for key in ('year', 'complete', 'money_in_cents', 'money_out_cents', 'saved_cents',
-                                                      'saving_rate_percent', 'saving_rate_delta_points', 'comparable', 'changes')}
+        comparable = bool(previous.get('comparable'))
+        keys = ('year', 'complete', 'observed_months', 'money_in_cents', 'money_out_cents', 'saved_cents', 'saving_rate_percent', 'comparable')
+        previous = {**{key: previous.get(key) for key in keys},
+                    # Totals of a partial year are not compared; monthly averages are.
+                    **({'changes': previous.get('changes'), 'saving_rate_delta_points': previous.get('saving_rate_delta_points')} if comparable else
+                       {'monthly_average_changes': previous.get('monthly_average_changes'),
+                        'note': 'One of the years is not complete, so compare monthly averages, not totals'})}
     day, purchase = review.get('busiest_day'), review.get('largest_purchase')
     weekday, mcc = review.get('favourite_weekday'), review.get('most_frequent_mcc')
     base.update({
         'money_in_cents': review['money_in_cents'], 'money_out_cents': review['money_out_cents'],
         'saved_cents': review['saved_cents'], 'saving_rate_percent': review.get('saving_rate_percent'),
+        'left_over_cents': review['money_in_cents'] - review['money_out_cents'],
+        'definitions': {'left_over_cents': 'money in minus spending; it includes what was moved to savings',
+                        'saved_cents': 'moved to savings and investments (net of withdrawals), part of left_over_cents'},
         'previous_year': previous, 'top_category': review.get('top_category'),
         'baskets': [{'basket': names.get(row['role'], row['role']), **row} for row in review.get('baskets') or []],
         'little_leaks': {key: (review.get('little_leaks') or {}).get(key) for key in ('cents', 'share_percent', 'months_of_rent_equivalent')},

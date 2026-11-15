@@ -111,7 +111,7 @@ const visible=html.replace(/<[^>]*>/g,'');
 assert.ok(visible.includes('≈')&&visible.includes('€12.00'));
 assert.match(visible,/50\s*%/);
 assert.ok(visible.includes('Spending without a rate estimate')&&visible.includes('€100.00'));
-assert.ok(visible.includes('mapping coverage')&&visible.includes('not an accuracy or confidence score'));
+assert.ok(visible.includes('matched to a VAT rate')&&visible.includes('does not say how exact the estimate is'));
 ''')
 
     def test_fully_unmapped_vat_is_not_presented_as_zero_tax(self):
@@ -409,7 +409,7 @@ calls.length=0;get('preferences-form').listeners.submit({preventDefault(){}});
 assert.equal(calls.length,0,'Browser preferences must not rewrite banking data or silently call the server');
 assert.equal(JSON.stringify(app.state.overview),before);
 assert.equal(JSON.stringify(app.state.categoryRows),rowsBefore);
-assert.equal(get('home-coach-question').textContent,get('home-coach-question').dataset.directQuestion+' ↗');
+assert.equal(get('home-coach-question').textContent,get('home-coach-question').dataset.directQuestion+' ›');
 assert.ok(get('home-coach-question').dataset.directQuestion.includes('Lifestyle'));
 assert.ok(!get('home-coach-question').dataset.directQuestion.includes('Restaurants'));
 assert.ok(get('home-coach-title').textContent.toLowerCase().includes('eating out'));

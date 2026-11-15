@@ -126,18 +126,29 @@ export function barChart(series, options={}) {
  *   Omitted options give the original output (last bar dark, others light).
  * @returns {string} SVG markup (viewBox 330x151) or an empty-state paragraph.
  */
+const isoMonth=value=>{const match=/^(\d{4})-(\d{2})$/.exec(String(value??''));return match?new Date(Date.UTC(+match[1],+match[2]-1,15)):null;};
+const monthFormat=(date,options)=>{try{return date.toLocaleDateString(chartLocale,{...options,timeZone:'UTC'});}catch{return date.toISOString().slice(0,7);}};
+/** Full period name for screen readers and tooltips: "October 2025"; non-month labels are kept as given. */
+function periodName(row){const raw=row.period||row.month||row.label||'',date=isoMonth(raw);return date?monthFormat(date,{month:'long',year:'numeric'}):String(raw);}
+/** Short axis label: "Oct"; the first label and every January also show the year ("Jan 26"). */
+function periodTick(row,first){const raw=row.period||row.month||row.label||'',date=isoMonth(raw);if(!date)return String(raw).slice(-5);return monthFormat(date,first||date.getUTCMonth()===0?{month:'short',year:'2-digit'}:{month:'short'});}
 export function trendChart(rows, options={}) {
   if (!rows?.length) return empty(ct('chart.noTrend',{},'No complete periods available for this trend.'));
   const values=rows.map(row=>Number(row.total_cents ?? row.consumption_cents ?? row.value_cents ?? 0));
   const max=Math.max(...values,1); const step=330/rows.length;
   const interactive=Boolean(options?.interactive), selected=interactive?validIndex(options?.selectedIndex,rows.length):null;
-  const bars=rows.map((row,i)=>{const height=Math.max(1,values[i]/max*100),show=i===rows.length-1||i%Math.ceil(rows.length/6)===0;
-    const tick=show?`<text transform="translate(${i*step+step/2},127) rotate(-35)" text-anchor="end" class="chart-note">${esc((row.period || row.month || row.label || '').slice(-5))}</text>`:'';
+  // Long month names (Finnish "marras 25") get fewer labels so they never touch.
+  const longNames=rows.some((row,i)=>periodTick(row,i===0).length>6),every=Math.ceil(rows.length/(longNames?4:6)),last=rows.length-1;
+  const bars=rows.map((row,i)=>{const height=Math.max(1,values[i]/max*100),show=(last-i)%every===0;
+    // Horizontal month names ("Oct", "Jan 26"), counted back from the newest bar so it is always labelled.
+    const anchor=rows.length>1&&i===0?'start':rows.length>1&&i===last?'end':'middle',tickX=anchor==='start'?i*step+2:anchor==='end'?(i+1)*step-2:i*step+step/2;
+    const tick=show?`<text x="${tickX}" y="127" text-anchor="${anchor}" class="chart-note">${esc(periodTick(rows[i],i===last-every*Math.floor(last/every)))}</text>`:'';
     if(!interactive)return `<rect x="${i*step+3}" y="${110-height}" width="${Math.max(2,step-6)}" height="${height}" rx="3" fill="${i===rows.length-1?'#466d48':'#b9cba3'}"/>${tick}`;
     const isSelected=selected===i, fill=isSelected?SELECTED_FILL:(selected===null&&i===rows.length-1?'#466d48':'#b9cba3');
-    const marks=`<rect class="chart-bar-mark" x="${i*step+3}" y="${110-height}" width="${Math.max(2,step-6)}" height="${height}" rx="3" fill="${fill}"${isSelected?` stroke="${SELECTED_STROKE}" stroke-width="1.5"`:selected!==null?` opacity="${DIMMED_OPACITY}"`:''}/>`;
-    return hitTarget(i,`${row.period||row.month||row.label||''}: ${euro(values[i])}`,selected,{x:i*step,y:0,width:step,height:131},marks)+tick;}).join('');
-  return svg(ct('chart.trend',{},'Complete-month spending trend'), rows.map((row,i)=>`${row.period||row.month||row.label}: ${euro(values[i])}`).join('. '),bars,151,interactive?{columns:rows.length,selected:selected!==null}:null);
+    const value=isSelected?`<text x="${Math.min(Math.max(i*step+step/2,24),306)}" y="${Math.max(9,106-height)}" text-anchor="middle" class="chart-value trend-selected-value">${esc(euro(values[i]))}</text>`:'';
+    const marks=`<rect class="chart-bar-mark" x="${i*step+3}" y="${110-height}" width="${Math.max(2,step-6)}" height="${height}" rx="3" fill="${fill}"${isSelected?` stroke="${SELECTED_STROKE}" stroke-width="1.5"`:selected!==null?` opacity="${DIMMED_OPACITY}"`:''}/>${value}`;
+    return hitTarget(i,`${periodName(row)}: ${euro(values[i])}`,selected,{x:i*step,y:0,width:step,height:131},marks)+tick;}).join('');
+  return svg(ct('chart.trend',{},'Complete-month spending trend'), rows.map((row,i)=>`${periodName(row)}: ${euro(values[i])}`).join('. '),bars,151,interactive?{columns:rows.length,selected:selected!==null}:null);
 }
 export function runwayChart(rows) {
   if (!rows?.length) return empty(ct('chart.noRunway',{},'A cash-flow estimate is not available for this account yet.'));
@@ -237,11 +248,12 @@ export function chartDetailPanel(detail, {money=euro, t=null}={}) {
   if (previous !== null) {
     const delta = total - previous;
     const direction = delta > 0 ? 'up' : delta < 0 ? 'down' : 'same';
-    const percent = previous > 0 ? new Intl.NumberFormat(chartLocale, {style:'percent', maximumFractionDigits:1, signDisplay:'exceptZero'}).format(delta / previous) : '';
+    // A bare signed number: the catalogue strings add the % sign in each language's own style ("+8%", "+8 %").
+    const percent = previous > 0 ? new Intl.NumberFormat(chartLocale, {maximumFractionDigits:1, signDisplay:'exceptZero'}).format(Math.round(delta / previous * 1000) / 10) : '';
     const arrow = {up:'↑', down:'↓', same:'→'}[direction];
     const values = {amount: format(Math.abs(delta)), percent};
-    const fallback = {up: percent ? 'Up {amount} ({percent}) vs previous month' : 'Up {amount} vs previous month',
-      down: percent ? 'Down {amount} ({percent}) vs previous month' : 'Down {amount} vs previous month',
+    const fallback = {up: percent ? 'Up {amount} ({percent}%) vs previous month' : 'Up {amount} vs previous month',
+      down: percent ? 'Down {amount} ({percent}%) vs previous month' : 'Down {amount} vs previous month',
       same: 'Same as previous month'}[direction];
     change = `<p class="chart-detail-change is-${direction}"><span aria-hidden="true">${arrow}</span> ${esc(tr('chart.detail.change.' + direction + (percent || direction === 'same' ? '' : 'NoPercent'), values, fallback))}</p>`;
   }

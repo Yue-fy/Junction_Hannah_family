@@ -17,10 +17,10 @@ CATEGORY_TERMS = (
     ('Entertainment', ('entertainment', 'cinema', 'movie', 'games', 'viih', 'elokuv', 'pelit', 'underhållning', 'nöje', 'bio', 'spel')),
     ('Health', ('health', 'medical', 'tervey', 'häls')),
     ('Home & Tech', ('home & tech', 'home appliance', 'appliance', 'electronics', 'washing machine', 'koti ja tekniikka', 'kodinkone', 'elektroniikka', 'pesukone', 'hem och teknik', 'hemelektronik', 'vitvar', 'tvättmaskin')),
-    ('Housing', ('housing', 'rent', 'asumismen', 'vuokra', 'boende', 'hyra')),
+    ('Housing', ('housing', 'rent', 'asumismen', 'asuminen', 'asumiseen', 'vuokra', 'boende', 'hyra')),
     ('Lifestyle', ('lifestyle', 'shopping', 'ostokset', 'ostoksiin', 'clothes', 'clothing', 'fashion', 'elämäntyyli', 'vaatte', 'muoti', 'livsstil', 'kläder')),
     ('Travel', ('travel', 'flight', 'hotel', 'matkail', 'matkamen', 'lento', 'hotelli', 'resor', 'resa', 'flyg', 'hotell')),
-    ('Utilities', ('utilities', 'electricity', 'water bill', 'phone bill', 'sähkö', 'vesilask', 'puhelinlask', 'käyttölask', 'elräkning', 'vattenräkning', 'telefonräkning')),
+    ('Utilities', ('utilities', 'electricity', 'water bill', 'phone bill', 'sähkö', 'vesilask', 'puhelinlask', 'käyttölask', 'elräkning', 'vattenräkning', 'telefonräkning', 'laskut', 'räkningar')),
 )
 MCC_TERMS = (
     ('Taxi', '4121', ('taxi', 'taks')),
@@ -49,9 +49,24 @@ def _copy(context, en, fi, sv):
     return {'en': en, 'fi': fi, 'sv': sv}.get(_locale(context), en)
 
 
+# Follow-up chips are written in English at the call sites; these are their FI/SV versions.
+# Each translation is a question the offline coach answers in that language.
+OPTION_COPY = {
+    'How much did I spend on restaurants?': ('Paljonko käytin ravintoloihin?', 'Hur mycket spenderade jag på restaurang?'),
+    'How much did I spend on groceries?': ('Paljonko käytin ruokaostoksiin?', 'Hur mycket spenderade jag på matinköp?'),
+    'What is safe for me to spend this week?': ('Paljonko voin käyttää turvallisesti tällä viikolla?',
+                                                'Hur mycket är tryggt för mig att spendera den här veckan?'),
+    'I want to save for a goal.': ('Haluan säästää tavoitetta varten.', 'Jag vill spara till ett mål.'),
+}
+
+
+def localized_options(context, options):
+    return [_copy(context, option, *OPTION_COPY[option]) if option in OPTION_COPY else option for option in options]
+
+
 def clarify(context, code, en, fi, sv, options=()):
     return {'needs_clarification': True, 'clarification_question': _copy(context, en, fi, sv),
-            'clarification_code': code, 'clarification_options': list(options), 'query_scope': None}
+            'clarification_code': code, 'clarification_options': localized_options(context, options), 'query_scope': None}
 
 
 def is_vat_question(text):
@@ -157,7 +172,7 @@ def _category_shorthand(text):
 
 
 def _matches(text, term):
-    if term in {'rent', 'shopping', 'ostokset', 'ostoksiin'}:
+    if term in {'rent', 'shopping', 'ostokset', 'ostoksiin', 'laskut', 'räkningar'}:
         return re.search(r'(?<!\w)' + re.escape(term) + r'(?!\w)', text) is not None
     return term in text
 
@@ -481,7 +496,7 @@ def resolve_statistics(message, context):
             and not re.search(r'\b(?:how much|how many|total|average|did i|have i)\b', text)):
         return clarify(context, 'coaching_support',
                        'We can take this one step at a time. What feels most urgent: upcoming bills, day-to-day spending, or building a small buffer?',
-                       'Voimme edetä yksi askel kerrallaan. Mikä tuntuu tärkeimmältä: tulevat laskut, arjen menot vai pieni vararahasto?',
+                       'Voimme edetä yksi askel kerrallaan. Mikä tuntuu tärkeimmältä: tulevat laskut, arjen menot vai pieni puskuri?',
                        'Vi kan ta ett steg i taget. Vad känns mest angeläget: kommande räkningar, vardagsutgifter eller en liten buffert?')
     threshold = re.search(r'\b(?:over|under|above|below|more than|less than|at least|at most|yli|alle|vähintään|enintään|enemmän kuin|vähemmän kuin|över|mer än|mindre än|minst|högst)\s*(?:[€$£]|eur\s*)?\d', text)
     if threshold or any(term in text for term in (

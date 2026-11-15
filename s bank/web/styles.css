@@ -838,3 +838,51 @@ html[data-current-view="coach"] .persona-panel { position: absolute; top: 56px; 
 .tax-flow{font-size:18px}
 #profile-view{padding-bottom:24px}
 .coach-retry{display:block;margin-top:8px}
+/* V4 (lane F): sheets have one title in the header, flat fields and a Save button that never scrolls away */
+.v3-dialog .sheet-header h2{margin:0;font-size:19px;line-height:1.25}
+.v3-dialog.has-title .draft-card__title,.v3-dialog.has-title .profile-add-menu>h3,.v3-dialog.has-title .tax-card>h2,.v3-dialog.has-title .tax-card>.eyebrow{display:none}
+#v3-dialog-content{padding-bottom:0}
+#v3-dialog-content>:last-child:not(.draft-card){margin-bottom:28px}
+#v3-dialog-content .draft-card{max-width:none;margin:0;padding:16px 0 0;border:0;border-radius:0;background:none;box-shadow:none}
+#v3-dialog-content .draft-card+.draft-card{margin-top:8px;border-top:1px solid var(--line)}
+#v3-dialog-content .draft-field{padding:0;background:none}
+#v3-dialog-content .draft-field:has([aria-invalid="true"]){background:none}
+#v3-dialog-content .draft-card__actions{position:sticky;bottom:0;z-index:2;margin:4px -20px 0;padding:12px 20px calc(14px + env(safe-area-inset-bottom));background:var(--paper);border-top:1px solid var(--line)}
+#v3-dialog-content .draft-card__actions[hidden]{display:none}
+#v3-dialog-content .profile-add-menu{padding-top:16px}
+#v3-dialog-content .tax-card{padding-top:16px}
+/* V4 (lane F): one inline SVG icon set for the tab bar */
+.bottom-dock nav .nav-icon{display:inline-flex;align-items:center;justify-content:center;min-height:28px}
+.bottom-dock nav .nav-icon svg{width:22px;height:22px;margin:0;display:block}
+/* V4 (lane F): screen-reader-only text everywhere, not just in the composer */
+.visually-hidden{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0}
+/* V4 (lane F): Spending has one period control (‹ month › plus 3/6/12 months for the charts over time) */
+html[data-current-view="trends"] .app-context .period-control,#trend-period,#map-period{display:none}
+.spending-period{display:grid;gap:10px;margin-top:4px}
+.period-stepper{display:grid;grid-template-columns:44px minmax(0,1fr) 44px;align-items:center;gap:6px}
+.period-stepper button{min-height:44px;border:1px solid var(--line);border-radius:999px;background:var(--white,#fff);color:var(--deep-green);font-size:22px;line-height:1}
+.period-stepper button:disabled{opacity:.4;cursor:not-allowed}
+.period-stepper select{width:100%;min-width:0;min-height:44px;padding:8px 12px;border:1px solid var(--line);border-radius:12px;background:var(--white,#fff);color:var(--ink);font-weight:600;text-align:center}
+.period-segments{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;padding:3px;border-radius:999px;background:var(--wash)}
+.period-segments button{min-height:38px;padding:0 10px;border:0;border-radius:999px;background:none;color:var(--muted);font-weight:600;white-space:nowrap}
+.period-segments button[aria-pressed="true"]{background:var(--white,#fff);color:var(--deep-green);box-shadow:0 1px 3px #19392a1a}
+.period-hint{font-size:12px;color:var(--muted);margin:0}
+.section-top--end{justify-content:flex-end}
+@media (min-width:1000px){
+  #trends-view .page-heading{align-items:end}
+  #trends-view .spending-period-control{flex:0 0 340px;min-width:300px}
+}
+/* V4 (lane F): desktop Home grid gives the year banner and tax chip the full row instead of one 74px column */
+#year-banner:empty,#home-tax-chip:empty{display:none}
+@media (min-width:1000px){
+  #home-view>#year-banner,#home-view>#home-tax-chip{grid-column:1/-1}
+}
+/* V4 (lane F): a visible line when a new chat starts */
+.coach-reset-notice{margin:0 0 12px;padding:8px 12px;border-radius:12px;background:var(--wash);color:var(--muted);font-size:13px;text-align:center}
+.coach-reset-notice[hidden]{display:none}
+/* V4 (lane F): three button styles (primary filled, secondary outlined, text). Shapes match across the app. */
+.draft-btn{border-radius:14px}
+.balance-coach-link{background:#fff;color:var(--deep-green);border:1px solid #fff}
+/* V4 (lane F): the skip link is invisible until it has keyboard focus */
+.skip-link:not(:focus){clip-path:inset(50%);width:1px;height:1px;overflow:hidden;padding:0}
+.coach-context-heading{margin:18px 0 4px;font-size:15px;font-weight:650}

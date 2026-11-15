@@ -95,8 +95,8 @@ class WebContractTests(unittest.TestCase):
 
     def node_app(self, body):
         """Execute the real app with a small DOM boundary and scoped API fixtures."""
-        sources = {name: self.read(name) for name in ('app.js', 'api.js', 'state.js', 'charts.js', 'i18n.js', 'experience.js', 'presentation.js', 'coach-narrative.js', 'coach-chat.js', 'monthly-recap.js',
-                                                      'v3.js', 'draft-card.js', 'topic-menu.js', 'money-profile.js', 'year-review.js', 'month-range.js')}
+        sources = {name: self.read(name) for name in ('app.js', 'api.js', 'state.js', 'charts.js', 'i18n.js', 'experience.js', 'presentation.js', 'coach-narrative.js', 'coach-chat.js', 'answer-card.js', 'monthly-recap.js',
+                                                      'v3.js', 'draft-card.js', 'topic-menu.js', 'money-profile.js', 'year-review.js', 'month-range.js', 'plans.js', 'home-v4.js')}
         harness = r'''
 import assert from 'node:assert/strict';
 const elements = new Map(), documentListeners = {}, calls=[];
@@ -279,7 +279,7 @@ assert.ok(get('goal-submit').textContent.includes('Skapa'));
         self.node_app(r'''
 assert.ok(get('safe-content').innerHTML.includes('€123.45'));assert.ok(get('safe-content').innerHTML.includes('€500.00'));
 assert.ok(get('investment-content').innerHTML.includes('€200.00'));assert.ok(get('investment-content').innerHTML.includes('€50.00'));
-assert.ok(get('vat-content').innerHTML.includes('mapping coverage'));assert.ok(get('vat-content').innerHTML.includes('Excise'));
+assert.ok(get('vat-content').innerHTML.includes('matched to a VAT rate'));assert.ok(!/MCC|mapping/.test(get('vat-content').innerHTML),'No developer words on the VAT card');assert.ok(get('vat-content').innerHTML.includes('Excise'));
 const originalFetch=globalThis.fetch;globalThis.fetch=async(url,options)=>{const path=new URL(url,'http://local').pathname;if(path==='/api/safe-to-spend')return {ok:true,json:async()=>({ok:true,data:offlineAnswer({available:false,needs_history:true},new URL(url,'http://local').pathname)})};if(path==='/api/investments')return {ok:false,status:503,json:async()=>({ok:false,error:{message:'Unavailable'}})};return originalFetch(url,options);};
 await app.load();assert.ok(get('safe-content').innerHTML.includes('history'));assert.ok(get('investment-content').innerHTML.includes('unavailable'));
 ''')
@@ -303,7 +303,7 @@ assert.equal(app.toolResultHTML({intent:'explain_change'}),'');
         self.node_app(r'''
 app.state.vat={transactions:[{transaction_ref:'vat-row',estimated_vat_cents:2550,rate_basis_points:2550,rate_source:{kind:'mcc',value:'7999'},mapping_quality:'broad_mcc_estimate',mapping_note:'Ambiguous recreation MCC 7999 uses the documented broad estimate'}]};
 const html=app.calculationHTML({kind:'transaction',customerId:'CUST00001',accountId:'ACC000001',row:{transaction_ref:'vat-row',date:'2026-09-01',amount_cents:-12550,category:'Entertainment',mcc_code:'7999'}});
-assert.ok(html.includes('Broad MCC estimate'));assert.ok(html.includes('MCC 7999'));assert.ok(html.includes('Ambiguous recreation MCC 7999'));
+assert.ok(html.includes('Estimated from the kind of shop'));assert.ok(html.includes('Kind of shop'));assert.ok(html.includes('Ambiguous recreation MCC 7999'));
 ''')
 
     def test_tax_plan_posts_user_inputs_as_unsaved_scenario(self):
@@ -312,7 +312,7 @@ get('tax-plan-amount').value='900';get('tax-plan-saved').value='100';get('tax-pl
 app.state.overview.latest_balance_date='2026-08-31';
 await app.submitTaxPlan();
 const call=calls.find(item=>item.path==='/api/tax-plan');assert.ok(call);assert.equal(call.body.amount_cents,90000);assert.equal(call.body.already_set_aside_cents,10000);assert.equal(call.body.reference_date,'2026-08-31');assert.equal(call.body.current_balance_cents,10000);assert.equal(call.body.reserve_floor_cents,50000);assert.equal(call.body.set_aside_location,'inside_current_balance');assert.equal(call.body.confirmed,true);
-assert.ok(get('tax-plan-result').innerHTML.includes('€133.34'));assert.ok(get('tax-plan-result').innerHTML.includes('Reference date'));assert.ok(get('tax-plan-result').innerHTML.includes('Observed balance'));assert.ok(get('tax-plan-result').innerHTML.includes('€100.00'));assert.ok(get('tax-plan-result').innerHTML.includes('Reserve'));assert.ok(get('tax-plan-result').innerHTML.includes('€500.00'));assert.ok(get('tax-plan-result').innerHTML.toLowerCase().includes('not tax advice'));
+assert.ok(get('tax-plan-result').innerHTML.includes('€133.34'));assert.ok(get('tax-plan-result').innerHTML.includes('Worked out on'));assert.ok(get('tax-plan-result').innerHTML.includes('Observed balance'));assert.ok(get('tax-plan-result').innerHTML.includes('€100.00'));assert.ok(get('tax-plan-result').innerHTML.includes('Safety cushion'));assert.ok(get('tax-plan-result').innerHTML.includes('€500.00'));assert.ok(get('tax-plan-result').innerHTML.toLowerCase().includes('not tax advice'));
 ''')
 
     def test_coach_directory_routes_questions_goals_and_vat(self):

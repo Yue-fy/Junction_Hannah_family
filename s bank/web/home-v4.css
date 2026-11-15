@@ -1,0 +1,162 @@
+/* Home as the Payday Plan (V4 lane H). Scoped to #home-view and the .hv4-* classes. */
+:root {
+  --hv4-green: #00703c;
+  --hv4-deep: #04432b;
+  --hv4-lime: #c9ec7a;
+  --hv4-gold: #f6cf86;
+  --hv4-card-line: #e3ebe4;
+}
+
+/* Home shows no scaffolding above the plan: month lives in "This month", persona in the avatar sheet. */
+main:has(#home-view:not([hidden])) .app-context { display: none; }
+body:has(#home-view:not([hidden])) .language-control label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+@media (max-width: 999px) { body:has(#home-view:not([hidden])) #demo-button { display: none; } }
+
+#home-view { display: block; }
+.home-v4 { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; padding: 6px 0 8px; }
+.home-v4 > div:empty { display: none; }
+.hv4-visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+/* ---------- Plan hero ---------- */
+.hv4-plan { position: relative; overflow: hidden; padding: 22px 22px 8px; border-radius: 28px; color: #fff;
+  background: radial-gradient(120% 90% at 100% 0%, #0d7a48 0%, transparent 55%), linear-gradient(160deg, #075a37 0%, var(--hv4-deep) 100%);
+  box-shadow: 0 18px 40px -24px #04432b99; }
+.hv4-plan[aria-busy="true"], .hv4-plan:has(.hv4-plan-empty) { min-height: 280px; padding-bottom: 22px; }
+.hv4-eyebrow { font-size: 13px; font-weight: 600; letter-spacing: .02em; color: #cfe7d8; }
+.hv4-hero { display: flex; flex-direction: column; margin: 14px 0 0; font-weight: 600; letter-spacing: normal; }
+.hv4-hero-lead { font-size: 15px; font-weight: 500; color: #d9eee1; }
+.hv4-hero-amount { font-size: 64px; line-height: 1; letter-spacing: -2.5px; font-weight: 700; margin: 6px 0 4px; font-variant-numeric: tabular-nums; }
+.hv4-hero-unit { font-size: 17px; font-weight: 500; color: #f1faf4; }
+.hv4-payday { display: inline-flex; margin-top: 14px; padding: 6px 12px; border-radius: 999px; background: #ffffff1c; font-size: 14px; font-weight: 600; }
+.hv4-plan-empty { margin-top: 16px; color: #d9eee1; }
+.hv4-steady, .hv4-warning { margin-top: 14px; padding: 10px 12px; border-radius: 14px; font-size: 14px; line-height: 1.4; }
+.hv4-steady { background: #ffffff18; color: #eef8f1; }
+.hv4-warning { background: #ffe5c2; color: #5b3500; font-weight: 600; }
+.hv4-split { margin-top: 20px; padding-top: 16px; border-top: 1px solid #ffffff22; }
+.hv4-balance { display: flex; justify-content: space-between; align-items: baseline; font-size: 14px; color: #cfe7d8; }
+.hv4-balance b { color: #fff; font-size: 15px; font-variant-numeric: tabular-nums; }
+.hv4-bar { display: flex; gap: 3px; height: 10px; margin: 10px 0 12px; border-radius: 999px; overflow: hidden; }
+.hv4-seg { display: block; flex-basis: 0; min-width: 4px; }
+.hv4-seg-held { background: #ffffff70; }
+.hv4-seg-buffer { background: #8fcfaa; }
+.hv4-seg-everyday { background: #5fae86; }
+.hv4-seg-free { background: var(--hv4-lime); }
+.hv4-seg-extra { background: var(--hv4-gold); }
+.hv4-legend { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 14px; margin: 0; padding: 0; list-style: none; font-size: 13px; color: #d9eee1; }
+.hv4-legend li { display: grid; grid-template-columns: 10px minmax(0, 1fr); align-items: center; gap: 0 7px; }
+.hv4-legend b { grid-column: 2; color: #fff; font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.hv4-dot { width: 10px; height: 10px; border-radius: 3px; }
+.hv4-why { margin: 14px -22px 0; border-top: 1px solid #ffffff22; }
+.hv4-why summary { display: flex; align-items: center; justify-content: space-between; min-height: 52px; padding: 0 22px; font-size: 15px; font-weight: 600; cursor: pointer; list-style: none; }
+.hv4-why summary::-webkit-details-marker { display: none; }
+.hv4-why summary::after { content: ""; width: 9px; height: 9px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(45deg) translate(-2px, -2px); transition: transform .2s; }
+.hv4-why[open] summary::after { transform: rotate(-135deg); }
+.hv4-why-list { margin: 0 22px; padding: 4px 0 0; list-style: none; font-size: 14px; }
+.hv4-why-list li { display: flex; justify-content: space-between; gap: 12px; padding: 9px 0; border-bottom: 1px solid #ffffff14; }
+.hv4-why-list li span { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; color: #e4f2e9; }
+.hv4-why-list small { font-size: 12px; color: #a9cdb7; }
+.hv4-why-list .hv4-told { padding: 1px 8px; border-radius: 999px; background: #c9ec7a26; color: var(--hv4-lime); font-weight: 600; }
+.hv4-why-list b { white-space: nowrap; font-weight: 600; font-variant-numeric: tabular-nums; }
+.hv4-why-list .hv4-why-total { border-bottom: 0; font-weight: 700; }
+.hv4-why-list .hv4-why-total span, .hv4-why-list .hv4-why-total b { color: var(--hv4-lime); font-weight: 700; }
+.hv4-why-perday, .hv4-why-note { margin: 4px 22px 0; font-size: 13px; color: #cfe7d8; }
+.hv4-why-note { margin-bottom: 18px; color: #a9cdb7; }
+
+/* ---------- Cards ---------- */
+.hv4-card { padding: 20px; border: 1px solid var(--hv4-card-line); border-radius: 24px; background: #fff; }
+.hv4-card h2 { font-size: 18px; letter-spacing: -.3px; }
+.hv4-card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.hv4-muted { color: var(--muted); font-size: 14px; line-height: 1.45; }
+.hv4-link { min-height: 44px; padding: 0 2px; border: 0; background: none; color: var(--hv4-green); font-size: 14px; font-weight: 600; white-space: nowrap; }
+.hv4-button { min-height: 48px; padding: 0 18px; border: 0; border-radius: 14px; background: var(--hv4-green); color: #fff; font-weight: 600; font-size: 15px; }
+.hv4-button:hover { background: #005f33; }
+.hv4-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.hv4-chip { min-height: 44px; padding: 0 16px; border: 1px solid #cfe0d3; border-radius: 999px; background: #fff; color: var(--hv4-deep); font-size: 14px; font-weight: 600; text-align: left; }
+.hv4-chip-primary { border-color: var(--hv4-green); background: var(--hv4-green); color: #fff; }
+
+/* Coach insight */
+.hv4-insight { background: #f1f8f2; border-color: #dcebdf; }
+.hv4-insight-head { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--hv4-green); }
+.hv4-coach-mark { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 9px; background: #dff1e4; color: var(--hv4-green); }
+.hv4-coach-mark svg { width: 18px; height: 18px; }
+.hv4-insight-text { margin-top: 10px; font-size: 16px; line-height: 1.45; color: var(--ink); }
+
+/* This month */
+.hv4-month .hv4-card-head { flex-wrap: wrap; }
+.hv4-month-pick select { min-height: 40px; padding: 0 30px 0 12px; border: 1px solid #d6e3d8; border-radius: 999px; background-color: #f4f8f4; color: var(--ink); font-size: 14px; font-weight: 600; }
+.hv4-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 0; }
+.hv4-tile { min-width: 0; }
+.hv4-tile + .hv4-tile { padding-left: 10px; border-left: 1px solid var(--hv4-card-line); }
+.hv4-tile dt { font-size: 13px; color: var(--muted); }
+.hv4-tile dd { margin: 2px 0 0; }
+.hv4-tile b { display: block; font-size: 20px; letter-spacing: -.5px; font-variant-numeric: tabular-nums; }
+.hv4-delta { display: block; margin-top: 3px; font-size: 12px; line-height: 1.3; color: var(--muted); }
+.hv4-delta-good { color: #137a43; }
+.hv4-delta-watch { color: #9a5b00; }
+
+/* Surprise buffer */
+.hv4-buffer-suggest { display: grid; grid-template-columns: 1fr auto; align-items: baseline; gap: 2px 12px; margin: 14px 0 8px; padding: 14px 16px; border-radius: 16px; background: #f4f8f4; }
+.hv4-buffer-suggest span { font-size: 14px; color: var(--muted); }
+.hv4-buffer-suggest b { font-size: 22px; letter-spacing: -.5px; }
+.hv4-buffer-suggest small { grid-column: 1 / -1; font-size: 13px; color: var(--muted); }
+.hv4-buffer-amount { font-size: 22px; font-weight: 700; letter-spacing: -.5px; }
+.hv4-progress { height: 8px; margin: 12px 0 10px; border-radius: 999px; background: #e9f0ea; overflow: hidden; }
+.hv4-progress span { display: block; height: 100%; min-width: 8px; border-radius: inherit; background: var(--hv4-green); }
+.hv4-basis { margin-bottom: 14px; font-size: 13px; color: var(--muted); }
+.hv4-buffer .hv4-button { width: 100%; }
+
+/* Goals */
+.hv4-goals { margin: 0; padding: 0; list-style: none; }
+.hv4-goals li + li { border-top: 1px solid var(--hv4-card-line); }
+.hv4-goal { display: grid; width: 100%; gap: 2px; padding: 10px 0; border: 0; background: none; text-align: left; }
+.hv4-goal-name { font-weight: 600; }
+.hv4-goal-meta { font-size: 13px; color: var(--muted); }
+.hv4-mini { display: block; height: 4px; margin-top: 6px; border-radius: 999px; background: #e9f0ea; overflow: hidden; }
+.hv4-mini span { display: block; height: 100%; min-width: 4px; background: var(--hv4-green); }
+.hv4-goals-card .hv4-chip { margin-top: 12px; }
+
+/* Personalise */
+.hv4-personal { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 14px; padding: 6px 4px; }
+.hv4-personal h2 { font-size: 15px; letter-spacing: 0; font-weight: 600; }
+.hv4-personal p { margin-top: 2px; font-size: 14px; color: var(--muted); }
+.hv4-personal-empty { padding: 18px 20px; border: 1px dashed #bcd6c2; border-radius: 24px; background: #fbfdfb; }
+.hv4-personal-empty .hv4-personal-actions { width: 100%; }
+.hv4-personal-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; }
+
+/* Seasonal extras: one quiet row */
+.hv4-seasonal { display: flex; flex-direction: column; gap: 8px; }
+.hv4-seasonal:not(:has(> div > *)) { display: none; }
+.hv4-seasonal > div:empty { display: none; }
+.hv4-seasonal .yr-banner { display: flex; align-items: center; gap: 12px; min-height: 0; margin: 0; padding: 10px 10px 10px 16px; border: 1px solid var(--hv4-card-line); border-radius: 18px; background: #fff; color: var(--ink); box-shadow: none; }
+.hv4-seasonal .yr-banner-art, .hv4-seasonal .yr-banner-text > p { display: none; }
+.hv4-seasonal .yr-banner-text { text-align: left; display: flex; flex-direction: row; flex: 1; align-items: center; justify-content: space-between; gap: 10px; min-width: 0; padding: 0; }
+.hv4-seasonal .yr-banner-text h3 { margin: 0; font-size: 14px; font-weight: 600; color: var(--ink); }
+.hv4-seasonal .yr-banner-open { flex: none; min-height: 36px; margin: 0; padding: 0 14px; border: 1px solid #cfe0d3; border-radius: 999px; background: #f1f8f2; color: var(--hv4-deep); font-size: 13px; font-weight: 600; }
+.hv4-seasonal .yr-banner-dismiss { position: static; flex: none; width: 36px; height: 36px; min-height: 36px; padding: 8px; border: 0; background: none; color: var(--muted); }
+.hv4-seasonal .tax-chip { margin: 0; }
+
+/* ---------- Desktop ---------- */
+@media (min-width: 1000px) {
+  .home-v4 { grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 20px; max-width: 1120px; margin: 0 auto; padding-top: 28px; align-items: start; }
+  .hv4-slot-plan { grid-column: 1 / span 7; grid-row: 1 / span 2; }
+  .hv4-slot-insight { grid-column: 8 / -1; }
+  .hv4-slot-month { grid-column: 8 / -1; }
+  .hv4-slot-buffer { grid-column: 1 / span 4; }
+  .hv4-slot-goals { grid-column: 5 / span 4; }
+  .hv4-slot-personal { grid-column: 9 / -1; }
+  .hv4-slot-seasonal { grid-column: 1 / -1; }
+  .hv4-plan { padding: 30px 30px 8px; }
+  .hv4-why { margin: 16px -30px 0; }
+  .hv4-why summary { padding: 0 30px; }
+  .hv4-why-list { margin: 0 30px; }
+  .hv4-why-perday, .hv4-why-note { margin-left: 30px; margin-right: 30px; }
+  .hv4-hero-amount { font-size: 80px; }
+  .hv4-card { padding: 24px; }
+  .hv4-slot-buffer, .hv4-slot-goals, .hv4-slot-personal { align-self: stretch; }
+  .hv4-slot-buffer > section, .hv4-slot-goals > section, .hv4-slot-personal > section { height: 100%; }
+  .hv4-personal-empty { flex-direction: column; align-items: flex-start; justify-content: center; }
+  .hv4-personal:not(.hv4-personal-empty) { align-content: center; padding: 20px 24px; border: 1px solid var(--hv4-card-line); border-radius: 24px; background: #fff; }
+  .hv4-seasonal { flex-direction: row; flex-wrap: wrap; }
+  .hv4-seasonal > div { flex: 1 1 320px; }
+}
+.hv4-later { padding: 12px 14px; border-radius: 14px; background: #fff6e8; color: #6b4300; font-size: 14px; line-height: 1.4; }

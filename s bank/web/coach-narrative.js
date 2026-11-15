@@ -24,7 +24,7 @@ const genericIntros = new Set([
   'Tässä ovat valitun luokan ja ajanjakson tarkat havaitut tulokset.',
   'Tämä on tallentamaton suunnitteluarvio, joka perustuu valitun luokan havaittuihin menoihin.',
   'Tämä on neutraali erittely havaituista menoista oppimiskoreittain, ei pisteytys tai arvio sinusta.',
-  'Arvio suojaa vararahasi, tunnistetut toistuvat menot ja aiempaan aikatauluttamattomaan kulutukseen perustuvan varan.',
+  'Arvio suojaa puskurisi, tunnistetut toistuvat menot ja aiempaan aikatauluttamattomaan kulutukseen perustuvan varan.',
   'Nämä ovat havaitut sijoitussiirrot ja nostot, eivät salkun arvoa tai tuottoa.',
   'Här är vad de valda uppgifterna visar.',
   'Här är de exakta observerade resultaten för den valda kategorin och perioden.',
@@ -273,25 +273,28 @@ export function coachNarrative(response = {}, options = {}) {
       'Käyttökelpoista tilihistoriaa ei ole riittävästi turvallisen käyttövaran arvioimiseen.',
       'Det finns inte tillräcklig användbar kontohistorik för att uppskatta ett tryggt belopp att spendera.')];
     else {
-      const reference = date(result.reference_date || result.as_of), end = date(result.horizon_end);
-      const horizon = integer(result.horizon_days) ? l('the next ' + number(result.horizon_days) + ' days', 'seuraaville ' + number(result.horizon_days) + ' päivälle', 'de följande ' + number(result.horizon_days) + ' dagarna') : l('the stated period', 'ilmoitetulle jaksolle', 'den angivna perioden');
+      // One spending plan until payday: this week's amount is a share of the comfortable pace.
+      const end = date(result.next_payday || result.horizon_end);
+      const free = integer(result.free_cents) ? amount(result.free_cents) : '', perDay = integer(result.per_day_cents) ? amount(result.per_day_cents) : '';
       answer = [result.safe_to_spend_cents === 0 ? l(
-        'There is no estimated room for extra spending for ' + horizon + (end ? ', through ' + end : '') + (reference ? ', using ' + reference + ' as the reference date' : '') + '.',
-        'Tilillä ei ole arvioitua käyttövaraa ylimääräiseen kulutukseen ' + horizon + (end ? ', ' + end + ' asti' : '') + (reference ? '. Viitepäivä on ' + reference : '') + '.',
-        'Det finns inget uppskattat utrymme för extra utgifter för ' + horizon + (end ? ', till ' + end : '') + (reference ? ', med ' + reference + ' som referensdag' : '') + '.')
+        'There is no room for extra spending before payday' + (end ? ' on ' + end : '') + ': bills, everyday costs and a small cushion take what is in the account.',
+        'Ennen palkkapäivää' + (end ? ' ' + end : '') + ' ylimääräiseen kulutukseen ei ole varaa: laskut, arjen menot ja pieni turvatyyny vievät tilillä olevan rahan.',
+        'Det finns inget utrymme för extra utgifter före lönedagen' + (end ? ' ' + end : '') + ': räkningar, vardagsutgifter och en liten marginal tar det som finns på kontot.')
         : l(
-        'The spending estimate is ' + amount(result.safe_to_spend_cents) + ' for ' + horizon + (end ? ', through ' + end : '') + (reference ? ', using ' + reference + ' as the reference date' : '') + '.',
-        'Arvioitu käyttövara on ' + amount(result.safe_to_spend_cents) + ' ' + horizon + (end ? ', ' + end + ' asti' : '') + (reference ? '. Viitepäivä on ' + reference : '') + '.',
-        'Det uppskattade beloppet att spendera är ' + amount(result.safe_to_spend_cents) + ' för ' + horizon + (end ? ', till ' + end : '') + (reference ? ', med ' + reference + ' som referensdag' : '') + '.')];
-      const protectedAmounts = [
-        integer(result.reserve_floor_cents) ? amount(result.reserve_floor_cents) + ' ' + (result.reserve_floor_source === 'demo_default' ? l('demo reserve', 'demon vararaha', 'demobuffert') : l('reserve', 'vararaha', 'buffert')) : '',
-        integer(result.scheduled_outflows_cents) ? amount(result.scheduled_outflows_cents) + ' ' + l('expected outflows', 'odotetut menot', 'väntade utflöden') : '',
-        integer(result.historical_flexible_buffer_cents) ? amount(result.historical_flexible_buffer_cents) + ' ' + l('everyday-spending allowance', 'arjen kulutusvara', 'utrymme för vardagsutgifter') : '',
-      ].filter(Boolean);
-      if (protectedAmounts.length) answer[0] += ' ' + l('The calculation deducts ', 'Laskelma vähentää nämä erät: ', 'Beräkningen drar av ') + list(protectedAmounts) + '.';
-      answer.push(l('This is a planning estimate, not a guarantee. New bills, goal allocations and unsaved tax plans may reduce it; expected income is excluded until it arrives.',
-        'Tämä on suunnitteluarvio, ei takuu. Uudet laskut, tavoitteisiin varatut summat ja tallentamattomat verosuunnitelmat voivat pienentää sitä. Odotettuja tuloja ei lasketa ennen niiden saapumista.',
-        'Detta är en planeringsuppskattning, inte en garanti. Nya räkningar, målavsättningar och osparade skatteplaner kan minska beloppet; väntade inkomster räknas först när de kommer in.'));
+        'You can spend about ' + amount(result.safe_to_spend_cents) + ' this week' + (perDay ? ' (about ' + perDay + ' a day)' : '') + (end ? ' until payday on ' + end : '') + '.',
+        'Voit käyttää tällä viikolla noin ' + amount(result.safe_to_spend_cents) + (perDay ? ' (noin ' + perDay + ' päivässä)' : '') + (end ? ' palkkapäivään ' + end + ' asti' : '') + '.',
+        'Du kan spendera ungefär ' + amount(result.safe_to_spend_cents) + ' den här veckan' + (perDay ? ' (ungefär ' + perDay + ' om dagen)' : '') + (end ? ' fram till lönedagen ' + end : '') + '.')];
+      if (free) answer[0] += ' ' + l(
+        free + ' is free until then after bills, everyday costs like food, a surprise buffer and a small cushion.',
+        'Vapaata rahaa on siihen asti ' + free + ', kun laskut, arjen menot kuten ruoka, varaus yllättäviin menoihin ja pieni turvatyyny on jätetty sivuun.',
+        free + ' är fritt fram till dess efter räkningar, vardagsutgifter som mat, en buffert för oväntade utgifter och en liten marginal.');
+      if (integer(result.extra_cents) && result.extra_cents > 0) answer.push(l(
+        'About ' + amount(result.extra_cents) + ' of that is more than you usually spend, so it could be saved.',
+        'Siitä noin ' + amount(result.extra_cents) + ' on enemmän kuin tavallisesti käytät, joten sen voisi säästää.',
+        'Ungefär ' + amount(result.extra_cents) + ' av det är mer än du brukar spendera, så det kan sparas.'));
+      answer.push(l('This is a planning estimate from your own history, not a guarantee; expected income is counted only when it arrives.',
+        'Tämä on suunnitteluarvio omasta historiastasi, ei takuu. Odotettu tulo lasketaan vasta, kun se saapuu.',
+        'Detta är en planeringsuppskattning utifrån din egen historik, inte en garanti; väntade inkomster räknas först när de kommer in.'));
     }
   } else if (response.tool_kind === 'cashflow_forecast') {
     const points = (result.projected || []).filter(row => integer(row.balance_cents));

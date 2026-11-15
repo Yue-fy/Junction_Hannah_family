@@ -231,7 +231,7 @@ class APITests(unittest.TestCase):
         self.assertEqual(result['data']['response_language_source'], 'interface_locale_offline')
         self.assertIn('English', result['data']['offline_language_limitation'])
         self.assertEqual(result['data']['intent'], 'safe_to_spend')
-        self.assertIn('vararahasi', result['data']['explanation_blocks'][0]['text'])
+        self.assertIn('turvatyyny', result['data']['explanation_blocks'][0]['text'])
 
         status, result = self.request('POST', '/api/coach', {'message': 'Hjälp mig planera ett sparmål', 'locale': 'sv'})
         self.assertEqual(status, 200)

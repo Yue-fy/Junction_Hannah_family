@@ -36,9 +36,26 @@ MCC_LABELS = {
 }
 
 
-def mcc_label(code):
-    """Return a friendly English label for a four-digit MCC string, else 'Code NNNN'."""
-    return MCC_LABELS.get(code, 'Code ' + str(code))
+# Finnish and Swedish versions of MCC_LABELS (same keys), for the year cards.
+MCC_LABELS_FI = {
+    '5411': 'Ruokaostokset', '5812': 'Ravintolat', '5814': 'Pikaruoka ja kahvilat',
+    '4121': 'Taksit', '4111': 'Joukkoliikenne', '5541': 'Polttoaine', '5912': 'Apteekki',
+    '7832': 'Elokuvat', '5311': 'Tavaratalot', '5732': 'Elektroniikka',
+    '4511': 'Lennot', '7011': 'Hotellit', '8011': 'Lääkäri', '8021': 'Hammaslääkäri',
+}
+MCC_LABELS_SV = {
+    '5411': 'Matinköp', '5812': 'Restaurang', '5814': 'Snabbmat och kaféer',
+    '4121': 'Taxi', '4111': 'Kollektivtrafik', '5541': 'Bränsle', '5912': 'Apotek',
+    '7832': 'Bio', '5311': 'Varuhus', '5732': 'Elektronik',
+    '4511': 'Flyg', '7011': 'Hotell', '8011': 'Läkare', '8021': 'Tandläkare',
+}
+_MCC_UNKNOWN = {'en': 'Code {code}', 'fi': 'Koodi {code}', 'sv': 'Kod {code}'}
+
+
+def mcc_label(code, locale='en'):
+    """Return a friendly label for a four-digit MCC string ('en' | 'fi' | 'sv'), else 'Code NNNN'."""
+    table = {'fi': MCC_LABELS_FI, 'sv': MCC_LABELS_SV}.get(locale, MCC_LABELS)
+    return table.get(code) or _MCC_UNKNOWN.get(locale, _MCC_UNKNOWN['en']).format(code=code)
 
 
 def _pct(part, whole):
@@ -129,7 +146,7 @@ def _caption(kind):
     return {
         'intro': 'Your {year} in money: {observed_months} months of your account, in a few cards.',
         'money_in_out': '{money_in} came in and {money_out} went out on spending.',
-        'saved': 'You moved {saved} to saving and investing, {saving_rate_percent} % of what came in.',
+        'saved': 'You moved {saved} to saving and investing, {saving_rate_percent} % of what came in. It is part of the {left_over} left over.',
         'top_category': '{category} was your biggest spending category: {amount}, {share_percent} % of spending.',
         'baskets': 'Regular essentials {fixed_obligation}, irregular essentials {flexible_essential}, little leaks {discretionary}.',
         'little_leaks': 'Little leaks added up to {amount}, {share_percent} % of your spending.',
@@ -330,10 +347,11 @@ def _cards(r):
                          'money_in_change_percent': prev['changes']['money_in']['change_percent'] if prev and prev['comparable'] else None,
                          'money_out_change_percent': prev['changes']['money_out']['change_percent'] if prev and prev['comparable'] else None})
     add('saved', {'saved_cents': r['saved_cents'], 'saved': r['saved'], 'saving_rate_percent': r['saving_rate_percent'],
-                  'previous_saving_rate_percent': prev['saving_rate_percent'] if prev else None,
-                  'saving_rate_delta_points': prev['saving_rate_delta_points'] if prev else None})
+                  'left_over_cents': r['money_in_cents'] - r['money_out_cents'], 'left_over': _eur(r['money_in_cents'] - r['money_out_cents']),
+                  'previous_saving_rate_percent': prev['saving_rate_percent'] if prev and prev['comparable'] else None,
+                  'saving_rate_delta_points': prev['saving_rate_delta_points'] if prev and prev['comparable'] else None})
     if r['saving_rate_percent'] is None:
-        cards[-1]['caption_template'] = 'You moved {saved} to saving and investing.'
+        cards[-1]['caption_template'] = 'You moved {saved} to saving and investing. It is part of the {left_over} left over.'
     if r['top_category']:
         t = r['top_category']
         add('top_category', {'category': t['category'], 'cents': t['cents'], 'amount': _eur(t['cents']), 'share_percent': t['share_percent']})
@@ -360,7 +378,10 @@ def _cards(r):
             busiest.update({'largest_purchase_category': lp['category'], 'largest_purchase_date': lp['date'],
                             'largest_purchase_cents': lp['cents'], 'largest_purchase_amount': _eur(lp['cents'])})
         add('busiest_day', busiest)
-        if lp:
+        if d['count'] < 2:
+            # One payment is not a "busy day"; it is the largest purchase, shown once.
+            cards.pop(); busiest = None
+        elif lp:
             cards[-1]['caption_template'] += ' Your largest single purchase: {largest_purchase_amount} on {largest_purchase_category}, {largest_purchase_date}.'
     fav, mcc = r['favourite_weekday'], r['most_frequent_mcc']
     if fav and mcc:

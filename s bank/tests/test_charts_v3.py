@@ -8,7 +8,8 @@ import unittest
 WEB = Path(__file__).resolve().parents[1] / 'web'
 
 # Output of the pre-V3 charts.js for the sample below (fresh module, so ids start at chart-1).
-ORIGINAL_TREND = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 330 151\" role=\"img\" aria-labelledby=\"chart-1-title chart-1-desc\"><title id=\"chart-1-title\">Complete-month spending trend</title><desc id=\"chart-1-desc\">2026-07: \u20ac123.45. 2026-08: \u20ac234.56. 2026-09: \u20ac34.56</desc><rect x=\"3\" y=\"57.369542974079124\" width=\"104\" height=\"52.630457025920876\" rx=\"3\" fill=\"#b9cba3\"/><text transform=\"translate(55,127) rotate(-35)\" text-anchor=\"end\" class=\"chart-note\">26-07</text><rect x=\"113\" y=\"10\" width=\"104\" height=\"100\" rx=\"3\" fill=\"#b9cba3\"/><text transform=\"translate(165,127) rotate(-35)\" text-anchor=\"end\" class=\"chart-note\">26-08</text><rect x=\"223\" y=\"95.26603001364256\" width=\"104\" height=\"14.733969986357435\" rx=\"3\" fill=\"#466d48\"/><text transform=\"translate(275,127) rotate(-35)\" text-anchor=\"end\" class=\"chart-note\">26-09</text></svg>"
+# V4: month axis labels are readable month names ("Jul 26", "Aug", "Sept"), not ISO fragments.
+ORIGINAL_TREND = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 330 151\" role=\"img\" aria-labelledby=\"chart-1-title chart-1-desc\"><title id=\"chart-1-title\">Complete-month spending trend</title><desc id=\"chart-1-desc\">July 2026: €123.45. August 2026: €234.56. September 2026: €34.56</desc><rect x=\"3\" y=\"57.369542974079124\" width=\"104\" height=\"52.630457025920876\" rx=\"3\" fill=\"#b9cba3\"/><text x=\"2\" y=\"127\" text-anchor=\"start\" class=\"chart-note\">Jul 26</text><rect x=\"113\" y=\"10\" width=\"104\" height=\"100\" rx=\"3\" fill=\"#b9cba3\"/><text x=\"165\" y=\"127\" text-anchor=\"middle\" class=\"chart-note\">Aug</text><rect x=\"223\" y=\"95.26603001364256\" width=\"104\" height=\"14.733969986357435\" rx=\"3\" fill=\"#466d48\"/><text x=\"328\" y=\"127\" text-anchor=\"end\" class=\"chart-note\">Sept</text></svg>"
 ORIGINAL_BAR = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 330 130\" role=\"img\" aria-labelledby=\"chart-2-title chart-2-desc\"><title id=\"chart-2-title\">Recorded amounts</title><desc id=\"chart-2-desc\">Groceries: \u20ac45.00. Refund &lt;b&gt;: -\u20ac12.00</desc><text x=\"0\" y=\"12\" class=\"chart-label\"><title>Groceries</title>Groceries</text><text x=\"330\" y=\"30\" text-anchor=\"end\" class=\"chart-value\">\u20ac45.00</text><rect x=\"0\" y=\"39\" width=\"330\" height=\"16\" rx=\"4\" fill=\"#e8ecdf\"/><rect x=\"69.47368421052632\" y=\"39\" width=\"260.5263157894737\" height=\"16\" rx=\"4\" fill=\"#466d48\"/><text x=\"0\" y=\"77\" class=\"chart-label\"><title>Refund &lt;b&gt;</title>Refund &lt;b&gt;</text><text x=\"330\" y=\"95\" text-anchor=\"end\" class=\"chart-value\">-\u20ac12.00</text><rect x=\"0\" y=\"104\" width=\"330\" height=\"16\" rx=\"4\" fill=\"#e8ecdf\"/><rect x=\"0\" y=\"104\" width=\"69.47368421052632\" height=\"16\" rx=\"4\" fill=\"#466d48\"/></svg>"
 
 
@@ -36,11 +37,11 @@ const chart=module.trendChart(rows,{interactive:true,selectedIndex:1});
 assert.equal((chart.match(/role="button"/g)||[]).length,3);
 assert.equal((chart.match(/tabindex="0"/g)||[]).length,3);
 assert.ok(chart.includes('role="group"'));
-assert.match(chart,/data-index="1" aria-label="2026-08: €2.00" aria-pressed="true"/);
-assert.match(chart,/data-index="0" aria-label="2026-07: €1.00" aria-pressed="false"/);
+assert.match(chart,/data-index="1" aria-label="August 2026: €2.00" aria-pressed="true"/);
+assert.match(chart,/data-index="0" aria-label="July 2026: €1.00" aria-pressed="false"/);
 assert.equal((chart.match(/aria-pressed="true"/g)||[]).length,1);
 assert.ok(chart.includes('is-selected')&&chart.includes('is-dimmed'));
-assert.ok(chart.includes('<desc')&&chart.includes('2026-07: €1.00. 2026-08: €2.00. 2026-09: €3.00'));
+assert.ok(chart.includes('<desc')&&chart.includes('July 2026: €1.00. August 2026: €2.00. September 2026: €3.00'));
 assert.match(chart,/class="chart-hit" x="0" y="0" width="110" height="131"/);
 assert.ok(chart.includes('--chart-columns:3'));
 const none=module.trendChart(rows,{interactive:true});

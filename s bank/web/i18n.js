@@ -153,7 +153,7 @@ const FI = {
   'action.reset': 'Palauta',
   'action.undo': 'Kumoa viimeisin muutos',
   'common.observed': 'Toteutunut',
-  'common.scenario': 'Skenaario',
+  'common.scenario': 'Laskelma',
   'common.estimate': 'Arvio',
   'common.completeMonths': 'Täydet kuukaudet',
   'common.perMonth': 'kuukaudessa',
@@ -217,13 +217,13 @@ const FI = {
   'goal.date': 'Tavoitepäivä',
   'goal.reserve': 'Puskuriksi jätettävä summa',
   'goal.create': 'Luo suunnitelma',
-  'goal.disclosure': 'Tämä on suunnitteluskenaario. Se ei tee tilisiirtoa.',
+  'goal.disclosure': 'Tämä on vain suunnitelma. Se ei tee tilisiirtoa.',
   'coach.eyebrow': 'Rahasi selkokielellä',
   'coach.title': 'Kysy valmentajalta',
   'coach.greeting': 'Mitä haluaisit ymmärtää? Edetään yksi askel kerrallaan.',
   'coach.input.label': 'Kysymyksesi',
   'coach.input.placeholder': 'Kysy raha-asioistasi…',
-  'coach.verified': 'Tarkistetut laskelmat · Valmennus toimii myös ilman verkkoyhteyttä',
+  'coach.verified': 'Luvut tarkistetaan tilitapahtumistasi · Pikavastaukset toimivat myös ilman tekoälyä',
   'coach.otherLanguage': 'Suomi, ruotsi ja englanti toimivat ilman tekoälyä. Muunkieliset kysymykset vaativat käyttöön otetun tekoälyn. Tekoäly ei vaihda käyttöliittymän kieltä.',
   'loading.account': 'Ladataan tiliäsi…',
   'loading.insight': 'Etsitään hyödyllistä havaintoa…',
@@ -268,7 +268,7 @@ const SV = {
   'persona.description': 'Kontona är syntetiska. Coachens uppgifter sparas endast på den här demoservern.',
   'persona.reset': 'Återställ den här kundens demo',
   'navigation.label': 'Huvudnavigering',
-  'nav.home': 'Start',
+  'nav.home': 'Hem',
   'nav.trends': 'Utveckling',
   'nav.goals': 'Mål',
   'action.close': 'Stäng',
@@ -280,7 +280,7 @@ const SV = {
   'action.reset': 'Återställ',
   'action.undo': 'Ångra senaste ändringen',
   'common.observed': 'Utfall',
-  'common.scenario': 'Scenario',
+  'common.scenario': 'Kalkyl',
   'common.estimate': 'Uppskattning',
   'common.completeMonths': 'Hela månader',
   'common.perMonth': 'per månad',
@@ -344,13 +344,13 @@ const SV = {
   'goal.date': 'Måldatum',
   'goal.reserve': 'Belopp att behålla som buffert',
   'goal.create': 'Skapa min plan',
-  'goal.disclosure': 'Detta är ett planeringsscenario. Ingen överföring skapas.',
+  'goal.disclosure': 'Det här är bara en plan. Ingen överföring görs.',
   'coach.eyebrow': 'Din ekonomi på klarspråk',
   'coach.title': 'Fråga din coach',
   'coach.greeting': 'Vad vill du förstå? Vi kan ta ett steg i taget.',
   'coach.input.label': 'Din fråga',
   'coach.input.placeholder': 'Fråga om din ekonomi…',
-  'coach.verified': 'Kontrollerade beräkningar · Coaching fungerar även utan nätanslutning',
+  'coach.verified': 'Siffrorna kontrolleras mot dina transaktioner · Snabbsvar fungerar även utan AI',
   'coach.otherLanguage': 'Finska, svenska och engelska fungerar utan AI. Frågor på andra språk kräver konfigurerad AI. AI ändrar inte gränssnittets språk.',
   'loading.account': 'Ditt konto laddas…',
   'loading.insight': 'Vi letar efter en användbar insikt…',
@@ -417,7 +417,7 @@ const JOURNEY_MESSAGES = {
   ],
   "home.genericHeadline": [
     "Restaurant spending changed by {amount} in {period}.",
-    "Ravintolamenojen muutos: {amount}, {period}.",
+    "Ravintolamenot muuttuivat {amount} {period:in}.",
     "Restaurangutgifterna förändrades med {amount} i {period}."
   ],
   "home.genericDescription": [
@@ -656,14 +656,14 @@ const JOURNEY_MESSAGES = {
     "Till {date}"
   ],
   "goal.capacity": [
-    "Cautious monthly capacity: {amount}. Based on six complete months of free cash flow.",
-    "Varovainen kuukausittainen säästövara: {amount}. Perustuu kuuden täyden kuukauden kassavirtaan.",
-    "Försiktigt månadsutrymme: {amount}. Bygger på sex hela månaders fria kassaflöde."
+    "In a usual month about {amount} is left over (your last six months).",
+    "Tavallisena kuukautena sinulle jää noin {amount} (kuusi viime kuukautta).",
+    "En vanlig månad blir ungefär {amount} över (dina senaste sex månader)."
   ],
   "goal.reserveDetail": [
-    "Protected reserve: {reserve}. Available above it: {upfront}, separate from monthly capacity.",
-    "Suojattu puskuri: {reserve}. Sen yli käytettävissä: {upfront}, erillään kuukausittaisesta säästövarasta.",
-    "Skyddad buffert: {reserve}. Tillgängligt utöver den: {upfront}, skilt från månadsutrymmet."
+    "Could go to this goal now, from your plan until payday: {upfront}.",
+    "Tähän tavoitteeseen voisi siirtää nyt palkkapäivän suunnitelmasta: {upfront}.",
+    "Kan gå till det här målet nu, enligt din plan fram till lönedagen: {upfront}."
   ],
   "goal.linked": [
     "{amount} modeled monthly contribution linked. No transfer created.",
@@ -671,9 +671,9 @@ const JOURNEY_MESSAGES = {
     "{amount} uppskattat månadsbidrag kopplat. Ingen överföring skapad."
   ],
   "goal.gap": [
-    "Planning gap: {amount} / month. Try a later date or a smaller target.",
-    "Arvion vaje: {amount} kuukaudessa. Kokeile myöhempää päivää tai pienempää tavoitetta.",
-    "Gap i planen: {amount} per månad. Prova ett senare datum eller ett mindre mål."
+    "Still missing after that: {amount} / month. Try a later date or a smaller target.",
+    "Sen jälkeenkin puuttuu {amount} kuukaudessa. Kokeile myöhempää päivää tai pienempää tavoitetta.",
+    "Det saknas ändå {amount} per månad. Prova ett senare datum eller ett mindre mål."
   ],
   "goal.assumptions": [
     "See this plan's assumptions",
@@ -767,8 +767,8 @@ const JOURNEY_MESSAGES = {
   ],
   "evidence.formula": [
     "Formula and source rows",
-    "Kaava ja lähdetapahtumat",
-    "Formel och källtransaktioner"
+    "Näin luku lasketaan",
+    "Så räknas siffran"
   ],
   "evidence.averageFormula": [
     "Total is the sum of restaurant purchases in each period. Average = total / purchase count, rounded half up to cents.",
@@ -822,8 +822,8 @@ const JOURNEY_MESSAGES = {
   ],
   "evidence.goalFormula": [
     "Remaining = target minus saved, at least zero. Monthly requirement = remaining / months, rounded up to cents. Cautious capacity uses the lower quartile of six complete months' free cash flow. Transfers are kept separate.",
-    "Jäljellä = tavoite miinus säästetty, vähintään nolla. Kuukausitarve = jäljellä oleva summa / kuukaudet, pyöristettynä senttiin ylöspäin. Varovainen säästövara perustuu kuuden täyden kuukauden vapaan kassavirran alakvartiiliin. Siirrot käsitellään erikseen.",
-    "Kvar = mål minus sparat, minst noll. Månadsbehov = kvar / månader, avrundat uppåt till cent. Försiktigt utrymme använder den undre kvartilen av sex hela månaders fria kassaflöde. Överföringar hålls skilda."
+    "Jäljellä = tavoite miinus jo säästetty. Kuukausisumma = jäljellä oleva summa jaettuna kuukausilla, pyöristettynä ylöspäin. Varovainen säästövara perustuu tiukempiin kuukausiisi viimeisen puolen vuoden ajalta. Säästösiirrot lasketaan erikseen.",
+    "Kvar = målet minus det du redan sparat. Månadsbelopp = det som är kvar delat med antalet månader, avrundat uppåt. Det försiktiga utrymmet bygger på dina stramare månader under det senaste halvåret. Sparöverföringar räknas separat."
   ],
   "evidence.noApproval": [
     "This plan creates no transfer and does not predict credit approval.",
@@ -877,8 +877,8 @@ const JOURNEY_MESSAGES = {
   ],
   "trends.description": [
     "{count} complete months · Observed restaurant spending.",
-    "{count} täyttä kuukautta · Toteutuneet ravintolamenot.",
-    "{count} hela månader · Faktiska restaurangutgifter."
+    "{count} täyttä kuukautta · toteutuneet menot.",
+    "{count} hela månader · faktiska utgifter."
   ],
   "trends.yoy": [
     "Same-month change: {amount}. Both periods are complete.",
@@ -932,8 +932,8 @@ const JOURNEY_MESSAGES = {
   ],
   "coach.offlineMode": [
     "Deterministic offline coach · Numbers from verified facts · Changes require your confirmation",
-    "Ilman tekoälyä toimiva valmentaja · Tarkistetut luvut · Muutokset vaativat vahvistuksesi",
-    "Coach utan AI · Kontrollerade siffror · Ändringar kräver din bekräftelse"
+    "Pikavastaus · Luvut tarkistettu tapahtumistasi · Muutokset vaativat vahvistuksesi",
+    "Snabbsvar · Siffrorna kontrollerade mot dina transaktioner · Ändringar kräver din bekräftelse"
   ],
   "coach.aiMode": [
     "AI-assisted response · Numbers from verified facts · Changes require your confirmation",
@@ -957,8 +957,8 @@ const JOURNEY_MESSAGES = {
   ],
   "safe.demoReserve": [
     "€500 demo reserve, chosen for this preview.",
-    "Tähän arvioon valittu 500 € demopuskuri.",
-    "500 € demobuffert, vald för denna förhandsvisning."
+    "Arvioon on varattu 500 € puskuri.",
+    "I uppskattningen hålls 500 € undan som buffert."
   ],
   "investment.monthsCount": [
     "{count} of {total} months",
@@ -982,8 +982,8 @@ const JOURNEY_MESSAGES = {
   ],
   "chart.noAverage": [
     "Average unavailable",
-    "Keskiarvo ei saatavilla",
-    "Genomsnitt saknas"
+    "Keskiarvoa ei voi laskea",
+    "Inget genomsnitt att visa"
   ],
   "chart.noComparison": [
     "No complete comparison periods available.",
@@ -1002,8 +1002,8 @@ const JOURNEY_MESSAGES = {
   ],
   "chart.runway": [
     "Pattern-based cash-flow preview",
-    "Historiaan perustuva kassavirta-arvio",
-    "Mönsterbaserad kassaflödesöversikt"
+    "Saldon arvio aiempien tapahtumien perusteella",
+    "Saldots utveckling enligt tidigare mönster"
   ],
   "chart.noRunway": [
     "A cash-flow estimate is not available for this account yet.",
@@ -1012,8 +1012,8 @@ const JOURNEY_MESSAGES = {
   ],
   "chart.runwayDescription": [
     "Observed starting balance {start}. Estimated ending balance {end}. Historical variation, not a probability interval.",
-    "Toteutunut alkusaldo {start}. Arvioitu loppusaldo {end}. Historiallista vaihtelua, ei todennäköisyysväli.",
-    "Faktiskt startsaldo {start}. Uppskattat slutsaldo {end}. Historisk variation, inte ett sannolikhetsintervall."
+    "Saldo nyt {start}. Arvioitu saldo jakson lopussa {end}. Vaihteluväli perustuu aiempiin menoihisi, ei todennäköisyyksiin.",
+    "Saldo nu {start}. Uppskattat saldo i slutet av perioden {end}. Spannet bygger på dina tidigare utgifter, inte på sannolikheter."
   ],
   "chart.recent": [
     "Recent observed activity",
@@ -1137,8 +1137,8 @@ const JOURNEY_MESSAGES = {
   ],
   "safe.everydayAllowance": [
     "Historical unscheduled-spending buffer",
-    "Historiallinen puskuri aikatauluttamattomille menoille",
-    "Historisk buffert för ej schemalagda utgifter"
+    "Varaus arjen menoihin",
+    "Reserv för vardagsutgifter"
   ],
   "evidence.assumptions": [
     "Assumptions used",
@@ -1167,8 +1167,8 @@ const JOURNEY_MESSAGES = {
   ],
   "safe.assumption.2": [
     "The spending buffer scales the upper quartile of historical thirty-day unscheduled spending.",
-    "Menopuskuri skaalataan aiempien 30 päivän aikatauluttamattomien menojen yläkvartiilista.",
-    "Utgiftsbufferten skalar den övre kvartilen av historiska trettiodagarsutgifter utan schema."
+    "Arjen menoihin varataan sen verran kuin kalliimpana kuukautena yleensä kuluu.",
+    "För vardagsutgifter räknar vi med vad en dyrare månad brukar kosta."
   ],
   "safe.assumption.3": [
     "Taxes and obligations missing from the transaction history are not inferred.",
@@ -1202,8 +1202,8 @@ const JOURNEY_MESSAGES = {
   ],
   "vat.coverage": [
     "Rate mapping coverage",
-    "Verokantakartoituksen kattavuus",
-    "Täckning för momssatsmappning"
+    "Osuus menoista, joille löytyi verokanta",
+    "Andel av utgifterna med känd momssats"
   ],
   "vat.breakdown": [
     "How the estimate is split",
@@ -1217,8 +1217,8 @@ const JOURNEY_MESSAGES = {
   ],
   "vat.method": [
     "VAT inside = gross price × rate / (1 + rate), rounded to cents per transaction. MCC is used first; category is a fallback.",
-    "Sisältyvä ALV = bruttohinta × verokanta / (1 + verokanta), pyöristettynä senttiin tapahtumittain. Ensin käytetään MCC:tä, muuten luokkaa.",
-    "Moms inuti = bruttopris × sats / (1 + sats), avrundat till cent per transaktion. MCC används först och kategori som reserv."
+    "Sisältyvä ALV = bruttohinta × verokanta / (1 + verokanta), pyöristettynä senttiin ostoksittain. Verokanta päätellään ensin kaupan toimialasta, muuten ostoluokasta.",
+    "Momsen i priset = bruttopris × momssats / (1 + momssats), avrundat till cent per köp. Momssatsen bestäms först utifrån butikens bransch, annars utifrån kategorin."
   ],
   "vat.taxInside": [
     "Estimated VAT inside: ≈ {amount} · {rate}",
@@ -1227,13 +1227,13 @@ const JOURNEY_MESSAGES = {
   ],
   "vat.unmapped": [
     "VAT rate not mapped",
-    "ALV-kantaa ei voitu määrittää",
-    "Momssatsen kunde inte mappas"
+    "Verokantaa ei voitu päätellä",
+    "Momssatsen kunde inte avgöras"
   ],
   "vat.coverageNote": [
     "Rate mapping coverage shows how much spending received a rate; it is not an accuracy or confidence score.",
-    "Verokantakartoituksen kattavuus kertoo, kuinka suurelle osalle menoista löytyi verokanta; se ei ole tarkkuus- tai luottamusluku.",
-    "Täckningen visar hur stor del av utgifterna som fick en momssats; den är inte ett mått på exakthet eller säkerhet."
+    "Luku kertoo, kuinka suurelle osalle menoista löytyi verokanta. Se ei kerro arvion tarkkuudesta.",
+    "Siffran visar hur stor del av utgifterna som fick en momssats. Den säger inget om hur exakt uppskattningen är."
   ],
   "vat.limitationsTitle": ["Important limits", "Tärkeät rajaukset", "Viktiga begränsningar"],
   "vat.limitation.mixed": [
@@ -1243,8 +1243,8 @@ const JOURNEY_MESSAGES = {
   ],
   "vat.limitation.ambiguous": [
     "Broad mappings are labelled per purchase; ambiguous rows can remain unmapped.",
-    "Laajat arviot merkitään ostoksittain; epäselvä tapahtuma voidaan jättää kartoittamatta.",
-    "Breda uppskattningar märks per köp; tvetydiga rader kan lämnas utan mappning."
+    "Osa verokannoista on arvioita. Epäselvät ostokset jätetään laskematta.",
+    "En del momssatser är uppskattningar. Oklara köp räknas inte med."
   ],
   "vat.limitation.excise": [
     "Excise duties on fuel, alcohol and tobacco are not included.",
@@ -1256,13 +1256,13 @@ const JOURNEY_MESSAGES = {
     "Tämä ei ole henkilökohtaisen verovelan, vähennyksen tai veroilmoituksen laskelma.",
     "Detta är ingen beräkning av personlig skatteskuld, avdrag eller deklaration."
   ],
-  "vat.mapping.direct_mcc": ["Direct MCC mapping", "Suora MCC-kartoitus", "Direkt MCC-mappning"],
-  "vat.mapping.broad_mcc_estimate": ["Broad MCC estimate", "Laaja MCC-arvio", "Bred MCC-uppskattning"],
-  "vat.mapping.category_fallback": ["Category fallback", "Luokkaan perustuva varakartoitus", "Kategori som reserv"],
-  "vat.mapping.broad_category_estimate": ["Broad category estimate", "Laaja luokka-arvio", "Bred kategoriuppskattning"],
-  "vat.mapping.unmapped": ["No reliable rate mapping", "Luotettavaa verokantakartoitusta ei löytynyt", "Ingen tillförlitlig momssatsmappning"],
+  "vat.mapping.direct_mcc": ["Direct MCC mapping", "Kaupan toimialan mukaan", "Enligt butikens bransch"],
+  "vat.mapping.broad_mcc_estimate": ["Broad MCC estimate", "Arvio kaupan toimialan mukaan", "Uppskattning enligt butikens bransch"],
+  "vat.mapping.category_fallback": ["Category fallback", "Ostoluokan mukaan", "Enligt kategori"],
+  "vat.mapping.broad_category_estimate": ["Broad category estimate", "Arvio ostoluokan mukaan", "Uppskattning enligt kategori"],
+  "vat.mapping.unmapped": ["No reliable rate mapping", "Verokantaa ei voitu päätellä", "Momssatsen kunde inte avgöras"],
   "vat.source.category": ["Category", "Luokka", "Kategori"],
-  "vat.source.unmapped": ["No mapping source", "Ei kartoituslähdettä", "Ingen mappningskälla"],
+  "vat.source.unmapped": ["No mapping source", "Ei tietoa", "Uppgift saknas"],
   "investment.coverageLimited": [
     "Only {count} observed months are available in the requested range.",
     "Pyydetyltä ajalta on saatavilla vain {count} havaittua kuukautta.",
@@ -1294,7 +1294,7 @@ const JOURNEY_MESSAGES = {
   "coach.question.profile": ["What kind of spender am I?", "Millainen rahankäyttäjä olen?", "Vilken typ av spenderare är jag?"],
   "coach.question.safe": ["What is safe for me to spend this week?", "Paljonko voin käyttää turvallisesti tällä viikolla?", "Hur mycket är tryggt för mig att spendera den här veckan?"],
   "coach.question.investing": ["Show my investment transfers", "Näytä sijoitussiirtoni", "Visa mina investeringsöverföringar"],
-  "coach.question.buffer": ["Plan an emergency buffer", "Suunnittele hätävara", "Planera en nödbuffert"],
+  "coach.question.buffer": ["Plan an emergency buffer", "Suunnittele puskurirahasto", "Planera en buffert"],
   "coach.question.goal": ["Plan my own savings goal", "Suunnittele oma säästötavoitteeni", "Planera mitt eget sparmål"],
   "coach.question.purchase": ["Prepare for a large purchase", "Valmistaudu suureen hankintaan", "Förbered ett stort inköp"],
   "coach.question.homeGoal": ["Prepare a home goal", "Valmistaudu asuntotavoitteeseen", "Förbered ett bostadsmål"],
@@ -1304,8 +1304,8 @@ const JOURNEY_MESSAGES = {
   "coach.question.vat": ["See estimated VAT inside purchases", "Katso ostoksiin sisältyvä ALV-arvio", "Se uppskattad moms i inköpen"],
   "coach.homeDisclaimer": ["Planning only. No approval or affordability decision is inferred.", "Vain suunnitteluun. Hyväksyntää tai maksukykyä ei päätellä.", "Endast för planering. Inget godkännande eller beslut om betalningsförmåga antas."],
   "coach.input.label": ["Ask in your own words", "Kysy omin sanoin", "Fråga med egna ord"],
-  "taxPlan.title": ["Plan a user-declared tax amount", "Suunnittele itse ilmoittamasi verosumma", "Planera ett skattebelopp som du själv anger"],
-  "taxPlan.help": ["This unsaved scenario combines what you enter with the current observed balance and reserve.", "Tallentamaton arvio yhdistää antamasi tiedot nykyiseen havaittuun saldoon ja puskuriin.", "Det osparade scenariot kombinerar dina uppgifter med det aktuella observerade saldot och bufferten."],
+  "taxPlan.title": ["Plan a user-declared tax amount", "Suunnittele verojen maksu", "Planera skatten du ska betala"],
+  "taxPlan.help": ["This unsaved scenario combines what you enter with the current observed balance and reserve.", "Laskelmaa ei tallenneta. Se yhdistää antamasi tiedot tilisi saldoon ja puskuriin.", "Kalkylen sparas inte. Den kombinerar dina uppgifter med kontots saldo och bufferten."],
   "taxPlan.amount": ["Amount due", "Maksettava summa", "Belopp som ska betalas"],
   "taxPlan.saved": ["Already set aside", "Jo sivuun laitettu", "Redan avsatt"],
   "taxPlan.location": ["Where is that set-aside amount?", "Missä sivuun laitettu summa on?", "Var finns det avsatta beloppet?"],
@@ -1313,15 +1313,15 @@ const JOURNEY_MESSAGES = {
   "taxPlan.outside": ["Outside this account balance", "Tämän tilin saldon ulkopuolella", "Utanför saldot på det här kontot"],
   "taxPlan.date": ["Due date", "Eräpäivä", "Förfallodag"],
   "taxPlan.submit": ["Calculate monthly set-aside", "Laske kuukausittainen varaus", "Beräkna månatlig avsättning"],
-  "taxPlan.disclaimer": ["Unsaved scenario · Not tax advice", "Tallentamaton arvio · Ei veroneuvontaa", "Osparat scenario · Inte skatterådgivning"],
-  "taxPlan.resultTitle": ["Your declared planning scenario", "Itse ilmoittamasi suunnitteluarvio", "Ditt angivna planeringsscenario"],
+  "taxPlan.disclaimer": ["Unsaved scenario · Not tax advice", "Laskelmaa ei tallenneta · Ei veroneuvontaa", "Kalkylen sparas inte · Ingen skatterådgivning"],
+  "taxPlan.resultTitle": ["Your declared planning scenario", "Oma verolaskelmasi", "Din egen skattekalkyl"],
   "taxPlan.remaining": ["Still to set aside", "Vielä sivuun laitettava", "Återstår att avsätta"],
   "taxPlan.due": ["Due", "Eräpäivä", "Förfaller"],
-  "taxPlan.reference": ["Reference date", "Vertailupäivä", "Referensdatum"],
-  "taxPlan.balance": ["Observed balance", "Havaittu saldo", "Observerat saldo"],
+  "taxPlan.reference": ["Reference date", "Laskettu päivältä", "Räknat per"],
+  "taxPlan.balance": ["Observed balance", "Tilin saldo", "Kontots saldo"],
   "taxPlan.reserve": ["Reserve", "Puskuri", "Buffert"],
   "taxPlan.afterSetAside": ["Available above reserve after full set-aside", "Käytettävissä puskurin ja koko varauksen jälkeen", "Tillgängligt över bufferten efter full avsättning"],
-  "taxPlan.notAdvice": ["Not tax advice. No liability, rate, deduction or filing rule was calculated, and this scenario was not saved.", "Ei veroneuvontaa. Verovelkaa, verokantaa, vähennystä tai ilmoitussääntöä ei laskettu, eikä arviota tallennettu.", "Inte skatterådgivning. Ingen skatteskuld, skattesats, avdrags- eller deklarationsregel beräknades, och scenariot sparades inte."],
+  "taxPlan.notAdvice": ["Not tax advice. No liability, rate, deduction or filing rule was calculated, and this scenario was not saved.", "Ei veroneuvontaa. Verojen määrää, verokantaa tai vähennyksiä ei laskettu, eikä laskelmaa tallennettu.", "Ingen skatterådgivning. Skattebelopp, skattesats eller avdrag har inte räknats ut, och kalkylen sparades inte."],
   "coach.result.evidence": ["Source rows ({count})", "Lähderivit ({count})", "Källrader ({count})"],
   "coach.result.allActivity": ["All matching activity", "Kaikki vastaavat tapahtumat", "All matchande aktivitet"],
   "coach.result.statistics": ["Exact account result", "Tarkka tilitulos", "Exakt kontoresultat"],
@@ -1330,11 +1330,11 @@ const JOURNEY_MESSAGES = {
   "coach.result.largest": ["Largest outflow", "Suurin meno", "Största utflödet"],
   "coach.result.comparison": ["Exact period comparison", "Tarkka ajanjaksovertailu", "Exakt periodjämförelse"],
   "coach.result.delta": ["Difference: {amount}", "Ero: {amount}", "Skillnad: {amount}"],
-  "coach.result.unsaved": ["Unsaved scenario", "Tallentamaton arvio", "Osparat scenario"],
+  "coach.result.unsaved": ["Unsaved scenario", "Laskelmaa ei ole tallennettu", "Kalkylen är inte sparad"],
   "coach.result.adjustment": ["Reduce {category} by {percent}%", "Vähennä luokkaa {category} {percent} %", "Minska {category} med {percent} %"],
   "coach.result.actual": ["Observed spending", "Havaitut menot", "Observerade utgifter"],
   "coach.result.base": ["Adjustable base", "Muokattava perusta", "Justerbar bas"],
-  "coach.result.noMutation": ["Your actual transactions stay unchanged. This preview has not been saved.", "Toteutuneet tapahtumat eivät muutu. Arviota ei ole tallennettu.", "Dina faktiska transaktioner ändras inte. Översikten har inte sparats."],
+  "coach.result.noMutation": ["Your actual transactions stay unchanged. This preview has not been saved.", "Toteutuneet tapahtumasi eivät muutu, eikä laskelmaa ole tallennettu.", "Dina faktiska transaktioner ändras inte och kalkylen har inte sparats."],
   "coach.result.profile": ["Your three-basket breakdown", "Kolmen korin erittelysi", "Din uppdelning i tre korgar"],
   "coach.result.noScore": ["Description only — not a score or judgment", "Vain kuvaus — ei pisteytys tai arvio", "Endast beskrivning — inget betyg eller omdöme"],
   "coach.result.total": ["Total consumption", "Kulutus yhteensä", "Total konsumtion"],
@@ -1344,7 +1344,7 @@ const JOURNEY_MESSAGES = {
   "coach.result.paid": ["Paid", "Maksettu", "Betalat"],
   "coach.result.refunds": ["Refunds", "Palautukset", "Återbetalningar"],
   "coach.result.rows": ["View matching transactions", "Näytä vastaavat tapahtumat", "Visa matchande transaktioner"],
-  "coach.result.exploreScenario": ["Explore the scenario", "Tutki arviota", "Utforska scenariot"],
+  "coach.result.exploreScenario": ["Explore the scenario", "Tutki laskelmaa", "Utforska kalkylen"],
   "coach.filter.category": ["Category", "Luokka", "Kategori"],
   "coach.filter.role": ["Basket", "Kori", "Korg"],
   "coach.filter.transaction_type": ["Transaction type", "Tapahtumatyyppi", "Transaktionstyp"],
@@ -1401,7 +1401,7 @@ const EXPERIENCE_V2_MESSAGES = {
   ],
   "home.title": [
     "Make room for what matters.",
-    "Tilaa tärkeille asioille.",
+    "Rahaa sille, mikä on tärkeää.",
     "Gör plats för det viktiga."
   ],
   "home.help": [
@@ -1516,7 +1516,7 @@ const EXPERIENCE_V2_MESSAGES = {
   ],
   "wish.buffer": [
     "An emergency buffer",
-    "Vararahasto",
+    "Puskurirahasto",
     "En buffert"
   ],
   "wish.home": [
@@ -1606,7 +1606,7 @@ const EXPERIENCE_V2_MESSAGES = {
   ],
   "demo.kaiHelp": [
     "See how expected bills and a buffer change the picture.",
-    "Katso, miten odotetut laskut ja vararaha vaikuttavat.",
+    "Katso, miten odotetut laskut ja puskuri vaikuttavat.",
     "Se hur väntade räkningar och en buffert påverkar bilden."
   ],
   "demo.alex": [
@@ -1648,11 +1648,11 @@ const AGENT_MESSAGES = {
   'starter.compare': ['How do I compare with others my age?','Miten kulutukseni vertautuu ikäisiini?','Hur ser min konsumtion ut jämfört med andra i min ålder?'],
   'starter.baskets': ['Explain the three baskets','Selitä kolme koria','Förklara de tre korgarna'],
   'action.create_goal': ['Review goal','Tarkista tavoite','Granska mål'],
-  'action.save_scenario': ['Review spending scenario','Tarkista menoskenaario','Granska utgiftsscenario'],
+  'action.save_scenario': ['Review spending scenario','Tarkista menolaskelma','Granska kalkylen'],
   'action.open_view': ['Open view','Avaa näkymä','Öppna vy'],
   scenarioReview: ['Reduce {category} by {percent}% for {month}.','Vähennä luokan {category} menoja {percent} % ajalta {month}.','Minska {category} med {percent} % för {month}.'],
-  scenarioHelp: ['This saves a planning scenario. It does not change your transactions or move money.','Tämä tallentaa suunnitteluskenaarion. Se ei muuta tapahtumiasi eikä siirrä rahaa.','Detta sparar ett planeringsscenario. Det ändrar inte dina transaktioner och flyttar inga pengar.'],
-  confirmScenario: ['Confirm & save scenario','Vahvista ja tallenna skenaario','Bekräfta och spara scenario'],
+  scenarioHelp: ['This saves a planning scenario. It does not change your transactions or move money.','Tämä tallentaa laskelman. Se ei muuta tapahtumiasi eikä siirrä rahaa.','Det här sparar en kalkyl. Den ändrar inte dina transaktioner och flyttar inga pengar.'],
+  confirmScenario: ['Confirm & save scenario','Vahvista ja tallenna laskelma','Bekräfta och spara kalkylen'],
   'step.get_overview': ['Reviewed your account overview','Tarkastelin tilisi yleiskuvaa','Granskade kontoöversikten'],
   'step.spending_total': ['Counted spending in the selected period','Laskin valitun ajanjakson menot','Räknade utgifterna under vald period'],
   'step.compare_periods': ['Compared spending across the selected periods','Vertasin valittujen ajanjaksojen menoja','Jämförde utgifter mellan valda perioder'],
@@ -1662,13 +1662,13 @@ const AGENT_MESSAGES = {
   'step.spender_profile': ['Described your spending style from recent months','Kuvasin kulutustyyliäsi viime kuukausilta','Beskrev din utgiftsstil de senaste månaderna'],
   'step.irregular_buffer': ['Reviewed your Surprise must-pays','Tarkastelin yllättäviä pakollisia menojasi','Granskade dina oväntade måsten'],
   'step.safe_to_save': ['Estimated what could be saved before payday','Arvioin, paljonko voisi säästää ennen palkkapäivää','Uppskattade vad som kan sparas före lönedagen'],
-  'step.forecast_30_days': ['Reviewed the cash-flow forecast','Tarkastelin kassavirtaennustetta','Granskade kassaflödesprognosen'],
-  'step.what_if_reduce': ['Calculated an unsaved spending adjustment','Laskin tallentamattoman menomuutoksen','Beräknade en osparad utgiftsändring'],
-  'step.goal_plan': ['Calculated a goal plan without saving it','Laskin tavoitesuunnitelman tallentamatta sitä','Beräknade en målplan utan att spara den'],
+  'step.forecast_30_days': ['Reviewed the cash-flow forecast','Tarkastelin saldon 30 päivän ennustetta','Granskade saldoprognosen för 30 dagar'],
+  'step.what_if_reduce': ['Calculated an unsaved spending adjustment','Laskin, mitä menojen pienentäminen tekisi (ei tallennettu)','Räknade på en minskning av utgifterna (inte sparad)'],
+  'step.goal_plan': ['Calculated a goal plan without saving it','Laskin tavoitesuunnitelman tallentamatta sitä','Räknade fram en plan för målet utan att spara den'],
   'step.list_goals': ['Reviewed saved goals','Tarkastelin tallennettuja tavoitteita','Granskade sparade mål'],
   'step.payday_pattern': ['Reviewed salary timing and balances','Tarkastelin palkan ajoitusta ja saldoja','Granskade lönetidpunkter och saldon'],
   'step.recurring_payments': ['Reviewed recurring payments','Tarkastelin toistuvia maksuja','Granskade återkommande betalningar'],
-  'step.calculate': ['Calculated using sourced figures','Laskin lähteisiin perustuvilla luvuilla','Räknade med källbelagda siffror'],
+  'step.calculate': ['Calculated using sourced figures','Laskin tilisi luvuilla','Räknade med siffror från ditt konto'],
   'step.explain_concept': ['Checked the financial glossary','Tarkistin taloussanaston','Kontrollerade den ekonomiska ordlistan'],
   'step.propose_action': ['Prepared an optional next step','Valmistelin valinnaisen seuraavan askeleen','Förberedde ett valfritt nästa steg'],
 };
@@ -1686,14 +1686,14 @@ const RECAP_MESSAGES = {
   ai:['AI recap · based on recorded transactions','Tekoälykooste · perustuu kirjattuihin tapahtumiin','AI-sammanfattning · baserad på registrerade transaktioner'],
   recorded:['Account summary · based on recorded figures','Tiliyhteenveto · perustuu kirjattuihin lukuihin','Kontosammanfattning · baserad på registrerade siffror'],
   open:['Explore with Coach','Tutki valmentajan kanssa','Utforska med coachen'],
-  question:['Help me understand my income, spending and savings transfers in {period}.','Auta ymmärtämään tulojani, menojani ja säästösiirtojani: {period}.','Hjälp mig förstå mina inkomster, utgifter och överföringar till sparande under {period}.'],
-  followup:['Where did most of my spending go in {period}?','Mihin suurin osa menoistani meni: {period}?','Vad gick största delen av mina utgifter till under {period}?'],
+  question:['Help me understand my income, spending and savings transfers in {period}.','Auta minua ymmärtämään tulojani, menojani ja säästösiirtojani {period:in}.','Hjälp mig förstå mina inkomster, utgifter och överföringar till sparande under {period}.'],
+  followup:['Where did most of my spending go in {period}?','Mihin suurin osa menoistani meni {period:in}?','Vart gick största delen av mina utgifter under {period}?'],
 };
 for (const [key, values] of Object.entries(RECAP_MESSAGES)) { EN['home.recap.'+key]=values[0]; FI['home.recap.'+key]=values[1]; SV['home.recap.'+key]=values[2]; }
 
 // V3 strings (docs/COACH_V3_PLAN.md). Keys are exposed as 'v3.<key>'.
 const V3_MESSAGES = {
-  offlineAnswer:['Quick answer (offline)','Pikavastaus (offline)','Snabbsvar (offline)'],
+  offlineAnswer:['Quick answer (offline)','Pikavastaus','Snabbsvar'],
   retryAgent:['Try again with the AI coach','Yritä uudelleen tekoälyvalmentajalla','Försök igen med AI-coachen'],
   basketExamples:['This month: {items}','Tässä kuussa: {items}','Den här månaden: {items}'],
   'safe.week':['You can spend this week','Voit käyttää tällä viikolla','Du kan spendera den här veckan'],
@@ -1702,9 +1702,12 @@ const V3_MESSAGES = {
   'safe.bills':['Bills before payday, set aside','Laskut ennen palkkapäivää, varattu','Räkningar före lönedagen, avsatta'],
   'safe.reserve':['Small reserve, set aside','Pieni puskuri, varattu','Liten buffert, avsatt'],
   'safe.saving':['Your planned saving, set aside','Suunniteltu säästösi, varattu','Ditt planerade sparande, avsatt'],
-  'safe.save':['You could also move about {amount} to savings and still cover a typical run to payday.','Voisit myös siirtää noin {amount} säästöön ja silti kattaa tavalliset menot palkkapäivään asti.','Du kan också flytta ungefär {amount} till sparande och ändå klara vanliga utgifter fram till lönedagen.'],
-  'safe.shortfall':['Bills before payday are {amount} more than what is available after the reserve.','Laskut ennen palkkapäivää ylittävät käytettävissä olevan summan {amount}.','Räkningarna före lönedagen är {amount} mer än det som finns kvar efter bufferten.'],
-  'safe.steady':['Steady mode: a full month of Must-pays is kept as your reserve.','Vakaa tila: puskurina pidetään kuukauden pakolliset menot.','Stabilt läge: en hel månads fasta måsten hålls som buffert.'],
+  'safe.save':['The other {amount} is more than you usually spend, so it could be saved.','Loput {amount} on enemmän kuin tavallisesti käytät, joten sen voisi säästää.','Resten, {amount}, är mer än du brukar spendera, så det kan sparas.'],
+  'safe.everyday':['Everyday costs until payday, set aside','Arjen menot palkkapäivään asti, varattu','Vardagsutgifter fram till lönedagen, avsatta'],
+  'safe.buffer':['Surprise costs, set aside','Yllättävät menot, varattu','Oväntade utgifter, avsatta'],
+  'safe.free':['Free until payday','Vapaana palkkapäivään asti','Fritt fram till lönedagen'],
+  'safe.shortfall':['Bills, everyday costs and your cushion need {amount} more than you have before payday.','Laskut, arjen menot ja turvatyyny vievät {amount} enemmän kuin tililläsi on ennen palkkapäivää.','Räkningar, vardagsutgifter och marginalen kräver {amount} mer än du har före lönedagen.'],
+  'safe.steady':['Steady mode: a full month of Must-pays is kept as your reserve.','Rauhallinen tahti: puskuriksi varataan koko kuukauden pakolliset menot.','Lugnt tempo: en hel månads fasta måsten hålls undan som buffert.'],
   'safe.note':['Estimate from your recorded bills and pay dates, not a guarantee.','Arvio kirjattujen laskujen ja palkkapäivien perusteella, ei takuu.','Uppskattning utifrån registrerade räkningar och lönedagar, ingen garanti.'],
   'safe.noPayday':['No regular payday found, so this looks 30 days ahead.','Säännöllistä palkkapäivää ei löytynyt, joten arvio katsoo 30 päivää eteenpäin.','Ingen regelbunden lönedag hittades, så uppskattningen gäller 30 dagar framåt.'],
   'nav.profile':['Me','Minä','Jag'],
@@ -1713,14 +1716,15 @@ const V3_MESSAGES = {
   'cashflow.title':['Money in vs money out','Tulot ja menot','Pengar in och ut'],
   'cashflow.month':['Month','Kuukausi','Månad'],
   'cashflow.year':['Year','Vuosi','År'],
-  'cashflow.net':['Left over','Jäi jäljelle','Kvar'],
-  'cashflow.rate':['Saving rate','Säästöaste','Sparkvot'],
+  'cashflow.net':['Stayed in your account','Jäi tilille','Blev kvar på kontot'],
+  'cashflow.leftOver':['Left over after spending','Menojen jälkeen jäi','Kvar efter utgifter'],
+  'cashflow.rate':['Share of income left over','Osuus tuloista, joka jäi yli','Andel av inkomsten som blev över'],
   'cashflow.partial':['Partial period','Vajaa jakso','Ofullständig period'],
-  'cashflow.rateSame':['Your saving rate stayed at {to}% from {start} to {end}.','Säästöasteesi pysyi {to} %:ssa ({start}–{end}).','Din sparkvot låg kvar på {to} % ({start}–{end}).'],
-  'cashflow.rateChange':['Your saving rate went from {from}% in {start} to {to}% in {end}.','Säästöasteesi muuttui {from} %:sta ({start}) {to} %:iin ({end}).','Din sparkvot gick från {from} % ({start}) till {to} % ({end}).'],
-  'cashflow.ask':['How did my money in and out look in {period}?','Miltä tuloni ja menoni näyttivät ajanjaksolla {period}?','Hur såg mina inkomster och utgifter ut under {period}?'],
+  'cashflow.rateSame':['You kept {to} of your income after spending in both {start} and {end}.','Sekä {start} että {end} tuloistasi jäi menojen jälkeen {to}.','Både {start} och {end} blev {to} av inkomsten kvar efter utgifterna.'],
+  'cashflow.rateChange':['After spending, {from} of your income was left in {start} and {to} in {end}.','Menojen jälkeen tuloistasi jäi {from} ({start}) ja {to} ({end}).','Efter utgifterna blev {from} av inkomsten kvar ({start}) och {to} ({end}).'],
+  'cashflow.ask':['How did my money in and out look in {period}?','Miltä tuloni ja menoni näyttivät {period:in}?','Hur såg mina inkomster och utgifter ut under {period}?'],
   'cashflow.askLabel':['Ask coach about this period','Kysy valmentajalta tästä jaksosta','Fråga coachen om perioden'],
-  'trend.ask':['What happened with my spending in {month}?','Mitä menoilleni tapahtui: {month}?','Vad hände med mina utgifter i {month}?'],
+  'trend.ask':['What happened with my spending in {month}?','Mitä menoilleni tapahtui {month:in}?','Vad hände med mina utgifter i {month}?'],
   'goal.newTitle':['I can save this goal for you','Voin tallentaa tämän tavoitteen','Jag kan spara det här målet'],
   'goal.editTitle':['Change this goal','Muuta tavoitetta','Ändra målet'],
   'goal.intro':['Check the details and change anything before saving. Saving a goal does not move money.','Tarkista tiedot ja muuta niitä ennen tallennusta. Tavoitteen tallentaminen ei siirrä rahaa.','Kontrollera uppgifterna och ändra innan du sparar. Att spara ett mål flyttar inga pengar.'],
@@ -1738,9 +1742,9 @@ const V3_MESSAGES = {
   'profile.forgetTitle':['Forget everything in your profile?','Unohdetaanko kaikki profiilisi tiedot?','Glöm allt i din profil?'],
   'profile.forgetIntro':['Your coach will no longer use anything you shared. Transactions are not affected.','Valmentaja ei enää käytä mitään kertomaasi. Tapahtumiin tämä ei vaikuta.','Coachen använder inte längre något du har delat. Transaktionerna påverkas inte.'],
   'profile.noteTitle':["I'd like to note this in your profile",'Haluaisin merkitä tämän profiiliisi','Jag skulle vilja anteckna detta i din profil'],
-  'profile.migrate':['You have notes saved in this browser from earlier. Move them into your money profile?','Tähän selaimeen on tallennettu aiempia muistiinpanoja. Siirretäänkö ne raha-profiiliisi?','Du har tidigare anteckningar sparade i webbläsaren. Flytta dem till din ekonomiprofil?'],
+  'profile.migrate':['You have notes saved in this browser from earlier. Move them into your money profile?','Tähän selaimeen on tallennettu aiempia muistiinpanoja. Siirretäänkö ne talousprofiiliisi?','Du har tidigare anteckningar sparade i webbläsaren. Flytta dem till din ekonomiprofil?'],
   'profile.migrateAction':['Move my notes','Siirrä muistiinpanot','Flytta anteckningarna'],
-  'onboarding.saved':['Saved to your money profile. You can change it anytime under Me.','Tallennettu raha-profiiliisi. Voit muuttaa tietoja milloin vain kohdassa Minä.','Sparat i din ekonomiprofil. Du kan ändra det när som helst under Jag.'],
+  'onboarding.saved':['Saved to your money profile. You can change it anytime under Me.','Tallennettu talousprofiiliisi. Voit muuttaa tietoja milloin vain kohdassa Minä.','Sparat i din ekonomiprofil. Du kan ändra det när som helst under Jag.'],
   'tax.eyebrow':['Taxes','Verot','Skatter'],
   'tax.title':['My taxes','Omat veroni','Mina skatter'],
   'tax.explainer':['Your account only shows salary after tax, because income tax is withheld by your tax card. Add your tax card details to follow it.','Tililläsi näkyy vain verojen jälkeinen palkka, koska tulovero pidätetään verokortin mukaan. Lisää verokorttisi tiedot seurataksesi sitä.','Kontot visar bara lön efter skatt eftersom inkomstskatten dras enligt skattekortet. Lägg till dina skattekortsuppgifter för att följa den.'],
@@ -1752,7 +1756,7 @@ const V3_MESSAGES = {
   'tax.edit':['Edit my tax details','Muokkaa verotietojani','Redigera mina skatteuppgifter'],
   'tax.footer':['Estimate from what you entered. Your tax decision in MyTax is the official source.','Arvio antamiesi tietojen perusteella. OmaVeron veropäätös on virallinen lähde.','Uppskattning utifrån det du angett. Beskattningsbeslutet i MinSkatt är den officiella källan.'],
   'vat.eyebrow':['Did you know?','Tiesitkö?','Visste du?'],
-  'vat.line':['About {vat} of the {spent} you spent on {category} was VAT ({rate}).','Noin {vat} luokan {category} {spent} menoistasi oli arvonlisäveroa ({rate}).','Ungefär {vat} av de {spent} du lade på {category} var moms ({rate}).'],
+  'vat.line':['About {vat} of the {spent} you spent on {category} was VAT ({rate}).','{category}: menoistasi {spent} noin {vat} oli arvonlisäveroa ({rate:pct}).','{category}: av dina utgifter på {spent} var ungefär {vat} moms ({rate:pct}).'],
   'vat.note':['VAT is already inside shop prices; the shop pays it to the state.','Arvonlisävero sisältyy jo hintoihin; kauppa tilittää sen valtiolle.','Momsen ingår redan i priset; butiken betalar den till staten.'],
   'year.saved':['Saved to your profile.','Tallennettu profiiliisi.','Sparat i din profil.'],
   'year.ask':['Tell me about my {year} in money.','Kerro minulle rahavuodestani {year}.','Berätta om mitt {year} i pengar.'],
@@ -1803,8 +1807,8 @@ const V3_COMPONENT_MESSAGES = {
   'agent.action.delete_goal':['Review goal removal','Tarkista tavoitteen poisto','Granska borttagningen'],
   'agent.action.update_profile':['Review what to note','Tarkista muistiin merkittävä','Granska vad som antecknas'],
   'agent.action.open_year_review':['Open my year in money','Avaa rahavuoteni','Öppna mitt år i pengar'],
-  'agent.step.explore':['Explored your spending patterns','Tutkin kulutuksesi rytmiä','Utforskade dina utgiftsmönster'],
-  'agent.step.cashflow_summary':['Compared money in and out over time','Vertasin tuloja ja menoja ajan yli','Jämförde pengar in och ut över tid'],
+  'agent.step.explore':['Explored your spending patterns','Tutkin kulutustottumuksiasi','Utforskade dina utgiftsmönster'],
+  'agent.step.cashflow_summary':['Compared money in and out over time','Vertasin tulojen ja menojen kehitystä','Jämförde inkomster och utgifter över tid'],
   'agent.step.get_profile':['Checked what you have shared with me','Tarkistin, mitä olet kertonut','Kontrollerade vad du har delat'],
   'agent.step.propose_profile_update':['Prepared something to note, for your review','Valmistelin muistiinpanon tarkistettavaksesi','Förberedde en anteckning för din granskning'],
   'agent.step.tax_overview':['Reviewed your tax details','Tarkastelin verotietojasi','Granskade dina skatteuppgifter'],
@@ -1813,6 +1817,100 @@ const V3_COMPONENT_MESSAGES = {
   'agent.step.year_review':['Looked back at your year','Katsoin vuottasi taaksepäin','Såg tillbaka på ditt år'],
 };
 for (const [key, values] of Object.entries(V3_COMPONENT_MESSAGES)) { EN[key]=values[0]; FI[key]=values[1]; SV[key]=values[2]; }
+
+// V4 lane F (docs/V4_SPEC.md). Plain English copy and one term per concept:
+// Money in · Spent · To savings · Goal · Safety cushion. FI/SV values of existing keys belong to the language pass,
+// so English rewrites of existing keys live here as overrides instead of editing the shared lines above.
+const V4_EN_COPY = {
+  'coach.verified': 'Numbers come from your account. Nothing changes without your OK.',
+  'coach.offlineMode': 'Quick answers · Numbers come from your account · Nothing changes without your OK',
+  'coach.aiMode': 'AI coach · Numbers come from your account · Nothing changes without your OK',
+  'evidence.deterministic': 'Checked against your transactions',
+  'evidence.formula': 'How we calculated this',
+  'evidence.goalFormula': 'What is left = goal minus what you have saved. Monthly amount = what is left ÷ months until the date. Your monthly room comes from the last six full months, after bills. Transfers to savings are counted separately.',
+  'evidence.calculationSources': 'Payments behind this',
+  'evidence.historySources': 'Past months we compared with',
+  'evidence.assumptions': 'What we assumed',
+  'goal.capacity': 'After bills and your usual spending, you have about {amount} left each month.',
+  'goal.reserveDetail': 'We keep {reserve} untouched as your safety cushion. You have {upfront} more in your account.',
+  'goal.gap': 'You would need to put aside {amount} a month. A later date makes that smaller.',
+  'goal.required': 'a month',
+  'goal.linked': '{amount} a month from your spending change is set towards this goal. No money is moved.',
+  'goal.assumptions': 'How we worked this out',
+  'goal.reserve': 'Safety cushion to keep',
+  'goal.disclosure': 'This is a plan. It does not move any money.',
+  'goal.intro': 'A trip, a safety cushion, something just for you.',
+  'goal.template.buffer': 'Safety cushion',
+  'feedback.goal': 'Your goal is saved. The plan keeps your safety cushion untouched.',
+  'trends.description': 'Spending in {count} full months.',
+  'chart.noAverage': 'No average yet',
+  'common.scenario': 'Estimate',
+  'money.income': 'Money in',
+  'safe.reserve': 'Safety cushion kept aside',
+  'safe.demoReserve': '{amount} is kept aside as your safety cushion.',
+  'safe.everydayAllowance': 'Usual everyday spending until then',
+  'safe.assumption.0': 'Money you expect to get is only counted once it arrives.',
+  'safe.assumption.1': 'Bills and transfers that come back regularly are held back.',
+  'safe.assumption.2': 'We also hold back a margin for everyday spending, based on your busier months.',
+  'v3.safe.reserve': 'Safety cushion, kept aside',
+  'v3.safe.shortfall': 'Bills before payday are {amount} more than what is left after your safety cushion.',
+  'v3.safe.steady': 'Steady mode: a full month of Must-pays is kept as your safety cushion.',
+  'forecast.subtitle': 'A 30-day estimate based on the bills and income that repeat in your history.',
+  'vat.coverage': 'Spending matched to a VAT rate',
+  'vat.coverageNote': 'Shows how much of your spending we could match to a VAT rate. It does not say how exact the estimate is.',
+  'vat.method': 'VAT inside a price = price × rate ÷ (1 + rate), worked out for each purchase from the kind of shop.',
+  'vat.mapping.direct_mcc': 'Rate from the kind of shop',
+  'vat.mapping.broad_mcc_estimate': 'Estimated from the kind of shop',
+  'vat.mapping.unmapped': 'No VAT rate found',
+  'vat.source.unmapped': 'No VAT rate found',
+  'vat.limitation.ambiguous': 'Some shops sell things at different VAT rates, so a few purchases have no rate.',
+  'investment.title': 'Money moved to savings',
+  'v2.spending.investments': 'Money moved to savings',
+  'investment.coverageLimited': 'Only {count} months of history are available for this range.',
+  'chart.cashflow.spending': 'Spent',
+  'chart.cashflow.bar': '{label}: money in {income}, spent {spending}, left over {net}',
+  'chart.cashflow.netNote': 'Left over = money in − spent − moved to savings',
+  'home.recap.income': 'Money in was {amount}.',
+  'taxPlan.help': 'This estimate is not saved. It combines what you enter with your balance and safety cushion.',
+  'taxPlan.disclaimer': 'Not saved · Not tax advice',
+  'taxPlan.resultTitle': 'Your tax set-aside plan',
+  'taxPlan.reference': 'Worked out on',
+  'taxPlan.reserve': 'Safety cushion',
+  'taxPlan.afterSetAside': 'Left above your safety cushion after setting it all aside',
+  'taxPlan.notAdvice': 'Not tax advice. We did not calculate any tax, rate or deduction, and this estimate was not saved.',
+  'coach.result.unsaved': 'Not saved',
+  'coach.result.exploreScenario': 'Explore this change',
+  'coach.question.buffer': 'Plan a safety cushion',
+  'agent.action.save_scenario': 'Review this change',
+  'agent.scenarioHelp': 'This saves a plan. It does not change your transactions or move money.',
+  'agent.confirmScenario': 'Confirm and save',
+  'v2.wish.buffer': 'A safety cushion',
+  'vat.gross': 'Spending this month',
+  'coach.otherLanguage': 'Ask in English, Finnish or Swedish.',
+  'vat.disclaimer': 'Worked out from the kind of shop for each purchase. This is not a personal tax calculation.',
+};
+for (const [key, value] of Object.entries(V4_EN_COPY)) {
+  if (!(key in EN)) throw new Error('V4 EN override for unknown key ' + key);
+  EN[key] = value;
+}
+// New V4 keys (EN, FI, SV).
+const V4_MESSAGES = {
+  'chat.reset.month': ['Started a new chat for {period}.', 'Aloitettiin uusi keskustelu: {period}.', 'Ett nytt samtal för {period} har börjat.'],
+  'chat.reset.persona': ['Started a new chat for {name}.', 'Aloitettiin uusi keskustelu: {name}.', 'Ett nytt samtal för {name} har börjat.'],
+  'chat.reset.language': ['Started a new chat in English.', 'Aloitettiin uusi keskustelu suomeksi.', 'Ett nytt samtal på svenska har börjat.'],
+  'chat.reset.reset': ['The demo was reset, so the chat started again.', 'Demo palautettiin alkutilaan, joten keskustelu alkoi alusta.', 'Demon återställdes, så samtalet började om.'],
+  'investment.sources': ['Transfers behind this', 'Siirrot tämän takana', 'Överföringarna bakom detta'],
+  'vat.source.shop': ['Kind of shop', 'Kauppatyyppi', 'Typ av butik'],
+  'vat.rateRowOne': ['{rate} · 1 purchase · ≈ {amount}', '{rate} · 1 ostos · ≈ {amount}', '{rate} · 1 köp · ≈ {amount}'],
+  'spending.period.label': ['Period', 'Jakso', 'Period'],
+  'spending.period.month': ['Month', 'Kuukausi', 'Månad'],
+  'spending.period.3': ['3 months', '3 kk', '3 mån'],
+  'spending.period.6': ['6 months', '6 kk', '6 mån'],
+  'spending.period.12': ['12 months', '12 kk', '12 mån'],
+  'month.previous': ['Previous month', 'Edellinen kuukausi', 'Föregående månad'],
+  'month.next': ['Next month', 'Seuraava kuukausi', 'Nästa månad'],
+};
+for (const [key, values] of Object.entries(V4_MESSAGES)) { EN[key] = values[0]; FI[key] = values[1]; SV[key] = values[2]; }
 
 export const MESSAGES = Object.freeze({
   en: Object.freeze(EN),
@@ -1872,9 +1970,33 @@ function chooseBrowserLocale(languages) {
   return 'en';
 }
 
-function interpolate(template, values) {
-  return String(template).replace(/\{([A-Za-z0-9_]+)\}/g, (match, key) =>
-    Object.prototype.hasOwnProperty.call(values, key) ? String(values[key]) : match
+// Finnish month labels ("syyskuu 2026") and years take the inessive ("syyskuussa 2026",
+// "vuonna 2026") when a template writes {name:in}. Other values and locales are left as they are.
+function finnishInessive(text) {
+  const month = /^(\S*kuu)(\s+\d{4})?$/i.exec(text);
+  if (month) return month[1] + 'ssa' + (month[2] || '');
+  if (/^\d{4}$/.test(text)) return 'vuonna ' + text;
+  return text;
+}
+
+function formatValue(value, locale, filter) {
+  // Decimal numbers follow the language: 9.6 → "9,6" in Finnish and Swedish.
+  // The API sends some percentages as strings ("9.6"), so plain decimal strings count too.
+  const decimalText = typeof value === 'string' && /^-?\d+\.\d+$/.test(value.trim());
+  let text = locale !== 'en' && ((typeof value === 'number' && Number.isFinite(value) && !Number.isInteger(value)) || decimalText)
+    ? new Intl.NumberFormat(intlLocale(locale), {maximumFractionDigits: 2, useGrouping: false}).format(Number(value))
+    : String(value);
+  if (filter === 'in' && locale === 'fi') text = finnishInessive(text);
+  // Rate labels from the server ("13.5% and 25.5%") get a decimal comma, a spaced % and a local "and".
+  if (filter === 'pct' && locale !== 'en') {
+    text = text.replace(/(\d)\.(\d)/g, '$1,$2').replace(/\s*%/g, ' %').replace(/\s+(?:and|&)\s+/g, locale === 'fi' ? ' ja ' : ' och ');
+  }
+  return text;
+}
+
+export function interpolate(template, values, locale = 'en') {
+  return String(template).replace(/\{([A-Za-z0-9_]+)(?::([a-z]+))?\}/g, (match, key, filter) =>
+    Object.prototype.hasOwnProperty.call(values, key) ? formatValue(values[key], normalizeLocale(locale), filter) : match
   );
 }
 
@@ -1906,7 +2028,91 @@ export function createI18n(options = {}) {
     },
     t(key, values = {}) {
       const template = catalog[current]?.[key] ?? catalog.en?.[key] ?? key;
-      return interpolate(template, values);
+      return interpolate(template, values, current);
     },
   };
 }
+
+/* ---------------------------------------------------------------- server sentences (FI / SV)
+ * Finnish and Swedish versions of short English sentences that the server still sends as
+ * plain text (safe-to-spend and forecast assumptions). Matching is by sentence, never by
+ * position, so a reordered or new server list can't put the wrong translation on a line.
+ * Unknown sentences are returned unchanged.
+ */
+const serverDecimal = value => String(value).replace('.', ',');
+
+// [pattern, fi, sv]; fi/sv may be functions of the RegExp match.
+const SERVER_SENTENCES = [
+  [/^Expected income is excluded until it arrives\.?$/,
+    'Tulevia tuloja ei lasketa mukaan ennen kuin ne ovat tilillä.',
+    'Väntade inkomster räknas inte med förrän de har kommit in.'],
+  [/^Taxes or obligations not present in the transaction history or your profile are not inferred\.?$/,
+    'Veroja tai muita maksuja, jotka eivät näy tapahtumissa tai profiilissasi, ei arvata.',
+    'Skatter eller andra betalningar som inte syns i transaktionerna eller i din profil gissas inte.'],
+  [/^No regular salary found, so a 30-day horizon is used instead of payday\.?$/,
+    'Säännöllistä palkkaa ei löytynyt, joten arvio katsoo 30 päivää eteenpäin.',
+    'Ingen regelbunden lön hittades, så uppskattningen gäller 30 dagar framåt.'],
+  [/^Next payday uses the usual salary day \((\d{1,2})\), moved to the month end in shorter months\.?$/,
+    m => `Seuraava palkkapäivä on tavallinen palkkapäiväsi, kuun ${m[1]}. päivä (lyhyempinä kuukausina kuun viimeinen päivä).`,
+    m => `Nästa lönedag är din vanliga lönedag, den ${m[1]} i månaden (i kortare månader den sista dagen).`],
+  [/^Declared debts and investing count once this pay cycle.*$/,
+    'Kertomasi lainat ja sijoitukset lasketaan kerran tällä palkkajaksolla. Samaa maksua ei vähennetä kahdesti.',
+    'Lån och investeringar som du har berättat om räknas en gång under den här löneperioden. Samma betalning dras inte av två gånger.'],
+  [/^Steady mode: the reserve covers at least one month of Must-pays.*$/,
+    'Rauhallinen tahti: puskuri kattaa vähintään kuukauden pakolliset menot, eikä säästöä suunnitella.',
+    'Lugnt tempo: bufferten täcker minst en månads fasta måsten och inget sparande planeras.'],
+  [/^Steady mode: no saving is planned this pay cycle\.?$/,
+    'Rauhallinen tahti: tällä palkkajaksolla ei suunnitella säästöä.',
+    'Lugnt tempo: inget sparande planeras under den här löneperioden.'],
+  [/^No saving target set, so nothing is set aside for saving\.?$/,
+    'Säästötavoitetta ei ole asetettu, joten säästöön ei varata mitään.',
+    'Inget sparmål är satt, så inget läggs undan för sparande.'],
+  [/^Saving target set, but no salary was found to apply it to\.?$/,
+    'Säästötavoite on asetettu, mutta palkkaa, josta säästää, ei löytynyt.',
+    'Det finns ett sparmål, men ingen lön att spara från hittades.'],
+  [/^([\d.]+)% saving target of your last salary.*$/,
+    m => `Säästötavoite: ${serverDecimal(m[1])} % viimeisestä palkastasi.`,
+    m => `Sparmål: ${serverDecimal(m[1])} % av din senaste lön.`],
+  [/^Safe to save needs at least thirty days of history.*$/,
+    'Säästövaran arvioon tarvitaan vähintään 30 päivän tapahtumat, joten se näytetään nollana.',
+    'Sparutrymmet kräver minst 30 dagars historik, så det visas som noll.'],
+  [/^Safe to save keeps back a busy.*month of everyday spending.*$/,
+    'Säästövaraa laskettaessa arjen menoihin jätetään palkkapäivään asti sen verran kuin kalliimpana kuukautena yleensä kuluu.',
+    'Sparutrymmet lämnar kvar så mycket som en dyrare månad av vardagsutgifter brukar kosta, fram till lönedagen.'],
+  [/^Qualified recurring patterns use robust median dates and amounts\.?$/,
+    'Toistuvat maksut arvioidaan niiden tavallisen päivän ja summan mukaan.',
+    'Återkommande betalningar uppskattas utifrån deras vanliga datum och belopp.'],
+  [/^Unscheduled consumption uses historical 30-day variation.*$/,
+    'Muut menot arvioidaan aiemman 30 päivän vaihtelun perusteella.',
+    'Övriga utgifter uppskattas utifrån hur de har varierat under tidigare 30-dagarsperioder.'],
+  [/^No unconfirmed income or tax inference\.?$/,
+    'Vahvistamattomia tuloja tai veroja ei arvata.',
+    'Obekräftade inkomster eller skatter gissas inte.'],
+  [/^Transfers affect balance and remain separate from consumption\.?$/,
+    'Siirrot vaikuttavat saldoon, mutta niitä ei lasketa kulutukseksi.',
+    'Överföringar påverkar saldot men räknas inte som konsumtion.'],
+  [/^Median amount and calendar day from up to six complete months\.?$/,
+    'Tavallinen summa ja päivä enintään kuuden täyden kuukauden ajalta.',
+    'Vanligt belopp och datum från högst sex hela månader.'],
+  [/^Salary\/housing seed recurrence; utilities are a monthly envelope\.?$/,
+    'Palkka ja asumismenot toistuvat kuukausittain; laskut arvioidaan kuukausisummana.',
+    'Lön och boende återkommer varje månad; räkningar uppskattas som en månadssumma.'],
+];
+
+/**
+ * @param {string} text   English sentence from the server
+ * @param {string} locale 'en' | 'fi' | 'sv'
+ * @returns {string} the FI/SV sentence when known, otherwise text unchanged
+ */
+export function localizeServerText(text, locale) {
+  if (typeof text !== 'string' || (locale !== 'fi' && locale !== 'sv')) return text;
+  const trimmed = text.trim();
+  for (const [pattern, fi, sv] of SERVER_SENTENCES) {
+    const match = pattern.exec(trimmed);
+    if (!match) continue;
+    const value = locale === 'fi' ? fi : sv;
+    return typeof value === 'function' ? value(match) : value;
+  }
+  return text;
+}
+

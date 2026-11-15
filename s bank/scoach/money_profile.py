@@ -10,7 +10,8 @@ Single-value keys keep at most one active entry; saving a new one replaces
 (deletes) the previous entry in the same audited mutation:
 ``life_stage``, ``household``, ``income_stability``, ``saving_rate_target_pct``,
 ``emergency_fund_target_months``, ``regular_investing``, ``risk_attitude``,
-``coaching_style``, ``protected_categories``.
+``coaching_style``, ``protected_categories``, and the optional plans
+``plan_mortgage`` and ``plan_tax`` (see ``plans.py``).
 
 Per-year keys keep one active entry per year (saving replaces the same year):
 ``tax`` (by ``tax_year``) and ``year_review`` (by ``year``).
@@ -36,6 +37,7 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 
 from .db import ensure_profile_schema
+from .labels import category_label, day_ordinal, euros, locale_or_en, short_date
 from .ledger import account_scope, fact_id, month_bounds, shift_month, transactions
 from .money import median_cents, rounded
 from .state import mutate, new_id, now
@@ -49,7 +51,8 @@ SOURCE_LABELS = {
 }
 SINGLE_KEYS = ('life_stage', 'household', 'income_stability', 'saving_rate_target_pct',
                'emergency_fund_target_months', 'regular_investing', 'risk_attitude',
-               'coaching_style', 'protected_categories')
+               'coaching_style', 'protected_categories', 'plan_mortgage', 'plan_tax')
+PLAN_KEYS = ('plan_mortgage', 'plan_tax')
 MULTI_KEYS = ('debts', 'upcoming', 'life_event', 'note')
 PER_YEAR_KEYS = {'tax': 'tax_year', 'year_review': 'year'}
 KEYS = SINGLE_KEYS + MULTI_KEYS + tuple(PER_YEAR_KEYS)
@@ -63,6 +66,9 @@ DEBT_TYPES = ('mortgage', 'student_loan', 'car_loan', 'consumer_credit', 'other'
 LIFE_EVENT_TYPES = ('job_loss', 'income_drop', 'large_loss', 'new_child', 'moving', 'other')
 STEADY_EVENT_TYPES = ('job_loss', 'income_drop', 'large_loss')
 TAX_DECISIONS = ('refund', 'back_tax', 'none')
+LOAN_TYPES = ('annuity', 'equal_principal')
+REFERENCE_RATES = ('euribor_12m', 'euribor_6m', 'euribor_3m', 'fixed', 'other')
+PAID_AS = ('housing_payment', 'loan_payment', 'other')
 STEADY_MONTHS = 6
 NOTE_MAX = 500
 ENTRY_NOTE_MAX = 500
@@ -72,6 +78,73 @@ LOCAL_FOCUS_TEXT = {
     'home': 'A place of my own', 'vehicle': 'Getting around',
     'flexibility': 'More everyday freedom',
 }
+# Customer-facing text for "Things I noticed" (profile_suggestions), per locale.
+# Questions are warm and always end as a question; notes are written in the first person
+# because they are saved as the customer's own note when confirmed.
+SUGGESTION_TEXT = {
+    'salary_varies': {'en': 'arrives on different days each month', 'fi': 'tulee eri päivinä eri kuukausina',
+                      'sv': 'kommer på olika dagar varje månad'},
+    'salary_usual': {'en': 'usually arrives around the {day} of the month', 'fi': 'tulee yleensä kuun {day} päivän tienoilla',
+                     'sv': 'brukar komma runt den {day} i månaden'},
+    'salary_question': {'en': 'Your salary {when} and is about {amount} after tax. Is that right?',
+                        'fi': 'Palkkasi {when}, ja se on verojen jälkeen noin {amount}. Pitääkö tämä paikkansa?',
+                        'sv': 'Din lön {when} och är ungefär {amount} efter skatt. Stämmer det?'},
+    'salary_note': {'en': 'My salary {when} and is about {amount} a month after tax.',
+                    'fi': 'Palkkani {when}, ja se on verojen jälkeen noin {amount} kuukaudessa.',
+                    'sv': 'Min lön {when} och är ungefär {amount} i månaden efter skatt.'},
+    'salary_evidence': {'en': 'Salary payments in the last {months} complete months',
+                        'fi': 'palkat viimeiseltä {months} täydeltä kuukaudelta',
+                        'sv': 'löneinsättningar under de senaste {months} hela månaderna'},
+    'steady_question': {'en': 'Your salary has been about the same every month for the last six months. Would you call your income steady?',
+                        'fi': 'Palkkasi on ollut viimeiset kuusi kuukautta suunnilleen sama joka kuukausi. Ovatko tulosi mielestäsi tasaiset?',
+                        'sv': 'Din lön har varit ungefär densamma varje månad det senaste halvåret. Skulle du säga att din inkomst är jämn?'},
+    'steady_evidence': {'en': 'Monthly salary totals varied by less than 10%', 'fi': 'kuukausipalkka vaihteli alle 10\u00a0%',
+                        'sv': 'månadslönen varierade mindre än 10\u00a0%'},
+    'housing_question': {'en': 'You pay about {amount} for housing each month, usually around the {day}. Is this rent or a mortgage payment?',
+                         'fi': 'Maksat asumisesta noin {amount} kuukaudessa, yleensä kuun {day} päivän tienoilla. Onko se vuokraa vai asuntolainaa?',
+                         'sv': 'Du betalar ungefär {amount} för boendet varje månad, oftast runt den {day}. Är det hyra eller bolån?'},
+    'housing_evidence': {'en': 'Housing payments in the last {months} complete months',
+                         'fi': 'asumismenot viimeiseltä {months} täydeltä kuukaudelta',
+                         'sv': 'boendebetalningar under de senaste {months} hela månaderna'},
+    'rent_note': {'en': 'I pay about {amount} a month in rent.', 'fi': 'Maksan vuokraa noin {amount} kuukaudessa.',
+                  'sv': 'Jag betalar ungefär {amount} i hyra per månad.'},
+    'rent_label': {'en': 'It is rent', 'fi': 'Se on vuokraa', 'sv': 'Det är hyra'},
+    'mortgage_label': {'en': 'It is a mortgage', 'fi': 'Se on asuntolainaa', 'sv': 'Det är bolån'},
+    'investing_all': {'en': 'each of the last six months', 'fi': 'joka kuukausi viimeisen puolen vuoden ajan',
+                      'sv': 'varje månad det senaste halvåret'},
+    'investing_some': {'en': '{months} of the last six months', 'fi': '{months} kuukautena viimeisen puolen vuoden aikana',
+                       'sv': '{months} av de senaste sex månaderna'},
+    'investing_question': {'en': 'You moved about {amount} to investments in {span}. Do you invest a fixed amount every month?',
+                           'fi': 'Siirsit sijoituksiin noin {amount} {span}. Sijoitatko joka kuukausi saman summan?',
+                           'sv': 'Du flyttade ungefär {amount} till investeringar {span}. Investerar du ett fast belopp varje månad?'},
+    'investing_evidence': {'en': 'Investment deposits in the last {months} complete months',
+                           'fi': 'sijoitussiirrot viimeiseltä {months} täydeltä kuukaudelta',
+                           'sv': 'investeringsöverföringar under de senaste {months} hela månaderna'},
+    'loan_question': {'en': 'There is a regular payment of about {amount} every month ({category}). Is this a loan? If so, what kind?',
+                      'fi': 'Tililtäsi lähtee joka kuukausi noin {amount} ({category}). Onko se lainanmaksu? Jos on, millainen laina?',
+                      'sv': 'Varje månad går ungefär {amount} från ditt konto ({category}). Är det ett lån? I så fall, vilket slags lån?'},
+    'loan_evidence': {'en': 'Fixed monthly payments in {category}', 'fi': 'samansuuruiset kuukausimaksut, {category}',
+                      'sv': 'lika stora månadsbetalningar, {category}'},
+    'missing_question': {'en': 'Your salary has not arrived this month. Has something changed?',
+                         'fi': 'Palkkaasi ei ole tullut tässä kuussa. Onko jotain muuttunut?',
+                         'sv': 'Din lön har inte kommit den här månaden. Har något förändrats?'},
+    'missing_evidence': {'en': 'Last salary payment was {days} days ago, on {date}',
+                         'fi': 'edellinen palkka tuli {days} päivää sitten, {date}',
+                         'sv': 'senaste lönen kom för {days} dagar sedan, {date}'},
+    'lower_question': {'en': 'Your salary in the last three months has been about {recent} a month, compared with about {baseline} before. Has something changed?',
+                       'fi': 'Palkkasi on ollut viimeiset kolme kuukautta noin {recent} kuukaudessa, kun se aiemmin oli noin {baseline}. Onko jotain muuttunut?',
+                       'sv': 'Din lön har de senaste tre månaderna varit ungefär {recent} i månaden, jämfört med ungefär {baseline} tidigare. Har något förändrats?'},
+    'lower_evidence': {'en': 'Salary in the last three complete months compared with the six months before',
+                       'fi': 'palkka kolmelta viime kuukaudelta verrattuna kuuteen sitä edeltäneeseen',
+                       'sv': 'lönen de tre senaste hela månaderna jämfört med de sex månaderna före'},
+    'job_loss_label': {'en': 'I lost my job', 'fi': 'Menetin työpaikkani', 'sv': 'Jag har förlorat jobbet'},
+}
+
+
+def _say(locale, key, **values):
+    return SUGGESTION_TEXT[key][locale].format(**values)
+
+
 _MONTH_RE = re.compile(r'^\d{4}-(0[1-9]|1[0-2])$')
 _DATE_RE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
 _CATEGORY_RE = re.compile(r"^[A-Za-zÀ-ɏ][A-Za-zÀ-ɏ0-9 &'/,.-]{0,39}$")
@@ -266,6 +339,43 @@ def _v_tax(value):
     return result
 
 
+def _v_plan_mortgage(value):
+    optional = ('remaining_months', 'monthly_payment_cents', 'payment_day', 'next_rate_check', 'paid_as')
+    value = _fields(value, 'plan_mortgage', ('principal_cents', 'loan_type', 'reference_rate', 'reference_rate_bp', 'margin_bp'), optional)
+    result = {'principal_cents': _int(value['principal_cents'], 'principal_cents', 100, 10_000_000_000),
+              'loan_type': _choice(value['loan_type'], 'loan_type', LOAN_TYPES),
+              'reference_rate': _choice(value['reference_rate'], 'reference_rate', REFERENCE_RATES),
+              # Euribor has been below zero (2015-2022), so the reference rate may be negative.
+              'reference_rate_bp': _int(value['reference_rate_bp'], 'reference_rate_bp', -1000, 2000),
+              'margin_bp': _int(value['margin_bp'], 'margin_bp', 0, 2000)}
+    if 'remaining_months' in value:
+        result['remaining_months'] = _int(value['remaining_months'], 'remaining_months', 1, 600)
+    if 'monthly_payment_cents' in value:
+        result['monthly_payment_cents'] = _int(value['monthly_payment_cents'], 'monthly_payment_cents', 100, 100_000_000)
+    if 'payment_day' in value:
+        result['payment_day'] = _int(value['payment_day'], 'payment_day', 1, 31)
+    if 'next_rate_check' in value:
+        result['next_rate_check'] = _month(value['next_rate_check'], 'next_rate_check')
+    if 'paid_as' in value:
+        result['paid_as'] = _choice(value['paid_as'], 'paid_as', PAID_AS)
+    if 'remaining_months' not in result and 'monthly_payment_cents' not in result:
+        _fail('Give the years left on the loan or the monthly payment')
+    if result['loan_type'] == 'equal_principal' and 'remaining_months' not in result:
+        _fail('An equal-principal loan needs the years left')
+    return result
+
+
+def _v_plan_tax(value):
+    value = _fields(value, 'plan_tax', ('on',), ('expected_back_tax_cents', 'expected_refund_cents'))
+    if value['on'] is not True:
+        _fail('on must be true; delete the plan to switch it off')
+    result = {'on': True}
+    for field in ('expected_back_tax_cents', 'expected_refund_cents'):
+        if field in value:
+            result[field] = _int(value[field], field, 0, 100_000_000)
+    return result
+
+
 VALIDATORS = {
     'life_stage': lambda v: _choice(v, 'life_stage', LIFE_STAGES),
     'household': _v_household,
@@ -282,6 +392,8 @@ VALIDATORS = {
     'note': _v_note,
     'year_review': _v_year_review,
     'tax': _v_tax,
+    'plan_mortgage': _v_plan_mortgage,
+    'plan_tax': _v_plan_tax,
 }
 
 
@@ -473,8 +585,17 @@ def planning_inputs(profile, as_of=None):
       'debts': [{'type', 'monthly_payment_cents', 'remaining_cents'|None}],
       'debts_monthly_total_cents': int,
       'regular_investing': {'active': bool, 'monthly_cents': int|None}|None,
-      'risk_attitude': str|None, 'coaching_mode': 'normal'|'steady' }.
+      'risk_attitude': str|None, 'coaching_mode': 'normal'|'steady',
+      'plan_set_asides': [{'kind': 'loan'|'tax', 'plan': 'mortgage'|'tax', 'label',
+                           'amount_cents' (per month), 'day_of_month'|None, 'until'|None,
+                           'dedupe_hint': {'transaction_type', 'amount_cents'}|None}],
+      'plan_set_asides_monthly_total_cents': int,
+       'protected_categories': [str] (kept with everyday costs in the spending plan) }.
+    plan_set_asides come from the plans the customer switched on (plans.py); hold
+    each back once per pay cycle, skipping a 'loan' item when a recurring payment
+    matching its dedupe_hint is already held back. They are not part of debts.
     """
+    from .plans import planning_set_asides
     def single(key):
         found = _active_entries(profile, key)
         return found[0]['value'] if found else None
@@ -482,6 +603,7 @@ def planning_inputs(profile, as_of=None):
               'remaining_cents': e['value'].get('remaining_cents')} for e in _active_entries(profile, 'debts')]
     investing = single('regular_investing')
     reference = as_of or (profile.get('as_of') if isinstance(profile, dict) else None)
+    set_asides = planning_set_asides(profile, reference) if isinstance(profile, dict) and 'by_key' in profile else []
     return {
         'saving_rate_target_pct': single('saving_rate_target_pct'),
         'emergency_fund_target_months': single('emergency_fund_target_months'),
@@ -490,6 +612,9 @@ def planning_inputs(profile, as_of=None):
         'regular_investing': {'active': investing['active'], 'monthly_cents': investing.get('monthly_cents')} if investing else None,
         'risk_attitude': single('risk_attitude'),
         'coaching_mode': coaching_mode(profile, reference),
+        'plan_set_asides': set_asides,
+        'plan_set_asides_monthly_total_cents': sum(item['amount_cents'] for item in set_asides),
+        'protected_categories': list(single('protected_categories') or []),
     }
 
 
@@ -558,6 +683,13 @@ def profile_summary(profile):
             parts.append('tax decision: %s%s' % (v['decision_result'].replace('_', ' '), (' %s' % _euros(v['decision_amount_cents'])) if 'decision_amount_cents' in v else ''))
         if 'already_set_aside_cents' in v: parts.append('%s already set aside' % _euros(v['already_set_aside_cents']))
         facts.append('Tax %s: %s.' % (v['tax_year'], ', '.join(parts) if parts else 'details started'))
+    plan = single('plan_mortgage')
+    if plan:
+        facts.append('Mortgage plan on: %s loan, about %s left, rate %s%% (reference %s plus margin).' % (
+            plan['loan_type'].replace('_', ' '), _euros(plan['principal_cents']),
+            (Decimal(plan['reference_rate_bp'] + plan['margin_bp']) / 100).normalize(), plan['reference_rate'].replace('_', ' ')))
+    if single('plan_tax'):
+        facts.append('Tax plan on: help them plan back taxes and refunds.')
     reviews = sorted(e['value']['year'] for e in _active_entries(profile, 'year_review'))
     if reviews: facts.append('Saved year reviews: %s.' % ', '.join(str(y) for y in reviews))
     mode = profile.get('mode') if isinstance(profile, dict) else None
@@ -673,11 +805,6 @@ def _sid(customer_id, *parts):
     return 'sugg:' + fact_id('profile-suggestion', customer_id, *parts).split(':', 1)[1]
 
 
-def _ordinal(day):
-    suffix = 'th' if 10 <= day % 100 <= 20 else {1: 'st', 2: 'nd', 3: 'rd'}.get(day % 10, 'th')
-    return '%s%s' % (day, suffix)
-
-
 def _monthly_groups(rows):
     groups = {}
     for r in rows:
@@ -712,7 +839,7 @@ def _window(conn, customer_id, as_of):
     return transactions(conn, customer_id, start, month_bounds(month)[1]), month
 
 
-def profile_suggestions(conn, customer_id, as_of=None):
+def profile_suggestions(conn, customer_id, as_of=None, locale='en'):
     """Candidate profile entries noticed in the transactions; never saved here.
 
     Args: customer_id; as_of (ISO date within observed history, default the
@@ -722,7 +849,7 @@ def profile_suggestions(conn, customer_id, as_of=None):
        'regular_investing'|'loan_like'|'income_change',
        'key': profile key, or 'observation' for informational items,
        'value': candidate value (cents ints),
-       'question': English text, always a question,
+       'question': text in ``locale`` ('en' | 'fi' | 'sv'), always a question,
        'evidence': {'label': str, 'transaction_refs': [...]},
        'source': 'from_your_transactions',
        'save_as': {'key', 'value'} what confirm_suggestion saves by default,
@@ -734,6 +861,8 @@ def profile_suggestions(conn, customer_id, as_of=None):
     """
     from .analytics import salary_change_signal
     ensure_schema(conn)
+    loc = locale_or_en(locale)
+    money = lambda cents: euros(cents, loc)
     scope = account_scope(conn, customer_id)
     reference = date.fromisoformat(_iso_date(as_of, 'as_of')) if as_of else date.fromisoformat(scope['observed_end'])
     if not scope['observed_start'] <= reference.isoformat() <= scope['observed_end']:
@@ -747,18 +876,18 @@ def profile_suggestions(conn, customer_id, as_of=None):
     salary = _recurring(rows, lambda r: r['transaction_type'] == 'salary' and r['amount_cents'] > 0)
     if salary and salary['months'] >= 3:
         varies = salary['day_mad'] > 3
-        when = 'arrives on different days each month' if varies else 'usually arrives around the %s of the month' % _ordinal(salary['day'])
+        when = _say(loc, 'salary_varies') if varies else _say(loc, 'salary_usual', day=day_ordinal(salary['day'], loc))
         value = {'kind': 'salary', 'usual_day': salary['day'], 'typical_monthly_cents': salary['amount_cents'], 'months_seen': salary['months'], 'day_varies': varies}
-        text = 'My salary %s and is about %s a month after tax.' % (when, _euros(salary['amount_cents']))
+        text = _say(loc, 'salary_note', when=when, amount=money(salary['amount_cents']))
         out.append({'id': _sid(customer_id, 'salary'), 'kind': 'salary', 'key': 'observation', 'value': value,
-                    'question': 'Your salary %s and is about %s after tax. Is that right?' % (when, _euros(salary['amount_cents'])),
-                    'evidence': {'label': 'Salary payments in the last %s complete months' % salary['months'], 'transaction_refs': salary['transaction_refs']},
+                    'question': _say(loc, 'salary_question', when=when, amount=money(salary['amount_cents'])),
+                    'evidence': {'label': _say(loc, 'salary_evidence', months=salary['months']), 'transaction_refs': salary['transaction_refs']},
                     'save_as': {'key': 'note', 'value': text}, 'alternatives': []})
         steady = salary['months'] >= 6 and salary['amount_mad_cents'] * 10 <= salary['amount_cents']
         if steady and 'income_stability' not in profile['by_key']:
             out.append({'id': _sid(customer_id, 'income_stability', 'steady'), 'kind': 'income_stability', 'key': 'income_stability', 'value': 'steady',
-                        'question': 'Your salary has been about the same every month for the last six months. Would you call your income steady?',
-                        'evidence': {'label': 'Monthly salary totals varied by less than 10%', 'transaction_refs': salary['transaction_refs']},
+                        'question': _say(loc, 'steady_question'),
+                        'evidence': {'label': _say(loc, 'steady_evidence'), 'transaction_refs': salary['transaction_refs']},
                         'save_as': {'key': 'income_stability', 'value': 'steady'}, 'alternatives': []})
 
     housing = _recurring(rows, lambda r: r['transaction_type'] == 'housing_payment' and r['amount_cents'] < 0)
@@ -767,19 +896,19 @@ def profile_suggestions(conn, customer_id, as_of=None):
         monthly = -housing['amount_cents']
         value = {'kind': 'housing_payment', 'typical_monthly_cents': monthly, 'usual_day': housing['day'], 'months_seen': housing['months']}
         out.append({'id': _sid(customer_id, 'housing'), 'kind': 'housing', 'key': 'observation', 'value': value,
-                    'question': 'You pay about %s for housing each month, usually around the %s. Is this rent or a mortgage payment?' % (_euros(monthly), _ordinal(housing['day'])),
-                    'evidence': {'label': 'Housing payments in the last %s complete months' % housing['months'], 'transaction_refs': housing['transaction_refs']},
-                    'save_as': {'key': 'note', 'value': 'I pay about %s a month in rent.' % _euros(monthly)},
-                    'alternatives': [{'label': 'It is rent', 'key': 'note', 'value': 'I pay about %s a month in rent.' % _euros(monthly)},
-                                     {'label': 'It is a mortgage', 'key': 'debts', 'value': {'type': 'mortgage', 'monthly_payment_cents': monthly}}]})
+                    'question': _say(loc, 'housing_question', amount=money(monthly), day=day_ordinal(housing['day'], loc)),
+                    'evidence': {'label': _say(loc, 'housing_evidence', months=housing['months']), 'transaction_refs': housing['transaction_refs']},
+                    'save_as': {'key': 'note', 'value': _say(loc, 'rent_note', amount=money(monthly))},
+                    'alternatives': [{'label': _say(loc, 'rent_label'), 'key': 'note', 'value': _say(loc, 'rent_note', amount=money(monthly))},
+                                     {'label': _say(loc, 'mortgage_label'), 'key': 'debts', 'value': {'type': 'mortgage', 'monthly_payment_cents': monthly}}]})
 
     investing = _recurring(rows, lambda r: r['transaction_type'] == 'investment_deposit' and r['amount_cents'] < 0)
     if investing and investing['months'] >= 4 and 'regular_investing' not in profile['by_key']:
         monthly = -investing['amount_cents']
         value = {'active': True, 'monthly_cents': monthly}
         out.append({'id': _sid(customer_id, 'regular_investing'), 'kind': 'regular_investing', 'key': 'regular_investing', 'value': value,
-                    'question': 'You moved about %s to investments in %s. Do you invest a fixed amount every month?' % (_euros(monthly), 'each of the last six months' if investing['months'] >= 6 else '%s of the last six months' % investing['months']),
-                    'evidence': {'label': 'Investment deposits in the last %s complete months' % investing['months'], 'transaction_refs': investing['transaction_refs']},
+                    'question': _say(loc, 'investing_question', amount=money(monthly), span=_say(loc, 'investing_all') if investing['months'] >= 6 else _say(loc, 'investing_some', months=investing['months'])),
+                    'evidence': {'label': _say(loc, 'investing_evidence', months=investing['months']), 'transaction_refs': investing['transaction_refs']},
                     'save_as': {'key': 'regular_investing', 'value': value}, 'alternatives': []})
 
     # Loan-like: fixed monthly outflows that are not housing, utilities or investing.
@@ -802,8 +931,8 @@ def profile_suggestions(conn, customer_id, as_of=None):
             continue
         value = {'type': 'other', 'monthly_payment_cents': monthly}
         out.append({'id': _sid(customer_id, 'loan_like', kind, category, merchant), 'kind': 'loan_like', 'key': 'debts', 'value': value,
-                    'question': 'There is a regular payment of about %s every month (%s). Is this a loan? If so, what kind?' % (_euros(monthly), category),
-                    'evidence': {'label': 'Fixed monthly payments in %s' % category, 'transaction_refs': found['transaction_refs']},
+                    'question': _say(loc, 'loan_question', amount=money(monthly), category=category_label(category, loc)),
+                    'evidence': {'label': _say(loc, 'loan_evidence', category=category_label(category, loc)), 'transaction_refs': found['transaction_refs']},
                     'save_as': {'key': 'debts', 'value': value}, 'alternatives': []})
 
     # Possible income change: always a question, never an assertion.
@@ -819,8 +948,8 @@ def profile_suggestions(conn, customer_id, as_of=None):
                 expected = _add_months(date.fromisoformat(last['date']), 1)
                 change = {'id': _sid(customer_id, 'income_change', 'missing', last['transaction_ref']),
                           'value': {'type': 'income_drop', 'since': expected.isoformat()},
-                          'question': 'Your salary has not arrived this month. Has something changed?',
-                          'evidence': {'label': 'Last salary payment was %s days ago, on %s' % (gap, last['date']), 'transaction_refs': [last['transaction_ref']]}}
+                          'question': _say(loc, 'missing_question'),
+                          'evidence': {'label': _say(loc, 'missing_evidence', days=gap, date=short_date(last['date'], loc)), 'transaction_refs': [last['transaction_ref']]}}
         if change is None:
             try:
                 signal = salary_change_signal(conn, customer_id, last_month)
@@ -829,12 +958,12 @@ def profile_suggestions(conn, customer_id, as_of=None):
             if signal and signal['qualified'] and signal['direction'] == 'decrease':
                 change = {'id': _sid(customer_id, 'income_change', 'lower', signal['recent_period']['start']),
                           'value': {'type': 'income_drop', 'since': signal['recent_period']['start']},
-                          'question': 'Your salary in the last three months has been about %s a month, compared with about %s before. Has something changed?' % (_euros(signal['recent_salary_median_cents']), _euros(signal['baseline_salary_median_cents'])),
-                          'evidence': {'label': 'Salary in the last three complete months compared with the six months before', 'transaction_refs': signal['transaction_refs']}}
+                          'question': _say(loc, 'lower_question', recent=money(signal['recent_salary_median_cents']), baseline=money(signal['baseline_salary_median_cents'])),
+                          'evidence': {'label': _say(loc, 'lower_evidence'), 'transaction_refs': signal['transaction_refs']}}
         if change:
             out.append({**change, 'kind': 'income_change', 'key': 'life_event',
                         'save_as': {'key': 'life_event', 'value': change['value']},
-                        'alternatives': [{'label': 'I lost my job', 'key': 'life_event', 'value': {'type': 'job_loss', 'since': change['value']['since']}}]})
+                        'alternatives': [{'label': _say(loc, 'job_loss_label'), 'key': 'life_event', 'value': {'type': 'job_loss', 'since': change['value']['since']}}]})
 
     result = []
     for s in out:
@@ -845,8 +974,8 @@ def profile_suggestions(conn, customer_id, as_of=None):
     return result
 
 
-def _find_suggestion(conn, customer_id, suggestion_id, as_of):
-    for s in profile_suggestions(conn, customer_id, as_of):
+def _find_suggestion(conn, customer_id, suggestion_id, as_of, locale='en'):
+    for s in profile_suggestions(conn, customer_id, as_of, locale):
         if s['id'] == suggestion_id:
             return s
     _fail('Unknown or already handled suggestion')
@@ -878,16 +1007,17 @@ def dismiss_suggestion(conn, customer_id, suggestion_id, as_of=None, provenance=
     return {'dismissed_suggestion_id': suggestion_id, 'audit_event': audit}
 
 
-def confirm_suggestion(conn, customer_id, suggestion_id, key=None, value=None, note=None, as_of=None, provenance='user'):
+def confirm_suggestion(conn, customer_id, suggestion_id, key=None, value=None, note=None, as_of=None, provenance='user', locale='en'):
     """Save a suggestion the customer confirmed (one audited, undoable change).
 
     Args: suggestion_id; key/value: optional override, e.g. an entry from the
     suggestion's 'alternatives' or the customer's edited value (key alone picks
     the matching alternative); note (optional); as_of as for profile_suggestions.
+    locale ('en' | 'fi' | 'sv'): language of a saved note (e.g. the salary or rent note).
     Saves with source 'from_your_transactions' and marks the suggestion confirmed.
     Returns {'entry': entry, 'replaced_entry_ids': [...], 'confirmed_suggestion_id', 'audit_event'}.
     """
-    suggestion = _find_suggestion(conn, customer_id, suggestion_id, as_of)
+    suggestion = _find_suggestion(conn, customer_id, suggestion_id, as_of, locale)
     chosen_key = key or suggestion['save_as']['key']
     if value is None:
         options = [suggestion['save_as']] + suggestion.get('alternatives', [])
