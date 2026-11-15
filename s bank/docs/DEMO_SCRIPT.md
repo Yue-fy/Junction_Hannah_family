@@ -1,3 +1,23 @@
+# S-Coach V3 demo script
+
+The V3 story takes about three minutes on a phone-sized screen (Chrome device toolbar at 390 × 844, or the `/device-preview.html` page). Start the server with the README command so `s bank/.env` is loaded; with a DeepSeek or Gemini key the coach answers with the AI agent, and without one every step still works with the offline answers (tagged "Quick answer (offline)").
+
+Persona: **Alex (CUST00001)**. Month: **August 2026** for the baskets story (Surprise must-pays of €902.48 that month), then **September 2026** for the rest. All figures below come from the demo database; if a figure differs, trust the screen and the "How I worked this out" panel.
+
+1. **Meet the coach (Coach tab).** On the first visit the coach asks a few tap questions: life stage, household, how steady income is, how much to keep, regular investing, loans, attitude to risk, anything coming up. Answer four, skip the rest, then review "Here's what I noticed in your account" (salary day, rent, saving transfers) and tap **Save to my money profile**. Nothing is stored before that tap.
+2. **"What kind of spender am I?"** The coach names a spending style from the last six months (Alex: *Big-Ticket Occasional*) with two or three reasons, one strength and one thing worth a look. Open **How I worked this out** to show which calculations ran and the transactions behind them.
+3. **"What can I safely spend this week?"** The answer is about **€1,138 this week, €162 a day until payday on 22 October**, because rent and bills due before payday are already set aside. The old seven-day method suggested €3,288. Ask **"How much can I save this month?"** for the safe-to-save amount.
+4. **Make it a goal.** Ask *"I want to save €3,000 for Italy by next June."* Tap **Review goal**, change the amount in the card, watch the monthly figure update, and save. On **Goals**, edit or delete it; deleting can be undone from the demo menu.
+5. **Life happens.** Type *"I lost my job last week."* The coach replies supportively and offers a card to note it. After **Save**, the **Me** tab shows the steady-mode banner, and the Spending card keeps a full month of Must-pays as the reserve.
+6. **Spending tab.** Switch the month to **August 2026** and point at the three baskets: Must-pays, **Surprise must-pays (€902.48)**, Little leaks, each with a one-line explanation. Use **−1 month / +1 month** on the time range, tap a bar in *How spending changes over time* for that month's details, then **Ask coach about this month**. Open **Money in vs money out** and switch Month/Year.
+7. **Your year in money.** On **Home**, open the *Your 2025 in money* banner: swipe through the cards (biggest month, busiest day, Little leaks in months of rent, spending style) and tap **Save to my profile**. It appears under **Me → My yearly reviews**.
+8. **Taxes and benchmarks (one sentence each).** **Me → Taxes**: the account only shows net salary, so the tax card explains what it needs and shows the yearly tax-decision dates. Ask *"Do I spend more on eating out than people my age?"* for a Statistics Finland 2022 comparison with its caveats.
+9. **Close in Finnish:** *"Paljonko voin käyttää tällä viikolla?"*
+
+Keep the browser at phone width. If the network or model is unavailable, the same flow works offline; say so rather than waiting.
+
+---
+
 # S-Coach V2 demo script
 
 Start the project with the repository-root commands in the [README](../README.md). Reuse the existing database and preserve saved customer work. If a fresh import is needed, use a separate output path. The six customer names are aliases for synthetic accounts, not biographies.

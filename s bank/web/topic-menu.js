@@ -16,6 +16,7 @@ const COPY = {
   'topic.intro': ['Tap a question to ask it. You can always type your own, too.', 'Napauta kysymystä, niin kysyn sen puolestasi. Voit aina kirjoittaa myös oman kysymyksesi.', 'Tryck på en fråga för att ställa den. Du kan alltid skriva en egen också.'],
   'topic.close': ['Close', 'Sulje', 'Stäng'],
   'topic.count': ['{count} questions', '{count} kysymystä', '{count} frågor'],
+  'topic.countOne': ['1 question', '1 kysymys', '1 fråga'],
 
   'topic.money': ['Where my money goes', 'Mihin rahani menevät', 'Vart mina pengar tar vägen'],
   'topic.money.month': ['Where did my money go this month?', 'Mihin rahani menivät tässä kuussa?', 'Vart tog mina pengar vägen den här månaden?'],
@@ -156,7 +157,7 @@ export function renderTopicSheet(locale = 'en', options = {}) {
     }).join('');
     return '<details class="topic-group" data-topic="' + escapeHtml(topic.id) + '"' + (topic.id === openTopic ? ' open' : '') + '>'
       + '<summary class="topic-group__summary" data-topic-focusable><span class="topic-group__title">' + escapeHtml(message(lang, topic.key)) + '</span>'
-      + '<span class="topic-group__count">' + escapeHtml(message(lang, 'topic.count', {count: topic.questions.length})) + '</span></summary>'
+      + '<span class="topic-group__count">' + escapeHtml(message(lang, topic.questions.length === 1 ? 'topic.countOne' : 'topic.count', {count: topic.questions.length})) + '</span></summary>'
       + '<ul class="topic-group__questions">' + questions + '</ul></details>';
   }).join('');
   return '<div class="topic-sheet" id="' + TOPIC_SHEET_ID + '" data-topic-sheet' + (opts.open ? ' data-open="true"' : ' hidden') + '>'

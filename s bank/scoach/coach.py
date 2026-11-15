@@ -312,14 +312,14 @@ def _deterministic(message, context):
                 'home_financing_history': 'Linked past mortgage data is historical context only. It is not a current approval or affordability assessment.',
             },
             'fi': {
-                'safe_to_spend': 'Arvio suojaa vararahasi, tulevat maksut ja aiempaan joustavaan kulutukseesi perustuvan puskurin.',
+                'safe_to_spend': 'Tämä on tämän viikon osuus rahasta, joka on vapaana seuraavaan palkkapäivään asti. Ennen palkkapäivää erääntyvät laskut, vararahasi ja asettamasi säästötavoite on jo jätetty sivuun.',
                 'safe_unavailable': 'Tarvitsen enemmän tilihistoriaa ennen kuin voin arvioida turvallisen käyttövaran.',
                 'investment_cashflow': 'Nämä ovat havaitut sijoitussiirrot ja nostot, eivät salkun arvoa tai tuottoa.',
                 'explain_change': 'Selitys perustuu havaittuihin tilitapahtumiin.',
                 'home_financing_history': 'Linkitetyt aiemmat asuntolainatiedot ovat vain historiallista taustatietoa. Ne eivät ole nykyinen maksukyky- tai hyväksyntäarvio.',
             },
             'sv': {
-                'safe_to_spend': 'Uppskattningen skyddar din reserv, kommande utgifter och en buffert baserad på dina tidigare flexibla utgifter.',
+                'safe_to_spend': 'Det här är veckans del av pengarna som är fria fram till nästa lönedag. Räkningar före lönedagen, en säkerhetsbuffert och ett sparmål du satt är redan avsatta.',
                 'safe_unavailable': 'Jag behöver mer kontohistorik innan jag kan uppskatta ett säkert belopp att spendera.',
                 'investment_cashflow': 'Det här är observerade insättningar och uttag, inte portföljvärde eller avkastning.',
                 'explain_change': 'Förklaringen bygger på observerade kontohändelser.',

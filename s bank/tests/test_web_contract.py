@@ -95,7 +95,8 @@ class WebContractTests(unittest.TestCase):
 
     def node_app(self, body):
         """Execute the real app with a small DOM boundary and scoped API fixtures."""
-        sources = {name: self.read(name) for name in ('app.js', 'api.js', 'state.js', 'charts.js', 'i18n.js', 'experience.js', 'presentation.js', 'coach-narrative.js', 'coach-chat.js', 'monthly-recap.js')}
+        sources = {name: self.read(name) for name in ('app.js', 'api.js', 'state.js', 'charts.js', 'i18n.js', 'experience.js', 'presentation.js', 'coach-narrative.js', 'coach-chat.js', 'monthly-recap.js',
+                                                      'v3.js', 'draft-card.js', 'topic-menu.js', 'money-profile.js', 'year-review.js', 'month-range.js')}
         harness = r'''
 import assert from 'node:assert/strict';
 const elements = new Map(), documentListeners = {}, calls=[];
@@ -149,7 +150,10 @@ globalThis.fetch=async(url,options)=>{
  return {ok:true,json:async()=>({ok:true,data})};
 };
 const dataURL=source=>'data:text/javascript;base64,'+Buffer.from(source).toString('base64');
-let source=sources['app.js'].replace(/from ['"]\.\/([^'"]+)['"]/g,(_,file)=>'from "'+dataURL(sources[file])+'"');
+// Resolve relative imports recursively so modules imported by app.js may import siblings too.
+const resolved=new Map();
+const resolveModule=file=>{if(!resolved.has(file))resolved.set(file,dataURL(sources[file].replace(/from ['"]\.\/([^'"]+)['"]/g,(_,name)=>'from "'+resolveModule(name)+'"')));return resolved.get(file);};
+let source=sources['app.js'].replace(/from ['"]\.\/([^'"]+)['"]/g,(_,file)=>'from "'+resolveModule(file)+'"');
 source=source.slice(0,source.lastIndexOf('\nload();'))+'\nexport {state,ensureScenario,showStory,showTransactions,markOneOff,createGoal,loadGoals,askCoach,calculationHTML,load,toolResultHTML,submitTaxPlan};';
 const app=await import(dataURL(source));
 const settle=async()=>{for(let i=0;i<8;i++)await new Promise(resolve=>setImmediate(resolve));};

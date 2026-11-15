@@ -49,18 +49,93 @@ def _previous_month(month):
     return f'{value.year - (value.month == 1):04d}-{12 if value.month == 1 else value.month - 1:02d}'
 
 
+def _int_query(query, name, default, minimum, maximum):
+    """Strict integer query parameter within [minimum, maximum]."""
+    if name not in query:
+        return default
+    value = query[name]
+    if not value.isdigit() or not minimum <= int(value) <= maximum:
+        raise ValueError('%s must be an integer from %d to %d' % (name, minimum, maximum))
+    return int(value)
+
+
+def _validate_goal_fields(fields):
+    """Shape check for /api/goals/update fields; goals.update_goal does the full validation."""
+    allowed = {'name', 'target_cents', 'target_date', 'current_saved_cents', 'reserve_floor_cents'}
+    if not isinstance(fields, dict) or not fields:
+        raise ValueError('fields must be a non-empty object')
+    if set(fields) - allowed:
+        raise ValueError('Unknown goal field; allowed: ' + ', '.join(sorted(allowed)))
+    for key, value in fields.items():
+        if key == 'name':
+            if not isinstance(value, str) or not value.strip() or len(value.strip()) > 120:
+                raise ValueError('name must be text of one to 120 characters')
+        elif key == 'target_date':
+            if not isinstance(value, str) or len(value) != 10:
+                raise ValueError('target_date must use YYYY-MM-DD')
+            date.fromisoformat(value)
+        elif type(value) is not int or value < 0 or (key == 'target_cents' and value == 0):
+            raise ValueError(key + (' must be positive integer cents' if key == 'target_cents' else ' must be nonnegative integer cents'))
+
+
+def _year_query(query, name='year'):
+    if name not in query:
+        return None
+    return _int_query(query, name, None, 2000, 2100)
+
+
+def _locale(value):
+    if value not in {'en', 'fi', 'sv'}:
+        raise ValueError('locale must be en, fi, or sv')
+    return value
+
+
+def _tax_entry(profile, tax_year):
+    """The active money-profile 'tax' entry for tax_year, or None."""
+    for entry in profile.get('by_key', {}).get('tax', []):
+        if entry['value'].get('tax_year') == tax_year:
+            return entry
+    return None
+
+
 def planning_profile(conn, customer_id, as_of):
-    """Money-profile planning inputs for forecasts, or None when no profile exists."""
-    try:
-        from . import money_profile
-    except ImportError:
+    """Money-profile planning inputs for forecast.safe_until_payday, or None when the profile is empty.
+
+    Args: conn; customer_id; as_of (ISO date, the data reference date; drives steady mode).
+    Returns money_profile.planning_inputs(...) dict or None.
+    """
+    from . import money_profile
+    profile = money_profile.get_profile(conn, customer_id, as_of)
+    if profile['empty']:
         return None
-    try:
-        money_profile.ensure_schema(conn) if hasattr(money_profile, 'ensure_schema') else None
-        inputs = money_profile.planning_inputs(money_profile.get_profile(conn, customer_id), as_of) if money_profile.planning_inputs.__code__.co_argcount > 1 else money_profile.planning_inputs(money_profile.get_profile(conn, customer_id))
-    except (ValueError, KeyError, TypeError):
-        return None
-    return inputs or None
+    return money_profile.planning_inputs(profile, as_of)
+
+
+def offline_safe_to_spend(conn, customer_id, reference_date):
+    """safe_until_payday reshaped for the legacy offline coach and its narrative.
+
+    Returns the safe_until_payday dict plus legacy fields: available (enough history),
+    safe_to_spend_cents (= this_week_cents), as_of, horizon_end (= next_payday),
+    horizon_days (= min(7, days_until_payday)), scheduled_outflows_cents (= committed_cents),
+    historical_flexible_buffer_cents (None: not deducted in this method), horizon 'until_payday'.
+    """
+    from .forecast import safe_until_payday
+    raw = safe_until_payday(conn, customer_id, as_of=reference_date,
+                            profile=planning_profile(conn, customer_id, reference_date))
+    available = bool(raw['safe_to_save_available'])
+    return {**raw, 'available': available, 'needs_history': not available,
+            'safe_to_spend_cents': raw['this_week_cents'] if available else None,
+            'as_of': raw['reference_date'], 'horizon': 'until_payday', 'horizon_end': raw['next_payday'],
+            'horizon_days': min(7, raw['days_until_payday']), 'scheduled_outflows_cents': raw['committed_cents'],
+            'historical_flexible_buffer_cents': None,
+            'label': 'Estimated safe-to-spend this week, until payday — not a guarantee' if available else 'Safe-to-spend unavailable — more history needed'}
+
+
+SAFE_UNTIL_PAYDAY_COPY = {
+    'en': 'This is this week\'s share of the money free until your next payday. Bills due before payday, a safety reserve and any saving target you set are already held back.',
+    'fi': 'Tämä on tämän viikon osuus rahasta, joka on vapaana seuraavaan palkkapäivään asti. Ennen palkkapäivää erääntyvät laskut, vararahasi ja asettamasi säästötavoite on jo jätetty sivuun.',
+    'sv': 'Det här är veckans del av pengarna som är fria fram till nästa lönedag. Räkningar före lönedagen, en säkerhetsbuffert och ett sparmål du satt är redan avsatta.',
+}
 
 
 def _bounded_materiality(cents):
@@ -100,8 +175,13 @@ class Application:
         if any(len(values) != 1 for values in query.values()):
             raise ValueError('Repeated query parameters are not supported')
         query = {key: values[0] for key, values in query.items()}
-        get_routes = {'/api/health', '/api/personas', '/api/overview', '/api/comparison', '/api/transactions', '/api/trends', '/api/forecast', '/api/safe-to-spend', '/api/investments', '/api/financing', '/api/statistics', '/api/statistics/compare', '/api/taxes', '/api/vat', '/api/goals'}
-        post_routes = {'/api/scenarios', '/api/scenarios/exclude', '/api/rules', '/api/goals', '/api/goals/link', '/api/goals/update', '/api/goals/delete', '/api/coach', '/api/agent', '/api/tax-plan', '/api/undo', '/api/reset'}
+        get_routes = {'/api/health', '/api/personas', '/api/overview', '/api/comparison', '/api/transactions', '/api/trends', '/api/forecast', '/api/safe-to-spend', '/api/investments', '/api/financing', '/api/statistics', '/api/statistics/compare', '/api/taxes', '/api/vat', '/api/goals',
+                      '/api/spender-profile', '/api/explore', '/api/cashflow', '/api/cashflow/summary', '/api/year-review/options',
+                      '/api/year-review', '/api/profile', '/api/profile/suggestions', '/api/tax', '/api/vat/card', '/api/benchmarks'}
+        post_routes = {'/api/scenarios', '/api/scenarios/exclude', '/api/rules', '/api/goals', '/api/goals/link', '/api/goals/update', '/api/goals/delete', '/api/coach', '/api/agent', '/api/tax-plan', '/api/undo', '/api/reset',
+                       '/api/year-review/captions', '/api/year-review/save', '/api/profile/entries', '/api/profile/entries/update',
+                       '/api/profile/entries/delete', '/api/profile/forget', '/api/profile/suggestions/confirm',
+                       '/api/profile/suggestions/dismiss', '/api/profile/migrate-local'}
         if path not in get_routes | post_routes:
             raise APIError(404, 'not_found', 'Unknown API endpoint')
         if (method == 'GET' and path not in get_routes) or (method == 'POST' and path not in post_routes) or method not in {'GET', 'POST'}:
@@ -123,7 +203,7 @@ class Application:
             }
         if not self.database.is_file():
             raise APIError(503, 'database_unavailable', 'Demo database missing. Run scripts/build_demo_db.py first.')
-        if method == 'POST' and path not in {'/api/coach', '/api/agent'} and body.get('confirmed') is not True:
+        if method == 'POST' and path not in {'/api/coach', '/api/agent', '/api/year-review/captions'} and body.get('confirmed') is not True:
             raise ValueError('This action requires explicit customer confirmation (confirmed: true)')
         if body.get('provenance', 'user') not in {'user', 'gemini_proposed_user_confirmed'}:
             raise ValueError('Invalid mutation provenance')
@@ -233,6 +313,73 @@ class Application:
                 if path == '/api/goals':
                     from .goals import goal_plan
                     return {**scope, 'goals': [goal_plan(conn, customer_id, row[0]) for row in conn.execute('SELECT id FROM goals WHERE customer_id=? ORDER BY created_at,id', (customer_id,))]}
+                reference_date = query.get('as_of') or min(end, scope['observed_end'])
+                if path == '/api/spender-profile':
+                    from .spender import spender_profile, irregular_buffer
+                    latest = latest_complete_month(conn, customer_id)
+                    end_month = month if month <= latest else latest
+                    months = _int_query(query, 'months', 6, 2, 24)
+                    return {**scope, 'end_month': end_month,
+                            'profile': spender_profile(conn, customer_id, end_month=end_month, months=months),
+                            'buffer': irregular_buffer(conn, customer_id, end_month=end_month)}
+                if path == '/api/explore':
+                    from .explore import explore
+                    explore_filters = self._validated_statistics_filters(
+                        conn, customer_id, {key: query[key] for key in ('category', 'role', 'transaction_type', 'mcc_code', 'merchant_id') if key in query})
+                    return explore(conn, customer_id, query['start'], query['end'], group_by=query['group_by'],
+                                   metric=query.get('metric', 'outflow_total'), filters=explore_filters or None,
+                                   top=_int_query(query, 'top', 10, 1, 31))
+                if path in {'/api/cashflow', '/api/cashflow/summary'}:
+                    from .cashflow import cashflow_series, cashflow_summary
+                    from .ledger import shift_month
+                    end_month = query.get('end_month', month)
+                    start_month = query.get('start_month', max(scope['observed_start'][:7], shift_month(month, -11)))
+                    function = cashflow_series if path == '/api/cashflow' else cashflow_summary
+                    return function(conn, customer_id, start_month, end_month, query.get('granularity', 'month'))
+                if path == '/api/year-review/options':
+                    from .year_review import year_options
+                    years = year_options(conn, customer_id)
+                    return {**scope, 'years': years, 'options': years}
+                if path == '/api/year-review':
+                    from .year_story import build_review, default_year, story_cards
+                    year = _year_query(query) or default_year(conn, customer_id)
+                    if year is None:
+                        raise ValueError('No year with enough account history')
+                    review = build_review(conn, customer_id, year)
+                    return {**review, 'story_cards': story_cards(review, _locale(query.get('locale', 'en')))}
+                if path in {'/api/profile', '/api/profile/suggestions'}:
+                    from . import money_profile
+                    try:
+                        suggestions = money_profile.profile_suggestions(conn, customer_id, reference_date)
+                    except ValueError:
+                        suggestions = []
+                    if path == '/api/profile/suggestions':
+                        return {'suggestions': suggestions, 'as_of': reference_date}
+                    return {'profile': money_profile.get_profile(conn, customer_id, reference_date),
+                            'suggestions': suggestions, 'as_of': reference_date}
+                if path == '/api/tax':
+                    from . import money_profile
+                    from .tax import tax_overview
+                    tax_year = _year_query(query, 'tax_year') or int(reference_date[:4])
+                    entry = _tax_entry(money_profile.get_profile(conn, customer_id, reference_date), tax_year)
+                    result = tax_overview(conn, customer_id, reference_date, entry['value'] if entry else None,
+                                          query.get('month', reference_date[:7]))
+                    overview = result['overview']
+                    # Aliases the "My taxes" card reads: cycle.label and a top-level refund_seen.
+                    if isinstance(overview.get('cycle'), dict):
+                        overview['cycle'] = {**overview['cycle'], 'label': overview['cycle'].get('stage_label')}
+                    return {**overview, 'refund_seen': overview.get('refund'), 'tax_year': tax_year,
+                            'tax_entry_id': entry['id'] if entry else None}
+                if path == '/api/benchmarks':
+                    from .benchmarks import compare_to_peers, benchmark_categories
+                    if 'category' not in query:
+                        return {'categories': benchmark_categories()}
+                    return compare_to_peers(conn, customer_id, query['category'], months=int(query.get('months', 12)),
+                                            end_month=query.get('month'))
+                if path == '/api/vat/card':
+                    from .tax import vat_learn_card
+                    card = vat_learn_card(conn, customer_id, month)
+                    return {**card, 'rate_label': card.get('rate_display')}
             if path == '/api/agent':
                 from .agent import run_agent
                 return run_agent(conn, customer_id, month, body.get('locale', 'en'),
@@ -262,6 +409,14 @@ class Application:
                     set_aside_location=body.get('set_aside_location', 'inside_current_balance'),
                     label=body.get('label', 'Tax planning amount'),
                 )
+            if path == '/api/year-review/captions':
+                from .agent import year_review_captions
+                from .year_story import build_review, story_cards
+                locale = _locale(body.get('locale', 'en'))
+                review = build_review(conn, customer_id, body['year'])
+                if not review.get('available'):
+                    raise ValueError('Not enough account history for this year')
+                return year_review_captions(review, story_cards(review, locale), locale, transport=self.agent_transport)
             return self._mutate(conn, path, customer_id, month, body)
         finally:
             conn.close()
@@ -280,15 +435,56 @@ class Application:
             '/api/tax-plan': {'amount_cents', 'due_date', 'reference_date', 'already_set_aside_cents', 'current_balance_cents', 'reserve_floor_cents', 'set_aside_location', 'label'},
             '/api/coach': {'message', 'locale', 'previous_query'}, '/api/undo': set(), '/api/reset': set(),
             '/api/agent': {'message', 'locale', 'history'},
+            '/api/year-review/captions': {'year', 'locale'},
+            '/api/year-review/save': {'year', 'captions', 'closing_message', 'locale'},
+            '/api/profile/entries': {'key', 'value', 'note', 'source'},
+            '/api/profile/entries/update': {'entry_id', 'value', 'note', 'active'},
+            '/api/profile/entries/delete': {'entry_id'},
+            '/api/profile/forget': set(),
+            '/api/profile/suggestions/confirm': {'suggestion_id', 'key', 'value', 'note'},
+            '/api/profile/suggestions/dismiss': {'suggestion_id'},
+            '/api/profile/migrate-local': {'local'},
+        }
+        required = {
+            '/api/goals/update': {'goal_id', 'fields'}, '/api/goals/delete': {'goal_id'},
+            '/api/year-review/captions': {'year'}, '/api/year-review/save': {'year'},
+            '/api/profile/entries': {'key', 'value'}, '/api/profile/entries/update': {'entry_id'},
+            '/api/profile/entries/delete': {'entry_id'}, '/api/profile/suggestions/confirm': {'suggestion_id'},
+            '/api/profile/suggestions/dismiss': {'suggestion_id'}, '/api/profile/migrate-local': {'local'},
         }
         if set(body) - common - fields.get(path, set()):
             raise ValueError('Unknown JSON body field')
+        missing = sorted(required.get(path, set()) - set(body))
+        if missing:
+            raise ValueError('Missing JSON body field: ' + ', '.join(missing))
+        if path == '/api/profile/entries/update' and not {'value', 'note', 'active'} & set(body):
+            raise ValueError('Nothing to update: give value, note or active')
         if path == '/api/agent':
             from .agent import validate_request
             validate_request(body.get('message'), body.get('locale', 'en'), body.get('history', []))
         for name, value in body.items():
             if path == '/api/agent' and name == 'history':
                 continue
+            elif name == 'value' and path.startswith('/api/profile/'):
+                continue  # Shape depends on the profile key; money_profile.validate_entry checks it strictly.
+            elif name == 'fields':
+                _validate_goal_fields(value)
+            elif name == 'local':
+                if not isinstance(value, dict):
+                    raise ValueError('local must be an object')
+            elif name == 'year':
+                if type(value) is not int or not 2000 <= value <= 2100:
+                    raise ValueError('year must be an integer calendar year')
+            elif name == 'active':
+                if type(value) is not bool:
+                    raise ValueError('active must be a boolean')
+            elif name == 'captions':
+                if value is not None and (not isinstance(value, dict) or len(value) > 12 or any(
+                        not isinstance(k, str) or not isinstance(v, str) or len(k) > 60 or len(v) > 300 for k, v in value.items())):
+                    raise ValueError('captions must map card ids to short texts')
+            elif name in {'closing_message', 'note'}:
+                if value is not None and (not isinstance(value, str) or len(value) > 500):
+                    raise ValueError(name + ' must be text of at most 500 characters')
             elif name == 'previous_query':
                 if value is not None and not isinstance(value, dict):
                     raise ValueError('previous_query must be a resolved scope object')
@@ -327,8 +523,31 @@ class Application:
             '/api/transactions': common | {'month', 'start', 'end', 'category', 'role', 'transaction_type', 'merchant_id', 'mcc_code', 'transaction_ref', 'consumption_only'},
             '/api/taxes': common | {'month', 'start', 'end'},
             '/api/vat': common | {'month', 'start', 'end'},
+            '/api/spender-profile': common | {'month', 'months'},
+            '/api/explore': common | {'start', 'end', 'group_by', 'metric', 'top', 'category', 'role', 'transaction_type', 'mcc_code', 'merchant_id'},
+            '/api/cashflow': common | {'month', 'start_month', 'end_month', 'granularity'},
+            '/api/cashflow/summary': common | {'month', 'start_month', 'end_month', 'granularity'},
+            '/api/year-review/options': common,
+            '/api/year-review': common | {'year', 'locale'},
+            '/api/profile': common | {'month', 'as_of'},
+            '/api/profile/suggestions': common | {'month', 'as_of'},
+            '/api/tax': common | {'month', 'as_of', 'tax_year'},
+            '/api/vat/card': common | {'month'},
+            '/api/benchmarks': common | {'category', 'months', 'month'},
         }
         if path not in allowed:
+            return
+        if set(query) - allowed[path]:
+            raise ValueError('Unknown query parameter')
+        if path == '/api/explore':
+            missing = sorted({'start', 'end', 'group_by'} - set(query))
+            if missing:
+                raise ValueError('Missing query parameter: ' + ', '.join(missing))
+        if path in {'/api/explore', '/api/spender-profile', '/api/cashflow', '/api/cashflow/summary', '/api/year-review',
+                    '/api/year-review/options', '/api/profile', '/api/profile/suggestions', '/api/tax', '/api/vat/card', '/api/benchmarks'}:
+            for field in ('category', 'role', 'transaction_type', 'merchant_id', 'mcc_code'):
+                if field in query and not query[field].strip():
+                    raise ValueError('Filters must be nonempty')
             return
         if set(query) - allowed[path]:
             raise ValueError('Unknown query parameter')
@@ -444,9 +663,10 @@ class Application:
             candidates.append({'id': 'payday_timing', 'kind': 'payday_timing', 'text': 'Across several observed pay cycles, your balance reached a low point before salary arrived. This is a timing pattern, not a prediction.', 'fact_ids': [payday['fact_id']], 'materiality': min(1.0, gap / threshold), 'urgency': .5, 'explainability': 1, 'addressability': 1, 'transaction_refs': payday['transaction_refs'], 'status': 'observed'})
         scope = account_scope(conn, customer_id)
         reference_date = min(end, scope['observed_end'])
-        safe = safe_to_spend(conn, customer_id, reference_date, days=7)
-        facts.append({'id': safe['fact_id'], 'value_cents': safe['safe_to_spend_cents'], 'unit': 'cents', 'label': safe['label'], 'status': 'scenario', 'available': safe['available'], 'reserve_floor_cents': safe['reserve_floor_cents'], 'reserve_floor_source': safe['reserve_floor_source']})
-        safe_text = 'This estimate protects the sourced reserve, upcoming outflows, and a buffer based on earlier flexible spending.' if safe['available'] else 'There is not enough observed history yet to estimate a safe-to-spend amount.'
+        # This week's share of the money free until payday (bills before payday already held back).
+        safe = offline_safe_to_spend(conn, customer_id, reference_date)
+        facts.append({'id': safe['fact_id'], 'value_cents': safe['safe_to_spend_cents'], 'unit': 'cents', 'label': safe['label'], 'status': 'scenario', 'available': safe['available'], 'reserve_floor_cents': safe['reserve_floor_cents'], 'reserve_floor_source': safe['reserve_floor_source'], 'next_payday': safe['next_payday'], 'per_day_cents': safe['per_day_cents']})
+        safe_text = SAFE_UNTIL_PAYDAY_COPY['en'] if safe['available'] else 'There is not enough observed history yet to estimate a safe-to-spend amount.'
         candidates.append({'id': 'safe_to_spend', 'kind': 'safe_to_spend', 'copy_key': 'safe_to_spend' if safe['available'] else 'safe_unavailable', 'text': safe_text, 'fact_ids': [safe['fact_id']], 'materiality': _bounded_materiality(safe['safe_to_spend_cents']), 'urgency': 1, 'explainability': 1, 'addressability': 1, 'transaction_refs': safe['transaction_refs'], 'status': 'scenario', 'available': safe['available'], 'utility': True})
         investing = investment_cashflows(conn, customer_id, month, 12)
         facts.append({'id': investing['fact_id'], 'value_cents': investing['net_contributions_cents'], 'unit': 'cents', 'label': investing['label'], 'status': 'observed'})
@@ -469,7 +689,7 @@ class Application:
                 'statistics_empty': 'I found no matching transactions for that exact category and period.',
                 'adjustment': 'This is an unsaved planning preview based on observed spending in the selected category.',
                 'profile': 'This is a neutral breakdown of observed spending across the learning baskets, not a score or judgment.',
-                'safe': 'This estimate protects the reserve, qualified recurring outflows, and a buffer based on earlier unscheduled spending.',
+                'safe': SAFE_UNTIL_PAYDAY_COPY['en'],
                 'safe_unavailable': 'There is not enough observed history yet to calculate a safe-to-spend estimate.',
                 'tax': 'I found explicit observed tax records for the selected period.',
                 'tax_empty': 'I found no explicit tax records for this period. Missing records do not mean no tax was paid.',
@@ -479,7 +699,7 @@ class Application:
                 'statistics_empty': 'En löytänyt tälle tarkalle luokalle ja ajanjaksolle vastaavia tapahtumia.',
                 'adjustment': 'Tämä on tallentamaton suunnitteluarvio, joka perustuu valitun luokan havaittuihin menoihin.',
                 'profile': 'Tämä on neutraali erittely havaituista menoista oppimiskoreittain, ei pisteytys tai arvio sinusta.',
-                'safe': 'Arvio suojaa vararahasi, tunnistetut toistuvat menot ja aiempaan aikatauluttamattomaan kulutukseen perustuvan varan.',
+                'safe': SAFE_UNTIL_PAYDAY_COPY['fi'],
                 'safe_unavailable': 'Tilihistoriaa ei ole vielä riittävästi turvallisen käyttövaran arvioimiseen.',
                 'tax': 'Löysin valitulta ajanjaksolta nimenomaisia havaittuja verotietoja.',
                 'tax_empty': 'En löytänyt tältä ajanjaksolta nimenomaisia verotietoja. Puuttuvat tiedot eivät tarkoita, ettei veroa olisi maksettu.',
@@ -489,7 +709,7 @@ class Application:
                 'statistics_empty': 'Jag hittade inga matchande transaktioner för den exakta kategorin och perioden.',
                 'adjustment': 'Det här är en osparad planeringsöversikt som bygger på observerade utgifter i den valda kategorin.',
                 'profile': 'Det här är en neutral uppdelning av observerade utgifter i lärandekorgarna, inte ett betyg eller omdöme.',
-                'safe': 'Uppskattningen skyddar bufferten, kvalificerade återkommande utflöden och ett utrymme baserat på tidigare ej schemalagda utgifter.',
+                'safe': SAFE_UNTIL_PAYDAY_COPY['sv'],
                 'safe_unavailable': 'Det finns ännu inte tillräcklig kontohistorik för en uppskattning av tryggt att spendera.',
                 'tax': 'Jag hittade uttryckliga observerade skatteuppgifter för den valda perioden.',
                 'tax_empty': 'Jag hittade inga uttryckliga skatteuppgifter för perioden. Saknade uppgifter betyder inte att ingen skatt betalades.',
@@ -604,13 +824,8 @@ class Application:
                 response['spender_summary'] = offline_summary(profile, locale)
                 response['spender_archetype'] = profile['archetype']
         elif intent == 'safe_to_spend':
-            from .forecast import safe_to_spend
-            result = safe_to_spend(
-                conn,
-                customer_id,
-                context['reference_date'],
-                days=context.get('days', 7),
-            )
+            # Until payday: every bill before payday is held back, so this week's amount is a share of what is free.
+            result = offline_safe_to_spend(conn, customer_id, context['reference_date'])
             refs = sorted(set(result['transaction_refs'] + result['comparison_transaction_refs']))
             response['tool_result'] = result
             response['tool_fact_id'] = result['fact_id']
@@ -659,6 +874,47 @@ class Application:
             value['monthly_contribution_cents'] = value['modeled_monthly_contribution_cents']
         return {kind: value, 'audit_event': audit}
 
+    @staticmethod
+    def _mutate_profile(conn, path, customer_id, month, body, provenance):
+        """Confirmed money-profile writes; entry and suggestion ids are checked against the customer."""
+        from . import money_profile
+        from .ledger import account_scope
+        money_profile.ensure_schema(conn)
+        reference_date = min(_month_bounds(month)[1], account_scope(conn, customer_id)['observed_end'])
+        if 'entry_id' in body and not conn.execute(
+                'SELECT 1 FROM profile_entries WHERE id=? AND customer_id=? AND key<>?',
+                (body['entry_id'], customer_id, money_profile.HIDDEN_KEY)).fetchone():
+            raise APIError(404, 'unknown_reference', 'Unknown entry_id in selected customer scope')
+        if 'suggestion_id' in body:
+            known = {item['id'] for item in money_profile.profile_suggestions(conn, customer_id, reference_date)}
+            if body['suggestion_id'] not in known:
+                raise APIError(404, 'unknown_reference', 'Unknown suggestion_id in selected customer scope')
+        if path == '/api/profile/entries':
+            source = body.get('source', 'you_told_me')
+            if source not in {'you_told_me', 'from_our_chat'}:
+                raise ValueError('source must be you_told_me or from_our_chat')
+            if body['key'] == 'year_review':
+                raise ValueError('Save a year review with /api/year-review/save')
+            return money_profile.save_entry(conn, customer_id, body['key'], body['value'], source,
+                                            note=body.get('note'), provenance=provenance)
+        if path == '/api/profile/entries/update':
+            return money_profile.update_entry(conn, customer_id, body['entry_id'], value=body.get('value'),
+                                              note=body.get('note'), active=body.get('active'), provenance=provenance)
+        if path == '/api/profile/entries/delete':
+            return money_profile.delete_entry(conn, customer_id, body['entry_id'], provenance=provenance)
+        if path == '/api/profile/forget':
+            return money_profile.forget_all(conn, customer_id, provenance=provenance)
+        if path == '/api/profile/suggestions/confirm':
+            return money_profile.confirm_suggestion(conn, customer_id, body['suggestion_id'], key=body.get('key'),
+                                                    value=body.get('value'), note=body.get('note'),
+                                                    as_of=reference_date, provenance=provenance)
+        if path == '/api/profile/suggestions/dismiss':
+            return money_profile.dismiss_suggestion(conn, customer_id, body['suggestion_id'], as_of=reference_date,
+                                                    provenance=provenance)
+        if path == '/api/profile/migrate-local':
+            return money_profile.migrate_local(conn, customer_id, body['local'], provenance=provenance)
+        raise APIError(404, 'not_found', 'Unknown mutation')
+
     def _mutate(self, conn, path, customer_id, month, body):
         from . import state, scenarios, goals
         provenance = body.get('provenance', 'user')
@@ -690,6 +946,20 @@ class Application:
             return self._mutation_result('goal', goals.update_goal(conn, customer_id, body['goal_id'], body['fields'], provenance=provenance))
         if path == '/api/goals/delete':
             return self._mutation_result('goal', goals.delete_goal(conn, customer_id, body['goal_id'], provenance=provenance))
+        if path == '/api/year-review/save':
+            from . import money_profile
+            from .year_story import build_review, compact_facts
+            review = build_review(conn, customer_id, body['year'])
+            if not review.get('available'):
+                raise ValueError('Not enough account history for this year')
+            value = {'year': body['year'], 'facts': compact_facts(review, body.get('locale', 'en'))}
+            if body.get('captions'):
+                value['captions'] = body['captions']
+            if body.get('closing_message'):
+                value['closing'] = body['closing_message']
+            return money_profile.save_entry(conn, customer_id, 'year_review', value, 'year_review', provenance=provenance)
+        if path.startswith('/api/profile/'):
+            return self._mutate_profile(conn, path, customer_id, month, body, provenance)
         if path == '/api/undo':
             return state.undo_last(conn, customer_id)
         if path == '/api/reset':

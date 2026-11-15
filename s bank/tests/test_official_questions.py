@@ -193,7 +193,9 @@ class OfficialBriefQuestionTests(unittest.TestCase):
         self.assertEqual(result["selected_candidate_id"], "safe_to_spend")
         self.assertEqual(result["tool_kind"], "safe_to_spend")
         self.assertEqual(result["tool_source"], "deterministic_safe_to_spend")
-        self.assertEqual(result["tool_result"]["safe_to_spend_cents"], 328_831)
+        # V3: offline answers use safe_until_payday; this week's share of the money free until payday.
+        self.assertEqual(result["tool_result"]["safe_to_spend_cents"], 113_827)
+        self.assertEqual(result["tool_result"]["horizon_end"], result["tool_result"]["next_payday"])
         self.assertEqual(result["tool_result"]["horizon_days"], 7)
         self.assertEqual(result["tool_result"]["reserve_floor_cents"], 50_000)
         self.assertTrue(result["tool_result"]["available"])

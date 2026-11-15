@@ -2,7 +2,7 @@
    Mobile first (works from 375px); uses the :root variables from styles.css. */
 
 /* Interactive charts keep each column at least 32px wide; the chart's parent scrolls horizontally when needed. */
-svg.chart-interactive { display: block; width: 100%; height: auto; min-width: calc(var(--chart-columns, 1) * 32px); }
+svg.chart-interactive { display: block; width: 100%; height: auto; min-width: calc(var(--chart-columns, 1) * 24px); }
 :has(> svg.chart-interactive) { overflow-x: auto; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; }
 
 .chart-bar { cursor: pointer; outline: none; -webkit-tap-highlight-color: transparent; }

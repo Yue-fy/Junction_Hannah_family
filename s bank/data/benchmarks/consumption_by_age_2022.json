@@ -1,0 +1,348 @@
+{
+ "source_name": "Statistics Finland, Households' consumption (Household Budget Survey)",
+ "table_id": "StatFin/ktutk/14q4",
+ "table_title": "Household consumption expenditure by age of reference person, 2012-2022",
+ "source_url": "https://pxdata.stat.fi/PxWeb/pxweb/en/StatFin/StatFin__ktutk/",
+ "api_url": "https://pxdata.stat.fi/PxWeb/api/v1/en/StatFin/ktutk/14q4.px",
+ "table_updated": "2024-04-11",
+ "retrieved_at": "2026-11-15",
+ "statistical_year": 2022,
+ "unit": "EUR per month at current (2022) prices",
+ "measures": {
+  "household_month_eur": "kulukk_kt_hk_1_1: Household's consumption expenditure at current prices per month, EUR",
+  "per_consumption_unit_month_eur": "kulukk_kt_hk_2_1: Consumption expenditure per consumption unit at current prices per month, EUR"
+ },
+ "classification": "COICOP 2018 (coicop_46_20231201)",
+ "age_variable": "ikaryhma_10_20180101 (age of the household's reference person)",
+ "note": "The 2022 data collection was revised to correspond to COICOP 2018.",
+ "groups": {
+  "0": {
+   "label": "Total consumption expenditure",
+   "by_age": {
+    "SSS": {
+     "household_month_eur": 3317,
+     "per_consumption_unit_month_eur": 2363
+    },
+    "17-24": {
+     "household_month_eur": 1871,
+     "per_consumption_unit_month_eur": 1535
+    },
+    "25-34": {
+     "household_month_eur": 3044,
+     "per_consumption_unit_month_eur": 2209
+    },
+    "35-44": {
+     "household_month_eur": 3872,
+     "per_consumption_unit_month_eur": 2362
+    },
+    "45-54": {
+     "household_month_eur": 4382,
+     "per_consumption_unit_month_eur": 2657
+    },
+    "55-64": {
+     "household_month_eur": 3677,
+     "per_consumption_unit_month_eur": 2712
+    },
+    "65-74": {
+     "household_month_eur": 2895,
+     "per_consumption_unit_month_eur": 2347
+    },
+    "75-84": {
+     "household_month_eur": 2691,
+     "per_consumption_unit_month_eur": 2251
+    },
+    "85-": {
+     "household_month_eur": 2202,
+     "per_consumption_unit_month_eur": 1898
+    }
+   }
+  },
+  "01": {
+   "label": "Food and non-alcoholic beverages",
+   "by_age": {
+    "SSS": {
+     "household_month_eur": 471,
+     "per_consumption_unit_month_eur": 329
+    },
+    "17-24": {
+     "household_month_eur": 251,
+     "per_consumption_unit_month_eur": 210
+    },
+    "25-34": {
+     "household_month_eur": 405,
+     "per_consumption_unit_month_eur": 292
+    },
+    "35-44": {
+     "household_month_eur": 575,
+     "per_consumption_unit_month_eur": 332
+    },
+    "45-54": {
+     "household_month_eur": 584,
+     "per_consumption_unit_month_eur": 346
+    },
+    "55-64": {
+     "household_month_eur": 500,
+     "per_consumption_unit_month_eur": 360
+    },
+    "65-74": {
+     "household_month_eur": 450,
+     "per_consumption_unit_month_eur": 362
+    },
+    "75-84": {
+     "household_month_eur": 413,
+     "per_consumption_unit_month_eur": 337
+    },
+    "85-": {
+     "household_month_eur": 330,
+     "per_consumption_unit_month_eur": 276
+    }
+   }
+  },
+  "03": {
+   "label": "Clothing and footwear",
+   "by_age": {
+    "SSS": {
+     "household_month_eur": 140,
+     "per_consumption_unit_month_eur": 97
+    },
+    "17-24": {
+     "household_month_eur": 127,
+     "per_consumption_unit_month_eur": 110
+    },
+    "25-34": {
+     "household_month_eur": 173,
+     "per_consumption_unit_month_eur": 125
+    },
+    "35-44": {
+     "household_month_eur": 190,
+     "per_consumption_unit_month_eur": 111
+    },
+    "45-54": {
+     "household_month_eur": 202,
+     "per_consumption_unit_month_eur": 118
+    },
+    "55-64": {
+     "household_month_eur": 134,
+     "per_consumption_unit_month_eur": 100
+    },
+    "65-74": {
+     "household_month_eur": 89,
+     "per_consumption_unit_month_eur": 71
+    },
+    "75-84": {
+     "household_month_eur": 62,
+     "per_consumption_unit_month_eur": 53
+    },
+    "85-": {
+     "household_month_eur": 45,
+     "per_consumption_unit_month_eur": 37
+    }
+   }
+  },
+  "06": {
+   "label": "Health",
+   "by_age": {
+    "SSS": {
+     "household_month_eur": 118,
+     "per_consumption_unit_month_eur": 86
+    },
+    "17-24": {
+     "household_month_eur": 51,
+     "per_consumption_unit_month_eur": 45
+    },
+    "25-34": {
+     "household_month_eur": 63,
+     "per_consumption_unit_month_eur": 46
+    },
+    "35-44": {
+     "household_month_eur": 99,
+     "per_consumption_unit_month_eur": 59
+    },
+    "45-54": {
+     "household_month_eur": 136,
+     "per_consumption_unit_month_eur": 83
+    },
+    "55-64": {
+     "household_month_eur": 134,
+     "per_consumption_unit_month_eur": 100
+    },
+    "65-74": {
+     "household_month_eur": 130,
+     "per_consumption_unit_month_eur": 105
+    },
+    "75-84": {
+     "household_month_eur": 182,
+     "per_consumption_unit_month_eur": 146
+    },
+    "85-": {
+     "household_month_eur": 151,
+     "per_consumption_unit_month_eur": 126
+    }
+   }
+  },
+  "072": {
+   "label": "Operation of personal transport equipment",
+   "by_age": {
+    "SSS": {
+     "household_month_eur": 216,
+     "per_consumption_unit_month_eur": 147
+    },
+    "17-24": {
+     "household_month_eur": 92,
+     "per_consumption_unit_month_eur": 69
+    },
+    "25-34": {
+     "household_month_eur": 183,
+     "per_consumption_unit_month_eur": 128
+    },
+    "35-44": {
+     "household_month_eur": 249,
+     "per_consumption_unit_month_eur": 145
+    },
+    "45-54": {
+     "household_month_eur": 331,
+     "per_consumption_unit_month_eur": 197
+    },
+    "55-64": {
+     "household_month_eur": 268,
+     "per_consumption_unit_month_eur": 190
+    },
+    "65-74": {
+     "household_month_eur": 192,
+     "per_consumption_unit_month_eur": 152
+    },
+    "75-84": {
+     "household_month_eur": 134,
+     "per_consumption_unit_month_eur": 109
+    },
+    "85-": {
+     "household_month_eur": 60,
+     "per_consumption_unit_month_eur": 49
+    }
+   }
+  },
+  "073": {
+   "label": "Passenger transport services",
+   "by_age": {
+    "SSS": {
+     "household_month_eur": 44,
+     "per_consumption_unit_month_eur": 32
+    },
+    "17-24": {
+     "household_month_eur": 30,
+     "per_consumption_unit_month_eur": 27
+    },
+    "25-34": {
+     "household_month_eur": 52,
+     "per_consumption_unit_month_eur": 43
+    },
+    "35-44": {
+     "household_month_eur": 59,
+     "per_consumption_unit_month_eur": 40
+    },
+    "45-54": {
+     "household_month_eur": 66,
+     "per_consumption_unit_month_eur": 38
+    },
+    "55-64": {
+     "household_month_eur": 46,
+     "per_consumption_unit_month_eur": 35
+    },
+    "65-74": {
+     "household_month_eur": 27,
+     "per_consumption_unit_month_eur": 22
+    },
+    "75-84": {
+     "household_month_eur": 22,
+     "per_consumption_unit_month_eur": 19
+    },
+    "85-": {
+     "household_month_eur": 14,
+     "per_consumption_unit_month_eur": 13
+    }
+   }
+  },
+  "09": {
+   "label": "Recreation, sport and culture",
+   "by_age": {
+    "SSS": {
+     "household_month_eur": 214,
+     "per_consumption_unit_month_eur": 149
+    },
+    "17-24": {
+     "household_month_eur": 104,
+     "per_consumption_unit_month_eur": 81
+    },
+    "25-34": {
+     "household_month_eur": 200,
+     "per_consumption_unit_month_eur": 143
+    },
+    "35-44": {
+     "household_month_eur": 240,
+     "per_consumption_unit_month_eur": 139
+    },
+    "45-54": {
+     "household_month_eur": 318,
+     "per_consumption_unit_month_eur": 185
+    },
+    "55-64": {
+     "household_month_eur": 235,
+     "per_consumption_unit_month_eur": 177
+    },
+    "65-74": {
+     "household_month_eur": 171,
+     "per_consumption_unit_month_eur": 135
+    },
+    "75-84": {
+     "household_month_eur": 174,
+     "per_consumption_unit_month_eur": 148
+    },
+    "85-": {
+     "household_month_eur": 103,
+     "per_consumption_unit_month_eur": 84
+    }
+   }
+  },
+  "1111": {
+   "label": "Restaurants, cafés and the like",
+   "by_age": {
+    "SSS": {
+     "household_month_eur": 97,
+     "per_consumption_unit_month_eur": 70
+    },
+    "17-24": {
+     "household_month_eur": 69,
+     "per_consumption_unit_month_eur": 57
+    },
+    "25-34": {
+     "household_month_eur": 132,
+     "per_consumption_unit_month_eur": 98
+    },
+    "35-44": {
+     "household_month_eur": 142,
+     "per_consumption_unit_month_eur": 98
+    },
+    "45-54": {
+     "household_month_eur": 121,
+     "per_consumption_unit_month_eur": 73
+    },
+    "55-64": {
+     "household_month_eur": 99,
+     "per_consumption_unit_month_eur": 73
+    },
+    "65-74": {
+     "household_month_eur": 60,
+     "per_consumption_unit_month_eur": 50
+    },
+    "75-84": {
+     "household_month_eur": 43,
+     "per_consumption_unit_month_eur": 36
+    },
+    "85-": {
+     "household_month_eur": 32,
+     "per_consumption_unit_month_eur": 25
+    }
+   }
+  }
+ }
+}

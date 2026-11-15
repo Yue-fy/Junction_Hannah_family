@@ -7,6 +7,7 @@ import { spendingCategories, forecastSummary, toolScope, milestoneFor } from './
 import { coachNarrative } from './coach-narrative.js';
 import { agentTurnHTML } from './coach-chat.js';
 import { createMonthlyRecapCache, monthlyRecapPrompt, recapTiles } from './monthly-recap.js';
+import { initV3 } from './v3.js';
 
 const state = createState();
 let api = createAPI(state.customerId);
@@ -25,7 +26,7 @@ const evidenceRegistry=new Map();let evidenceSequence=0;
 let memoryProposal=null, noteEditing=null, tourStep=0, coachSequence=0;
 let coachPending=null, coachTimer=null, agentProposal=null, actionSequence=0;
 const monthlyRecaps=createMonthlyRecapCache(),recapPrevious=new Map();
-let homeRecap=null,homeDataState='loading';
+let homeRecap=null,homeDataState='loading',v3=null;
 function sourceButton(refs=[],scope={}){
   if(!refs.length)return '';
   const key='source-'+(++evidenceSequence);
@@ -125,7 +126,7 @@ function renderHandoffProgress(pending){
   }
 }
 function clearScopedViews({preserveLoading=false}={}){
-  clearCoachPending(true);agentProposal=null;
+  clearCoachPending(true);agentProposal=null;v3?.reset();
   homeRecap=null;homeDataState='loading';
   closeDialogs();clearFilter();clearHandoff();state.transactionEvidence=null;
   state.queryScope=null;state.conversation=[];memoryProposal=null;evidenceRegistry.clear();coachSequence++;
@@ -147,11 +148,11 @@ function clearScopedViews({preserveLoading=false}={}){
   renderComparison();renderForecast();renderTrends();renderGoals();renderSupport();renderVat();renderSpending();
 }
 function navigate(view) {
-  if(!['home','trends','coach','goals','journal'].includes(view))view='home';
+  if(!['home','trends','coach','goals','journal','profile'].includes(view))view='home';
   clearFilter();clearHandoff();
   state.view=view;
   document.documentElement.setAttribute('data-current-view',view);
-  for(const name of ['home','trends','coach','goals','journal']) $(name+'-view').hidden=name!==view;
+  for(const name of ['home','trends','coach','goals','journal','profile']) $(name+'-view').hidden=name!==view;
   $('persona-panel').hidden=true;$('persona-button').setAttribute('aria-expanded','false');
   if(view==='journal')renderPersonalization();
   if(view==='goals')renderWishes();
@@ -160,6 +161,7 @@ function navigate(view) {
   window.scrollTo({top:0,behavior:'instant'});
   $('main-content').focus({preventScroll:true});
   if(view==='home')refreshMonthlyRecap();
+  v3?.onNavigate(view);
 }
 function renderMonthlyRecap(){
   const ready=homeDataState==='ready'&&state.overview;
@@ -437,7 +439,7 @@ function renderForecast() {
 }
 function renderTrends() {
   const data=state.trends,rows=(data?.months||[]).filter(row=>row.available!==false&&row.total_cents!==null);
-  $('trend-chart').innerHTML=trendChart(rows);text('trend-description',rows.length?t('trends.description',{count:rows.length}):t('empty.trends'));
+  if(v3)v3.renderTrendChart(rows);else $('trend-chart').innerHTML=trendChart(rows);text('trend-description',rows.length?t('trends.description',{count:rows.length}):t('empty.trends'));
   $('trends-view').querySelector('.trend-facts')?.remove();
   if(!data)return;
   const annual=data.annual_comparison;
@@ -445,7 +447,7 @@ function renderTrends() {
   $('trend-chart').insertAdjacentHTML('afterend',evidence);
 }
 function renderGoals() {
-  $('goals-list').innerHTML=state.goals.length?state.goals.map(goal=>`<article class="goal-card"><span class="status-pill scenario-pill">${esc(t('common.estimate'))}</span><h2>${esc(goal.name)}</h2><p class="subtle">${esc(t('goal.by',{date:dateLabel(goal.target_date)}))}</p><p class="goal-amount">${money(goal.required_monthly_cents)} <span>${esc(t('goal.required'))}</span></p>${goalChart(goal.current_saved_cents??0,goal.target_cents)}<p class="small-text">${esc(t('goal.capacity',{amount:money(goal.conservative_monthly_contribution_cents)}))}</p><p class="small-text">${esc(t('goal.reserveDetail',{reserve:money(goal.reserve_floor_cents),upfront:money(goal.upfront_available_cents)}))}</p>${goal.modeled_scenario_contribution_cents>0?`<p class="small-text">${esc(t('goal.linked',{amount:money(goal.modeled_scenario_contribution_cents)}))}</p>`:''}${goal.monthly_gap_cents>0?`<p class="small-text">${esc(t('goal.gap',{amount:money(goal.monthly_gap_cents)}))}</p>`:''}<button class="text-button" data-goal-evidence="${esc(goal.goal_id||goal.id)}">${esc(t('goal.assumptions'))} ↗</button></article>`).join(''):`<div class="goal-card"><span class="eyebrow">${esc(t('goals.eyebrow'))}</span><h2>${esc(t('goals.empty'))}</h2><p class="subtle">${esc(t('goals.subtitle'))}</p></div>`;
+  $('goals-list').innerHTML=state.goals.length?state.goals.map(goal=>`<article class="goal-card"><span class="status-pill scenario-pill">${esc(t('common.estimate'))}</span><h2>${esc(goal.name)}</h2><p class="subtle">${esc(t('goal.by',{date:dateLabel(goal.target_date)}))}</p><p class="goal-amount">${money(goal.required_monthly_cents)} <span>${esc(t('goal.required'))}</span></p>${goalChart(goal.current_saved_cents??0,goal.target_cents)}<p class="small-text">${esc(t('goal.capacity',{amount:money(goal.conservative_monthly_contribution_cents)}))}</p><p class="small-text">${esc(t('goal.reserveDetail',{reserve:money(goal.reserve_floor_cents),upfront:money(goal.upfront_available_cents)}))}</p>${goal.modeled_scenario_contribution_cents>0?`<p class="small-text">${esc(t('goal.linked',{amount:money(goal.modeled_scenario_contribution_cents)}))}</p>`:''}${goal.monthly_gap_cents>0?`<p class="small-text">${esc(t('goal.gap',{amount:money(goal.monthly_gap_cents)}))}</p>`:''}<button class="text-button" data-goal-evidence="${esc(goal.goal_id||goal.id)}">${esc(t('goal.assumptions'))} ↗</button>${v3?v3.goalActionsHTML(goal):''}</article>`).join(''):`<div class="goal-card"><span class="eyebrow">${esc(t('goals.eyebrow'))}</span><h2>${esc(t('goals.empty'))}</h2><p class="subtle">${esc(t('goals.subtitle'))}</p></div>`;
   renderPersonalization();renderWishes();
 }
 function supportingEvidence(data){
@@ -691,7 +693,8 @@ function agentTurn(id){
 function reviewAgentAction(turn,index){
   const action=turn.response.actions?.[index],params=action?.params;
   if(!params)return;
-  if(action.kind==='open_view'&&['home','trends','goals','coach'].includes(params.view)){navigate(params.view);return;}
+  if(action.kind==='open_view'&&['home','trends','goals','coach','profile'].includes(params.view)){navigate(params.view);return;}
+  if(!['create_goal','save_scenario'].includes(action.kind)){v3?.handleAgentAction(turn,action);return;}
   if(action.kind==='create_goal'){
     closeDialogs();navigate('goals');$('goal-planner').open=true;
     $('goal-template').value='custom';$('goal-name').value=params.name;
@@ -838,9 +841,10 @@ async function load(context=captureContext()){
   state.scenario=persisted||null;state.exclusion=persisted?.excluded_transaction_refs?.[0]||null;renderScenario();
   renderSpending();renderPersonalization();
   refreshMonthlyRecap();
+  v3?.onLoad(context);
 }
 function changePeriod(selectedMonth,trendMonths=state.trendMonths){
-  if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(selectedMonth)||!['3','6','12','24'].includes(String(trendMonths)))return explainError(new Error(t('error.period')));
+  if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(selectedMonth)||!/^(?:[1-9]|1\d|2[0-4])$/.test(String(trendMonths)))return explainError(new Error(t('error.period')));
   if((state.observedStart&&selectedMonth<state.observedStart.slice(0,7))||(state.observedEnd&&selectedMonth>state.observedEnd.slice(0,7)))return explainError(new Error(t('error.period')));
   const keep={customerId:state.customerId,selectedMonth,trendMonths:Number(trendMonths),observedStart:state.observedStart,observedEnd:state.observedEnd,generation:state.generation+1,loadSequence:state.loadSequence+1,view:state.view};
   Object.assign(state,createState(),keep);clearScopedViews();navigate(keep.view);load();
@@ -862,6 +866,10 @@ function applyLanguage(){
   if($('calculation-dialog').open&&state.calculationEvidence)$('calculation-content').innerHTML=calculationHTML(state.calculationEvidence);
   renderSpending();renderPersonalization();
 }
+v3=initV3({state,$,esc,t,money,dateLabel,monthLabel,shiftMonth,monthEnd,request,captureContext,isCurrent,perform,navigate,changePeriod,askCoach,showTransactions,openDialog,closeDialogs,explainError,notify,
+  locale:()=>i18n.locale,categoryName,storage:localStore,localProfile:()=>experience().load(),
+  refreshGoals:async context=>{await loadGoals(context);},
+  refreshSupport:async context=>{try{const asOf=state.overview?.latest_balance_date||monthEnd(state.selectedMonth);const safe=await request(context,'get','/api/safe-to-spend',{as_of:asOf,horizon:'until_payday',reserve_floor_cents:50000});state.safeToSpend=safe;renderSupport();}catch{}}});
 $('persona-button').addEventListener('click',()=>{const panel=$('persona-panel');panel.hidden=!panel.hidden;$('persona-button').setAttribute('aria-expanded',String(!panel.hidden));if(!panel.hidden)$('persona').focus();});
 $('persona').addEventListener('change',()=>{selectPersona(state,$('persona').value);api=createAPI(state.customerId);clearScopedViews();navigate('home');load();});
 $('open-story').addEventListener('click',event=>perform(event.currentTarget,context=>askCoach(t('home.recap.question',{period:monthLabel(context.month)}),context)));
@@ -917,6 +925,7 @@ $('reset-demo').addEventListener('click',event=>perform(event.currentTarget,asyn
 $('forecast-details').addEventListener('click',()=>{const panel=$('forecast-assumptions');panel.hidden=!panel.hidden;$('forecast-details').setAttribute('aria-expanded',String(!panel.hidden));});
 
 document.addEventListener('click',event=>{
+  if(v3?.handleClick(event))return;
   const categoryTarget=event.target.closest('[data-spending-category]');
   if(categoryTarget?.dataset?.spendingCategory){selectSpending(categoryTarget.dataset.spendingCategory,categoryTarget);return;}
   const button=event.target.closest('button');if(!button)return;
@@ -990,7 +999,7 @@ document.addEventListener('click',event=>{
 document.addEventListener('keydown',event=>{const segment=event.target.closest?.('[data-spending-category]');if(segment?.dataset?.spendingCategory&&segment.tagName?.toLowerCase()!=='button'&&['Enter',' '].includes(event.key)){event.preventDefault();selectSpending(segment.dataset.spendingCategory,segment);}});
 // Native dialogs provide Escape, focus trapping and restoration to the opener.
 for(const dialog of document.querySelectorAll('dialog')) dialog.addEventListener('click',event=>{if(event.target===dialog){const box=dialog.getBoundingClientRect();if(event.clientY<box.top||event.clientY>box.bottom||event.clientX<box.left||event.clientX>box.right)dialog.close();}});
-$('language').addEventListener('change',()=>{clearCoachPending(true);agentProposal=null;const retry=Boolean($('status-message').querySelector('button'));i18n.setLocale($('language').value);clearCoachEvidence();state.queryScope=null;state.conversation=[];memoryProposal=null;coachSequence++;text('coach-response','');text('coach-live-status','');$('coach-response').setAttribute('aria-busy','false');$('coach-input').value='';resizeCoachInput();text('coach-debug-content','');$('coach-debug').hidden=true;$('tax-plan-result').replaceChildren();notify(retry?t('error.generic'):'',retry);applyLanguage();refreshMonthlyRecap();});
+$('language').addEventListener('change',()=>{clearCoachPending(true);agentProposal=null;const retry=Boolean($('status-message').querySelector('button'));i18n.setLocale($('language').value);clearCoachEvidence();state.queryScope=null;state.conversation=[];memoryProposal=null;coachSequence++;text('coach-response','');text('coach-live-status','');$('coach-response').setAttribute('aria-busy','false');$('coach-input').value='';resizeCoachInput();text('coach-debug-content','');$('coach-debug').hidden=true;$('tax-plan-result').replaceChildren();notify(retry?t('error.generic'):'',retry);applyLanguage();refreshMonthlyRecap();v3?.onLanguage();});
 $('selected-month').addEventListener('change',()=>changePeriod($('selected-month').value));
 $('trend-range').addEventListener('change',()=>changePeriod(state.selectedMonth,Number($('trend-range').value)));
 document.addEventListener('invalid',event=>event.target.setCustomValidity?.(t('error.validation')),true);

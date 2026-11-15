@@ -285,8 +285,12 @@ export function cashflowChart(rows, options={}) {
     const marks = bar(centre - barWidth - 1, row.income_cents, isSelected ? SELECTED_FILL : '#466d48', partial, 'chart-bar-mark cashflow-income', extra)
       + bar(centre + 1, row.consumption_cents, isSelected ? '#c98f55' : '#e1bd91', partial, 'chart-bar-mark cashflow-spending', extra)
       + (partial ? `<text x="${centre.toFixed(2)}" y="${(Math.min(y(row.income_cents), y(row.consumption_cents), zero) - 3).toFixed(2)}" text-anchor="middle" class="chart-note cashflow-partial-label" font-size="9">${esc(step >= 30 ? partialText : '*')}</text>` : '');
-    const show = i === data.length - 1 || i % Math.ceil(data.length / 6) === 0;
-    const tick = show ? `<text transform="translate(${centre.toFixed(2)},${top + plot + 16}) rotate(-35)" text-anchor="end" class="chart-note">${esc(label(row).slice(-7))}</text>` : '';
+    const every = Math.max(1, Math.ceil(44 / step));
+    const last = data.length - 1;
+    const show = (last - i) % every === 0;
+    const anchor = i === 0 ? 'start' : i === last ? 'end' : 'middle';
+    const tickX = i === 0 ? i * step : i === last ? (i + 1) * step : centre;
+    const tick = show ? `<text x="${tickX.toFixed(2)}" y="${top + plot + 14}" text-anchor="${anchor}" class="chart-note" font-size="9">${esc(label(row).slice(0, 8))}</text>` : '';
     if (!interactive) return marks + tick;
     const aria = ct('chart.cashflow.bar', {label:label(row), income:euro(row.income_cents), spending:euro(row.consumption_cents), net:nets[i] === null ? '—' : euro(nets[i])}, '{label}: money in {income}, money out {spending}, net {net}') + (partial ? ' (' + ct('chart.cashflow.partialPeriod', {}, 'partial period') + ')' : '');
     return hitTarget(i, aria, selected, {x:(i * step).toFixed(2), y:0, width:step.toFixed(2), height:top + plot + 20}, marks) + tick;

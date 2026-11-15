@@ -700,7 +700,7 @@ function suggestionCard(item, locale, h, decision) {
   const id = esc(item?.id);
   return '<article class="profile-suggestion" data-suggestion="' + id + '">'
     + '<p class="profile-suggestion-question">' + esc(question) + '</p>'
-    + (cleanText(item?.question, 300) ? '<p class="profile-suggestion-value">' + esc(pm(locale, 'key.' + item.key)) + ': ' + esc(value) + '</p>' : '')
+    + (cleanText(item?.question, 300) && item?.key !== 'observation' ? '<p class="profile-suggestion-value">' + esc(pm(locale, 'key.' + item.key)) + ': ' + esc(value) + '</p>' : '')
     + (evidence ? '<p class="profile-suggestion-evidence">' + esc(t('noticed.evidence', {label: evidence})) + '</p>' : '')
     + '<div class="profile-actions">'
     + '<button type="button" class="profile-button profile-button-keep" data-suggestion-keep="' + id + '" aria-pressed="' + (decision === 'keep' ? 'true' : 'false') + '">' + esc(t('noticed.keep')) + '</button>'
@@ -950,7 +950,9 @@ export function renderProfilePage(profile, suggestions = [], locale = 'en', help
   }
   if (!entries.length) {
     html += '<section class="profile-section profile-empty" data-profile-empty><h2>' + esc(t('empty.title')) + '</h2><p>' + esc(t('empty.body')) + '</p>'
-      + '<button type="button" class="primary-button" data-profile-onboarding>' + esc(t('empty.start')) + '</button></section>';
+      + '<button type="button" class="primary-button" data-profile-onboarding>' + esc(t('empty.start')) + '</button></section>'
+      + '<section class="profile-section" data-profile-section="taxes"><h2>' + esc(t('section.taxes')) + '</h2><p class="subtle">' + esc(t('taxes.help')) + '</p>'
+      + '<button type="button" class="secondary-button" data-profile-open-tax>' + esc(t('taxes.open')) + '</button></section>';
   } else {
     for (const section of groupProfileEntries(entries)) {
       if (section.id === 'taxes') {

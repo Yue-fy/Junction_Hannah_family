@@ -148,7 +148,7 @@ def _month_label(month):
 def _archetype_label(result):
     if not isinstance(result, dict):
         return None
-    for key in ('archetype', 'label', 'name'):
+    for key in ('archetype_label', 'label', 'name', 'archetype'):
         value = result.get(key)
         if isinstance(value, str) and value:
             return value
